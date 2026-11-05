@@ -954,7 +954,7 @@ enum SendLive {
         switch estimate.feeAsset {
         case .native:
             let symbol = networks.meta(estimate.chainId)?.nativeSymbol ?? ""
-            return "\(feeFromBase(estimate.totalWei, decimals: 18)) \(symbol)"
+            return "\(feeFromBase(estimate.totalWei, decimals: ChainCatalog.coinDecimals)) \(symbol)"
         case .erc20(_, let decimals, let amount, let symbol):
             return "\(feeFromBase(amount, decimals: decimals)) \(symbol ?? "TOKEN")"
         }
@@ -1037,6 +1037,14 @@ enum SendLive {
     ///
     /// Each shell used to answer this itself while no estimate was in hand,
     /// and a failed quote on BNB Chain with USDT chosen was drawn three ways.
+    /// r12 S4: what goes before the confirm's fee figure — the core's one
+    /// rule (`fee.row`): nothing. The confirm said "~0.12" here and "0.12"
+    /// on the web and the desktop for the same quoted fee; the figure is the
+    /// quote, said bare.
+    static var feeRowPrefix: String {
+        (MsRules.call("fee.row", ["quoted": true]) as? [String: Any])?["amount_prefix"] as? String ?? ""
+    }
+
     static func feeCoinMark(_ view: SendViewWire) -> TokenMarkModel? {
         guard let coin = view.feeCoin else { return nil }
         return TokenMarkModel.of(chainId: coin.chainId, symbol: coin.symbol,
@@ -1050,8 +1058,9 @@ enum SendLive {
     /// shell formats it. Android's first cut printed `5000000000000000000 XDAI`
     /// on a phone; this is where that does not happen again.
     static func formWarning(_ view: SendViewWire, loc: Loc) -> String? {
-        if let issue = view.sameAssetFeeIssue {
-            let decimals = view.selectedToken?.decimals ?? 18
+        // r12-1: the figures are in the selected token's own decimals —
+        // never 18 assumed when none is selected (there is no issue then).
+        if let issue = view.sameAssetFeeIssue, let decimals = view.selectedToken?.decimals {
             // The asset list's figures (spec 078), not 18-digit remainders:
             // "you have" is the balance on the token card above, digit for
             // digit. The most that can be sent is rounded DOWN — typed back,
@@ -1171,7 +1180,7 @@ enum SendLive {
                 // core's re-ask — never "Estimating…" and back.
                 value: failure?.figure(loc)
                     ?? (frozen ? view.fee ?? fee?.fee : view.fee ?? fee?.fee).map {
-                        "~\(feeLine($0, view: view, fee: fee, display: display, networks: networks))"
+                        feeRowPrefix + feeLine($0, view: view, fee: fee, display: display, networks: networks)
                     }
                     ?? (view.estimatingGas || view.feeBusy || (fee?.busy ?? false)
                         ? loc.t("send.estimatingFee") : "—"),

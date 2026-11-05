@@ -4555,6 +4555,9 @@ impl WalletPage {
                     .read(cx)
                     .view()
                     .balance_unknown,
+                // R12 S4: the account whose activity this is (the multisig
+                // shown, else the session's) has had its first scan back.
+                crate::executor::activity_feed::scanned(&crate::multisig::shown::address(cx)),
                 &resident::resident::<ActivityFeed>(cx).read(cx).shared(),
                 &self.strings,
             );

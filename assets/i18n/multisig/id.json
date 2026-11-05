@@ -112,6 +112,7 @@
     "failed": "Tidak berhasil: {{reason}}",
     "noExpiry": "Persetujuan tidak kedaluwarsa: tetap berlaku sampai transaksi dieksekusi atau dibatalkan.",
     "notFound": "Transaksi ini belum ada di kotak surat.",
+    "notHere": "Transaksi ini milik multisig yang tidak ditampilkan di sini. Buka tautannya untuk membacanya.",
     "opening": "Membuka transaksi…",
     "cannotPay": "{{name}} tidak punya cukup {{symbol}} untuk biaya jaringan: dibutuhkan sekitar {{fee}}, tersedia {{balance}}. Tambahkan saldo, atau biarkan anggota lain yang mengeksekusi.",
     "notLanded": "Belum masuk ke jaringan setelah tiga menit. Jika tidak segera tampil sebagai dieksekusi, coba lagi.",

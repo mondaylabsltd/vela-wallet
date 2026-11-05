@@ -334,7 +334,8 @@ struct WalletNetworksTests {
             Issue.record("a transaction's fee row is on-chain")
             return
         }
-        #expect(value == "~0.0021 VTN")
+        // r12 S4: the quoted fee, bare (the core's `fee.row`).
+        #expect(value == "0.0021 VTN")
     }
 
     /// A transaction on a network the person added has its Network row, in

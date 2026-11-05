@@ -261,7 +261,8 @@ struct MultisigR10FixTests {
         _ = nudge.observe(arc, reached: false, unreadable: [], refreshing: false, nowMs: 250_000)
         let flap = nudge.observe(arc, reached: true, unreadable: [], refreshing: false, nowMs: 251_000)
         #expect(!healthy, "a healthy network: nothing")
-        #expect(!downOnce && !downAgain, "an outage reads nothing")
+        // r12-3: going down is the core's own rule (`pool_unreached`).
+        #expect(!downOnce && !downAgain, "an outage reads nothing here")
         #expect(back, "back: the balance reads now")
         #expect(!steady, "and only once")
         #expect(!flap, "once a minute")

@@ -1481,7 +1481,12 @@ if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.siz
   //   loading, ready or failed — "Reading the transaction…" with the button
   //   shut; a failure says why, that nothing can be signed until it is read,
   //   and offers Try again; never "allowed" by default). 676 + 6 = 682.
-  const pins = { multisig: 682 };
+  // 683 (round 12, iOS + desktop, 2026-11-05): + `home.multisig.proposal.notHere`
+  //   (a transaction sheet for a multisig this device does not show says so,
+  //   never "it hasn't been shared with the members"). `componentsUi.signing.
+  //   firstTimeTag` changes value only: the history it reads is this device's
+  //   ("First time sending here from this device"). 682 + 1 = 683.
+  const pins = { multisig: 683 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

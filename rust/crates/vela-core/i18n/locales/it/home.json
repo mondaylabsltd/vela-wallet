@@ -189,6 +189,7 @@
         "failed": "Non è andata a buon fine: {{reason}}",
         "noExpiry": "Le approvazioni non scadono: valgono finché la transazione non viene eseguita o annullata.",
         "notFound": "Questa transazione non è ancora nella casella.",
+        "notHere": "Questa transazione appartiene a un multisig non mostrato qui. Apri il suo link per leggerla.",
         "opening": "Apertura della transazione…",
         "cannotPay": "{{name}} non ha abbastanza {{symbol}} per la commissione di rete: servono circa {{fee}}, ce ne sono {{balance}}. Aggiungine o lascia eseguire un altro membro.",
         "notLanded": "Dopo tre minuti non ha ancora raggiunto la rete. Se non risulta eseguita a breve, riprova.",

@@ -112,6 +112,7 @@
     "failed": "That didn't go through: {{reason}}",
     "noExpiry": "Approvals don't expire: they count until the transaction is executed or cancelled.",
     "notFound": "This transaction hasn't been shared with the members yet.",
+    "notHere": "This transaction belongs to a multisig that isn't shown here. Open its link to read it.",
     "opening": "Opening the transaction…",
     "cannotPay": "{{name}} doesn't hold enough {{symbol}} for the network fee: about {{fee}} is needed, {{balance}} is there. Add some, or let another member execute.",
     "notLanded": "It hasn't reached the network after three minutes. If it doesn't show as executed soon, try again.",

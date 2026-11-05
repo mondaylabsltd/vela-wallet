@@ -2732,7 +2732,7 @@ struct RootView: View {
             return base
         }
         let applied = WalletLive.apply(view, currency: settings.currency ?? .unread, feed: activity.feed,
-                                       feedRead: activity.hasRead, on: base, loc: loc,
+                                       feedRead: activity.settled(for: shownAddress), on: base, loc: loc,
                                        now: Date(), spinning: wallet.spin.spinning,
                                        networks: walletNetworks,
                                        noValue: space.testnet ? loc.t("networkSpace.noValue") : nil)
@@ -3511,7 +3511,7 @@ struct RootView: View {
                             chainId: chain.chainId,
                             tokenAddress: nil,
                             symbol: chain.nativeSymbol,
-                            decimals: 18,
+                            decimals: ChainCatalog.coinDecimals,
                             networkName: chain.displayName
                         )
                     },
@@ -4663,7 +4663,7 @@ struct RootView: View {
                     chainId: chain.chainId,
                     tokenAddress: nil,
                     symbol: chain.nativeSymbol,
-                    decimals: 18,
+                    decimals: ChainCatalog.coinDecimals,
                     networkName: chain.displayName
                 )
                 flows.push(.receiveQr)

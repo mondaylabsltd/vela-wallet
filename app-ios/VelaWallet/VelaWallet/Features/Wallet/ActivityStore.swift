@@ -50,6 +50,20 @@ final class ActivityStore {
     /// lands, the honest surface is the drawn skeleton (FR-008).
     private(set) var hasRead = false
 
+    /// The accounts (lowercased) whose first whole incoming scan has come
+    /// back this session (R12 S4) — one that ran with the account's
+    /// holdings read (`ActivityExecutor.looked`). Before it, an empty feed
+    /// is not yet "No activity yet": the chains have not been asked what
+    /// came in — the home says it is still looking. Kept per account: a
+    /// switch to one never scanned is a first look again.
+    private(set) var scanned: Set<String> = []
+
+    /// What the home's Activity may claim for `address`: read from the store
+    /// AND its first scan back — "nothing has happened here" needs both.
+    func settled(for address: String) -> Bool {
+        hasRead && scanned.contains(address.lowercased())
+    }
+
     private let executor: ActivityExecutor
     private var core: CoreStore<FeedViewWire>!
 
@@ -84,7 +98,15 @@ final class ActivityStore {
             bridge: ActivityFeedCore(),
             perform: { [weak self, executor] operation in
                 let answer = await executor.perform(operation)
-                if operation["type"] as? String == "read_tx_store" { self?.hasRead = true }
+                switch operation["type"] as? String {
+                case "read_tx_store": self?.hasRead = true
+                case "scan_incoming_transfers":
+                    if let address = operation["address"] as? String,
+                       executor.looked.contains(address.lowercased()) {
+                        self?.scanned.insert(address.lowercased())
+                    }
+                default: break
+                }
                 return answer
             },
             onView: { [weak self] view in self?.commit(view) },

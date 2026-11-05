@@ -273,6 +273,14 @@ final class WalletStore {
         core.dispatch(Self.autoRefreshEvent)
     }
 
+    /// r12-3: the pool's chains out of reach changed — the core's own rule
+    /// (`pool_unreached`): a network the account is read on that has just
+    /// gone out of reach is read again, forced, and its failure is the
+    /// home's "Can't reach Arc Testnet". The shell only says the set.
+    func poolUnreached(_ chainIds: [Int]) {
+        core.dispatch(CoreJSON.string(["type": "pool_unreached", "chain_ids": chainIds]))
+    }
+
     /// r10-1: a network came back — a call to it answered after calls to it
     /// went unanswered, or the balance's own last read could not reach it —
     /// and the balance reads again now. Nothing else would: the home's poll
@@ -418,6 +426,8 @@ struct RecoveryNudge {
         _ chainId: Int, reached: Bool, unreadable: Set<Int>, home: Set<Int> = [], refreshing: Bool, nowMs: Double
     ) -> Bool {
         guard reached else {
+            // Going down reads nothing here: that is the core's own rule
+            // now (r12-3, `pool_unreached` — `WalletStore.poolUnreached`).
             down.insert(chainId)
             return false
         }

@@ -253,7 +253,9 @@ struct GuardViewWire: Decodable, Equatable {
 
     static let empty = GuardViewWire(
         surface: .none, detected: nil,
-        meta: GuardTokenMetaViewWire(symbol: "", decimals: 18, verified: false, loading: false),
+        // Nothing is drawn from it (surface `.none`), and its decimals are
+        // no claim: none read (r12-1 — never 18 assumed).
+        meta: GuardTokenMetaViewWire(symbol: "", decimals: 0, verified: false, loading: false),
         editor: nil, confirmAllowed: true, rewrittenParamsJson: nil,
         unlimitedConsented: false,
         increaseTotal: nil, decimalsUnverified: false, expired: false, batch: nil

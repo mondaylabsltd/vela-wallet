@@ -221,7 +221,7 @@ enum TokenReads {
                 chainId: chainId, method: "eth_getBalance", params: [address, "latest"]
             ) {
             case .ok(let value):
-                if let hex = value as? String { nativeBalance = scaled(hex: hex, decimals: 18) }
+                if let hex = value as? String { nativeBalance = scaled(hex: hex, decimals: ChainCatalog.coinDecimals) }
             case .failed(let throttled):
                 failed = true
                 rateLimited = throttled

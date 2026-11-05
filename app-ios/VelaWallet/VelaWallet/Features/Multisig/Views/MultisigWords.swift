@@ -147,6 +147,45 @@ struct MsWords {
         ChainCatalog.meta(chainId)?.nativeSymbol ?? "ETH"
     }
 
+    // MARK: - Amounts (r12-1: never a token's decimals assumed)
+
+    /// The network's own coin is counted in the EVM's unit, wei: 18
+    /// decimals by the protocol (the desktop's `TokenInfo::coin`). This is
+    /// the ONLY 18 the multisig screens know — a token's decimals are the
+    /// core's or nobody's, never this figure.
+    static let coinDecimals = ChainCatalog.coinDecimals
+
+    /// A token as an amount is worded in it: its symbol and decimals, the
+    /// decimals `nil` when nobody read them.
+    struct TokenFacts: Equatable {
+        var symbol: String
+        var decimals: Int?
+    }
+
+    /// The network's coin (`token` nil or empty), else what the core read
+    /// of the token (`MultisigProposalsView.tokens`) — `decimals` nil when
+    /// it read none, the symbol its contract's short form then.
+    func facts(chainId: Int, token: String?) -> TokenFacts {
+        guard let token, !token.isEmpty else { return TokenFacts(symbol: symbol(chainId), decimals: Self.coinDecimals) }
+        let core = coreToken(chainId, token)
+        return TokenFacts(symbol: core?.symbol ?? Self.short(token), decimals: core?.decimals)
+    }
+
+    /// `raw` base units in `facts`: "0.5 USDC", or — decimals unknown —
+    /// "500000 base units · decimals unknown USDC" (the review's own
+    /// words, `review.reading.decimalsUnknown`), never a figure in 18.
+    func amount(_ raw: String, _ facts: TokenFacts) -> String {
+        guard let decimals = facts.decimals else {
+            return "\(t("review.reading.decimalsUnknown", ["raw": raw])) \(facts.symbol)".trimmingCharacters(in: .whitespaces)
+        }
+        return "\(MsRules.formatUnits(raw, decimals: decimals)) \(facts.symbol)".trimmingCharacters(in: .whitespaces)
+    }
+
+    /// An amount in the network's coin (a fee, a call's value).
+    func coinAmount(_ raw: String, chainId: Int) -> String {
+        amount(raw, facts(chainId: chainId, token: nil))
+    }
+
     // MARK: - A transaction's one line
 
     /// "Send 500 USDC", "Add Bob (0x12…34)" — the proposal's own title.
@@ -160,10 +199,11 @@ struct MsWords {
         switch action.kind {
         case "transfer":
             guard let info = await hub?.tokenInfo(chainId: chainId, token: action["token"]?.string),
+                  let decimals = info.decimals,
                   info.symbol != AddressText.short(action["token"]?.string ?? "")
             else { return actionTitleNow(chainId: chainId, action: action, nonce: nonce) }
             return t("action.send", [
-                "amount": MsRules.formatUnits(action["amount"]?.string ?? "0", decimals: info.decimals),
+                "amount": MsRules.formatUnits(action["amount"]?.string ?? "0", decimals: decimals),
                 "symbol": info.symbol,
             ])
         default:
@@ -230,7 +270,7 @@ struct MsWords {
         case "transfer":
             let amount = action["amount"]?.string ?? "0"
             guard let address = action["token"]?.string else {
-                return t("action.send", ["amount": MsRules.formatUnits(amount, decimals: 18), "symbol": symbol(chainId)])
+                return t("action.send", ["amount": MsRules.formatUnits(amount, decimals: Self.coinDecimals), "symbol": symbol(chainId)])
                     .trimmingCharacters(in: .whitespaces)
             }
             if let token {
@@ -253,25 +293,31 @@ struct MsWords {
             return t(allTransfers ? "action.batch" : "action.batchCalls", ["total": String(calls.count)])
         case "cancel":
             return t("action.cancel", ["nonce": nonce])
-        case "addOwner":
-            return t("change.add", ["member": who(action["owner"]?.string ?? "")])
-        case "removeOwner":
-            return t("change.remove", ["member": who(action["owner"]?.string ?? "")])
-        case "swapOwner":
-            return t("change.replace", [
-                "old": who(action["oldOwner"]?.string ?? ""), "new": who(action["newOwner"]?.string ?? ""),
-            ])
-        case "changeThreshold":
-            // "Require 1 approval" — the corpus's plural family (r9).
-            let threshold = action["threshold"]?.string ?? ""
-            return t("action.changeThreshold", count: Int(threshold) ?? 0, ["threshold": threshold, "count": threshold])
+        case "addOwner", "removeOwner", "swapOwner", "changeThreshold":
+            // r12-8: the core's one title rule (`names.change`), the same on
+            // a sheet and on an Activity row.
+            if let title = memberChangeTitle(action) { return title }
+            switch action.kind {
+            case "addOwner":
+                return t("change.add", ["member": who(action["owner"]?.string ?? "")])
+            case "removeOwner":
+                return t("change.remove", ["member": who(action["owner"]?.string ?? "")])
+            case "swapOwner":
+                return t("change.replace", [
+                    "old": who(action["oldOwner"]?.string ?? ""), "new": who(action["newOwner"]?.string ?? ""),
+                ])
+            default:
+                // "Require 1 approval" — the corpus's plural family (r9).
+                let threshold = action["threshold"]?.string ?? ""
+                return t("action.changeThreshold", count: Int(threshold) ?? 0, ["threshold": threshold, "count": threshold])
+            }
         case "rename":
             return t("action.rename", ["name": action["name"]?.string ?? ""])
         case "call":
             let value = action["value"]?.string ?? "0"
             if value == "0" || value.isEmpty { return t("action.call") }
             return t("action.callWithValue", [
-                "amount": MsRules.formatUnits(value, decimals: 18), "symbol": symbol(chainId),
+                "amount": MsRules.formatUnits(value, decimals: Self.coinDecimals), "symbol": symbol(chainId),
             ])
         default:
             return t("action.unsupported")
@@ -283,6 +329,29 @@ struct MsWords {
         guard let action else { return nil }
         if action.kind == "transfer" || action.kind == "call" { return action["to"]?.string }
         return nil
+    }
+
+    /// r12-8: a member change's title by the core's one rule (link door
+    /// `names.change {action, labels}` → `{key, params, count?}`), each
+    /// member named by `names.who` with the core's labels (`member_labels`),
+    /// worded in this page's language when it is drawn. `nil`: not a member
+    /// change, or a core without the rule.
+    func memberChangeTitle(_ action: MsJSON?) -> String? {
+        guard let action, !action.isNull else { return nil }
+        // The core's labels (`member_labels`: kept, index, this device's own
+        // names); this device's own names only where it has none yet.
+        let labels = localNames.merging((labels ?? hub?.accountsView.memberLabels) ?? [:]) { _, core in core }
+        guard let answer = MsRules.call("names.change", ["action": action.any, "labels": labels]) as? [String: Any],
+              let key = answer["key"] as? String
+        else { return nil }
+        let params = (answer["params"] as? [String: Any] ?? [:]).mapValues { "\($0)" }
+        let said: String
+        if let count = answer["count"].flatMap({ ($0 as? String).flatMap(Int.init) ?? ($0 as? NSNumber)?.intValue }) {
+            said = loc.t(key, count: count, vars: params)
+        } else {
+            said = loc.t(key, vars: params)
+        }
+        return said == key ? nil : said
     }
 
     // MARK: - A row's one word (`standings`)
@@ -300,28 +369,42 @@ struct MsWords {
                 "threshold": standing?["threshold"]?.string ?? String(item.threshold),
             ])
         case "blocked":
-            return t("status.cannotRun", ["reason": blockReason(standing?["block"])])
+            return t("status.cannotRun", ["reason": blockReason(standing?["block"], chainId: item.chainId)])
         default:
             return t("status.progress", ["approved": String(item.approved), "threshold": String(item.threshold)])
         }
     }
 
     /// Why a ready transaction cannot run now (`MultisigReadyBlock`).
-    func blockReason(_ block: MsJSON?) -> String {
+    func blockReason(_ block: MsJSON?, chainId: Int) -> String {
         guard let block else { return "" }
         if block.kind == "nobodyPays" { return t("status.nobodyPays") }
-        return whyFails(block["why"])
+        return whyFails(block["why"], chainId: chainId)
     }
 
     /// `short` (token, have, need) or `reverts` (reason).
-    func whyFails(_ why: MsJSON?) -> String {
+    ///
+    /// r12-1: the figures are the core's — its token facts for the shortfall
+    /// (on the reason itself, else the proposals view's `tokens`), never 18
+    /// decimals assumed: "the multisig holds 0, and this needs <0.000001"
+    /// for a 0.01 USDC send was a 6-decimals token read in 18. Decimals
+    /// nobody read are said as base units, "decimals unknown".
+    func whyFails(_ why: MsJSON?, chainId: Int) -> String {
         guard let why else { return t("proposal.uncheckedReason") }
         switch why.kind {
         case "short":
-            let decimals = why["token"]?["decimals"]?.int ?? 18
-            let symbol = why["token"]?["symbol"]?.string ?? ""
+            let facts = shortFacts(why, chainId: chainId)
             func amount(_ key: String) -> String {
-                "\(MsRules.formatUnits(why[key]?.string ?? "0", decimals: decimals)) \(symbol)".trimmingCharacters(in: .whitespaces)
+                let value = why[key]
+                // The core's amount (`MultisigAmount`, r12-1): its `said` is
+                // the words — "0.01 USDC", or the base units with "decimals
+                // unknown" — decimals and symbol resolved by the core.
+                if let said = Self.said(value?["said"], loc: loc) { return said }
+                // An older core: base units, a string, in the facts it gave.
+                let raw = value?["base_units"]?.string ?? value?["raw"]?.string ?? value?.string ?? "0"
+                var own = facts
+                if let decimals = value?["decimals"]?.int { own.decimals = decimals }
+                return self.amount(raw, own)
             }
             return t("proposal.whyShort", ["have": amount("have"), "need": amount("need")])
         case "reverts":
@@ -332,6 +415,36 @@ struct MsWords {
         default:
             return t("proposal.uncheckedReason")
         }
+    }
+
+    /// A `MultisigAmount.said` in words: `known` its `text`; a token whose
+    /// decimals nobody could read, the corpus's `key` with `{{raw}}`; `nil`
+    /// for no `said` at all.
+    static func said(_ said: MsJSON?, loc: Loc) -> String? {
+        guard let said, !said.isNull else { return nil }
+        switch said.kind {
+        case "known":
+            return said["text"]?.string
+        case "decimals_unknown":
+            let key = said["key"]?.string ?? "home.multisig.review.reading.decimalsUnknown"
+            let text = loc.t(key, vars: ["raw": said["raw"]?.string ?? ""])
+            return text == key ? nil : text
+        default:
+            return nil
+        }
+    }
+
+    /// The token a shortfall is in, as the core said it: `token` the address
+    /// (null: the network's coin) or the token's facts `{token|address,
+    /// symbol, decimals}`; a `symbol` / `decimals` on the reason itself
+    /// first; else the proposals view's facts for that address.
+    func shortFacts(_ why: MsJSON, chainId: Int) -> TokenFacts {
+        let token = why["token"]
+        let address = token?.string ?? token?["token"]?.string ?? token?["address"]?.string
+        var facts = facts(chainId: chainId, token: address)
+        if let symbol = why["symbol"]?.string ?? token?["symbol"]?.string, !symbol.isEmpty { facts.symbol = symbol }
+        if let decimals = why["decimals"]?.int ?? token?["decimals"]?.int { facts.decimals = decimals }
+        return facts
     }
 
     // MARK: - Why nothing is signed (r9-9)
@@ -372,7 +485,7 @@ struct MsWords {
             case "unpriced": return t("proposal.feeUnpriced")
             case "unchecked": return t("proposal.feeUnchecked")
             default:
-                return t("proposal.wouldFail", ["reason": whyFails(state["preview"]?["why"] ?? state["preview"])])
+                return t("proposal.wouldFail", ["reason": whyFails(state["preview"]?["why"] ?? state["preview"], chainId: chainId)])
             }
         case "noOutsideSigner":
             return t("proposal.failed", ["reason": t("proposal.noOutsideSigner")])

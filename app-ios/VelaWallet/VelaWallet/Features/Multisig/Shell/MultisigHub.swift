@@ -185,6 +185,12 @@ final class MultisigHub {
     private func accountsMoved() {
         let had = accountsView.accounts.count
         accountsView = accounts.accountsView
+        // r12-8: a member's name landing (the index, an invite) re-titles the
+        // executed member changes in Activity, as the sheet says them.
+        if loaded, rowLabels != accountsView.memberLabels {
+            rowLabels = accountsView.memberLabels
+            rewordMemberRows()
+        }
         askIndex(accountsView.indexWanted)
         // r9-8: the first multisig created, added, opened from an invite or
         // found as a member here — there is now something to say: the
@@ -778,20 +784,38 @@ final class MultisigHub {
                 if row["kind"] as? String == "send" {
                     let token = row["token"] as? String
                     let info = await tokenInfo(chainId: chainId, token: token)
-                    base["value"] = MsRules.plainUnits(row["amount"] as? String ?? "0", decimals: info.decimals)
-                    base["symbol"] = info.symbol
-                    base["decimals"] = info.decimals
+                    let amount = row["amount"] as? String ?? "0"
+                    if let decimals = info.decimals {
+                        base["value"] = MsRules.plainUnits(amount, decimals: decimals)
+                        base["symbol"] = info.symbol
+                        base["decimals"] = decimals
+                    } else {
+                        // r12-1: decimals nobody read — the base units as
+                        // they are, said so beside the symbol, never a
+                        // figure in decimals assumed.
+                        base["value"] = amount
+                        let unknown = MsWords(loc: loc, hub: self).t("review.reading.decimalsUnknown", ["raw": ""])
+                        base["symbol"] = [unknown.trimmingCharacters(in: .whitespaces), info.symbol].joined(separator: " ")
+                        base["decimals"] = 0
+                    }
                     if let token { base["token"] = token }
                     base["type"] = "send"
                 } else {
                     let sends = row["sends"] as? String ?? "0"
                     let info = await tokenInfo(chainId: chainId, token: nil)
+                    let decimals = info.decimals ?? MsWords.coinDecimals
                     let some = sends != "0" && !sends.isEmpty
-                    base["value"] = some ? MsRules.plainUnits(sends, decimals: info.decimals) : "0"
+                    base["value"] = some ? MsRules.plainUnits(sends, decimals: decimals) : "0"
                     base["symbol"] = some ? info.symbol : ""
-                    base["decimals"] = info.decimals
+                    base["decimals"] = decimals
                     base["type"] = "dapp_tx"
                     base["intent"] = await executedTitle(e, chainId: chainId, hash: hash)
+                    // r12-8: a member change keeps its action, so its row is
+                    // titled again in the page's words and the names as they
+                    // stand (`rewordMemberRows`), never frozen as written.
+                    if let action = e["action"] as? [String: Any], Self.isMemberChange(action) {
+                        base["multisigChange"] = action
+                    }
                     base["dappSummary"] = [
                         "action": "call", "calls": row["calls"] ?? 1, "contract": row["contract"] ?? "",
                     ]
@@ -811,6 +835,40 @@ final class MultisigHub {
         }
     }
 
+    static func isMemberChange(_ action: [String: Any]?) -> Bool {
+        ["addOwner", "removeOwner", "swapOwner", "changeThreshold"].contains(action?["kind"] as? String ?? "")
+    }
+
+    /// r12-8: every executed member change's Activity row titled again by
+    /// the core's one rule (`names.change`) in this page's language and with
+    /// the names as they stand now — the sheet's title, on Activity too (the
+    /// web's `rewordMemberRows`). A row is rewritten only when its title
+    /// changed; rows written before r12 carry no action and keep theirs.
+    /// Answers how many changed.
+    @discardableResult
+    func rewordMemberRows() -> Int {
+        let words = MsWords(loc: loc, hub: self)
+        var changed = 0
+        var rows = TxRecords.load(store: shelf)
+        for (i, row) in rows.enumerated() {
+            guard (row["id"] as? String)?.hasPrefix("multisig:") == true,
+                  let action = row["multisigChange"] as? [String: Any],
+                  let title = words.memberChangeTitle(MsJSON(any: action)),
+                  title != row["intent"] as? String
+            else { continue }
+            rows[i]["intent"] = title
+            changed += 1
+        }
+        if changed > 0 {
+            shelf.writeList(VelaStore.Key.transactionHistory, rows)
+            onRecorded?()
+        }
+        return changed
+    }
+
+    /// The labels the member rows were last titled with (`rewordMemberRows`).
+    @ObservationIgnored private var rowLabels: [String: String]?
+
     /// An executed proposal's title for Activity and its notification: a
     /// contract call as the core reads its bytes ("Approve · USDC", r10-8 —
     /// the proposal is still in the machine's view when it runs), anything
@@ -826,10 +884,11 @@ final class MultisigHub {
     }
 
     /// A token's symbol and decimals: the chain's coin from the catalogue,
-    /// an ERC-20's from the chain.
-    func tokenInfo(chainId: Int, token: String?) async -> (symbol: String, decimals: Int) {
+    /// an ERC-20's from the chain. `decimals` nil: nobody read them (r12-1:
+    /// never 18, never 0, assumed).
+    func tokenInfo(chainId: Int, token: String?) async -> (symbol: String, decimals: Int?) {
         guard let token, !token.isEmpty else {
-            return (ChainCatalog.meta(chainId)?.nativeSymbol ?? "ETH", 18)
+            return (ChainCatalog.meta(chainId)?.nativeSymbol ?? "ETH", MsWords.coinDecimals)
         }
         // r8-2: the core's facts first (its registry, else the contract).
         let facts = proposalsView.tokens["\(chainId):\(token.lowercased())"]
@@ -839,9 +898,9 @@ final class MultisigHub {
         if let meta = await tokens?.resolve(chainId: chainId, addresses: [token])[token.lowercased()] {
             return (meta.symbol, meta.decimals)
         }
-        // Nobody read its decimals: its base units as they are — never a
-        // figure in 18 decimals assumed (r8-2).
-        return (AddressText.short(token), 0)
+        // Nobody read its decimals: said so — never a figure in 18
+        // decimals assumed (r8-2, r12-1).
+        return (AddressText.short(token), nil)
     }
 }
 

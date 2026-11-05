@@ -57,7 +57,7 @@
       "ethSignBody": "此操作會簽署一個不透明的雜湊值。惡意網站可在背後隱藏代幣轉移或授權。除非你完全信任此網站且明確知道自己在簽署什麼，否則請勿繼續。",
       "ethSignWarning": "無法核實的請求 — 絕大多數正當應用都不會使用 eth_sign。除非你十分肯定，否則請拒絕。",
       "firstTimeTagNeutral": "首次使用此地址",
-      "firstTimeTag": "首次",
+      "firstTimeTag": "首次從此裝置轉帳到此地址",
       "contractTag": "合約",
       "holdToConfirm": "長按以確認",
       "advancedToggle": "進階 — 查看原始數據",

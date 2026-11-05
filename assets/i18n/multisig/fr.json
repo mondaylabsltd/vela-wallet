@@ -114,6 +114,7 @@
     "failed": "Cela n’a pas abouti : {{reason}}",
     "noExpiry": "Les approbations n’expirent pas : elles comptent jusqu’à l’exécution ou l’annulation de la transaction.",
     "notFound": "Cette transaction n’est pas encore dans la boîte.",
+    "notHere": "Cette transaction appartient à un multisig qui n'est pas affiché ici. Ouvrez son lien pour la lire.",
     "opening": "Ouverture de la transaction…",
     "cannotPay": "{{name}} n'a pas assez de {{symbol}} pour les frais de réseau : il faut environ {{fee}}, il y a {{balance}}. Ajoutez-en, ou laissez un autre membre l'exécuter.",
     "notLanded": "Elle n'a pas atteint le réseau au bout de trois minutes. Si elle n'apparaît pas bientôt comme exécutée, réessayez.",

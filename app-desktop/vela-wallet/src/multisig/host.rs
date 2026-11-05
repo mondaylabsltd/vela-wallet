@@ -663,8 +663,12 @@ impl MultisigHost {
         if !view.loaded {
             return;
         }
-        // §9.1: one name per address for every surface, the core's.
-        super::shown::set_labels(&view.member_labels);
+        // §9.1: one name per address for every surface, the core's. r12-8: a
+        // name landing re-titles the executed member changes in Activity,
+        // as the sheet says them.
+        if super::shown::set_labels(&view.member_labels) {
+            reword_member_rows();
+        }
         // r10-1: the networks each multisig lives on (its record's), so the
         // hero's "Updated" speaks only for those (§9.3 `lives_on`).
         for row in &view.accounts {
@@ -847,6 +851,20 @@ impl MultisigHost {
         })
         .detach();
     }
+}
+
+/// r12-8: the executed member changes' Activity rows titled again by the
+/// core's one rule, off the UI thread (the store is a file).
+fn reword_member_rows() {
+    let _ = std::thread::Builder::new()
+        .name("vela-multisig-reword".to_owned())
+        .spawn(|| {
+            let loc = crate::loc::Loc::from_env();
+            let labels = super::shown::labels();
+            let _ = storage::update_list(crate::executor::activity_feed::TX_KEY, |stored| {
+                super::activity::reword_member_rows(stored, &loc, &labels) > 0
+            });
+        });
 }
 
 /// An executed multisig transaction's rows, worded and kept in Activity

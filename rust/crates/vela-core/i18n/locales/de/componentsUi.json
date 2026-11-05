@@ -47,7 +47,7 @@
       "ethSignBody": "Hiermit wird ein undurchsichtiger Hash signiert. Eine bösartige Seite kann dahinter einen Token-Transfer oder eine Genehmigung verstecken. Fahren Sie nur fort, wenn Sie dieser Seite voll vertrauen und genau wissen, was Sie signieren.",
       "ethSignWarning": "Nicht überprüfbare Anfrage — die meisten seriösen Apps verwenden eth_sign nie. Lehnen Sie ab, sofern Sie nicht sicher sind.",
       "firstTimeTagNeutral": "Erste Nutzung dieser Adresse",
-      "firstTimeTag": "Erstes Mal",
+      "firstTimeTag": "Erstes Mal von diesem Gerät",
       "contractTag": "Contract",
       "holdToConfirm": "Zum Bestätigen halten",
       "advancedToggle": "Technische Details",

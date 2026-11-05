@@ -1036,6 +1036,9 @@ impl SendHost {
                 // r10 follow-up: a send left this account — the incoming
                 // check looks at once and its back-off starts again.
                 crate::executor::activity_feed::sent(cx);
+                // R12 S4: and the balances are read again once it has had
+                // time to land — never the pre-send figure beside a sent row.
+                crate::executor::balance_dashboard::after_send(cx);
                 // Round 3 (send-5): what the submit knew of an op that may
                 // have been sent — the nonce it signed — once the hand-off
                 // has named its records, as the web's `noteSubmitFacts`.

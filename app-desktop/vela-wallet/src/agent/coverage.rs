@@ -668,6 +668,10 @@ const CALLS: &[(&str, Place)] = &[
     // r10 follow-up: the person's moments, for the incoming check's cadence.
     ("activity_feed::refreshed", Step("refresh_balances")),
     ("activity_feed::sent", Step("submit_transfer")),
+    // R12 S4: whether the shown account's first incoming scan is back.
+    ("activity_feed::scanned", Machine("a read")),
+    // R12 S4: the balances read again after a send was handed off.
+    ("balance_dashboard::after_send", Step("submit_transfer")),
     ("activity_feed::interacting", Machine("a list scrolled")),
     ("activity_feed::is_stable", Machine("a read")),
     (

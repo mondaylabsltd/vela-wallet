@@ -21,7 +21,7 @@ struct MsReviewBody: View {
     /// (its fields and hashes) is drawn — the web's `past`.
     var past = false
     /// A token's symbol and decimals, read once for the moves.
-    @State private var tokens: [String: (symbol: String, decimals: Int)] = [:]
+    @State private var tokens: [String: (symbol: String, decimals: Int?)] = [:]
     @State private var techOpen = false
 
     private var network: String { words.network(chainId) }
@@ -171,13 +171,20 @@ struct MsReviewBody: View {
     /// zero change not drawn) — r11 S4: never a hyphen.
     private func deltaText(_ delta: MsJSON) -> (text: String, negative: Bool)? {
         let raw = delta["delta"]?.string ?? "0"
-        let info: (symbol: String, decimals: Int)
-        if let token = delta["token"]?.string, !token.isEmpty {
-            info = tokens[token.lowercased()] ?? (MsWords.short(token), 18)
-        } else {
-            info = (words.symbol(chainId), 18)
+        var facts = words.facts(chainId: chainId, token: delta["token"]?.string)
+        if let token = delta["token"]?.string, !token.isEmpty, let read = tokens[token.lowercased()] {
+            facts = MsWords.TokenFacts(symbol: read.symbol, decimals: read.decimals ?? facts.decimals)
         }
-        return Self.signedDelta(raw, decimals: info.decimals, symbol: info.symbol)
+        // r12-1: decimals nobody read — the signed base units, said so;
+        // never a figure in 18 decimals assumed.
+        guard let decimals = facts.decimals else {
+            let negative = raw.hasPrefix("-")
+            let digits = negative ? String(raw.dropFirst()) : raw
+            guard digits.contains(where: { ("1"..."9").contains($0) }) else { return nil }
+            let sign = negative ? "\u{2212}" : "+"
+            return (sign + words.amount(digits, facts), negative)
+        }
+        return Self.signedDelta(raw, decimals: decimals, symbol: facts.symbol)
     }
 
     /// `raw` signed base units → "−0.01 USDC" (the core's figure).

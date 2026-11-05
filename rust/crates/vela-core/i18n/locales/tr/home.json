@@ -186,6 +186,7 @@
         "failed": "Tamamlanamadı: {{reason}}",
         "noExpiry": "Onayların süresi dolmaz: işlem yürütülene ya da iptal edilene kadar geçerlidir.",
         "notFound": "Bu işlem henüz posta kutusunda değil.",
+        "notHere": "Bu işlem burada gösterilmeyen bir çoklu imzaya ait. Okumak için bağlantısını açın.",
         "opening": "İşlem açılıyor…",
         "cannotPay": "{{name}} ağ ücreti için yeterli {{symbol}} tutmuyor: yaklaşık {{fee}} gerekiyor, {{balance}} var. Bakiye ekleyin ya da başka bir üye yürütsün.",
         "notLanded": "Üç dakika sonra hâlâ ağa ulaşmadı. Kısa süre içinde yürütüldü olarak görünmezse yeniden deneyin.",

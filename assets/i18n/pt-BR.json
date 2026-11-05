@@ -1391,7 +1391,7 @@
    "ethSignBody": "Isto assina um hash opaco. Um site malicioso pode esconder uma transferência ou aprovação de tokens por trás dele. Só continue se confiar totalmente neste site e souber exatamente o que está assinando.",
    "ethSignWarning": "Solicitação não verificável — apps legítimos quase nunca usam eth_sign. Rejeite, a menos que tenha certeza.",
    "firstTimeTagNeutral": "Primeira vez usando este endereço",
-   "firstTimeTag": "Primeira vez",
+   "firstTimeTag": "Primeira vez deste dispositivo",
    "contractTag": "Contrato",
    "holdToConfirm": "Segure para confirmar",
    "advancedToggle": "Detalhes técnicos",

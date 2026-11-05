@@ -587,7 +587,8 @@ struct HandoffCardTests {
             fee: nil, display: .usd, networks: .builtin, loc: loc
         ))
         #expect(row.label == "Network fee")
-        #expect(row.value.hasPrefix("~") && row.value.contains("USDC"), "\(row.value)")
+        // r12 S4: the quoted fee bare (the core's `fee.row`), never "~".
+        #expect(!row.value.hasPrefix("~") && row.value.contains("USDC"), "\(row.value)")
         #expect(row.tier == loc.t("send.gasTier.fast"))
         let single = HandoffFeeModel.of(
             feeJson: HandoffFeeFixtures.feeJson(), speedJson: HandoffFeeFixtures.speedJson(single: true),
