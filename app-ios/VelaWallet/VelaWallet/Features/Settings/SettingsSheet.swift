@@ -444,6 +444,8 @@ private struct AccountsSheetBody: View {
                         Text(row.addressDisplay)
                             .typeRole(Typography.monoSmall)
                             .foregroundStyle(theme.fgSubtle)
+                            // r14-11a: a short address is one line, never broken after its "…".
+                            .lineLimit(1)
                     }
                     Spacer(minLength: Tokens.Space.s8)
                     Text(row.amount)

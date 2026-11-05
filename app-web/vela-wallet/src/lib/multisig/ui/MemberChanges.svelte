@@ -24,6 +24,7 @@
 	 * waiting show here as one change with each network's progress
 	 * ("Arc 1/2 · Base 0/2").
 	 */
+	import AddressText from '$lib/ui/AddressText.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { requireApprovals } from '../core/approvals-words';
@@ -248,7 +249,7 @@
 							<Identicon svg={identiconSvgForClient(s.address)} size="compact" />
 							<span class="text">
 								<span class="name">{s.name ?? shortenAddress(s.address)}</span>
-								<span class="address">{shortenAddress(s.address)}</span>
+								<span class="address"><AddressText text={shortenAddress(s.address)} /></span>
 							</span>
 						</button>
 					</li>
@@ -326,7 +327,7 @@
 					<span class="text">
 						<span class="name">{names.label(owner)}</span>
 						{#if names.label(owner) !== shortenAddress(owner)}
-							<span class="address">{shortenAddress(owner)}</span>
+							<span class="address"><AddressText text={shortenAddress(owner)} /></span>
 						{/if}
 					</span>
 					<span class="row-buttons">

@@ -1,0 +1,26 @@
+<script lang="ts">
+	/**
+	 * r14-11a: a line of text whose short address forms are never broken —
+	 * the one way the web draws a short address inside wrapping text.
+	 *
+	 * "0x5fb7e1…47B271" may break after its "…" (Unicode line breaking allows
+	 * it, and a CJK line takes it). Each short form here is one `.short-address`
+	 * run: the words around it still wrap, and the address moves to the next
+	 * line whole. Text with none is drawn exactly as before — one text.
+	 */
+	import { addressRuns } from './address-runs';
+
+	let { text }: { text: string } = $props();
+
+	const runs = $derived(addressRuns(text));
+</script>
+
+{#if runs.some((run) => run.address)}{#each runs as run, i (i)}{#if run.address}<span
+				class="short-address">{run.text}</span
+			>{:else}{run.text}{/if}{/each}{:else}{text}{/if}
+
+<style>
+	.short-address {
+		white-space: nowrap;
+	}
+</style>

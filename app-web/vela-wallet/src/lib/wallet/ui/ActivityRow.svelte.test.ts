@@ -216,7 +216,8 @@ describe('a dApp row’s title wraps only between what was done and where', () =
 		let broke = false;
 		for (const width of [200, 210, 220, 230, 240, 250, 260, 270, 280, 288]) {
 			const view = drawn(row({ title }), width);
-			const text = view.title.firstChild!;
+			// The title's one text node (a framework anchor may stand beside it).
+			const text = document.createTreeWalker(view.title, NodeFilter.SHOW_TEXT).nextNode()!;
 			const from = title.indexOf('合约交互');
 			if (linesOf(text, from, from + 4) > 1) broke = true;
 			view.done();
@@ -250,6 +251,68 @@ describe('a dApp row’s title wraps only between what was done and where', () =
 		expect(view.title.querySelector('.action')).toBeNull();
 		expect(view.title.textContent).toBe('Contract interaction');
 		view.done();
+	});
+});
+
+/**
+ * r14-11a: the zh side panel drew a pending multisig transfer's line as
+ * 「已批准 1/2 · 至 0x5fb7e1… / 47B271」 — a short address broken after its
+ * "…", which Unicode line breaking allows and a CJK line takes. A short
+ * address is one unbreakable run wherever a row draws it: the words around it
+ * wrap, the address moves to the next line whole, and nothing is lost.
+ */
+describe('a short address in a row is never broken (r14-11a)', () => {
+	const ADDRESS = '0x5fb7e1…47B271';
+	const LINES = [
+		{ title: '发送 0.01 USDC', subtitle: `已批准 1/2 · 至 ${ADDRESS}` },
+		{ title: '发送 0.01 USDC', subtitle: `排队中 · 至 ${ADDRESS}` },
+		{ title: `添加 ${ADDRESS}`, subtitle: 'Arc Testnet' },
+		{ title: 'Send 0.01 USDC', subtitle: `Approved 1/2 · to ${ADDRESS}` }
+	];
+
+	/** The distinct line tops a node's text is drawn on. */
+	function lines(node: Node): number {
+		const range = document.createRange();
+		range.selectNodeContents(node);
+		return new Set(
+			[...range.getClientRects()].filter((b) => b.width > 0).map((b) => Math.round(b.top))
+		).size;
+	}
+
+	it('moves whole to the next line, at every phone width, beside a figure', () => {
+		// The row's width on a 320–430 phone and in the side panel, less the
+		// gutters: the text column beside the artwork and the figure.
+		for (const width of [220, 240, 260, 280, 300, 320, 360]) {
+			for (const line of LINES) {
+				const host = document.createElement('div');
+				host.style.width = `${width}px`;
+				document.body.appendChild(host);
+				const screen = render(ActivityRow, {
+					target: host,
+					props: {
+						row: row({ kind: 'sent', amount: '−0.01', unit: 'USDC', ...line }),
+						onclick: () => {}
+					}
+				});
+				const at = `${line.title} / ${line.subtitle} @ ${width}`;
+				// Nothing lost: the row still says it all.
+				expect(host.querySelector('.title')!.textContent, at).toBe(line.title);
+				expect(host.querySelector('.subtitle')!.textContent, at).toBe(line.subtitle);
+				const runs = [...host.querySelectorAll<HTMLElement>('.short-address')];
+				expect(
+					runs.map((r) => r.textContent),
+					at
+				).toEqual([ADDRESS]);
+				expect(getComputedStyle(runs[0]).whiteSpace, at).toBe('nowrap');
+				expect(lines(runs[0]), at).toBe(1);
+				// …and it stays inside the row.
+				expect(runs[0].getBoundingClientRect().right, at).toBeLessThanOrEqual(
+					host.getBoundingClientRect().right + 0.5
+				);
+				screen.unmount();
+				host.remove();
+			}
+		}
 	});
 });
 
