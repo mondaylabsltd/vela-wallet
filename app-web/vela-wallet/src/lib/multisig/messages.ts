@@ -166,6 +166,8 @@ export interface MultisigMessages {
 		/** ms-9: replaced by another transaction at its number (`{{nonce}}`). */
 		voidedByOther: string;
 		notInMailbox: string;
+		/** A transaction of a multisig not shown here (§18 (b), the core's `review.missing`). */
+		notHere: string;
 		badLink: string;
 		/** ms-21: a link's transaction on a device with no member of its multisig. */
 		previewNote: string;
@@ -843,6 +845,11 @@ export interface ReviewStateMessages {
 	 * danger line over it, with Try again; it signs only "… anyway".
 	 */
 	unchecked: string;
+	/**
+	 * r14-13: "Couldn't reach {{network}} to read this transaction." — the
+	 * review's network answered none of its reads: failed, never "… anyway".
+	 */
+	chainUnread: string;
 }
 
 /** `home.multisig.review.reading` (r8-1, r8-2, r8-5). */
@@ -1097,6 +1104,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		voidedNote: '',
 		voidedByOther: '',
 		notInMailbox: '',
+		notHere: '',
 		badLink: '',
 		previewNote: '',
 		watch: '',
@@ -1638,7 +1646,8 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 			unreadable: '',
 			gone: '',
 			tryAgain: '',
-			unchecked: ''
+			unchecked: '',
+			chainUnread: ''
 		},
 		reading: {
 			send: '',

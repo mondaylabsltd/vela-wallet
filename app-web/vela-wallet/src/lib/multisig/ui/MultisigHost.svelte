@@ -78,6 +78,8 @@
 	let addPrefill = $state('');
 	/** r4b-13: what the link's own lookup found, said at once in the add sheet. */
 	let addFailure = $state<string | null>(null);
+	/** §18 (c): that lookup did not come back — the core marks it retryable. */
+	let addRetry = $state(false);
 	/** The person closed "Opening…": the link's transaction opens over nothing they do now. */
 	let leftLink = false;
 
@@ -270,6 +272,7 @@
 				// the add sheet's own lookup to say, with every reason — not a line.
 				const reason = stand.reason.kind;
 				addPrefill = stand.link.multisig;
+				addRetry = stand.retry ?? false;
 				addFailure =
 					reason === 'refused' ||
 					reason === 'highRisk' ||
@@ -398,6 +401,7 @@
 			link={invite}
 			broken={sheet.broken !== undefined ? (sheet.fault ?? 'damaged') : false}
 			prefillFailure={invite || sheet.broken !== undefined ? null : addFailure}
+			prefillRetry={!invite && sheet.broken === undefined && addRetry}
 			{locale}
 			{wide}
 			{closeLabel}

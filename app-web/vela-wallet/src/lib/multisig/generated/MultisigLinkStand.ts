@@ -8,4 +8,12 @@ import type { ProposalLink } from "./ProposalLink";
 /**
  * Where the link opened stands, for the shell to draw.
  */
-export type MultisigLinkStand = { "kind": "broken", link: BrokenLink, text: string, fault: AddLinkFault | null, } | { "kind": "invite", link: AddLink, } | { "kind": "missingNetwork", link: ProposalLink, } | { "kind": "opening", link: ProposalLink, } | { "kind": "member", link: ProposalLink, address: string, kept_before: boolean, } | { "kind": "preview", link: ProposalLink, kept: boolean, } | { "kind": "failed", link: ProposalLink, reason: MultisigAddOutcome, } | { "kind": "kept" };
+export type MultisigLinkStand = { "kind": "broken", link: BrokenLink, text: string, fault: AddLinkFault | null, } | { "kind": "invite", link: AddLink, } | { "kind": "missingNetwork", link: ProposalLink, } | { "kind": "opening", link: ProposalLink, } | { "kind": "member", link: ProposalLink, address: string, kept_before: boolean, } | { "kind": "preview", link: ProposalLink, kept: boolean, } | { "kind": "failed", link: ProposalLink, reason: MultisigAddOutcome, 
+/**
+ * §18 (c), round 14: a lookup that did not come back (the service
+ * or the network silent, rate-limited, the Safe contracts unread —
+ * [`AddOutcome::offers_retry`], the add sheet's own rule): offer Try
+ * again (`retry_link`). A lookup that answered (not found, refused,
+ * high risk) is not retried behind the person's words.
+ */
+retry: boolean, } | { "kind": "kept" };

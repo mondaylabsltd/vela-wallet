@@ -152,3 +152,22 @@ describe('the fee line (r4-7)', () => {
 		expect(shown.items).toEqual(['activating Alice’s account, which pays the fee']);
 	});
 });
+
+describe('a deploy the core could not check is never said as refused (r14-4)', () => {
+	it('reads `unverified` as the unknown authority, and `refused` as the refusal', async () => {
+		const { previewOf } = await import('../shell/proposal-failure');
+		const unread = previewOf(
+			{ kind: 'unverified', authority: { kind: 'unknown', unread: ['0x41'] } },
+			5042002
+		);
+		expect(unread?.kind).toBe('refused');
+		const unreadError = (unread as { error: { authority: { kind: string } } }).error;
+		expect(unreadError.authority.kind).toBe('unknown');
+		const refused = previewOf(
+			{ kind: 'refused', authority: { kind: 'refused', reasons: [{ kind: 'badMembers' }] } },
+			5042002
+		);
+		const refusedError = (refused as { error: { authority: { kind: string } } }).error;
+		expect(refusedError.authority.kind).toBe('refused');
+	});
+});
