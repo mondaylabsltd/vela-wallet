@@ -3718,3 +3718,43 @@ fn a_write_during_an_outage_still_goes_out() {
     let ops = sut.dispatch(rpc_call("w1", "eth_sendRawTransaction", now + 10.0));
     assert!(posted_url(&ops, "w1").is_some(), "{ops:?}");
 }
+
+/// r13-4: a chain RF1 put out of reach in a few milliseconds (every node
+/// answered one method with a 500, or refused) is not SILENT — the next read
+/// still sweeps it whole, the node that answers it first, and it is never
+/// named at once (`silent_chains` stays empty).
+#[test]
+fn a_chain_out_of_reach_by_one_quick_pass_is_not_silent_and_is_swept_whole() {
+    let mut sut = loaded(T0);
+    sut.dispatch(rpc_call("c1", "eth_call", T0 + 1_000.0));
+    sut.resolve(outcome(
+        "c1",
+        USER,
+        Out::HttpError { status: 500 },
+        3.0,
+        T0 + 1_003.0,
+    ));
+    sut.resolve(outcome("c1", PUB1, Out::NotConnected, 3.0, T0 + 1_006.0));
+    sut.resolve(outcome("c1", PUB2, Out::NotConnected, 3.0, T0 + 1_009.0));
+    let view = sut.view();
+    assert_eq!(view.unreached_chains, vec![CHAIN], "RF1");
+    assert!(view.silent_chains.is_empty(), "not silent: {view:?}");
+    let mut ops = sut.dispatch(rpc_call("c2", "eth_blockNumber", T0 + 1_100.0));
+    let mut asked = Vec::new();
+    while let Some(url) = posted_url(&ops, "c2") {
+        asked.push(url.clone());
+        let out = if url == USER { ok() } else { Out::NotConnected };
+        ops = sut.resolve_matching(
+            |op| matches!(op, Op::JsonRpcPost { call_id, .. } if call_id == "c2"),
+            outcome("c2", &url, out, 3.0, T0 + 1_110.0),
+        );
+        if url == USER {
+            break;
+        }
+    }
+    assert!(
+        asked.iter().any(|u| u == USER),
+        "the node that answers was asked: {asked:?}"
+    );
+    assert!(sut.view().out_of_reach_chains.is_empty());
+}

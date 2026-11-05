@@ -2586,11 +2586,14 @@ fn handle_outcome(
 
 /// r13-4: a read that a chain out of reach would hold — through the RPC
 /// pool, a read ([`is_hedged_read`]: nothing it sends changes anything), on
-/// a chain in `unreached_chains`.
+/// a chain found silent (`silent_chains`).
 fn outage_read(model: &Model, call_id: &str) -> bool {
+    // Only a SILENT chain (the silence rule): RF1 can come from one method a
+    // node refuses with a 500, and that node still answers every other
+    // read — a read that skipped it failed where it would have answered.
     model.calls.get(call_id).is_some_and(|session| {
         is_hedged_read(session.kind, &session.method)
-            && model.unreached_chains.contains(&session.chain_id)
+            && model.silent_chains.contains(&session.chain_id)
     })
 }
 
