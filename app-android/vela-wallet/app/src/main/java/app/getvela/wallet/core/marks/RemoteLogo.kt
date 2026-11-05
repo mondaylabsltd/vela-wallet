@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.LruCache
+import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -21,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import app.getvela.wallet.core.net.VelaHttp
 import okhttp3.Cache
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -79,15 +81,37 @@ object LogoStore {
     @Volatile
     private var client: OkHttpClient? = null
 
+    /** Tests only ([answerFrom]): what answers every logo fetch before the network would. */
+    @Volatile
+    private var answering: Interceptor? = null
+
     // Derived from the one shared read client (SC-107: nothing else opens a
     // socket), with a disk cache so a relaunch draws yesterday's logos before
     // the network answers.
-    private fun client(context: Context): OkHttpClient = client ?: synchronized(this) {
-        client ?: VelaHttp.client.newBuilder()
-            .cache(Cache(File(context.cacheDir, "logos"), 16L * 1024 * 1024))
-            .callTimeout(8, TimeUnit.SECONDS)
-            .build()
-            .also { client = it }
+    private fun client(context: Context): OkHttpClient {
+        val network = client ?: synchronized(this) {
+            client ?: VelaHttp.client.newBuilder()
+                .cache(Cache(File(context.cacheDir, "logos"), 16L * 1024 * 1024))
+                .callTimeout(8, TimeUnit.SECONDS)
+                .build()
+                .also { client = it }
+        }
+        // Derived per call, sharing the one client's cache and connections.
+        return answering?.let { network.newBuilder().addInterceptor(it).build() } ?: network
+    }
+
+    /**
+     * Tests only: every logo fetch is answered by [interceptor] — a device
+     * test's fixtures, so it passes on a machine with no direct internet —
+     * and never reaches the network; `null` gives the network back. What was
+     * held (logos and misses) is forgotten either way, so nothing a previous
+     * answerer said is drawn after it. The fetch is otherwise the app's own:
+     * the same client, the same decode, the same memory of what was drawn.
+     */
+    @VisibleForTesting
+    internal fun answerFrom(interceptor: Interceptor?) {
+        answering = interceptor
+        clear()
     }
 
     fun cached(url: String): Bitmap? = memory.get(url)
