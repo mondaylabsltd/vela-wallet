@@ -175,6 +175,15 @@ data class RpcPoolView(
     /** Of those, the chains whose own node did not answer — never routed around (the person said so). */
     val own_node_unreached_chains: List<Int> = emptyList(),
     /**
+     * r12-3 (docs/multisig-machines.md §13.2): the chain notice's own set —
+     * [failed_chains] ∪ [unreached_chains], less [rate_limited_chains] —
+     * sorted ascending. Handed to the balance machine as `pool_unreached`
+     * whenever it changes ([WalletController.poolUnreached]): a network the
+     * pool lost in a warm session is read again and named, never left as
+     * "Live" over a network that stopped answering.
+     */
+    val out_of_reach_chains: List<Int> = emptyList(),
+    /**
      * Per routed call (by call id), the endpoints its current pass has still
      * to try, in the order the core will try them — the endpoint it waits on
      * already off the list. It is where a hedged read's early ask goes (the
