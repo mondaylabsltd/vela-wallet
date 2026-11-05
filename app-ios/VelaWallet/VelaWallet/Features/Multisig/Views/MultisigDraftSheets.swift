@@ -38,13 +38,13 @@ struct MultisigDraftReviewSheet: View {
             if let siteNote { MsNote(text: siteNote, identifier: "multisig.draft.site") }
             if let draft {
                 let item = draft.item
-                Text(verbatim: words.title(item, review: draft.review.isNull ? nil : draft.review))
+                Text(prose: words.title(item, review: draft.review.isNull ? nil : draft.review))
                     .typeRole(Typography.title.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("multisig.draft.title")
-                Text(verbatim: "\(words.network(item.chainId)) · \(words.t("action.numberValue", ["nonce": item.nonce]))")
+                Text(prose: "\(words.network(item.chainId)) · \(words.t("action.numberValue", ["nonce": item.nonce]))")
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.fgSubtle)
                 // §12: the review once read; until then (or when it could
@@ -96,7 +96,7 @@ struct MultisigDraftReviewSheet: View {
                     set: { member = $0 }
                 )) {
                     ForEach(draft.membersHere, id: \.self) { address in
-                        Text(verbatim: words.label(address)).tag(Optional(address))
+                        Text(prose: words.label(address)).tag(Optional(address))
                     }
                 }
                 .pickerStyle(.menu)
@@ -206,7 +206,7 @@ extension View {
             .accessibilityIdentifier("multisig.anyway.confirm")
             Button(cancel, role: .cancel) { step.wrappedValue = nil }
         } message: { pending in
-            Text(verbatim: pending.reasons.joined(separator: "\n"))
+            Text(prose: pending.reasons.joined(separator: "\n"))
         }
     }
 }
@@ -222,7 +222,7 @@ struct MultisigRiskSheet: View {
         MsSheet(title: words.t("authority.signRiskTitle"), closeLabel: words.loc.t("common.done"), onClose: { ask.answer(false) }) {
             MsNote(text: words.t("authority.signRiskBody", ["network": words.network(ask.chainId)]), tone: .danger)
             ForEach(Array(ask.findings.enumerated()), id: \.offset) { _, finding in
-                Text(verbatim: words.finding(finding))
+                Text(prose: words.finding(finding))
                     .typeRole(Typography.body.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
                     .fixedSize(horizontal: false, vertical: true)

@@ -65,7 +65,7 @@ struct MsSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s8) {
             if let title {
-                Text(verbatim: title)
+                Text(prose: title)
                     .typeRole(Typography.label.scaled(textScale))
                     .foregroundStyle(theme.fgSubtle)
                     .accessibilityAddTraits(.isHeader)
@@ -89,7 +89,7 @@ struct MsRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: Tokens.Space.s8) {
             VStack(alignment: .leading, spacing: Tokens.Space.s4) {
-                Text(verbatim: label)
+                Text(prose: label)
                     .typeRole(Typography.label.scaled(textScale))
                     .foregroundStyle(theme.fgSubtle)
                 // An address or hash breaks only between its halves (r13).
@@ -138,7 +138,7 @@ struct MsNote: View {
                     .padding(.top, Tokens.Space.s2)
                     .accessibilityHidden(true)
             }
-            Text(verbatim: text)
+            Text(prose: text)
                 .typeRole(Typography.flowCaption.scaled(textScale))
                 .foregroundStyle(tone == .neutral ? theme.fgMuted : color)
                 .fixedSize(horizontal: false, vertical: true)
@@ -166,7 +166,7 @@ struct MsChip: View {
     var tone: MsNote.Tone = .neutral
 
     var body: some View {
-        Text(verbatim: text)
+        Text(prose: text)
             .typeRole(Typography.chip.scaled(textScale))
             .foregroundStyle(tone == .neutral ? theme.fgMuted : (tone == .danger ? theme.errorBase : theme.warningBase))
             .padding(.horizontal, Tokens.Space.s8)
@@ -204,12 +204,12 @@ struct MsNavRow: View {
                         .accessibilityHidden(true)
                 }
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                    Text(verbatim: title)
+                    Text(prose: title)
                         .typeRole(Typography.fieldLabel.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
                         .fixedSize(horizontal: false, vertical: true)
                     if let subtitle {
-                        Text(verbatim: subtitle)
+                        Text(prose: subtitle)
                             .typeRole(Typography.rowSub.scaled(textScale))
                             .foregroundStyle(theme.fgSubtle)
                             .fixedSize(horizontal: false, vertical: true)
@@ -243,7 +243,7 @@ struct MsField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s4) {
-            Text(verbatim: label)
+            Text(prose: label)
                 .typeRole(Typography.label.scaled(textScale))
                 .foregroundStyle(theme.fgSubtle)
             TextField(placeholder, text: $text)
@@ -260,7 +260,7 @@ struct MsField: View {
                 )
                 .accessibilityIdentifier(identifier)
             if let error {
-                Text(verbatim: error)
+                Text(prose: error)
                     .typeRole(Typography.flowCaption.scaled(textScale))
                     .foregroundStyle(theme.errorBase)
                     .fixedSize(horizontal: false, vertical: true)

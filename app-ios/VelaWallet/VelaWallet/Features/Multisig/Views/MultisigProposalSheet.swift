@@ -817,7 +817,7 @@ struct MultisigProposalSheet: View {
         } else {
             HStack(spacing: Tokens.Space.s8) {
                 ProgressView()
-                Text(verbatim: words.t("proposal.opening"))
+                Text(prose: words.t("proposal.opening"))
                     .typeRole(Typography.body.scaled(textScale))
                     .foregroundStyle(theme.fgMuted)
             }
@@ -834,7 +834,7 @@ struct MultisigProposalSheet: View {
     @ViewBuilder private func content(_ model: MsProposalModel) -> some View {
         if let siteNote { MsNote(text: siteNote, identifier: "multisig.proposal.site") }
         VStack(alignment: .leading, spacing: Tokens.Space.s8) {
-            Text(verbatim: model.title)
+            Text(prose: model.title)
                 .typeRole(Typography.title.scaled(textScale))
                 .foregroundStyle(theme.fgBase)
                 .fixedSize(horizontal: false, vertical: true)
@@ -843,7 +843,7 @@ struct MultisigProposalSheet: View {
             HStack(spacing: Tokens.Space.s8) {
                 MsChip(text: model.statusLine, tone: model.standing?.kind == "blocked" ? .warning : .neutral)
                     .accessibilityIdentifier("multisig.proposal.status")
-                Text(verbatim: "\(words.network(chainId)) · \(words.t("action.numberValue", ["nonce": model.item.nonce]))")
+                Text(prose: "\(words.network(chainId)) · \(words.t("action.numberValue", ["nonce": model.item.nonce]))")
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.fgSubtle)
             }
@@ -919,17 +919,17 @@ struct MultisigProposalSheet: View {
                             let short = MsWords.short(member)
                             let label = words.label(member)
                             // An unnamed member is its address, said once.
-                            Text(verbatim: label)
+                            Text(prose: label)
                                 .typeRole((label == short ? Typography.monoSmall : Typography.fieldLabel).scaled(textScale))
                                 .foregroundStyle(theme.fgBase)
                             if label != short {
-                                Text(verbatim: short)
+                                Text(prose: short)
                                     .typeRole(Typography.monoSmall.scaled(textScale))
                                     .foregroundStyle(theme.fgSubtle)
                             }
                         }
                         Spacer(minLength: Tokens.Space.s8)
-                        Text(verbatim: words.t(word.key))
+                        Text(prose: words.t(word.key))
                             .typeRole(Typography.rowSub.scaled(textScale))
                             .foregroundStyle(done ? theme.successBase : theme.fgSubtle)
                     }
@@ -1061,7 +1061,7 @@ struct MultisigProposalSheet: View {
                             Button(words.t("proposal.reject"), role: .destructive) { reject(model) }
                             Button(words.t("proposal.rejectCancel"), role: .cancel) {}
                         } message: {
-                            Text(verbatim: words.t("proposal.rejectHint", count: model.item.threshold, [
+                            Text(prose: words.t("proposal.rejectHint", count: model.item.threshold, [
                                 "threshold": String(model.item.threshold), "count": String(model.item.threshold),
                             ]))
                         }
@@ -1074,7 +1074,7 @@ struct MultisigProposalSheet: View {
     private func memberPicker(_ members: [String], selection: Binding<String?>) -> some View {
         Picker(words.t("proposal.as"), selection: selection) {
             ForEach(members, id: \.self) { address in
-                Text(verbatim: words.label(address)).tag(Optional(address))
+                Text(prose: words.label(address)).tag(Optional(address))
             }
         }
         .pickerStyle(.menu)
@@ -1109,7 +1109,7 @@ struct MultisigProposalSheet: View {
             // reads, reviews and signs the transaction alone.
             MsSection(title: words.t("external.outsideLinkTitle")) {
                 MsNote(text: words.t("external.outsideLinkHint"))
-                Text(verbatim: words.t("proposal.stillNeeded", ["missing": words.loc.list(model.outside.map(words.label))]))
+                Text(prose: words.t("proposal.stillNeeded", ["missing": words.loc.list(model.outside.map(words.label))]))
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.fgMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1168,12 +1168,12 @@ struct MultisigProposalSheet: View {
             MsSection(title: words.t("timeline.heading")) {
                 ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                     VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                        Text(verbatim: line.text)
+                        Text(prose: line.text)
                             .typeRole(Typography.rowSub.scaled(textScale))
                             .foregroundStyle(theme.fgMuted)
                             .fixedSize(horizontal: false, vertical: true)
                         if let when = line.when {
-                            Text(verbatim: when)
+                            Text(prose: when)
                                 .typeRole(Typography.flowCaption.scaled(textScale))
                                 .foregroundStyle(theme.fgSubtle)
                                 .accessibilityIdentifier("multisig.proposal.history.when")

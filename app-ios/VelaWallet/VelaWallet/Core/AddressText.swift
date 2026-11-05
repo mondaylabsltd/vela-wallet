@@ -76,6 +76,24 @@ enum AddressText {
             && !text.contains(where: \.isWhitespace)
     }
 
+    /// WORD JOINER: no line break on either side, drawn as nothing.
+    static let joiner = "\u{2060}"
+
+    /// r14-11a: `text` with every short form in it (`0x777E98…61875a`) bound
+    /// whole — a word joiner either side of its "…". Unicode allows a break
+    /// after U+2026 and a CJK line takes it, so a subtitle could end a line
+    /// at `0x777E98…`. Prose's own ellipses ("Reading…") and full addresses
+    /// are untouched. For drawing only (`Text(prose:)`): never applied to
+    /// what is copied, shared or stored, nor to the core's `short_address`.
+    /// Android binds its fingerprints the same way; the web draws no-wrap
+    /// runs (`address-runs.ts`).
+    static func bound(_ text: String) -> String {
+        guard text.contains("\u{2026}") else { return text }
+        return text.replacing(#/(0[xX][0-9a-fA-F]+)…([0-9a-fA-F]+)/#) { match in
+            "\(match.1)\(joiner)\u{2026}\(joiner)\(match.2)"
+        }
+    }
+
     /// The mock's two mono lines: the address split in half, never mid-byte.
     ///
     /// Lives here rather than beside its first caller because spec 051 needed a
