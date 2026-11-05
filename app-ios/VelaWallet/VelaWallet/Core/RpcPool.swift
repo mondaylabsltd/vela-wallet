@@ -156,9 +156,15 @@ final class RpcPool {
     /// (`pool_unreached`) and re-reads, forced, a network the account is read
     /// on that has just gone out of reach. A warm outage aged "Updated 2m"
     /// for minutes before: the home's poll is ten.
-    var onOutOfReach: ((_ chainIds: [Int]) -> Void)?
-    /// The last set said through `onOutOfReach`.
+    ///
+    /// r13-4: with them, the SILENT ones (`RpcPoolView.silent_chains`: three
+    /// different nodes said nothing at all for 5 s, nothing answered since)
+    /// — the core names those at once, as the web's `onPoolOutOfReach` has
+    /// it say them; told whenever either set changes.
+    var onOutOfReach: ((_ chainIds: [Int], _ silent: [Int]) -> Void)?
+    /// The last sets said through `onOutOfReach`.
     private(set) var outOfReachChains: [Int] = []
+    private(set) var silentChains: [Int] = []
 
     private let store: VelaStore
     private let accounts: AccountStore
@@ -197,7 +203,7 @@ final class RpcPool {
 
     /// The pool's view, mirrored — each field written only when it moved, so
     /// a screen that reads one list is not redrawn for another's change.
-    private func viewArrived(_ view: RpcPoolViewWire) {
+    func viewArrived(_ view: RpcPoolViewWire) {
         if failedChains != view.failedChains { failedChains = view.failedChains }
         if rateLimitedChains != view.rateLimitedChains { rateLimitedChains = view.rateLimitedChains }
         if unreachedChains != view.unreachedChains { unreachedChains = view.unreachedChains }
@@ -206,9 +212,11 @@ final class RpcPool {
             ownNodeUnreachedChains = view.ownNodeUnreachedChains
         }
         let outOfReach = view.outOfReachChains.sorted()
-        if outOfReachChains != outOfReach {
+        let silent = view.silentChains.sorted()
+        if outOfReachChains != outOfReach || silentChains != silent {
             outOfReachChains = outOfReach
-            onOutOfReach?(outOfReach)
+            silentChains = silent
+            onOutOfReach?(outOfReach, silent)
         }
         viewRevision &+= 1
     }
@@ -671,16 +679,19 @@ struct RpcPoolViewWire: Decodable, Equatable {
     /// or unreached, never only rate limited) — what the balance machine
     /// hears as `pool_unreached`.
     var outOfReachChains: [Int] = []
+    /// r13-4: of them, the SILENT ones (several nodes said nothing at all
+    /// for seconds) — handed on beside them, named at once.
+    var silentChains: [Int] = []
 
     private enum CodingKeys: String, CodingKey {
         case failedChains, rateLimitedChains, banned, unreachedChains
-        case fallbackChains, ownOnlyChains, ownNodeUnreachedChains, outOfReachChains
+        case fallbackChains, ownOnlyChains, ownNodeUnreachedChains, outOfReachChains, silentChains
     }
 
     init(
         failedChains: [Int], rateLimitedChains: [Int], banned: [RpcBanEntryWire],
         unreachedChains: [Int] = [], fallbackChains: [Int] = [], ownOnlyChains: [Int] = [],
-        ownNodeUnreachedChains: [Int] = []
+        ownNodeUnreachedChains: [Int] = [], outOfReachChains: [Int] = [], silentChains: [Int] = []
     ) {
         self.failedChains = failedChains
         self.rateLimitedChains = rateLimitedChains
@@ -689,6 +700,8 @@ struct RpcPoolViewWire: Decodable, Equatable {
         self.fallbackChains = fallbackChains
         self.ownOnlyChains = ownOnlyChains
         self.ownNodeUnreachedChains = ownNodeUnreachedChains
+        self.outOfReachChains = outOfReachChains
+        self.silentChains = silentChains
     }
 
     /// The newer lists are read when present: a view from an older core reads
@@ -703,6 +716,7 @@ struct RpcPoolViewWire: Decodable, Equatable {
         ownOnlyChains = try c.decodeIfPresent([Int].self, forKey: .ownOnlyChains) ?? []
         ownNodeUnreachedChains = try c.decodeIfPresent([Int].self, forKey: .ownNodeUnreachedChains) ?? []
         outOfReachChains = try c.decodeIfPresent([Int].self, forKey: .outOfReachChains) ?? []
+        silentChains = try c.decodeIfPresent([Int].self, forKey: .silentChains) ?? []
     }
 }
 

@@ -68,14 +68,31 @@ struct RootView: View {
     /// nothing there — a multisig's networks (`lives_on`); none said for a
     /// Vela account, whose holdings say where it lives.
     private var shownLivesOn: [Int] { shownMultisig?.account.chainIds ?? [] }
-    /// r11-3: the other space's networks the multisig shown lives on, when
-    /// none of its networks is in the space in front (empty otherwise).
-    private var shownElsewhere: [Int] {
-        guard shownMultisig != nil else { return [] }
+    /// r11-3, r13-1: where the multisig shown lives when none of its networks
+    /// is in the space in front — the core's word (nil otherwise).
+    private var shownElsewhere: WalletLive.Elsewhere? {
+        guard shownMultisig != nil else { return nil }
+        let rows = settings.networkAdmin?.networks
         return WalletLive.livesElsewhere(
             chainIds: shownLivesOn,
             here: walletNetworks.chains.map(\.chainId),
-            known: WalletNetworks(settings.networkAdmin?.networks).chains.map(\.chainId)
+            other: WalletNetworks(rows, space: space.current.other).chains.map(\.chainId),
+            front: space.current
+        )
+    }
+    /// r13-7: the shown multisig's history (`ProposalsView.history`) — only
+    /// once the proposals machine follows it (the web's `multisigHistory`).
+    /// The unread line names the network the history could not be read on.
+    private var shownMultisigHistory: WalletLive.MultisigHistory? {
+        guard let row = shownMultisig else { return nil }
+        let view = multisig.proposalsView
+        guard view.followed?.lowercased() == row.account.address.lowercased() else { return nil }
+        let chainId = view.historyUnreadable.first ?? row.account.chainIds.first
+        return WalletLive.MultisigHistory(
+            stand: view.history,
+            unreadText: multisigWords.t("panel.historyUnreadable",
+                                        ["network": chainId.map(multisigWords.network) ?? ""]),
+            retryText: loc.t("common.tryAgain")
         )
     }
     private var shownName: String {
@@ -1385,17 +1402,22 @@ struct RootView: View {
                                     onOpen: { multisig.sheet = $0 },
                                     onFund: { enterReceive() },
                                     elsewhere: shownElsewhere,
-                                    otherSpace: space.current.other,
-                                    onSwitchSpace: {
+                                    onSwitchSpace: { target in
                                         // The person's press, through the intent the
-                                        // space prompt answers with.
-                                        agent.person(["type": "set_network_space", "space": space.current.other.rawValue])
+                                        // space prompt answers with — to the space the
+                                        // core says it lives in.
+                                        agent.person(["type": "set_network_space", "space": target.rawValue])
                                     }
                                 ))
                             },
                             // r10 follow-up: no scan in the home's way while
                             // it moves under a finger.
-                            onScrolling: { activity.scrolling("home", $0) }
+                            onScrolling: { activity.scrolling("home", $0) },
+                            // r13-7: a multisig's history not read, read again
+                            // (the proposals machine's `retry`, as the card's note).
+                            onActivityRetry: shownMultisig == nil ? nil : {
+                                multisig.sendProposal(["type": "retry"])
+                            }
                         )
                     }
                     // The hero's status line, as a sheet over the wallet —
@@ -2735,16 +2757,18 @@ struct RootView: View {
             base.balance.refresh = nil
             return base
         }
-        let applied = WalletLive.apply(view, currency: settings.currency ?? .unread, feed: activity.feed,
-                                       feedRead: activity.settled(for: shownAddress), on: base, loc: loc,
-                                       now: Date(), spinning: wallet.spin.spinning,
-                                       networks: walletNetworks,
-                                       noValue: space.testnet ? loc.t("networkSpace.noValue") : nil)
+        let fed = WalletLive.apply(view, currency: settings.currency ?? .unread, feed: activity.feed,
+                                   feedRead: activity.settled(for: shownAddress), on: base, loc: loc,
+                                   now: Date(), spinning: wallet.spin.spinning,
+                                   networks: walletNetworks,
+                                   noValue: space.testnet ? loc.t("networkSpace.noValue") : nil)
+        // r13-7: a multisig's Activity says what its history is — being read,
+        // or not read (with Try again) — never "No activity yet" over either.
+        let applied = WalletLive.withMultisigHistory(fed, shownMultisigHistory)
         // r11-3: a multisig whose money is in the other space says so —
         // never a false zero or empty state for networks it never lived on.
-        if !shownElsewhere.isEmpty {
-            return WalletLive.livingElsewhere(
-                applied, heading: loc.t(space.testnet ? "networkSpace.headingMainnet" : "networkSpace.headingTestnet"))
+        if let elsewhere = shownElsewhere {
+            return WalletLive.livingElsewhere(applied, heading: loc.t(elsewhere.headingKey))
         }
         // Real-device S3: the account just switched to (a multisig) is named
         // before the balance machine has heard of it — never the previous

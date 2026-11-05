@@ -14,6 +14,8 @@ struct WalletEmptyState: View {
 
     let icon: LucideGlyph
     let model: SectionEmptyModel
+    /// r13-7: the model's Try again (a read that failed, read again).
+    var onRetry: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: Tokens.Space.s8) {
@@ -27,6 +29,11 @@ struct WalletEmptyState: View {
                 Text(verbatim: model.caption)
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.fgMuted)
+            }
+            if let retry = model.retry, let onRetry {
+                VelaButton(title: retry, kind: .secondary) { onRetry() }
+                    .padding(.top, Tokens.Space.s8)
+                    .accessibilityIdentifier("home.activity.retry")
             }
         }
         .multilineTextAlignment(.center)

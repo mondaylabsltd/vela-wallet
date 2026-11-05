@@ -27,12 +27,11 @@ struct MultisigHomeCard: View {
     var funded = false
     var onOpen: (MultisigSheet) -> Void
     var onFund: () -> Void
-    /// r11-3: the other space's networks it lives on when none of its
-    /// networks is in the space in front (empty: it lives here).
-    var elsewhere: [Int] = []
-    /// The space its money is in, and the person's switch there.
-    var otherSpace: NetworkSpaceKind = .testnet
-    var onSwitchSpace: (() -> Void)? = nil
+    /// r11-3, r13-1: where it lives when none of its networks is in the
+    /// space in front — the core's word (nil: it lives here).
+    var elsewhere: WalletLive.Elsewhere? = nil
+    /// The person's switch to the space its money is in.
+    var onSwitchSpace: ((NetworkSpaceKind) -> Void)? = nil
 
     private var view: MsProposalsView { hub.proposalsView }
     private var account: MsAccount { row.account }
@@ -40,8 +39,8 @@ struct MultisigHomeCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
-            if !elsewhere.isEmpty {
-                otherSpaceNote
+            if let elsewhere {
+                otherSpaceNote(elsewhere)
             }
             header
             // core-ms-2: the banner — said only when something waits and there
@@ -104,20 +103,25 @@ struct MultisigHomeCard: View {
 
     /// "Used on Arc Testnet · Testnet space", and the switch there: a
     /// multisig shown from the space it does not live in holds nothing here.
-    private var otherSpaceNote: some View {
-        let testnet = otherSpace == .testnet
-        let line = words.t("add.usedOn", ["networks": words.loc.list(elsewhere.map(words.network))])
-            + " · " + words.loc.t(testnet ? "networkSpace.headingTestnet" : "networkSpace.headingMainnet")
+    /// Every word is the core's key (r13-1: `Elsewhere`).
+    private func otherSpaceNote(_ elsewhere: WalletLive.Elsewhere) -> some View {
+        let line = Self.otherSpaceLine(elsewhere, words: words)
         return VStack(alignment: .leading, spacing: Tokens.Space.s8) {
             MsNote(text: line, tone: .warning, identifier: "multisig.home.otherSpace")
             if let onSwitchSpace {
-                VelaButton(
-                    title: words.loc.t(testnet ? "networkSpace.toTestnet" : "networkSpace.toMainnet"),
-                    kind: .secondary
-                ) { onSwitchSpace() }
+                VelaButton(title: words.loc.t(elsewhere.switchKey), kind: .secondary) {
+                    onSwitchSpace(elsewhere.target)
+                }
                 .accessibilityIdentifier("multisig.home.otherSpaceSwitch")
             }
         }
+    }
+
+    /// The note's line: the core's line key over its networks, then the other
+    /// space's heading.
+    static func otherSpaceLine(_ elsewhere: WalletLive.Elsewhere, words: MsWords) -> String {
+        words.loc.t(elsewhere.lineKey, vars: ["networks": words.loc.list(elsewhere.chainIds.map(words.network))])
+            + " · " + words.loc.t(elsewhere.headingKey)
     }
 
     // MARK: - Header

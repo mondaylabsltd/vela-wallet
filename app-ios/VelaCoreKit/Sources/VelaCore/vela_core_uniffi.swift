@@ -22438,6 +22438,24 @@ public func launchAnimationStorageKey() -> String  {
 })
 }
 /**
+ * r13-1: where an account used on `chain_ids` lives when none of its
+ * networks is in the space in front — `network_space::lives_elsewhere`, the
+ * one rule every home draws its other-space note from (the wasm twin is
+ * `networkLivesElsewhere`, the same JSON). `args_json`: `{chain_ids, here,
+ * other, front}` — `here` / `other` the front space's and the other space's
+ * networks on the person's lists, `front` as stored ("mainnet" /
+ * "testnet"). The answer: an `Elsewhere` (`{chain_ids, space, line_key,
+ * heading_key, switch_key}`), or `null` — nothing to say.
+ */
+public func networkLivesElsewhere(argsJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_network_lives_elsewhere(
+        FfiConverterString.lower(argsJson),uniffiCallStatus
+    )
+})
+}
+/**
  * Where a multisig member's approval goes — [`signing_route`] for
  * `vela_multisigApprove` (`trusted_signer::approval::approval_route`), as
  * the same JSON. `None` for a record this build cannot read.
@@ -23833,6 +23851,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_launch_animation_storage_key() != 35486) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_network_lives_elsewhere() != 39770) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_multisig_approval_route() != 29971) {

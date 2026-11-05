@@ -245,13 +245,69 @@ enum WalletLive {
         return copy
     }
 
-    /// r11-3: the networks of the other space a multisig lives on, when none
-    /// of its networks (`chainIds`, its record's) is in the space in front
-    /// (`here`) — those Vela has (`known`, both spaces, the core's list).
-    /// Empty when one is here, or it names none: nothing to say.
-    static func livesElsewhere(chainIds: [Int], here: [Int], known: [Int]) -> [Int] {
-        guard !chainIds.isEmpty, !chainIds.contains(where: here.contains) else { return [] }
-        return chainIds.filter(known.contains)
+    /// r11-3, r13-1: where a multisig lives when none of its networks
+    /// (`chainIds`, its record's) is in the space in front — the core's rule
+    /// (`network_space::lives_elsewhere`, uniffi `network_lives_elsewhere`,
+    /// the shared vector `vectors/multisig/other-space.json`); this shell
+    /// keeps no copy of it. `here` / `other`: the person's lists of the space
+    /// in front and of the other one. `nil`: nothing to say (or a core that
+    /// could not answer — the home as it is).
+    static func livesElsewhere(chainIds: [Int], here: [Int], other: [Int], front: NetworkSpaceKind) -> Elsewhere? {
+        guard !chainIds.isEmpty else { return nil }
+        let args = CoreJSON.string([
+            "chain_ids": chainIds, "here": here, "other": other, "front": front.rawValue,
+        ])
+        let answer = networkLivesElsewhere(argsJson: args)
+        guard answer != "null", let data = answer.data(using: .utf8) else { return nil }
+        return try? CoreJSON.decoder.decode(Elsewhere.self, from: data)
+    }
+
+    /// The core's `Elsewhere`: its networks of the other space, that space
+    /// (where the switch goes), and the keys of the note's line ("Used on
+    /// {{networks}}"), the other space's heading and the switch.
+    struct Elsewhere: Decodable, Equatable {
+        let chainIds: [Int]
+        let space: String
+        let lineKey: String
+        let headingKey: String
+        let switchKey: String
+
+        /// The space it lives in.
+        var target: NetworkSpaceKind { NetworkSpaceKind(rawValue: space) ?? .mainnet }
+    }
+
+    /// r13-7: where the shown multisig's history stands (the core's
+    /// `ProposalsView.history`), with the words its Activity says when it
+    /// could not be read: the panel's line and Try again.
+    struct MultisigHistory: Equatable {
+        /// `reading` / `read` / `unread`.
+        let stand: String
+        let unreadText: String
+        let retryText: String
+    }
+
+    /// r13-7 (the web's `withLiveWallet` `multisigHistory`): a multisig's
+    /// Activity over no rows says what its history is — being read (loading,
+    /// never "No activity yet"), or not read (the panel's line with Try
+    /// again, never "No activity yet"). Read, or rows already there: the
+    /// home as it is.
+    static func withMultisigHistory(_ model: WalletHomeModel, _ history: MultisigHistory?) -> WalletHomeModel {
+        guard let history, model.activityGroups.isEmpty else { return model }
+        var copy = model
+        let section = model.activitySection
+        switch history.stand {
+        case "reading":
+            copy.activitySection = SectionModel(title: section.title, action: section.action,
+                                                mode: .loading, empty: section.empty)
+        case "unread":
+            copy.activitySection = SectionModel(
+                title: section.title, action: section.action, mode: .empty,
+                empty: SectionEmptyModel(title: history.unreadText, caption: "", retry: history.retryText)
+            )
+        default:
+            break
+        }
+        return copy
     }
 
     /// r11-3: the home of a multisig whose money lives in the other space —
