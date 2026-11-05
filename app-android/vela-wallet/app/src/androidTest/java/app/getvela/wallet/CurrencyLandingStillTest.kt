@@ -182,7 +182,7 @@ class CurrencyLandingStillTest {
             board.copy(fee = (board.fee as FeeModel.OnChain).copy(worthRoom = false))
         }
         // …and landing in a currency whose worth fits on the one line after all.
-        val short = landed.copy(fee = (landed.fee as FeeModel.OnChain).copy(value = "~0.000123 ETH · ≈$0.31"))
+        val short = landed.copy(fee = (landed.fee as FeeModel.OnChain).copy(value = "0.000123 ETH · ≈$0.31"))
         var current by mutableStateOf<SigningScreenModel>(waiting)
         compose.setContent {
             CompositionLocalProvider(LocalVelaStrings provides strings) {
@@ -199,7 +199,7 @@ class CurrencyLandingStillTest {
             compose.waitForIdle()
             assertEquals("the fee's worth landing ($name) moved the sheet", before, sheetFrame())
         }
-        compose.onAllNodesWithText("~0.000123 ETH · ≈CN¥2.24").fetchSemanticsNodes().let { assertEquals(1, it.size) }
+        compose.onAllNodesWithText("0.000123 ETH · ≈CN¥2.24").fetchSemanticsNodes().let { assertEquals(1, it.size) }
     }
 
     // -- the balance sheet: its total and each network's worth --------------------
