@@ -273,6 +273,14 @@ final class WalletStore {
         core.dispatch(Self.autoRefreshEvent)
     }
 
+    /// r12-3: the pool's chains out of reach changed — the core's own rule
+    /// (`pool_unreached`): a network the account is read on that has just
+    /// gone out of reach is read again, forced, and its failure is the
+    /// home's "Can't reach Arc Testnet". The shell only says the set.
+    func poolUnreached(_ chainIds: [Int]) {
+        core.dispatch(CoreJSON.string(["type": "pool_unreached", "chain_ids": chainIds]))
+    }
+
     /// r10-1: a network came back — a call to it answered after calls to it
     /// went unanswered, or the balance's own last read could not reach it —
     /// and the balance reads again now. Nothing else would: the home's poll
@@ -413,27 +421,15 @@ struct RecoveryNudge {
     /// Networks whose last call went unanswered (not rate limited).
     private(set) var down: Set<Int> = []
     private(set) var nudged: [Int: Double] = [:]
-    /// r12-3: when each network's going down last read the balance — apart
-    /// from `nudged`, so a network back a moment later still reads again.
-    private(set) var downNudged: [Int: Double] = [:]
 
     mutating func observe(
         _ chainId: Int, reached: Bool, unreadable: Set<Int>, home: Set<Int> = [], refreshing: Bool, nowMs: Double
     ) -> Bool {
         guard reached else {
-            // r12-3: a network the account lives on going down while the
-            // balance last read it fine — the home said only an ageing
-            // "Updated 2m" for minutes (its poll is ten). The balance reads
-            // once, on the edge: the core's own read then fails, and its
-            // unreachable list says "Can't reach Arc Testnet". Never again
-            // while it stays down, never while a round is out, never for a
-            // network already said, and once a minute at most.
-            let wentDown = down.insert(chainId).inserted
-            guard wentDown, home.isEmpty || home.contains(chainId), !unreadable.contains(chainId), !refreshing,
-                  nowMs - (downNudged[chainId] ?? -.infinity) >= Self.gapMs
-            else { return false }
-            downNudged[chainId] = nowMs
-            return true
+            // Going down reads nothing here: that is the core's own rule
+            // now (r12-3, `pool_unreached` — `WalletStore.poolUnreached`).
+            down.insert(chainId)
+            return false
         }
         let cameBack = down.remove(chainId) != nil && (home.isEmpty || home.contains(chainId))
         guard cameBack || unreadable.contains(chainId), !refreshing,

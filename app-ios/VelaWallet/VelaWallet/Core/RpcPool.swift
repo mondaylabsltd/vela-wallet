@@ -151,6 +151,15 @@ final class RpcPool {
     /// from a network that is gone (RJ14).
     var onOutcome: ((_ outcome: RpcOutcome, _ chainId: Int) -> Void)?
 
+    /// r12-3: the chains out of reach now (`RpcPoolView.out_of_reach_chains`),
+    /// whenever that set changes — the balance machine is told
+    /// (`pool_unreached`) and re-reads, forced, a network the account is read
+    /// on that has just gone out of reach. A warm outage aged "Updated 2m"
+    /// for minutes before: the home's poll is ten.
+    var onOutOfReach: ((_ chainIds: [Int]) -> Void)?
+    /// The last set said through `onOutOfReach`.
+    private(set) var outOfReachChains: [Int] = []
+
     private let store: VelaStore
     private let accounts: AccountStore
     private var core: CoreStore<RpcPoolViewWire>!
@@ -195,6 +204,11 @@ final class RpcPool {
         if fallbackChains != view.fallbackChains { fallbackChains = view.fallbackChains }
         if ownNodeUnreachedChains != view.ownNodeUnreachedChains {
             ownNodeUnreachedChains = view.ownNodeUnreachedChains
+        }
+        let outOfReach = view.outOfReachChains.sorted()
+        if outOfReachChains != outOfReach {
+            outOfReachChains = outOfReach
+            onOutOfReach?(outOfReach)
         }
         viewRevision &+= 1
     }
@@ -653,10 +667,14 @@ struct RpcPoolViewWire: Decodable, Equatable {
     var ownOnlyChains: [Int] = []
     /// Of those, the ones that cannot be read now — "Can't reach your node".
     var ownNodeUnreachedChains: [Int] = []
+    /// r12-3: the chains out of reach now, by the core's one rule (failed
+    /// or unreached, never only rate limited) — what the balance machine
+    /// hears as `pool_unreached`.
+    var outOfReachChains: [Int] = []
 
     private enum CodingKeys: String, CodingKey {
         case failedChains, rateLimitedChains, banned, unreachedChains
-        case fallbackChains, ownOnlyChains, ownNodeUnreachedChains
+        case fallbackChains, ownOnlyChains, ownNodeUnreachedChains, outOfReachChains
     }
 
     init(
@@ -684,6 +702,7 @@ struct RpcPoolViewWire: Decodable, Equatable {
         fallbackChains = try c.decodeIfPresent([Int].self, forKey: .fallbackChains) ?? []
         ownOnlyChains = try c.decodeIfPresent([Int].self, forKey: .ownOnlyChains) ?? []
         ownNodeUnreachedChains = try c.decodeIfPresent([Int].self, forKey: .ownNodeUnreachedChains) ?? []
+        outOfReachChains = try c.decodeIfPresent([Int].self, forKey: .outOfReachChains) ?? []
     }
 }
 
