@@ -61,6 +61,12 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // 987ccbcc's page, real-device pass 2 (D1): an executor's card says
+    // "Execute anyway" in the danger fill, with why, exactly where the app's
+    // one review asks for it (`context.multisig.anyway` — a danger, or
+    // neither of the app's safety checks read) — the approval's r9-10, for
+    // the one press of "Approve and execute". Not LAUNCH.
+    "954b901382aee4381b18f2ac7d04d494435e5cd16c6a1809c9ec8a715bec4eac",
     // 797489e6's page, round 12 (r12-7): every short address is THE short
     // form (`names::short_address`): EIP-55, `0x` + 6, `…`, 6 — never the
     // 4+4 lowercase "0x3e9b…692d". Not LAUNCH.

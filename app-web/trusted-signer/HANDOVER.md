@@ -1,5 +1,12 @@
 # 交接：可信签名器页面
 
+> **真机第二轮（2026-11-05，D1）：执行者也说「仍然执行」。** 新版本 **954b9013**（`BUILD_ALLOWED` 第一位，LAUNCH 不变）。
+> 钱包那一份审查要求「… anyway」时（危险，或状态变化检查与模拟**都**没读到），执行者的操作卡（`resolveExecution`）
+> 按 `context.multisig.anyway` 把按钮写成「仍然执行」（`button.msExecuteAnyway`，危险填充），并挂一条
+> `warn.msAppAnywayExec` 说明这是 App 的说法；拒签永远优先（「anyway」打不开拒签）。批准卡的「仍然批准」（r9-10）不变。
+> vela-core 现在为每个外壳（原生与桌面也算）的 `vela_multisigExecute` 构建 `context.multisig`（编号、safeTxHash、`anyway`）。
+> 十五种语言都有新键（`locales-test` 84/84）；`multisig-test.mjs` 359/359；19 个套件全过。部署顺序同上：`dist/` 先上线。
+
 > **第十二轮（2026-11-05）：短地址只有一种写法。** 新版本 **987ccbcc**（`BUILD_ALLOWED` 第一位，LAUNCH 不变）。
 > 本页所有短地址改用 vela-core `names::short_address` 的写法：EIP-55 大小写、`0x` + 6 位、`…`、6 位（以前的 `0x3e9b…692d` 现在写成 6+6 的 EIP-55 形式）。
 > 以前是 4+4、照传入的大小写原样截断；4+4 的仿冒地址是 2^32 的搜索，6+6 是 2^48。`plain-send-test`、`multisig-test`、`provenance-test` 的期望值随之更新；22 个套件全过。部署顺序同上：`dist/` 先上线。

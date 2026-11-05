@@ -416,6 +416,8 @@ final class MultisigLive: MultisigPorts {
             "threshold": purpose["threshold"] ?? NSNull(),
             // r10: its members now, for a member change's before → after.
             "owners": purpose["owners"] ?? [],
+            // D1: the one review asks for "… anyway" — the page says "Execute anyway".
+            "anyway": purpose["anyway"] as? Bool ?? false,
         ]
     }
 

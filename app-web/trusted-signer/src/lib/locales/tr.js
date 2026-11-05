@@ -382,6 +382,8 @@ window.VelaCS.i18n.register('tr', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "Yine de onayla",
   'warn.msAppAnyway': "Vela’nın kontrolü bu sayfanın doğrulayamadığı bir tehlike buldu (örneğin başarısız olacağı): yalnızca eminsen onayla.",
+  'button.msExecuteAnyway': "Yine de yürüt",
+  'warn.msAppAnywayExec': "Vela’nın kontrolü bu sayfanın doğrulayamadığı bir tehlike buldu (örneğin başarısız olacağı ya da neyi değiştirdiğinin kontrol edilemediği): yalnızca eminsen yürüt.",
   'value.baseUnitsUnknown': "temel birim · ondalık sayısı bilinmiyor",
   'sentence.msAddOwnerOne': "{owner} üye olur ve {threshold} onay gerekir.",
   'sentence.msRemoveOwnerOne': "{owner} artık üye değildir ve {threshold} onay gerekir.",

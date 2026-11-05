@@ -157,6 +157,7 @@
     "feeChecking": "正在檢查能否執行，以及網路費…",
     "feeUnpriced": "暫時無法算出網路費。",
     "feeUnchecked": "無法確認它能否執行 — 你仍可以核准；執行時會再檢查一次。",
+    "feeUncheckedHeld": "無法確認它能否執行 — 執行時會再檢查一次。",
     "feeRetry": "重新檢查",
     "feeSetup": "包含在 {{network}} 上的一次性設定 ≈ {{amount}}：",
     "feeSetupPlain": "包含在 {{network}} 上的一次性設定：",
@@ -712,7 +713,8 @@
      "timedOut": "未能及時讀取。",
      "unreadable": "無法讀取此交易。",
      "gone": "此交易已不在清單中。",
-     "tryAgain": "重試"
+     "tryAgain": "重試",
+     "unchecked": "Vela 無法核對這筆交易會改變什麼。"
     }
    },
    "notify": {

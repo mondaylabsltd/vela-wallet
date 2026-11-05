@@ -49,6 +49,37 @@ class PasskeyDeadlineTest {
         assertEquals(UserOpSpine.Failure.Signer(FailureKind.NotSupported, "no provider"), ceremonyFailure(unsupported, deadline))
     }
 
+    /**
+     * Real-device pass 2 (D5): Google unreachable, the create sheet spun 241 s
+     * and handed the person back to the key list with no reason. The wait ends
+     * AT the core's deadline even when the platform call never answers its
+     * cancellation, and its end is said as the deadline's — the core names it
+     * "The passkey prompt timed out. Try again.", never the person's cancel.
+     */
+    @Test
+    fun `a create that never answers ends at the deadline, said as timed out`() {
+        val started = System.nanoTime()
+        val ended = runCatching {
+            runBlocking {
+                app.getvela.wallet.feature.onboarding.core.withinPasskeyDeadline(300) {
+                    // A provider stuck on a network it cannot reach, deaf to cancellation.
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                        kotlinx.coroutines.delay(60_000)
+                    }
+                }
+            }
+        }.exceptionOrNull()
+        val tookMs = (System.nanoTime() - started) / 1_000_000
+        assertTrue("ended at the deadline, not when the call gave up: $tookMs ms", tookMs < 5_000)
+        val failure = ended as? app.getvela.wallet.feature.onboarding.core.PasskeyDeadlinePassed
+            ?: return fail("not the deadline's end: $ended")
+        assertEquals(FailureKind.Cancelled, failure.kind)
+        val words = uniffi.vela_core_uniffi.passkeyErrorWords("android", failure.domain.orEmpty(), failure.code, failure.message.orEmpty())
+        assertEquals("onboarding.common.passkeyError.timedOut", words.key)
+        // An answer before the deadline is the answer.
+        assertEquals(7, runBlocking { app.getvela.wallet.feature.onboarding.core.withinPasskeyDeadline(5_000) { 7 } })
+    }
+
     @Test
     fun `the deadline is two minutes, the core's, and the prompt is asked for it`() {
         assertEquals(120_000L, deadline)

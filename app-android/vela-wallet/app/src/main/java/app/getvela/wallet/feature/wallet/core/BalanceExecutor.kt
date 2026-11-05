@@ -157,7 +157,7 @@ class BalanceExecutor(
     private suspend fun fetchTokens(
         operation: BalanceOperation.FetchTokens,
     ): BalanceShellResult {
-        val holdings = holdings(operation.address, streaming = true)
+        val holdings = holdings(operation.address, streamGeneration = operation.generation)
         // Every other machine in this app logs what it did; this one did not,
         // and the first device run could not tell a genuinely empty wallet from
         // twelve failed reads — both render as a total of zero from outside.
@@ -296,7 +296,8 @@ class BalanceExecutor(
      */
     private suspend fun holdings(
         address: String,
-        streaming: Boolean = false,
+        /** Streams each chain as it lands, labelled with THIS fetch's generation (D3); null: no stream. */
+        streamGeneration: Long? = null,
     ): Holdings = coroutineScope {
         // Every network, Tempo included (PR 2 polish): a chain with no native
         // coin — its gas is a TIP-20 stablecoin, and its RPC answers the SAME
@@ -330,8 +331,8 @@ class BalanceExecutor(
                         ChainAnswer(row.chain_id.toInt(), answered = false, tokens = emptyList(), internal = true)
                     }
                 } ?: ChainAnswer(row.chain_id.toInt(), answered = false, tokens = emptyList())
-                if (streaming && answer.tokens.isNotEmpty()) {
-                    stream(BalanceEvent.ChainAssetsArrived(address, answer.tokens))
+                if (streamGeneration != null && answer.tokens.isNotEmpty()) {
+                    stream(BalanceEvent.ChainAssetsArrived(address, streamGeneration, answer.tokens))
                 }
                 answer
             }

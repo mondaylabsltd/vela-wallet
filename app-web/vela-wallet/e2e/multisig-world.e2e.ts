@@ -205,7 +205,7 @@ test('a rejection: a cancellation at the same number, read as one; only one of t
 
 	await test.step('rejected on its review: one cancellation at its number, approved by member two', async () => {
 		await rejectToReview();
-		await review.getByRole('button', { name: /^Propose( and approve)?$/ }).click();
+		await review.getByRole('button', { name: /^Propose( and approve)?( anyway)?$/ }).click();
 		await expect.poll(() => world.mailbox.length, { timeout: 30_000 }).toBe(2);
 		const cancellation = world.mailbox[1];
 		// The same number, nothing moved: a call to itself, of nothing.
@@ -271,13 +271,15 @@ async function proposeSend(page: Page, amount: string): Promise<void> {
 	await expect(advance).toBeEnabled({ timeout: 30_000 });
 	await advance.click();
 	await expect(page.getByRole('heading', { name: en('send.confirmTitle') })).toBeVisible();
-	await page.getByRole('button', { name: /^Propose( and approve)?$/ }).click();
+	await page.getByRole('button', { name: /^Propose( and approve)?( anyway)?$/ }).click();
 	const hashes = page.getByTestId('review-hashes');
 	await expect(hashes).toBeVisible({ timeout: 60_000 });
-	await hashes
-		.locator('xpath=ancestor::*[@role="dialog"][1]')
-		.getByRole('button', { name: /^Propose( and approve)?$/ })
-		.click();
+	const sheet = hashes.locator('xpath=ancestor::*[@role="dialog"][1]');
+	// D1 (real-device pass 2, r13-2): this world's node offers neither a
+	// state-change check nor a simulation — the review is drawn, said in
+	// danger with Try again, and proposed only "… anyway".
+	await expect(sheet.getByTestId('review-unchecked')).toBeVisible();
+	await sheet.getByRole('button', { name: /^Propose( and approve)? anyway$/ }).click();
 }
 
 test('what waits: one line on the home, the other multisig in the switcher, a new one counted', async ({

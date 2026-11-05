@@ -1,5 +1,5 @@
 {
-  "about": "§12 (docs/multisig-machines.md): the sign door over a review's state. A sign / propose / approve / execute button is enabled ONLY when the state is ready and the review's sign rule allows it; a missing state is loading. Replayed through the link door `review.door {state?, review?}` by Rust, the web, the desktop, Android and iOS.",
+  "about": "§12 (docs/multisig-machines.md): the sign door over a review's state. A sign / propose / approve / execute button is enabled ONLY when the state is ready and the review's sign rule allows it; a missing state is loading. Replayed through the link door `review.door {state?, review?}` by Rust, the web, the desktop, Android and iOS. D1 (real-device pass 2): a ready review whose state-change check AND simulation both could not be read (its `unchecked` concern) is drawn, but the door asks for \"… anyway\" whatever its sign rule says and carries the danger line (`reason_key` home.multisig.review.state.unchecked) with Try again (`retry`); one check unread alone stays a plain caution. `checks` (replayed by Rust through `multisig_review`): the review's own rule, state guard × simulation — whatever left both unread: a hang (each read gave up at its bound), a refused connection (r13-2: ready in 2–4 s), or the reads right after Try again. A case's `trace` / `probe` / `sim` are the answers the review is gathered from (absent: an unreachable read, or for a read check the fixture's own).",
   "timeout_ms": 40000,
   "keys": [
     "home.multisig.review.state.loading",
@@ -7,7 +7,8 @@
     "home.multisig.review.state.timedOut",
     "home.multisig.review.state.unreadable",
     "home.multisig.review.state.gone",
-    "home.multisig.review.state.tryAgain"
+    "home.multisig.review.state.tryAgain",
+    "home.multisig.review.state.unchecked"
   ],
   "door": [
     {
@@ -59,6 +60,89 @@
       "name": "ready without a review: a contradiction, shut and said unreadable",
       "args": { "state": { "kind": "ready" }, "review": null },
       "expect": { "shows": "failed", "enabled": false, "anyway": false, "reason_key": "home.multisig.review.state.unreadable", "retry": true }
+    },
+    {
+      "name": "ready, neither check read: drawn, the danger line, Try again, and only \"… anyway\"",
+      "args": { "state": { "kind": "ready" }, "review": { "sign": { "allowed": true, "anyway": true }, "concerns": [{ "kind": "stateUnread", "reason": "unreachable" }, { "kind": "unsimulated" }, { "kind": "unchecked" }] } },
+      "expect": { "shows": "review", "enabled": true, "anyway": true, "reason_key": "home.multisig.review.state.unchecked", "retry": true }
+    },
+    {
+      "name": "ready, neither check read, a sign rule handed without its anyway: still never one plain tap",
+      "args": { "state": { "kind": "ready" }, "review": { "sign": { "allowed": true, "anyway": false }, "concerns": [{ "kind": "unchecked" }] } },
+      "expect": { "shows": "review", "enabled": true, "anyway": true, "reason_key": "home.multisig.review.state.unchecked", "retry": true }
+    },
+    {
+      "name": "ready, only the state guard unread: a caution, one plain tap",
+      "args": { "state": { "kind": "ready" }, "review": { "sign": { "allowed": true, "anyway": false }, "concerns": [{ "kind": "stateUnread", "reason": "unreachable" }] } },
+      "expect": { "shows": "review", "enabled": true, "anyway": false, "reason_key": null, "retry": false }
+    },
+    {
+      "name": "ready, only the simulation unread: a caution, one plain tap",
+      "args": { "state": { "kind": "ready" }, "review": { "sign": { "allowed": true, "anyway": false }, "concerns": [{ "kind": "unsimulated" }] } },
+      "expect": { "shows": "review", "enabled": true, "anyway": false, "reason_key": null, "retry": false }
+    },
+    {
+      "name": "loading, neither check read last time: shut, no danger line yet",
+      "args": { "state": { "kind": "loading" }, "review": { "sign": { "allowed": true, "anyway": true }, "concerns": [{ "kind": "unchecked" }] } },
+      "expect": { "shows": "loading", "enabled": false, "anyway": false, "reason_key": null, "retry": false }
+    },
+    {
+      "name": "r13-2: ready again right after Try again, neither check read: the danger line, Try again, \"… anyway\"",
+      "args": { "state": { "kind": "ready" }, "review": { "sign": { "allowed": true, "anyway": true }, "concerns": [{ "kind": "stateUnread", "reason": "unreadable" }, { "kind": "unsimulated" }, { "kind": "unchecked" }] } },
+      "expect": { "shows": "review", "enabled": true, "anyway": true, "reason_key": "home.multisig.review.state.unchecked", "retry": true }
+    }
+  ],
+  "checks": [
+    {
+      "name": "guard unread, simulation unread: unchecked, danger, anyway",
+      "guard": "unread",
+      "simulation": "unread",
+      "expect": { "unchecked": true, "tone": "danger", "anyway": true }
+    },
+    {
+      "name": "guard unread, simulation read: caution, plain",
+      "guard": "unread",
+      "simulation": "read",
+      "expect": { "unchecked": false, "tone": "caution", "anyway": false }
+    },
+    {
+      "name": "guard read, simulation unread: caution, plain",
+      "guard": "read",
+      "simulation": "unread",
+      "expect": { "unchecked": false, "tone": "caution", "anyway": false }
+    },
+    {
+      "name": "guard read, simulation read: ok, plain",
+      "guard": "read",
+      "simulation": "read",
+      "expect": { "unchecked": false, "tone": "ok", "anyway": false }
+    },
+    {
+      "name": "r13-2: a REFUSED node (not a hang) — every read answered at once with an error: unchecked, danger, anyway",
+      "guard": "unread",
+      "simulation": "unread",
+      "trace": { "error": { "code": -32603, "message": "connect ECONNREFUSED 127.0.0.1:8545" } },
+      "probe": { "error": { "code": -32603, "message": "connect ECONNREFUSED 127.0.0.1:8545" } },
+      "sim": "{\"error\": {\"code\": -32603, \"message\": \"connect ECONNREFUSED 127.0.0.1:8545\"}}",
+      "expect": { "unchecked": true, "tone": "danger", "anyway": true }
+    },
+    {
+      "name": "r13-2: the guard refused, the simulation timed out: unchecked, danger, anyway",
+      "guard": "unread",
+      "simulation": "unread",
+      "trace": { "error": { "code": -32603, "message": "connect ECONNREFUSED 127.0.0.1:8545" } },
+      "probe": { "unreachable": true },
+      "sim": "{\"unreachable\": true}",
+      "expect": { "unchecked": true, "tone": "danger", "anyway": true }
+    },
+    {
+      "name": "r13-2: right after Try again following a hang — the node still refusing: the same rule, never one plain tap",
+      "guard": "unread",
+      "simulation": "unread",
+      "trace": { "unreachable": true },
+      "probe": { "error": { "code": -32603, "message": "connect ECONNREFUSED 127.0.0.1:8545" } },
+      "sim": "{\"error\": {\"code\": -32603, \"message\": \"connect ECONNREFUSED 127.0.0.1:8545\"}}",
+      "expect": { "unchecked": true, "tone": "danger", "anyway": true }
     }
   ]
 }

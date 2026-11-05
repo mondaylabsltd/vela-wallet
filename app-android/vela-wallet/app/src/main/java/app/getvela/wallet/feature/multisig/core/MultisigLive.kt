@@ -478,6 +478,8 @@ class MultisigLive(
                 "threshold" to (purpose["threshold"] ?: JsonNull),
                 // Core §9.5: the members it runs under (`SendPurpose::Execute.owners`).
                 "owners" to (purpose["owners"] ?: JsonNull),
+                // D1: the one review asks for "… anyway" — the page says "Execute anyway".
+                "anyway" to (purpose["anyway"] ?: JsonPrimitive(false)),
             )
         }
 

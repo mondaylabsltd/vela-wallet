@@ -162,6 +162,12 @@ struct MsSignDoor: Equatable {
     /// `failed`: offer "Try again" (`review_again`).
     let retry: Bool
 
+    /// D1 (real-device pass 2): the review is drawn, but neither its
+    /// state-change check nor its simulation was read — the core's danger
+    /// line (`reasonKey`) goes above it with "Try again", and every press is
+    /// "… anyway" (`anyway`).
+    var unchecked: Bool { shows == .review && !(reasonKey ?? "").isEmpty }
+
     init(shows: Shows, enabled: Bool, anyway: Bool, reasonKey: String?, retry: Bool) {
         self.shows = shows
         self.enabled = enabled

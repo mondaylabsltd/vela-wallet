@@ -421,7 +421,18 @@ struct MsReviewPending: View {
     var body: some View {
         switch door.shows {
         case .review:
-            EmptyView()
+            if door.unchecked {
+                // D1: drawn, but neither safety check read — said in danger,
+                // with Try again; the button below signs only "… anyway".
+                VStack(alignment: .leading, spacing: Tokens.Space.s8) {
+                    MsNote(text: Self.uncheckedLine(door, words: words), tone: .danger,
+                           identifier: "multisig.review.unchecked")
+                    if door.retry {
+                        VelaButton(title: words.t("review.state.tryAgain"), kind: .secondary, action: tryAgain)
+                            .accessibilityIdentifier("multisig.review.tryAgain")
+                    }
+                }
+            }
         case .loading:
             HStack(spacing: Tokens.Space.s8) {
                 ProgressView()
@@ -442,6 +453,13 @@ struct MsReviewPending: View {
                 }
             }
         }
+    }
+
+    /// D1: the danger line over a review neither of whose checks was read,
+    /// in the core's words.
+    @MainActor
+    static func uncheckedLine(_ door: MsSignDoor, words: MsWords) -> String {
+        words.loc.t(door.reasonKey ?? "home.multisig.review.state.unchecked")
     }
 
     /// The reason (the core's key) and what it means: nothing is signed.

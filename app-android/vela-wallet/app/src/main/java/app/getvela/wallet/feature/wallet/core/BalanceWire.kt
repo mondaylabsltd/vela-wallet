@@ -255,6 +255,11 @@ sealed class BalanceEvent {
     @SerialName("chain_assets_arrived")
     data class ChainAssetsArrived(
         val address: String,
+        /**
+         * D3: the fetch's own generation, echoed from its [BalanceOperation.FetchTokens]
+         * — the core paints a snapshot only for the fetch it came from.
+         */
+        val generation: Long,
         val tokens: List<BalanceToken> = emptyList(),
     ) : BalanceEvent()
 
@@ -323,6 +328,8 @@ sealed class BalanceOperation {
         val address: String,
         val force: Boolean,
         val pull: Boolean,
+        /** D3: the account-and-space generation; every snapshot of this fetch echoes it. */
+        val generation: Long = 0,
     ) : BalanceOperation()
 
     /** The account switcher's rows: TTL-cached, never forced, never streaming. */

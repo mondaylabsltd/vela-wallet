@@ -184,8 +184,8 @@ export function ensureBalanceDashboard() {
 				// The mid-fetch snapshots. Dispatched from `fetchTokens`'s own
 				// `onProgress`, i.e. from a microtask between two effect resolutions —
 				// never from inside a `core.dispatch()`, so the core is never re-entered.
-				chainAssetsArrived: (address, tokens) =>
-					session?.dispatch({ type: 'chain_assets_arrived', address, tokens }),
+				chainAssetsArrived: (address, generation, tokens) =>
+					session?.dispatch({ type: 'chain_assets_arrived', address, generation, tokens }),
 				roundEnded
 			}
 		});

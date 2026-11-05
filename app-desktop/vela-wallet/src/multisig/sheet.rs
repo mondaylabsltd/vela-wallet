@@ -11,7 +11,9 @@
 
 use serde_json::Value;
 use vela_core::app::multisig_proposals::{self as ms_proposals, ItemSigners, ProposalStatus};
-use vela_core::app::multisig_review_state::{self as review_state, ReviewState, SignDoor};
+use vela_core::app::multisig_review_state::{
+    self as review_state, ReviewShows, ReviewState, SignDoor,
+};
 use vela_core::multisig_review::SignRule;
 
 fn same(a: &str, b: &str) -> bool {
@@ -311,6 +313,14 @@ pub fn press_rule(door: &SignDoor) -> SignRule {
     }
 }
 
+/// D1 (real-device pass 2): the door draws the review, but neither its
+/// state-change check nor its simulation was read — the core's danger line
+/// (`reason_key`) goes above it with Try again (`retry`), and every press is
+/// "… anyway" (`anyway`, [`press_rule`]).
+pub fn unchecked(door: &SignDoor) -> bool {
+    door.shows == ReviewShows::Review && door.reason_key.is_some()
+}
+
 /// "Try again" under a failed review: the machine's `review_again` — for a
 /// proposal (`Some((chain_id, hash))`) its review, else the draft's.
 #[must_use]
@@ -549,6 +559,38 @@ mod tests {
 
     fn ready_door(review: Value) -> SignDoor {
         sign_door(Some(&ReviewState::Ready), Some(&review), true)
+    }
+
+    /// D1 (real-device pass 2): a review neither of whose safety checks was
+    /// read is drawn under the danger line with Try again, and every press —
+    /// Approve, Approve and execute (the one press), Execute — says
+    /// "… anyway". One check unread alone stays plain.
+    #[test]
+    fn a_review_nothing_checked_is_drawn_in_danger_and_every_press_is_anyway() {
+        let door = ready_door(json!({
+            "sign": {"allowed": true, "anyway": true},
+            "concerns": [{"kind": "stateUnread", "reason": "unreachable"}, {"kind": "unsimulated"}, {"kind": "unchecked"}]
+        }));
+        assert!(unchecked(&door) && door.retry);
+        assert_eq!(
+            door.reason_key.as_deref(),
+            Some(review_state::UNCHECKED_KEY)
+        );
+        let rule = press_rule(&door);
+        assert!(rule.allowed && rule.anyway);
+        assert_eq!(execute_label(true, rule), "review.approveExecuteAnyway");
+        assert_eq!(execute_label(false, rule), "review.executeAnyway");
+        assert_eq!(approve_label(rule), "review.approveAnyway");
+        assert!(execute_enabled(&door, Some(&Look::Unchecked), true, true));
+        let one = ready_door(json!({
+            "sign": {"allowed": true, "anyway": false},
+            "concerns": [{"kind": "unsimulated"}]
+        }));
+        assert!(!unchecked(&one) && !one.retry);
+        assert_eq!(
+            execute_label(true, press_rule(&one)),
+            "proposal.approveAndExecute"
+        );
     }
 
     /// §12: the shared door vectors (`tests/vectors/multisig/review-state.json`)

@@ -10,4 +10,11 @@ export type MultisigSendPurpose = { "kind": "execute", multisig: string, name: s
  * r10 page: its members now, for a member change's before → after
  * on the page (the app's word, as `threshold` is).
  */
-owners: Array<string>, } | { "kind": "record", multisig: string, };
+owners: Array<string>, 
+/**
+ * D1 (real-device pass 2): the one review asks for "… anyway" (its
+ * `sign.anyway` — a danger, or neither safety check read): a page
+ * signing it says "Execute anyway" in the danger style, as the
+ * app's word (`context.multisig.anyway`, the approval's r9-10).
+ */
+anyway: boolean, } | { "kind": "record", multisig: string, };

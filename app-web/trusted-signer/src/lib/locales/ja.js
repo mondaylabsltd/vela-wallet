@@ -382,6 +382,8 @@ window.VelaCS.i18n.register('ja', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "それでも承認",
   'warn.msAppAnyway': "Vela の確認で、このページでは検証できない危険が見つかりました（例：実行が失敗する）。確信がある場合のみ承認してください。",
+  'button.msExecuteAnyway': "それでも実行",
+  'warn.msAppAnywayExec': "Vela の確認で、このページでは検証できない危険が見つかりました（例：実行が失敗する、または何が変わるかを確認できなかった）。確信がある場合のみ実行してください。",
   'value.baseUnitsUnknown': "基本単位 · 小数点以下の桁数不明",
   'sentence.msAddOwnerOne': "{owner} がメンバーになり、承認は {threshold} 件必要になります。",
   'sentence.msRemoveOwnerOne': "{owner} がメンバーでなくなり、承認は {threshold} 件必要になります。",

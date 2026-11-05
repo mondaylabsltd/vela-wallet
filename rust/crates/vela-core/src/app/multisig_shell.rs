@@ -122,6 +122,12 @@ pub enum SendPurpose {
         /// on the page (the app's word, as `threshold` is).
         #[serde(default)]
         owners: Vec<String>,
+        /// D1 (real-device pass 2): the one review asks for "… anyway" (its
+        /// `sign.anyway` — a danger, or neither safety check read): a page
+        /// signing it says "Execute anyway" in the danger style, as the
+        /// app's word (`context.multisig.anyway`, the approval's r9-10).
+        #[serde(default)]
+        anyway: bool,
     },
     /// The Ethereum backup's `record` call for `multisig`: the signing
     /// sheet, as any first-party transaction.

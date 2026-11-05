@@ -118,6 +118,16 @@ fun MsReviewDoor(
 ) {
     val colors = VelaTheme.colors
     when {
+        // D1: drawn, but neither its state-change check nor its simulation
+        // could be read — the danger line above it, with Try again; the
+        // button under it signs only "… anyway" (the door's `anyway`).
+        door.unchecked -> Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(VelaSpacing.sm)) {
+            Column(Modifier.fillMaxWidth().testTag("$tag.reviewUnchecked"), verticalArrangement = Arrangement.spacedBy(VelaSpacing.sm)) {
+                MsNote(reviewUncheckedLine(door, words), tone = MsTone.Danger, tag = "$tag.reviewUncheckedLine")
+                if (door.retry) MsTextButton(words.t("review.state.tryAgain"), tag = "$tag.reviewTryAgain") { onTryAgain() }
+            }
+            review()
+        }
         door.showsReview -> review()
         door.failed -> Column(Modifier.fillMaxWidth().testTag("$tag.reviewFailed"), verticalArrangement = Arrangement.spacedBy(VelaSpacing.sm)) {
             MsNote(reviewFailedReason(door, words), tone = MsTone.Warning, tag = "$tag.reviewFailedReason")
@@ -134,6 +144,10 @@ fun MsReviewDoor(
         }
     }
 }
+
+/** D1: the danger line over a review neither of whose safety checks was read, in the core's words. */
+internal fun reviewUncheckedLine(door: MsSignDoor, words: MultisigWords): String =
+    words.raw(door.reasonKey?.takeIf { it.isNotBlank() } ?: "home.multisig.review.state.unchecked")
 
 /** §12: a failed review's reason, in the core's words (`reason_key`, a full corpus key). */
 internal fun reviewFailedReason(door: MsSignDoor, words: MultisigWords): String =

@@ -384,6 +384,8 @@ window.VelaCS.i18n.register('fr', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "Approuver quand même",
   'warn.msAppAnyway': "La vérification de Vela a trouvé un danger que cette page ne peut pas vérifier (par exemple, qu’elle échouerait) : n’approuvez que si vous êtes sûr.",
+  'button.msExecuteAnyway': "Exécuter quand même",
+  'warn.msAppAnywayExec': "La vérification de Vela a trouvé un danger que cette page ne peut pas vérifier (par exemple, qu’elle échouerait, ou que ce qu’elle modifie n’a pas pu être vérifié) : n’exécutez que si vous êtes sûr.",
   'value.baseUnitsUnknown': "unités de base · décimales inconnues",
   'sentence.msAddOwnerOne': "{owner} devient membre, et {threshold} approbation sera requise.",
   'sentence.msRemoveOwnerOne': "{owner} n’est plus membre, et {threshold} approbation sera requise.",

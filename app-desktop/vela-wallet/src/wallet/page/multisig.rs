@@ -2038,6 +2038,8 @@ impl WalletPage {
         look: Option<&crate::multisig::sheet::Look>,
         payer: Option<&str>,
         account: Option<&MultisigAccount>,
+        // D8: the review's door is open — Approve can be pressed.
+        approve_open: bool,
         cx: &mut Context<Self>,
     ) -> Div {
         use crate::multisig::sheet::Look;
@@ -2108,7 +2110,19 @@ impl WalletPage {
             ),
             Some(Look::Spent) => (words::t(&loc, "proposal.doneNote"), Tone::Neutral, false),
             Some(Look::Unpriced) => (words::t(&loc, "proposal.feeUnpriced"), Tone::Neutral, true),
-            Some(Look::Unchecked) => (words::t(&loc, "proposal.feeUnchecked"), Tone::Neutral, true),
+            // D8: "you can still approve" only where Approve can be pressed.
+            Some(Look::Unchecked) => (
+                words::t(
+                    &loc,
+                    if approve_open {
+                        "proposal.feeUnchecked"
+                    } else {
+                        "proposal.feeUncheckedHeld"
+                    },
+                ),
+                Tone::Neutral,
+                true,
+            ),
         };
         let mut line = div()
             .flex()
@@ -2410,6 +2424,7 @@ impl WalletPage {
                         look.as_ref(),
                         payer.as_deref(),
                         account,
+                        door.enabled,
                         cx,
                     ));
                 }
@@ -2795,7 +2810,42 @@ impl WalletPage {
         if door.shows == ReviewShows::Review
             && let Some(review) = review
         {
-            return self.ms_review_body(theme, review, chain_id, past, account, cx);
+            let body = self.ms_review_body(theme, review, chain_id, past, account, cx);
+            // D1 (real-device pass 2): drawn, but neither its state-change
+            // check nor its simulation was read — the core's danger line
+            // and Try again above it; every press is "… anyway".
+            if past || !crate::multisig::sheet::unchecked(door) {
+                return body;
+            }
+            let line = door
+                .reason_key
+                .as_deref()
+                .unwrap_or(review_state::UNCHECKED_KEY);
+            let again = crate::multisig::sheet::review_again(proposal.map(|h| (chain_id, h)));
+            let mut head = div().flex().flex_col().gap(px(8.)).child(ms_note(
+                theme,
+                &loc.t(line),
+                Tone::Danger,
+            ));
+            if door.retry {
+                head = head.child(
+                    div().flex().child(
+                        crate::ui::vela_button(
+                            "ms-review-unchecked-again",
+                            crate::ui::ButtonVariant::Secondary,
+                            loc.t(review_state::TRY_AGAIN_KEY).to_string().into(),
+                            theme,
+                            cx.listener(move |this, _, _, cx| {
+                                let host = this.ms_host(cx);
+                                let event = again.clone();
+                                host.update(cx, |host, cx| host.proposals(event, cx));
+                            }),
+                        )
+                        .w_auto(),
+                    ),
+                );
+            }
+            return div().flex().flex_col().gap(px(12.)).child(head).child(body);
         }
         if door.shows == ReviewShows::Loading {
             return div().child(ms_note(

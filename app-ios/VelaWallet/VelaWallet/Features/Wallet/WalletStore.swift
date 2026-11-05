@@ -75,8 +75,8 @@ final class WalletStore {
         )
         // The port closes over this store, so it is installed after it exists
         // — the same shape `SendStore` uses for its two.
-        executor.onChainAssets = { [weak self] tokens in
-            self?.chainAssetsArrived(tokens)
+        executor.onChainAssets = { [weak self] address, generation, tokens in
+            self?.chainAssetsArrived(address: address, generation: generation, tokens: tokens)
         }
         homePoller = HomeBalancePoller { [weak self] in self?.autoRefresh() }
     }
@@ -359,17 +359,24 @@ final class WalletStore {
     /// exists to paint never arrived; the home only moved when a later event
     /// happened to carry the whole answer. Found in the device console on
     /// 2026-09-15 while looking at something else entirely.
-    func chainAssetsArrived(_ tokens: [[String: Any]]) {
-        guard let address = scopedTo, !address.isEmpty else { return }
-        core.dispatch(Self.chainAssetsEvent(address: address, tokens: tokens))
+    ///
+    /// D3 (real-device pass 2): labelled with the FETCH's own address and
+    /// generation, never `scopedTo` — the account in front when the
+    /// snapshot lands. A member's fetch still out when the multisig was
+    /// switched to was labelled the multisig's: its $2.4M was drawn under
+    /// the multisig, kept as its rows, and survived a relaunch. The core
+    /// now paints a snapshot only for the fetch it came from.
+    func chainAssetsArrived(address: String, generation: Int, tokens: [[String: Any]]) {
+        guard !address.isEmpty else { return }
+        core.dispatch(Self.chainAssetsEvent(address: address, generation: generation, tokens: tokens))
     }
 
     /// The event, as a value, so a test can hand the REAL core the very JSON
     /// this store sends. A test that rebuilt the shape itself would have
     /// passed for the two specs this field was missing.
-    static func chainAssetsEvent(address: String, tokens: [[String: Any]]) -> String {
+    static func chainAssetsEvent(address: String, generation: Int, tokens: [[String: Any]]) -> String {
         CoreJSON.string([
-            "type": "chain_assets_arrived", "address": address, "tokens": tokens,
+            "type": "chain_assets_arrived", "address": address, "generation": generation, "tokens": tokens,
         ])
     }
 

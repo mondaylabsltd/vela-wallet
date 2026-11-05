@@ -409,6 +409,8 @@ window.VelaCS.i18n.register('en', {
   // decimals are unknown in its base units; one approval said as one.
   'button.msApproveAnyway': "Approve anyway",
   'warn.msAppAnyway': "Vela’s check of this transaction found a danger this page can’t verify (for example, that it would fail): approve only if you’re sure.",
+  'button.msExecuteAnyway': "Execute anyway",
+  'warn.msAppAnywayExec': "Vela’s check of this transaction found a danger this page can’t verify (for example, that it would fail, or that what it changes couldn’t be checked): execute only if you’re sure.",
   'value.baseUnitsUnknown': "base units · decimals unknown",
   'sentence.msAddOwnerOne': "{owner} becomes a member, and {threshold} approval will be needed.",
   'sentence.msRemoveOwnerOne': "{owner} stops being a member, and {threshold} approval will be needed.",

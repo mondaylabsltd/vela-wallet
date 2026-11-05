@@ -265,6 +265,47 @@ fn cancelling_registration_persists_nothing() {
     assert!(!view.busy);
 }
 
+/// Real-device pass 2 (D5): Google unreachable, the system sheet spun until
+/// the core's passkey deadline ended it, and the person was put back at the
+/// key list with nothing said — as if they had closed it. A prompt the
+/// deadline ended is a refusal, but it is said: "The passkey prompt timed
+/// out. Try again." A cancel with no timeout facts stays the quiet line.
+#[test]
+fn a_registration_the_deadline_ended_is_said_not_taken_for_a_cancel() {
+    let mut sut = filled("Ann");
+    sut.dispatch(Event::Submit);
+    sut.resolve(ShellResult::PasskeySupport { supported: true });
+    sut.resolve(group_key_generated());
+    sut.dispatch(Event::AddKey {
+        name: String::new(),
+        method: KeyMethod::Platform,
+    });
+    let next = sut.resolve(ShellResult::PasskeyFailed {
+        kind: FailureKind::Cancelled,
+        message: Some("the passkey prompt timed out".to_owned()),
+        error: Some(vela_core::app::passkey_error::PasskeyErrorFacts {
+            platform: "android".to_owned(),
+            domain: "TYPE_TIMEOUT_ERROR".to_owned(),
+            code: None,
+            message: "the passkey prompt timed out".to_owned(),
+        }),
+    });
+    assert!(
+        next.iter().any(|op| matches!(
+            op,
+            ShellOperation::Prompt {
+                kind: PromptKind::CreateFailed { words_key: Some(key), .. },
+                ..
+            } if key == "onboarding.common.passkeyError.timedOut"
+        )),
+        "{next:?}"
+    );
+    let view = sut.view();
+    assert_eq!(view.stage, CreateStage::AddKeys);
+    assert_ne!(view.status, Some(StatusKey::SetupCancelled));
+    assert!(view.keys.is_empty(), "nothing was drafted");
+}
+
 /// Issue #459: the same for a key on a phone. Dismissing the "Scan a code"
 /// sheet answers the phone ceremony with `cancelled`, and the person is back
 /// at the key list with the quiet "setup cancelled" line — never the

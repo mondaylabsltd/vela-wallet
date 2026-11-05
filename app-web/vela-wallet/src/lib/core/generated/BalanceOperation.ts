@@ -9,4 +9,13 @@ export type BalanceOperation = { "type": "fetch_tokens", address: string, force:
 /**
  * True only for the pull-to-refresh gesture — drives the spinner.
  */
-pull: boolean, } | { "type": "fetch_account_assets", address: string, } | { "type": "read_balance_cache", address: string, } | { "type": "read_balance_cache_many", addresses: Array<string>, } | { "type": "write_balance_cache", address: string, usd: number, } | { "type": "start_retry_timer", ms: number, timer_id: number, } | { "type": "write_privacy", hidden: boolean, };
+pull: boolean, 
+/**
+ * Real-device pass 2 (D3): the account-and-space generation this
+ * fetch reads for. Every [`Event::ChainAssetsArrived`] snapshot of
+ * THIS fetch echoes it, with this fetch's own `address` — never the
+ * account in front when the snapshot lands (iOS labelled a member's
+ * in-flight snapshots with the multisig switched to, and the home
+ * drew the member's $2.4M under the multisig).
+ */
+generation: number, } | { "type": "fetch_account_assets", address: string, } | { "type": "read_balance_cache", address: string, } | { "type": "read_balance_cache_many", addresses: Array<string>, } | { "type": "write_balance_cache", address: string, usd: number, } | { "type": "start_retry_timer", ms: number, timer_id: number, } | { "type": "write_privacy", hidden: boolean, };

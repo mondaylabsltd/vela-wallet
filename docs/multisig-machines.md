@@ -968,3 +968,110 @@ rule. Vector `tests/vectors/multisig/member-titles.json` (Rust
 | "Approve and execute" stuck on "Executing…" in the onchain suite | the harness, not the wallet: the core fork test gives the fixture accounts a nonce (`anvil_impersonateAccount`), after which their counterfactual accounts cannot be created on that fork (AA13). Each suite now gets a harness of its own (`nightly.yml`, the harness README). |
 
 Tests: `tests/app_multisig_outside.rs` (`a_request_for_a_multisig_nobody_records_is_reviewed_from_the_genesis_vela_sends`, `a_genesis_that_is_not_the_multisigs_is_not_believed`, `the_session_sends_the_genesis_beside_its_request`, `a_request_for_the_links_own_transaction_takes_the_links_ready_review`), `tests/app_multisig_outside_propose.rs`; the 14 onchain tests on a fresh harness.
+
+## 14. Real-device pass 2 — nothing checked is never one tap; a snapshot is its fetch's
+
+Decided by the coordinator under the owner's clear-signing rule (no blind
+signing, the Bybit lesson; a state-diff guard before signing; honest states).
+
+### 14.1 D1 (S2) — neither safety check read signs only "… anyway"
+
+**Found.** On a slow network each read gives up at its bound (8 s), so at
+~36 s a review came back with the state-diff guard `unavailable` AND no
+simulation — `ready`, a caution, and one tap. The test hand approved and
+executed in that state. Round 13 (r13-2) found the same from another
+cause: a node that REFUSES (not hangs) answers every read at once with an
+error, and the review was `ready` in 2–4 s with a plain Approve — and the
+same in the reads right after Try again. The rule reads the review's two
+verdicts, not their cause: a hang, a refusal, a timeout or the window after
+Try again are all "both unread" (vectors `checks` replay each cause's real
+answers; `a_refused_node_reads_neither_check_and_signs_only_anyway`).
+
+| Was | Now |
+| --- | --- |
+| guard unread + simulation unread: two cautions (`stateUnread`, `unsimulated`), `sign {allowed: true, anyway: false}` | NEW concern `unchecked` (Danger) beside them: `tone: danger`, `sign.anyway: true` (`multisig_review::unchecked_of`). Still `ready` — the review stays readable. |
+| one of the two unread | unchanged, now explicit and tested: a caution, one plain press |
+| the door said nothing over a `ready` review | `review.door` on a `ready` review with the `unchecked` concern: `{shows: review, enabled, anyway: true, reason_key: "home.multisig.review.state.unchecked", retry: true}` — `anyway` whatever the sign rule handed says. |
+| outside page `review_again` re-read only reviews not `ready` | also the link's (and every request's) `ready` review that is `unchecked` |
+| `SendPurpose::Execute` carried no "anyway": the executor's page said a plain "Execute" | `SendPurpose::Execute.anyway` (serde default) from the gate's sign rule; `approval::execution_context(…, anyway)` → `context.multisig.anyway`; the core's `trusted_signer::request` now builds `context.multisig` for `vela_multisigExecute` from the shell's params for every shell (`approval::execution_of_params`; the natives and the desktop had none — no number, no hash on their executor's card). |
+
+Shell work (done on all four): over a `ready` review whose door has a
+`reason_key`, draw that key as a DANGER line above the review with Try again
+(`review_again`; testids `review-unchecked` / `multisig.proposal.reviewUnchecked`
+/ `multisig.review.unchecked`); every sign press follows `door.anyway`
+("Approve anyway", "Approve and execute anyway", "Execute anyway", "Propose
+anyway"); executor params carry `anyway`. Found on the way: the web's and
+iOS's "Approve" alone beside "Approve and execute" stayed plain under an
+"anyway" review — it now says "Approve anyway" in danger too (the desktop
+and Android already did). Words: `home.multisig.review.state.
+unchecked` ("Vela couldn't check what this transaction changes."; pin 684).
+
+The page **954b9013** (front of `BUILD_ALLOWED`; LAUNCH unchanged; deploy
+`dist/` first): an executor's card whose `context.multisig.anyway` is true says
+"Execute anyway" in the danger fill with `warn.msAppAnywayExec` (15 locales);
+"anyway" never opens a refusal. The approval's "Approve anyway" (r9-10) already
+followed `PasskeyPurpose.anyway`, which the gate now sets for D1 too.
+
+Vectors: `tests/vectors/multisig/review-state.json` — five more `door` cases
+(every shell replays them) and `checks` (guard × simulation; Rust replays
+them through `multisig_review`). Machine tests: `app_multisig_review_state.rs`
+(`a_review_neither_check_read_is_ready_but_every_press_signs_only_anyway`,
+`one_check_unread_alone_signs_plainly`), `trusted_signer.rs`
+(`an_executors_page_hears_the_number_and_the_reviews_anyway_from_every_shell`).
+
+### 14.2 D3 (S2) — a balance snapshot paints only the fetch it came from
+
+**Found (iOS shell; the core trusted it).** The balance executor's mid-fetch
+snapshots were labelled with the account in FRONT when each landed
+(`WalletStore.scopedTo`), not the account the fetch read. At launch the home
+opens the session's account first (the member — the dev switch
+`VELA_PARALLEL_ACCOUNT` put it in front) and the remembered multisig a beat
+later, so the member's in-flight snapshots reached the core as the
+multisig's: drawn ("$2.4M", "Updated 24m"), kept as its rows
+(`HoldingsCache`, keyed correctly by address — it stored what the view held)
+and restored on the next launch; Send and the pay link's Send offered the same
+figures. The dev switch exposed it; any account switch during a fetch could.
+
+| Was | Now |
+| --- | --- |
+| `chain_assets_arrived {address, tokens}`: the address alone, a shell's word | `BalanceOperation::FetchTokens.generation` (the account-and-space generation, bumped by every account or space switch) and `chain_assets_arrived {address, generation, tokens}` — REQUIRED: a snapshot whose generation is not the current one is dropped, whatever address it carries; addresses compare without case. |
+| iOS: `chainAssetsArrived(tokens)` labelled with `scopedTo` | the executor hands each snapshot its fetch's own address and generation |
+
+Every shell echoes the fetch's generation (web `balance-executor.ts`, desktop
+`executor/balance_dashboard.rs`, Android `BalanceExecutor.kt`, iOS
+`BalanceExecutor.swift`). The caches checked: every holdings cache
+(`vela.holdingsCache`) is keyed `address#space` on all four; the cached total
+by address. Send's figures are the balance machine's (one source), each
+shell's answer gated on the balance view's address.
+
+Tests: `app_balance_dashboard.rs`
+(`another_accounts_snapshot_never_paints_the_account_in_front_whatever_its_label`,
+`a_relaunch_and_a_space_switch_keep_each_accounts_rows_its_own`); iOS
+`BalanceBleedTests` (the dev switch, the switch, the mislabelled snapshot,
+Send's figures, a relaunch); Android `BalanceMachineTest`.
+
+### 14.3 Smaller
+
+- **D8** — the fee line under a shut Approve (the review being read) said
+  "you can still approve": `home.multisig.proposal.feeUncheckedHeld`
+  ("Couldn't check whether it would run — Execute checks again.", pin 685)
+  wherever the door is not open, on all four shells.
+- **D5** — a passkey creation the core's deadline ended (Google unreachable)
+  is said: `create_wallet` takes a `cancelled` failure whose facts classify as
+  `TimedOut` as a failure with "The passkey prompt timed out. Try again.",
+  never the quiet "setup cancelled". Android races the platform call against
+  `passkeySignTimeoutMs` (`withinPasskeyDeadline`) — it ends at the deadline
+  even when the provider ignores its cancellation — and reports it as
+  `TYPE_TIMEOUT_ERROR`.
+- **D10** — the Android `-PvelaDeviceTest` build is labelled "Vela Test"
+  (manifest placeholder `velaAppLabel`).
+- **D6** — measured, not changed. On the simulator (PerfTests
+  `testColdStartToCachedHome`, Release, n=5 each) the home's
+  "named-account" gate (5fb15bffd) costs nothing measurable on a single
+  account's cold start: 0.645 s with it, 0.620 s without (the 0.831 s first
+  run came right after the seed launch). With one account the balance view
+  names the shown account from its first frame (logged frame by frame). The
+  device's 0.51 s was taken with a multisig shown at launch: the home then
+  waits for the multisig machine to name it, and drawing before that is
+  exactly the member's figure under the multisig's name (S3, D3). The gate
+  stays.

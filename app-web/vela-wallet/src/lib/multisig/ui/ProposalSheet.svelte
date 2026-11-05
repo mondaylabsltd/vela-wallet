@@ -2084,13 +2084,14 @@
 							{#if approveFirst && canApproveOnly}
 								<!-- Executing pays the fee; approving alone does not. -->
 								<Button
-									variant="secondary"
+									variant={anyway ? 'danger' : 'secondary'}
 									shape="rounded"
 									loading={busy && phase.kind === 'busy' && phase.what === 'approve'}
 									disabled={busy || signShut}
 									onclick={onApprove}
 								>
-									{m.proposal.approve}
+									<!-- D1: approving alone goes through the same "… anyway" step. -->
+									{anywayLabel('approve', m.proposal.approve, fullReview, m)}
 								</Button>
 							{/if}
 							<Button
@@ -2132,7 +2133,8 @@
 						<!-- Round 5: the look did not answer in time — said, and nothing held:
 						     approving goes ahead, and Execute looks again first. -->
 						<p class="fine" role="status" data-testid="execute-unchecked">
-							{m.proposal.feeUnchecked}
+							<!-- D8: "you can still approve" only where Approve can be pressed. -->
+							{signShut ? m.proposal.feeUncheckedHeld : m.proposal.feeUnchecked}
 							<button type="button" class="text-button link-ink" onclick={recheck}
 								>{m.proposal.feeRetry}</button
 							>

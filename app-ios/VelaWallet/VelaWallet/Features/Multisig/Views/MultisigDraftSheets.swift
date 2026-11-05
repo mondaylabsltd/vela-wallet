@@ -53,6 +53,13 @@ struct MultisigDraftReviewSheet: View {
                 // body), never the core's English reason.
                 let door = Self.door(draft)
                 if door.shows == .review, !draft.review.isNull {
+                    // D1: neither safety check read — the danger line and
+                    // Try again above the review it still draws.
+                    if door.unchecked {
+                        MsReviewPending(door: door, words: words) {
+                            hub.sendProposal(["type": "review_again"])
+                        }
+                    }
                     MsReviewBody(review: draft.review, chainId: item.chainId, words: words)
                 } else {
                     MsReviewPending(door: door, words: words) {

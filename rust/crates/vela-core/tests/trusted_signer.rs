@@ -682,6 +682,52 @@ fn the_wallets_own_send_is_sent_as_its_calls_with_the_fee_leg_after_them() {
     assert_eq!(built["context"]["operation"]["feeLegIndex"], 1);
 }
 
+/// D1 (real-device pass 2): a multisig executor's operation, as the native
+/// shells and the desktop hand it over (`vela_multisigExecute` and the send
+/// purpose's fields), is told to the page the way the web tells it — the
+/// number, the core's safeTxHash there, the name, and "… anyway" when the
+/// one review asks for it (neither safety check read, or a danger): the page
+/// says "Execute anyway". Params that do not read add nothing.
+#[test]
+fn an_executors_page_hears_the_number_and_the_reviews_anyway_from_every_shell() {
+    let tx = json!({
+        "to": "0x6813Eb9362372EEF6200f3b1dbC3f819671cBA69", "value": "0x1", "data": "0x",
+        "operation": 0, "safeTxGas": "0x0", "baseGas": "0x0", "gasPrice": "0x0",
+        "gasToken": "0x0000000000000000000000000000000000000000",
+        "refundReceiver": "0x0000000000000000000000000000000000000000", "nonce": "0x4"
+    });
+    let ask = |params: Value| {
+        request(&RequestInput {
+            method: vela_core::signing_venue::MULTISIG_EXECUTE_METHOD,
+            params,
+            origin: "",
+            chain_id: 100,
+            account: SAFE,
+            ..Default::default()
+        })
+    };
+    let anyway = ask(json!({
+        "tx": tx, "multisig": SAFE, "name": "Team fund", "threshold": 2,
+        "owners": [SAFE], "anyway": true
+    }));
+    let about = &anyway["context"]["multisig"];
+    assert_eq!(about["anyway"], true);
+    assert_eq!(about["nonce"], "0x4");
+    assert_eq!(about["name"], "Team fund");
+    let st: vela_core::multisig::SafeTx = serde_json::from_value(tx.clone()).unwrap();
+    assert_eq!(
+        about["safeTxHash"],
+        vela_core::multisig::safe_tx_hash(100, SAFE, &st).unwrap()
+    );
+    let plain = ask(json!({"tx": tx, "multisig": SAFE, "threshold": 2}));
+    assert!(plain["context"]["multisig"].get("anyway").is_none());
+    // A shell that hands over nothing readable: nothing said.
+    assert!(ask(json!({})).pointer("/context/multisig").is_none());
+    assert!(ask(json!({"multisig": SAFE}))
+        .pointer("/context/multisig")
+        .is_none());
+}
+
 /// Spec 079: a request from the wallet's own browser names the site as the
 /// browser saw it; one relayed from elsewhere carries no `dapp` (the page keeps
 /// its caution).

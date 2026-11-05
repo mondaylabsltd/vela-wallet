@@ -376,7 +376,10 @@ struct MsProposalModel {
             return (words.t("proposal.feeLine", ["fee": feeText, "name": words.label(executor)]), .neutral)
         case "fails": return (words.t("proposal.wouldFail", ["reason": words.whyFails(preview["why"], chainId: chainId)]), .danger)
         case "unpriced": return (words.t("proposal.feeUnpriced"), .warning)
-        case "unchecked": return (words.t("proposal.feeUnchecked"), .warning)
+        // D8 (real-device pass 2): "you can still approve" only where
+        // Approve can be pressed — never under one shut while the review is
+        // read (or not read).
+        case "unchecked": return (words.t(door.enabled ? "proposal.feeUnchecked" : "proposal.feeUncheckedHeld"), .warning)
         case "refused": return (words.t("authority.deployUnverified", ["network": words.network(chainId)]), .danger)
         case "spent": return (words.t("proposal.doneNote"), .neutral)
         default: return nil
@@ -855,6 +858,11 @@ struct MultisigProposalSheet: View {
     @ViewBuilder private func reviewPart(_ model: MsProposalModel) -> some View {
         switch model.reviewState {
         case .ready(let review):
+            // D1: neither safety check read — the door's danger line and
+            // Try again, above the review it still draws.
+            if !model.past, model.door.unchecked {
+                MsReviewPending(door: model.door, words: words, tryAgain: reviewAgain)
+            }
             MsReviewBody(review: review, chainId: chainId, words: words, past: model.past)
         case .loading, .failed:
             if !model.past {
@@ -959,11 +967,12 @@ struct MultisigProposalSheet: View {
                         MsNote(text: why.text, tone: why.tone, identifier: "multisig.proposal.approveOnly")
                     }
                     VelaButton(
-                        // Approving alone beside the one press is the plain
-                        // second choice; alone, it wears the review's rule.
-                        title: completes ? words.t("proposal.approve")
-                            : model.signLabel("proposal.approve", anyway: "review.approveAnyway"),
-                        kind: completes ? .secondary : (model.signAnyway ? .danger : .primary),
+                        // Approving alone beside the one press is the second
+                        // choice; either way it wears the review's rule — D1:
+                        // "Approve anyway" in danger, never a plain Approve
+                        // under a review nothing checked.
+                        title: model.signLabel("proposal.approve", anyway: "review.approveAnyway"),
+                        kind: model.signAnyway ? .danger : (completes ? .secondary : .primary),
                         enabled: model.signable,
                         loading: approving && !completes,
                         haptic: .confirm

@@ -25,6 +25,7 @@ import kotlinx.coroutines.withTimeout
 import app.getvela.wallet.feature.multisig.draftDoor
 import app.getvela.wallet.feature.multisig.draftReviewAgain
 import app.getvela.wallet.feature.multisig.reviewFailedReason
+import app.getvela.wallet.feature.multisig.reviewUncheckedLine
 import java.io.File
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -217,6 +218,52 @@ class MultisigReviewStateTest {
         assertTrue(through.canSign && through.signAnyway)
         assertFalse(model(proposalView(refused, ready)).canSign)
         assertFalse("no sign rule is never allowed", model(proposalView("{}", ready)).canSign)
+    }
+
+    // -- D1: neither safety check read (real-device pass 2) -------------------------
+
+    /** The core's review when the state guard and the simulation both gave up. */
+    private val unchecked = """{"sign":{"allowed":true,"anyway":true},"concerns":[{"kind":"stateUnread","reason":"unreachable"},{"kind":"unsimulated"},{"kind":"unchecked"}],"recipients":[],"simulation":{"kind":"unreachable","deltas":[]},"state":{"verdict":{"kind":"unavailable","reason":"unreachable"}}}"""
+    private val guardUnread = """{"sign":{"allowed":true,"anyway":false},"concerns":[{"kind":"stateUnread","reason":"unreachable"}],"recipients":[],"simulation":{"kind":"deltas","deltas":[]},"state":{"verdict":{"kind":"unavailable","reason":"unreachable"}}}"""
+
+    @Test
+    fun a_review_neither_check_read_is_drawn_in_danger_with_try_again_and_signs_only_anyway() {
+        // A proposal: Approve, Approve and execute, Execute all "… anyway".
+        val m = model(proposalView(unchecked, ready))
+        assertTrue(m.door.showsReview && m.door.unchecked && m.door.retry)
+        assertTrue(m.reviewReady && m.canSign)
+        assertTrue("every press is \"… anyway\"", m.signAnyway)
+        assertEquals("Vela couldn't check what this transaction changes.", reviewUncheckedLine(m.door, words))
+        // Its Try again reads this proposal again.
+        assertEquals("review_again", m.reviewAgain["type"].toString().trim('"'))
+        // A draft: Propose and approve the same.
+        val d = draftDoor(draftView(unchecked, ready).draft!!)
+        assertTrue(d.unchecked && d.enabled && d.anyway && d.retry)
+    }
+
+    /** D8: under a shut Approve (the review being read), the fee line says nothing of approving. */
+    @Test
+    fun the_fee_line_never_says_you_can_approve_under_a_shut_approve() {
+        fun view(state: String): MsProposalsView {
+            val canExecute = item.replace(""""canExecute":[]""", """"canExecute":["$bob"]""")
+            return MsProposalsView.of(json("""{"followed":"$safe","reviews":{"100:$hash":$allowed},"review_states":{"100:$hash":$state},
+                "previews":{"100:${hash.lowercase()}:${bob.lowercase()}":{"kind":"unchecked"}},"items":[$canExecute],
+                "chains":[{"chainId":100,"members":{"deployed":true,"owners":["$alice","$bob"],"threshold":2,"nonce":"4"},"items":[],"mailbox":true}]}"""))
+        }
+        val reading = MsProposalModel(view(loading).items.single(), view(loading), words, null)
+        assertFalse(reading.canSign)
+        assertEquals("Couldn’t check whether it would run — Execute checks again.", reading.feeLine(bob)?.first)
+        val open = MsProposalModel(view(ready).items.single(), view(ready), words, null)
+        assertTrue(open.canSign)
+        assertEquals("Couldn’t check whether it would run — you can still approve; Execute checks again.", open.feeLine(bob)?.first)
+    }
+
+    @Test
+    fun one_check_unread_alone_stays_a_plain_caution() {
+        val m = model(proposalView(guardUnread, ready))
+        assertFalse(m.door.unchecked || m.door.retry)
+        assertTrue(m.canSign)
+        assertFalse(m.signAnyway)
     }
 
     // -- the real proposals machine, over this shell ---------------------------------

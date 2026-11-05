@@ -374,21 +374,8 @@ pub fn trusted_signer_signature_request(args_json: &str) -> Result<String, JsVal
     // name and threshold — for the page to check and draw as the app's
     // (`approval::execution_context`, round 7). Params that name a multisig
     // must read; ones from a shell that names none add nothing.
-    let execution = if a.method == vela_core::signing_venue::MULTISIG_EXECUTE_METHOD
-        && a.params.get("multisig").is_some()
-    {
-        let p: ExecutionParams = serde_json::from_value(a.params.clone()).map_err(js)?;
-        Some(
-            trusted_signer::approval::execution_context(
-                a.chain_id,
-                &p.multisig,
-                &p.tx,
-                p.name.as_deref(),
-                p.threshold,
-                &p.owners,
-            )
-            .map_err(js)?,
-        )
+    let execution = if a.method == vela_core::signing_venue::MULTISIG_EXECUTE_METHOD {
+        trusted_signer::approval::execution_of_params(a.chain_id, &a.params).map_err(js)?
     } else {
         None
     };
@@ -414,22 +401,6 @@ pub fn trusted_signer_signature_request(args_json: &str) -> Result<String, JsVal
         context.insert("multisig".into(), about);
     }
     Ok(request.to_string())
-}
-
-/// A multisig executor's params (`vela_multisigExecute`): the SafeTx it
-/// executes, on which multisig, and what this device knows of it.
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ExecutionParams {
-    tx: vela_core::multisig::SafeTx,
-    multisig: String,
-    #[serde(default)]
-    name: Option<String>,
-    #[serde(default)]
-    threshold: Option<u64>,
-    /// r10 page: its members now (the send purpose's `owners`).
-    #[serde(default)]
-    owners: Vec<String>,
 }
 
 #[derive(serde::Deserialize)]

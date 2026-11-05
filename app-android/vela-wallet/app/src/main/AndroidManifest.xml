@@ -94,7 +94,7 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
+        android:label="${velaAppLabel}"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:enableOnBackInvokedCallback="true"
         android:supportsRtl="true"
@@ -150,7 +150,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="@string/app_name"
+            android:label="${velaAppLabel}"
             android:configChanges="keyboard|keyboardHidden|navigation|touchscreen|screenSize|smallestScreenSize|screenLayout|density|fontScale|uiMode"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.VelaWallet"
@@ -286,7 +286,7 @@
             android:name=".core.platform.ScanTileService"
             android:exported="true"
             android:icon="@drawable/ic_tile_scan"
-            android:label="@string/app_name"
+            android:label="${velaAppLabel}"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
@@ -299,7 +299,7 @@
         <receiver
             android:name=".core.widget.VelaBalanceWidgetReceiver"
             android:exported="true"
-            android:label="@string/app_name">
+            android:label="${velaAppLabel}">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>

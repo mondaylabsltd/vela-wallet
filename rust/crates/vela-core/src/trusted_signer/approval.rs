@@ -154,6 +154,7 @@ pub fn execution_context(
     name: Option<&str>,
     threshold: Option<u64>,
     owners: &[String],
+    anyway: bool,
 ) -> Result<Value, crate::error::CoreError> {
     let safe_tx_hash = multisig::safe_tx_hash(chain_id, multisig, tx)?;
     let mut about = serde_json::Map::new();
@@ -161,10 +162,65 @@ pub fn execution_context(
     if let Some(name) = name.map(str::trim).filter(|n| !n.is_empty()) {
         about.insert("name".into(), json!(name));
     }
+    // D1: the one review asks for "… anyway" — the page says "Execute
+    // anyway" in the danger style, as the app's word (r9-10's approval rule).
+    if anyway {
+        about.insert("anyway".into(), json!(true));
+    }
     members_now(&mut about, owners, threshold);
     about.insert("nonce".into(), json!(tx.nonce));
     about.insert("safeTxHash".into(), json!(safe_tx_hash));
     Ok(Value::Object(about))
+}
+
+/// A multisig executor's params (`vela_multisigExecute`, the send
+/// purpose's fields as every shell hands them over): the SafeTx it executes,
+/// on which multisig, and what this device knows of it.
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutionParams {
+    pub tx: SafeTx,
+    pub multisig: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub threshold: Option<u64>,
+    /// r10 page: its members now (the send purpose's `owners`).
+    #[serde(default)]
+    pub owners: Vec<String>,
+    /// D1: the one review asks for "… anyway" (the send purpose's `anyway`).
+    #[serde(default)]
+    pub anyway: bool,
+}
+
+/// [`execution_context`] from a shell's `vela_multisigExecute` params — one
+/// reader for the web and the native shells. `None`: params that name no
+/// multisig (a shell that hands none over adds nothing); an error: params
+/// that name one and do not read.
+///
+/// # Errors
+///
+/// Params that name a multisig but are not [`ExecutionParams`], or a SafeTx
+/// the core cannot hash.
+pub fn execution_of_params(
+    chain_id: u64,
+    params: &Value,
+) -> Result<Option<Value>, crate::error::CoreError> {
+    if params.get("multisig").is_none_or(Value::is_null) {
+        return Ok(None);
+    }
+    let p: ExecutionParams = serde_json::from_value(params.clone())
+        .map_err(|e| crate::error::CoreError::Internal(format!("execution params: {e}")))?;
+    execution_context(
+        chain_id,
+        &p.multisig,
+        &p.tx,
+        p.name.as_deref(),
+        p.threshold,
+        &p.owners,
+        p.anyway,
+    )
+    .map(Some)
 }
 
 /// The bytes the member's passkey signs for `safe_tx_hash`
@@ -342,8 +398,11 @@ mod tests {
             Some("  Team fund "),
             Some(2),
             &owners,
+            true,
         )
         .unwrap_or_else(|_| unreachable!());
+        // D1: the review asks for "… anyway": the page is told so.
+        assert_eq!(about["anyway"], true);
         assert_eq!(about["address"], MULTISIG);
         assert_eq!(about["name"], "Team fund");
         assert_eq!(about["threshold"], 2);
@@ -355,14 +414,15 @@ mod tests {
             multisig::safe_tx_hash(CHAIN, MULTISIG, &tx()).unwrap_or_default()
         );
         // Nothing this device does not know is said: no name, no threshold.
-        let bare = execution_context(CHAIN, MULTISIG, &tx(), Some(" "), Some(0), &[])
+        let bare = execution_context(CHAIN, MULTISIG, &tx(), Some(" "), Some(0), &[], false)
             .unwrap_or_else(|_| unreachable!());
         assert!(
             bare.get("name").is_none()
                 && bare.get("threshold").is_none()
                 && bare.get("owners").is_none()
+                && bare.get("anyway").is_none()
         );
-        assert!(execution_context(CHAIN, "not an address", &tx(), None, None, &[]).is_err());
+        assert!(execution_context(CHAIN, "not an address", &tx(), None, None, &[], false).is_err());
     }
 
     #[test]

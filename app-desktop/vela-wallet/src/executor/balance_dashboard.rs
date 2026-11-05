@@ -395,8 +395,9 @@ impl Machine for BalanceDashboard {
                 address,
                 force,
                 pull,
+                generation,
             } => {
-                let (address, pull) = (address.clone(), *pull);
+                let (address, pull, generation) = (address.clone(), *pull, *generation);
                 // `force` bypasses a 5-minute shell TTL this cut does not keep:
                 // every fetch is live. Recorded rather than silently ignored —
                 // adding the TTL later changes no core rule, because the core
@@ -421,17 +422,21 @@ impl Machine for BalanceDashboard {
                     if !previous.is_empty() {
                         sink.send(Event::ChainAssetsArrived {
                             address: address.clone(),
+                            generation,
                             tokens: previous,
                         });
                     }
                     let streamed_for = address.clone();
                     let arrived: std::sync::Arc<balances::ChainSink> =
                         std::sync::Arc::new(move |tokens| {
-                            // The address rides along so the core can drop a
-                            // stream that belongs to an account the person has
-                            // already switched away from (its invariant ⑤).
+                            // The fetch's own address and generation ride
+                            // along so the core can drop a stream that
+                            // belongs to an account (or a space) the person
+                            // has already switched away from (its invariant
+                            // ⑤; D3).
                             sink.send(Event::ChainAssetsArrived {
                                 address: streamed_for.clone(),
+                                generation,
                                 tokens,
                             });
                         });

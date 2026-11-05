@@ -3040,14 +3040,22 @@ pub mod page {
                 Event::ReviewAgain => {
                     {
                         let mut s = lock(&model.state);
+                        // D1: a review drawn but checked by neither the
+                        // state guard nor the simulation is read again too
+                        // (its door's Try again).
                         if let Some(l) = s.loaded.as_mut() {
-                            if !l.view.review_state.is_ready() {
+                            if !l.view.review_state.is_ready()
+                                || review_state::unchecked(l.view.review.as_ref())
+                            {
                                 l.view.review_state = ReviewState::Loading;
                                 l.again = true;
                             }
                         }
                         for r in s.request_reads.values_mut() {
-                            if let Some(x) = r.shown.as_mut().filter(|x| x.review.is_none()) {
+                            if let Some(x) = r.shown.as_mut().filter(|x| {
+                                x.review.is_none() || review_state::unchecked(x.review.as_ref())
+                            }) {
+                                x.review = None;
                                 x.review_state = ReviewState::Loading;
                             }
                         }

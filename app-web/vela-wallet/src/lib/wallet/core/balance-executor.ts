@@ -124,7 +124,11 @@ export function createBalanceExecutor(stream: BalanceStreamSink) {
 					forceRefresh: operation.force,
 					onCached: (at) => (readAt = at),
 					onProgress: (partial) =>
-						stream.chainAssetsArrived(operation.address, partial.map(toBalanceToken)),
+						stream.chainAssetsArrived(
+							operation.address,
+							operation.generation,
+							partial.map(toBalanceToken)
+						),
 					onFailedChains: (ids, insideApp, tokenListUnread) => {
 						failed = ids;
 						internal = insideApp;

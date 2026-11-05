@@ -24,6 +24,12 @@ data class MsSignDoor(
     val loading: Boolean get() = shows != SHOWS_REVIEW && shows != SHOWS_FAILED
     val failed: Boolean get() = shows == SHOWS_FAILED
     val showsReview: Boolean get() = shows == SHOWS_REVIEW
+    /**
+     * D1: the review is drawn, but neither its state-change check nor its
+     * simulation was read — the core's danger line (`reason_key`) goes above
+     * it with Try again, and every press is "… anyway" ([anyway]).
+     */
+    val unchecked: Boolean get() = shows == SHOWS_REVIEW && !reasonKey.isNullOrBlank()
 
     companion object {
         const val SHOWS_LOADING = "loading"

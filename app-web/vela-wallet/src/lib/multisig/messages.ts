@@ -255,6 +255,8 @@ export interface MultisigMessages {
 		feeChecking: string;
 		feeUnpriced: string;
 		feeUnchecked: string;
+		/** D8: the same, while Approve is shut (the review not read): nothing said of approving. */
+		feeUncheckedHeld: string;
 		feeRetry: string;
 		/** What of the fee is one-time setup (`{{network}}`, `{{amount}}`). */
 		feeSetup: string;
@@ -822,6 +824,12 @@ export interface ReviewStateMessages {
 	unreadable: string;
 	gone: string;
 	tryAgain: string;
+	/**
+	 * D1: "Vela couldn't check what this transaction changes." — a review
+	 * drawn whose state-change check AND simulation could not be read: a
+	 * danger line over it, with Try again; it signs only "… anyway".
+	 */
+	unchecked: string;
 }
 
 /** `home.multisig.review.reading` (r8-1, r8-2, r8-5). */
@@ -1130,6 +1138,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		feeChecking: '',
 		feeUnpriced: '',
 		feeUnchecked: '',
+		feeUncheckedHeld: '',
 		feeRetry: '',
 		feeSetup: '',
 		feeSetupPlain: '',
@@ -1607,7 +1616,8 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 			timedOut: '',
 			unreadable: '',
 			gone: '',
-			tryAgain: ''
+			tryAgain: '',
+			unchecked: ''
 		},
 		reading: {
 			send: '',

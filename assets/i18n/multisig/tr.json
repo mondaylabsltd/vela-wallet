@@ -157,6 +157,7 @@
     "feeChecking": "Çalışıp çalışmayacağı ve ağ ücreti kontrol ediliyor…",
     "feeUnpriced": "Ağ ücreti şu anda hesaplanamadı.",
     "feeUnchecked": "Çalışıp çalışmayacağı kontrol edilemedi — yine de onaylayabilirsiniz; Yürüt yeniden kontrol eder.",
+    "feeUncheckedHeld": "Çalışıp çalışmayacağı kontrol edilemedi — Yürüt yeniden kontrol eder.",
     "feeRetry": "Yeniden kontrol et",
     "feeSetup": "{{network}} üzerinde tek seferlik kurulum dahil ≈ {{amount}}:",
     "feeSetupPlain": "{{network}} üzerinde tek seferlik kurulum dahil:",
@@ -712,7 +713,8 @@
      "timedOut": "Zamanında okunamadı.",
      "unreadable": "Bu işlem okunamadı.",
      "gone": "Bu işlem artık listede değil.",
-     "tryAgain": "Tekrar dene"
+     "tryAgain": "Tekrar dene",
+     "unchecked": "Vela bu işlemin neyi değiştirdiğini kontrol edemedi."
     }
    },
    "notify": {

@@ -80,7 +80,7 @@ struct MultisigReviewStateTests {
     /// (the on-demand multisig catalog, copied from `assets/i18n/multisig`).
     @Test func theStateWordsAreInEveryLocale() throws {
         let keys = try #require(try Self.vectors()["keys"] as? [String])
-        #expect(keys.count == 6)
+        #expect(keys.count == 7)
         for tag in Loc.supported {
             let loc = Loc(overrideTag: tag, preferredLanguages: [])
             for key in keys {
@@ -184,6 +184,66 @@ struct MultisigReviewStateTests {
                 == "Couldn't read this transaction. Nothing can be signed until it's read.")
         // Not asked again behind the person's back: Try again is theirs.
         #expect(!failed.reviewUnread)
+    }
+
+    // MARK: - D1: neither safety check read (real-device pass 2)
+
+    /// Each read gave up at its bound: the state guard and the simulation
+    /// both unread. Drawn (`ready`), but in danger with Try again, and every
+    /// press — Approve, Approve and execute, Execute, Propose and approve —
+    /// goes through the "… anyway" step.
+    private static let unchecked = #"{"sign":{"allowed":true,"anyway":true},"concerns":[{"kind":"stateUnread","reason":"unreachable"},{"kind":"unsimulated"},{"kind":"unchecked"}]}"#
+    private static let guardUnread = #"{"sign":{"allowed":true,"anyway":false},"concerns":[{"kind":"stateUnread","reason":"unreachable"}]}"#
+
+    @Test func aReviewNeitherCheckReadSignsOnlyAnywayUnderADangerLine() throws {
+        let model = try proposal(reviews: #"{"100:\#(Self.hash)":\#(Self.unchecked)}"#,
+                                 states: #"{"100:\#(Self.hash)":{"kind":"ready"}}"#)
+        #expect(model.signable)
+        #expect(model.door.unchecked && model.door.retry)
+        #expect(model.signAnyway, "one plain tap on a review nothing checked")
+        #expect(MsReviewPending.uncheckedLine(model.door, words: words)
+                == "Vela couldn't check what this transaction changes.")
+        #expect(model.signLabel("proposal.approveAndExecute", anyway: "review.approveExecuteAnyway")
+                == words.t("review.approveExecuteAnyway"))
+        #expect(model.signLabel("proposal.approve", anyway: "review.approveAnyway") == words.t("review.approveAnyway"))
+        // A draft: "Propose and approve" the same.
+        let door = MultisigDraftReviewSheet.door(try draft(state: #"{"kind":"ready"}"#, review: Self.unchecked))
+        #expect(door.enabled && door.anyway && door.unchecked && door.retry)
+    }
+
+    /// D8 (real-device pass 2): while the review is read and Approve is shut,
+    /// the fee line said "you can still approve". It says only what is true:
+    /// Execute checks again; "you can still approve" where Approve opens.
+    @Test func theFeeLineNeverSaysYouCanApproveUnderAShutApprove() throws {
+        func model(_ states: String) throws -> MsProposalModel {
+            var json = MultisigViewsTests.proposalsJson(
+                item: MultisigViewsTests.item(approved: 2, status: "ready", canApprove: [Self.one], canExecute: [Self.one]),
+                standing: #"{"kind":"ready"}"#
+            )
+            json = json.replacingOccurrences(of: #""reviews":{}"#, with: #""reviews":\#(allowed)"#)
+            json = json.replacingOccurrences(of: #""review_states":{}"#, with: #""review_states":\#(states)"#)
+            json = json.replacingOccurrences(
+                of: #""previews":{}"#,
+                with: #""previews":{"100:\#(Self.hash.lowercased()):\#(Self.one.lowercased())":{"kind":"unchecked"}}"#)
+            let view = try #require(decode(MsProposalsView.self, json))
+            return MsProposalModel(item: try #require(view.items.first), view: view, words: words, account: nil)
+        }
+        let reading = try model(#"{"100:\#(Self.hash)":{"kind":"loading"}}"#)
+        #expect(!reading.signable)
+        #expect(reading.feeLine(for: Self.one)?.text == "Couldn’t check whether it would run — Execute checks again.")
+        let open = try model(#"{"100:\#(Self.hash)":{"kind":"ready"}}"#)
+        #expect(open.signable)
+        #expect(open.feeLine(for: Self.one)?.text
+                == "Couldn’t check whether it would run — you can still approve; Execute checks again.")
+    }
+
+    /// One of the two checks read keeps today's caution: no danger line, a
+    /// plain press.
+    @Test func oneCheckUnreadAloneStaysAPlainCaution() throws {
+        let model = try proposal(reviews: #"{"100:\#(Self.hash)":\#(Self.guardUnread)}"#,
+                                 states: #"{"100:\#(Self.hash)":{"kind":"ready"}}"#)
+        #expect(model.signable && !model.signAnyway)
+        #expect(!model.door.unchecked && !model.door.retry)
     }
 
     @Test func approveAndExecuteOpenOnceAProposalsReviewIsReady() throws {

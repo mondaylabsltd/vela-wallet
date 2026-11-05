@@ -717,6 +717,13 @@ pub enum BalanceOperation {
         force: bool,
         /// True only for the pull-to-refresh gesture — drives the spinner.
         pull: bool,
+        /// Real-device pass 2 (D3): the account-and-space generation this
+        /// fetch reads for. Every [`Event::ChainAssetsArrived`] snapshot of
+        /// THIS fetch echoes it, with this fetch's own `address` — never the
+        /// account in front when the snapshot lands (iOS labelled a member's
+        /// in-flight snapshots with the multisig switched to, and the home
+        /// drew the member's $2.4M under the multisig).
+        generation: u32,
     },
     /// One account's assets for a switcher row (`fetchTokens(acc.address)`,
     /// `useHomeController.ts:459` — TTL-cached, never forced, never streams).
@@ -887,10 +894,13 @@ pub enum Event {
     /// that has finished so far — exactly what `onProgress` delivers
     /// (`useHomeController.ts:324-331`). Chains not in the snapshot keep
     /// their previous tokens, so the total never drops to $0 mid-refresh
-    /// (invariant ④). Tagged with `address`: a stale account's stream can
-    /// never paint the new account (invariant ⑤).
+    /// (invariant ④). Tagged with `address` AND the fetch's `generation`
+    /// (echoed from [`BalanceOperation::FetchTokens`]): a stale account's —
+    /// or another space's — stream can never paint the account in front
+    /// (invariant ⑤), even one a shell labels with the wrong address (D3).
     ChainAssetsArrived {
         address: String,
+        generation: u32,
         tokens: Vec<BalanceToken>,
     },
     /// Home gained focus / app foregrounded — reload, exactly as
@@ -1369,9 +1379,11 @@ impl App for BalanceDashboard {
                 }
                 begin_fetch(model, force, pull)
             }
-            Event::ChainAssetsArrived { address, tokens } => {
-                chain_assets_arrived(model, &address, tokens)
-            }
+            Event::ChainAssetsArrived {
+                address,
+                generation,
+                tokens,
+            } => chain_assets_arrived(model, &address, generation, tokens),
             Event::AppFocused => {
                 model.backgrounded = false;
                 if model.address.is_some() && !model.read_deferred {
@@ -1684,6 +1696,7 @@ fn reset_for(
             address,
             force,
             pull: false,
+            generation: generation_of(model),
         });
     }
     requests(model, operations)
@@ -1771,12 +1784,14 @@ fn begin_fetch(model: &mut Model, force: bool, pull: bool) -> Command<BalanceEff
     }
     model.fetch_in_flight = true;
     model.read_deferred = false;
+    let generation = generation_of(model);
     request(
         model,
         BalanceOperation::FetchTokens {
             address,
             force,
             pull,
+            generation,
         },
     )
 }
@@ -1800,10 +1815,17 @@ fn with_display_symbol(mut token: BalanceToken) -> BalanceToken {
 fn chain_assets_arrived(
     model: &mut Model,
     address: &str,
+    generation: u32,
     tokens: Vec<BalanceToken>,
 ) -> Command<BalanceEffect, Event> {
-    if model.address.as_deref() != Some(address) {
-        return Command::done(); // stale stream for a previous account (⑤)
+    // D3: a snapshot paints only the fetch it came from — this account, in
+    // this space, since the last switch. The address alone was a shell's
+    // word: iOS labelled a member's in-flight snapshots with the multisig
+    // switched to, and the member's money was drawn (and kept) as the
+    // multisig's. The generation is the core's own, echoed from its
+    // `FetchTokens`: a shell cannot label an older fetch as this one.
+    if !same_account(model.address.as_deref(), address) || generation != generation_of(model) {
+        return Command::done(); // stale stream for a previous account or space (⑤)
     }
     let fresh: BTreeSet<u32> = tokens.iter().map(|t| t.chain_id).collect();
     let mut merged: Vec<BalanceToken> = model
@@ -2576,6 +2598,17 @@ fn upsert_balance(rows: &mut Vec<BalanceCacheEntry>, address: &str, usd: f64) {
 /// Issue one operation whose answer must match the current account generation.
 fn request(model: &Model, operation: BalanceOperation) -> Command<BalanceEffect, Event> {
     requests(model, vec![operation])
+}
+
+/// The account-and-space generation a `FetchTokens` names and its snapshots
+/// echo (D3): the low 32 bits of [`Model::attempt`].
+fn generation_of(model: &Model) -> u32 {
+    u32::try_from(model.attempt & u64::from(u32::MAX)).unwrap_or_default()
+}
+
+/// The account in front is `address` (addresses compare without case).
+fn same_account(front: Option<&str>, address: &str) -> bool {
+    front.is_some_and(|f| f.eq_ignore_ascii_case(address))
 }
 
 /// Issue operations whose answers must match the current account generation.

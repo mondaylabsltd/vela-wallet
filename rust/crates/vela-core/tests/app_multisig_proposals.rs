@@ -25,6 +25,10 @@ use world::{
 
 type Sut = DomainDriver<MultisigProposals>;
 
+/// An `eth_simulateV1` answer that reads: one call, nothing moved (D1: a
+/// review with no check read at all is signed only "… anyway").
+const SIM_READ: &str = r#"{"result":[{"calls":[{"status":"0x1","logs":[]}]}]}"#;
+
 const B: &str = "0x00000000000000000000000000000000000000bb";
 
 fn start(world: &World, networks: Vec<u64>) -> Event {
@@ -733,6 +737,8 @@ fn executed_and_followed_until_it_landed() {
 fn a_page_executor_signs_one_operation_and_its_page_is_told_what_runs() {
     use vela_core::app::multisig_shell::{ApprovalRoute, SendPurpose};
     let (mut world, mut sut, account) = setup(&[0, 1]);
+    // One check of two reads (D1): the page is told plainly.
+    world.sim_reply = Some(SIM_READ.to_owned());
     let state = propose(
         &mut sut,
         &mut world,
@@ -781,10 +787,13 @@ fn a_page_executor_signs_one_operation_and_its_page_is_told_what_runs() {
         threshold,
         tx,
         owners,
+        anyway,
     })) = world.purposes.first().cloned()
     else {
         panic!("{:?}", world.purposes);
     };
+    // D1: a review one of whose checks read signs plainly.
+    assert!(!anyway);
     assert_eq!(multisig, account.address);
     assert_eq!(name.as_deref(), Some("Quiet Harbor"));
     assert_eq!(threshold, 2);
@@ -1304,6 +1313,9 @@ fn has_blind(review: &Value) -> bool {
 #[test]
 fn a_blind_review_says_sign_anyway_and_names_the_blind_concern() {
     let (mut world, mut sut, _) = setup(&[0, 1]);
+    // The simulation reads (this world's state guard does not): a review one
+    // of whose checks read is plain unless something else asks (D1).
+    world.sim_reply = Some(SIM_READ.to_owned());
     let hash = hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
     let key = format!("100:{hash}");
     let review = |sut: &mut Sut, world: &mut World, blind: bool| {

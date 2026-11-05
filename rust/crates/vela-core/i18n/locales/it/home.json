@@ -234,6 +234,7 @@
         "feeChecking": "Verifica che verrebbe eseguita, e della commissione di rete…",
         "feeUnpriced": "Al momento non è possibile calcolare la commissione di rete.",
         "feeUnchecked": "Non è stato possibile verificare se andrebbe a buon fine — puoi comunque approvare; Esegui verifica di nuovo.",
+        "feeUncheckedHeld": "Non è stato possibile verificare se andrebbe a buon fine — Esegui verifica di nuovo.",
         "feeRetry": "Verifica di nuovo",
         "feeSetup": "Include una configurazione una tantum su {{network}} ≈ {{amount}}:",
         "feeSetupPlain": "Include una configurazione una tantum su {{network}}:",
@@ -793,7 +794,8 @@
           "timedOut": "Non è stato possibile leggerla in tempo.",
           "unreadable": "Non è stato possibile leggere questa transazione.",
           "gone": "Questa transazione non è più nell'elenco.",
-          "tryAgain": "Riprova"
+          "tryAgain": "Riprova",
+          "unchecked": "Vela non è riuscita a verificare cosa cambia questa transazione."
         }
       },
       "notify": {

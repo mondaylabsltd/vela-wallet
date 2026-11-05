@@ -1486,7 +1486,15 @@ if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.siz
   //   never "it hasn't been shared with the members"). `componentsUi.signing.
   //   firstTimeTag` changes value only: the history it reads is this device's
   //   ("First time sending here from this device"). 682 + 1 = 683.
-  const pins = { multisig: 683 };
+  // 684 (real-device pass 2, D1, 2026-11-05): + `home.multisig.review.state.
+  //   unchecked` (a review whose state-change check AND simulation both
+  //   could not be read is drawn, but signs only through "… anyway" under
+  //   this danger line and a Try again). 683 + 1 = 684.
+  // 685 (real-device pass 2, D8, 2026-11-05): + `home.multisig.proposal.
+  //   feeUncheckedHeld` (the fee line while Approve is shut — the review
+  //   still read — says nothing of approving: "you can still approve"
+  //   under a disabled Approve was untrue). 684 + 1 = 685.
+  const pins = { multisig: 685 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());
