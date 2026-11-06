@@ -1028,6 +1028,11 @@ pub struct Model {
     cached_total: Option<f64>,
     /// First fetch for this account has settled (either way) — skeleton off.
     bootstrapped: bool,
+    /// r16-22: a round of this account settled from the NETWORKS (not the
+    /// shell's TTL cache) since it was switched to. Only then may the view
+    /// claim it holds nothing (`empty_key`, `live_key`): a cache's rows were
+    /// read minutes ago, and its "nothing" is no network's word now.
+    read_live: bool,
     /// The last round of this account SETTLED — it was not still out, and it
     /// did not throw. Only then is what the view holds something the chains
     /// said: a cached zero before any read, or after a read that threw, is
@@ -1593,6 +1598,7 @@ impl App for BalanceDashboard {
             checking_key: (!first_read_ended && model.pool_said.is_empty())
                 .then(|| CHECKING.to_owned()),
             live_key: (model.last_round_answered
+                && model.read_live
                 && !model.hidden
                 && !unknown
                 && !unreachable
@@ -1601,6 +1607,7 @@ impl App for BalanceDashboard {
                 && total == 0.0)
                 .then(|| LIVE_ZERO.to_owned()),
             empty_key: (first_read_ended
+                && model.read_live
                 && some_chain_answered(model)
                 && !unread_said(model)
                 && model.tokens.is_empty()
@@ -1674,6 +1681,7 @@ fn reset_for(
     model.last_read.clear();
     model.cached_total = None;
     model.bootstrapped = false;
+    model.read_live = false;
     model.last_round_answered = false;
     model.partial_retries_left = MAX_PARTIAL_RETRIES;
     model.notice_allowed = false;
@@ -1999,6 +2007,7 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             let from_cache = read_at_ms.is_some();
             if !from_cache {
                 model.pool_said.clear();
+                model.read_live = true;
             }
             let failed_chain_ids: Vec<u32> = if from_cache {
                 let mut known: Vec<u32> = model
@@ -2141,6 +2150,15 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             model.last_round_answered = true;
             arm_list_recheck(model, &mut operations);
             arm_recovery(model, &mut operations, !model.failed_chain_ids.is_empty());
+            // r16-22: the cache said this account holds nothing, and no
+            // network has been read for it since it was switched to: an
+            // empty-state claim needs every network read, so they are read
+            // now (forced past the cache) — the claim, or the outage, is
+            // that read's to say.
+            if from_cache && !model.read_live && model.tokens.is_empty() && !model.backgrounded {
+                let live = begin_fetch(model, true, false);
+                return Command::all(vec![requests(model, operations), live]);
+            }
             // r12-3: the pool lost a network while this round was out, and
             // this round did not say it: read again, forced, once.
             if std::mem::take(&mut model.pool_reread_pending) && !model.backgrounded {
