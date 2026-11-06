@@ -134,6 +134,61 @@ pub fn chain_answered(answers: &[Value]) -> bool {
             .any(|a| a.get("result").is_some() || a.get("error").is_some())
 }
 
+/// r16-3: how long a review's re-ask of safety checks that came back as
+/// silence may run, from its first re-ask, before "unchecked" is final for
+/// this read. A network back from an outage answers its multisig's own
+/// state first; its checks were turned away for another 1–5 s (Arc, R16).
+pub const RECHECK_MS: u32 = 10_000;
+/// r16-3: the pause before each re-ask of silent checks (a pool that turns
+/// a read away does so in milliseconds; asking again at once meets the same).
+pub const RECHECK_PAUSE_MS: u32 = 1_000;
+
+/// r16-3, the rule "unchecked" is published by: whether a gathered review's
+/// safety checks — `checks`, the envelopes of the state trace, the probe and
+/// the simulation — are FINAL for this read. Final when the review would not
+/// land unchecked anyway (no review, or its state guard or simulation read),
+/// when the network did not answer the multisig's own state (`anchor`: it
+/// lands `failed {chainUnread}`, never unchecked), when no check is still
+/// silent (each answered — a refusal is the network's answer), or when the
+/// re-ask has run `rechecked_ms` ≥ [`RECHECK_MS`]. Otherwise the silent
+/// checks are asked again: a review on its way back from an outage goes
+/// failed → Reading → ready and never passes through "… anyway".
+pub fn checks_final(
+    review: Option<&Value>,
+    anchor: &Value,
+    checks: &[Value],
+    rechecked_ms: f64,
+) -> bool {
+    let answered = |e: &Value| e.get("result").is_some() || e.get("error").is_some();
+    let review = review.filter(|r| !r.is_null());
+    review.is_none()
+        || !unchecked(review)
+        || !answered(anchor)
+        || !checks.iter().any(|c| !answered(c))
+        || rechecked_ms >= f64::from(RECHECK_MS)
+}
+
+/// `review.checksFinal {review?, anchor, checks, rechecked_ms}` through the
+/// link door: [`checks_final`].
+pub fn checks_final_json(args: &Value) -> Result<Value, String> {
+    let checks = match args.get("checks") {
+        None | Some(Value::Null) => Vec::new(),
+        Some(Value::Array(a)) => a.clone(),
+        Some(_) => return Err("checks: not a list".to_owned()),
+    };
+    let anchor = args.get("anchor").cloned().unwrap_or(Value::Null);
+    let ms = args
+        .get("rechecked_ms")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0);
+    Ok(Value::Bool(checks_final(
+        args.get("review"),
+        &anchor,
+        &checks,
+        ms,
+    )))
+}
+
 /// What a sheet draws in the review's place.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

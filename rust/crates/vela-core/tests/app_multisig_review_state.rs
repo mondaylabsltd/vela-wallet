@@ -43,12 +43,12 @@ fn run_holding(sut: &mut Sut, world: &mut World, event: Event, held: impl Fn(&Op
     sut.dispatch(event);
     for _ in 0..20_000 {
         let outstanding = sut.outstanding();
-        let open: Vec<&Op> = outstanding.iter().filter(|op| !held(op)).collect();
+        let open: Vec<Op> = outstanding.into_iter().filter(|op| !held(op)).collect();
         let Some(op) = open
             .iter()
             .find(|op| !matches!(op, Op::Wait { .. }))
-            .or_else(|| open.first())
-            .map(|op| (*op).clone())
+            .or_else(|| world::soonest_wait(&open))
+            .cloned()
         else {
             return;
         };
@@ -468,7 +468,7 @@ fn run_purposes(sut: &mut Sut, world: &mut World, event: Event) -> Vec<PasskeyPu
         let Some(op) = outstanding
             .iter()
             .find(|op| !matches!(op, Op::Wait { .. }))
-            .or_else(|| outstanding.first())
+            .or_else(|| world::soonest_wait(&outstanding))
             .cloned()
         else {
             return purposes;
@@ -865,6 +865,150 @@ fn a_review_coming_back_from_an_outage_never_lands_anyway_on_the_way() {
     );
 }
 
+/// As [`run`], watching the review under `key` after every answer: the
+/// door must never stand enabled on "… anyway" before the read lands —
+/// what a person sees between the press of Try again and the review.
+/// Returns the clock when the review landed.
+fn run_never_anyway_on_the_way(sut: &mut Sut, world: &mut World, event: Event, key: &str) -> f64 {
+    sut.dispatch(event);
+    for _ in 0..20_000 {
+        let outstanding = sut.outstanding();
+        let Some(op) = outstanding
+            .iter()
+            .find(|op| !matches!(op, Op::Wait { .. }))
+            .or_else(|| world::soonest_wait(&outstanding))
+            .cloned()
+        else {
+            return world.now;
+        };
+        let res = world.answer(&op);
+        sut.resolve_matching(|o| *o == op, res);
+        let view = sut.view();
+        if view.review_states.get(key) == Some(&ReviewState::Loading) {
+            let door = door_at(sut, key);
+            assert!(!door.enabled, "nothing signable while it is read: {door:?}");
+        }
+    }
+    panic!("the machine never settled");
+}
+
+fn probe_selector() -> String {
+    format!(
+        "0x{}",
+        alloy_primitives::hex::encode(
+            &alloy_primitives::keccak256(b"simulateAndRevert(address,bytes)")[..4]
+        )
+    )
+}
+
+/// Round 16 (r16-3): r15-12b was not fixed on Arc. Its nodes ANSWER a
+/// state trace — with "method not found" — so the r15-12 re-ask (made only
+/// when every check came back as silence) never ran: the network had just
+/// come back, the probe and the simulation were still turned away, and the
+/// review landed "unchecked" with an enabled "Approve anyway" for 1–5 s
+/// until the next read. The rule now: a review that would land unchecked
+/// while one of its checks is still silent asks those checks again, paced,
+/// until they answer or the re-ask's own limit (`RECHECK_MS`) is reached;
+/// only then is "unchecked" final. Failed → Reading → ready, every sign
+/// button off on the way.
+#[test]
+fn a_review_whose_trace_is_refused_waits_for_its_silent_checks_before_unchecked() {
+    let (mut world, mut other, key, hash) = proposed_on_another_device();
+    world.silent.insert(100);
+    world.sim_reply = Some(r#"{"unreachable":true}"#.to_owned());
+    run(&mut other, &mut world, review(&hash));
+    assert!(matches!(
+        other.view().review_states[&key],
+        ReviewState::Failed { .. }
+    ));
+    // The outage lifts. The trace is refused by every node (Arc: "method
+    // not found" — the world's default answer); the probe and the
+    // simulation are turned away as silent for the first two asks each
+    // (the read and one re-ask made at once), then answered.
+    world.silent.clear();
+    let probe = probe_selector();
+    let turned_away = std::sync::Arc::new(std::sync::Mutex::new(0_u32));
+    let count = turned_away.clone();
+    world.rpc_hooks.push(Box::new(move |_, method, params| {
+        let probing = method == "eth_call"
+            && params[0]["data"]
+                .as_str()
+                .is_some_and(|d| d.to_ascii_lowercase().starts_with(&probe));
+        let mut n = count.lock().unwrap();
+        (probing && *n < 2).then(|| {
+            *n += 1;
+            vela_core::app::multisig_shell::MultisigShellResult::RpcUnanswered {
+                detail: "connection refused".to_owned(),
+            }
+        })
+    }));
+    for _ in 0..2 {
+        world
+            .sim_replies
+            .push_back(Some(r#"{"unreachable":true}"#.to_owned()));
+    }
+    world.sim_reply = Some(r#"{"result":[{"calls":[{"status":"0x1","logs":[]}]}]}"#.to_owned());
+    run_never_anyway_on_the_way(
+        &mut other,
+        &mut world,
+        Event::ReviewAgain {
+            chain_id: Some(100),
+            safe_tx_hash: Some(hash.clone()),
+        },
+        &key,
+    );
+    assert_eq!(
+        *turned_away.lock().unwrap(),
+        2,
+        "the probe was turned away twice"
+    );
+    assert_eq!(other.view().review_states[&key], ReviewState::Ready);
+    let door = door_at(&other, &key);
+    assert!(
+        door.enabled && !door.anyway && door.reason_key.is_none(),
+        "read in full, never anyway: {door:?}"
+    );
+}
+
+/// r16-3, the other side: a network that answers its multisig's state but
+/// whose checks stay silent (a node that never traces or simulates) is still
+/// D1 — "… anyway" — but only once the re-ask has run to its own limit:
+/// the review stays Reading (nothing signable) until then.
+#[test]
+fn checks_that_stay_silent_land_unchecked_only_at_the_reasks_own_limit() {
+    let (mut world, mut other, key, hash) = proposed_on_another_device();
+    let probe = probe_selector();
+    let asked = std::sync::Arc::new(std::sync::Mutex::new(0_u32));
+    let count = asked.clone();
+    world.rpc_hooks.push(Box::new(move |_, method, params| {
+        let probing = method == "eth_call"
+            && params[0]["data"]
+                .as_str()
+                .is_some_and(|d| d.to_ascii_lowercase().starts_with(&probe));
+        probing.then(|| {
+            *count.lock().unwrap() += 1;
+            vela_core::app::multisig_shell::MultisigShellResult::RpcUnanswered {
+                detail: "connection refused".to_owned(),
+            }
+        })
+    }));
+    world.sim_reply = Some(r#"{"unreachable":true}"#.to_owned());
+    let pressed = world.now;
+    let landed = run_never_anyway_on_the_way(&mut other, &mut world, review(&hash), &key);
+    assert_eq!(other.view().review_states[&key], ReviewState::Ready);
+    let door = door_at(&other, &key);
+    assert!(door.enabled && door.anyway && door.retry, "{door:?}");
+    assert!(
+        landed - pressed >= f64::from(review_state::RECHECK_MS),
+        "unchecked only once the re-ask ran to its limit ({} ms)",
+        landed - pressed
+    );
+    assert!(
+        *asked.lock().unwrap() > 2,
+        "the silent probe was asked again, paced"
+    );
+}
+
 /// r14-13, a HUNG network (no answer at all, on any shell): every read —
 /// and a simulation the shell never ends — is ended by the core at
 /// `REVIEW_ASK_MS`, so the review lands `failed {chainUnread}` well before
@@ -988,6 +1132,17 @@ fn the_door_vectors_hold_through_the_link_door() {
     for case in settle {
         let got = vela_core::multisig_link::call_json("review.settle", &case["args"].to_string())
             .unwrap_or_else(|e| panic!("{}: {e:?}", case["name"]));
+        let got: Value = serde_json::from_str(&got).unwrap();
+        assert_eq!(got, case["expect"], "{}", case["name"]);
+    }
+    // r16-3: whether a review's checks are final for this read, through
+    // the same door.
+    let recheck = vectors["recheck"].as_array().unwrap();
+    assert!(recheck.len() >= 6);
+    for case in recheck {
+        let got =
+            vela_core::multisig_link::call_json("review.checksFinal", &case["args"].to_string())
+                .unwrap_or_else(|e| panic!("{}: {e:?}", case["name"]));
         let got: Value = serde_json::from_str(&got).unwrap();
         assert_eq!(got, case["expect"], "{}", case["name"]);
     }

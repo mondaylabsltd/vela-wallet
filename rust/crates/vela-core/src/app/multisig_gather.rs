@@ -22,6 +22,7 @@ use futures::future;
 use serde_json::{json, Value};
 
 use super::multisig_outside::reading::TokenFacts;
+use super::multisig_review_state as review_state;
 use super::multisig_shell::{ChainMembers, Io, MultisigOperation, MultisigShellResult, RpcFail};
 use crate::multisig::{self, Genesis, SafeTx};
 use crate::multisig_review::{
@@ -261,46 +262,96 @@ pub async fn gather_review<Ev: Send + 'static>(io: &Io<Ev>, subject: &ReviewSubj
     };
     let (anchor, (mut trace, mut probe), mut sim_reply, recipient_facts, tokens) =
         futures::join!(anchor, state, simulate(), facts, tokens);
-    // r15-12: a network coming back answers its multisig's own state (the
-    // pool's outage probe goes first) while the checks asked beside it were
-    // still turned away as silent. Landed as is, the review would be D1
-    // ("… anyway", signable) for the seconds until it is read again — a
-    // review on its way from failed to read passed through "anyway". The
-    // network has just answered: the checks are asked once more, within the
-    // same bounded run; only what is still unread then is said unread.
-    if answered(&anchor)
-        && checks_silent(
-            trace.as_ref(),
-            probe.as_ref(),
-            sim_asked,
-            sim_reply.as_deref(),
-        )
-    {
-        let again = async { futures::join!(ask(reads.trace.clone()), ask(reads.probe.clone())) };
-        let ((t, p), s) = futures::join!(again, simulate());
-        trace = t;
-        probe = p;
-        sim_reply = s;
-    }
-    answers.push(anchor);
-    answers.extend(trace.iter().chain(probe.iter()).cloned());
     let mut known = subject.known.clone();
     known.extend(members_known(
         &subject.members.owners,
         &subject.member_names,
     ));
-    Gathered {
-        input: ReviewInput {
-            reads: base,
-            sim_reply,
-            trace,
-            probe,
-            recipient_facts,
-            known,
+    let token_facts: Vec<TokenFacts> = tokens.into_values().collect();
+    let input =
+        |trace: &Option<Value>, probe: &Option<Value>, sim_reply: &Option<String>| ReviewInput {
+            reads: base.clone(),
+            sim_reply: sim_reply.clone(),
+            trace: trace.clone(),
+            probe: probe.clone(),
+            recipient_facts: recipient_facts.clone(),
+            known: known.clone(),
             blind: false,
-            token_facts: tokens.into_values().collect(),
+            token_facts: token_facts.clone(),
             origin: subject.origin.clone(),
-        },
+        };
+    // r15-12 / r16-3: a network coming back answers its multisig's own
+    // state (the pool's outage probe goes first) while the checks asked
+    // beside it are still turned away as silent — for 1–5 s on Arc, whose
+    // nodes also answer a state trace with "method not found". Landed as is,
+    // the review would be D1 ("… anyway", signable) until it is read again:
+    // a review on its way from failed to read passed through "anyway". So
+    // "unchecked" is published only once the checks are final for this read
+    // (`checks_final`): the silent ones are asked again, paced, until one
+    // answers or the re-ask reaches its own limit (`RECHECK_MS`) — the
+    // review stays Reading (nothing signable) meanwhile.
+    let started = io.now().await;
+    loop {
+        let review = review_of(&input(&trace, &probe, &sim_reply))
+            .and_then(|r| serde_json::to_value(r).ok());
+        let checks = check_envelopes(trace.as_ref(), probe.as_ref(), sim_asked, &sim_reply);
+        let rechecked = io.now().await - started;
+        if review_state::checks_final(review.as_ref(), &anchor, &checks, rechecked) {
+            break;
+        }
+        let left = f64::from(review_state::RECHECK_MS) - rechecked;
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let left_ms = left.max(0.0) as u64;
+        io.wait(u64::from(review_state::RECHECK_PAUSE_MS).min(left_ms))
+            .await;
+        let silent = |e: &Option<Value>| e.as_ref().is_some_and(|e| !answered(e));
+        let (t_again, p_again) = (silent(&trace), silent(&probe));
+        let s_again = sim_asked && sim_silent(&sim_reply);
+        let again = async {
+            let ask_if = |again: bool, r: Option<mr::RpcRequest>| async move {
+                if again {
+                    Some(ask(r).await)
+                } else {
+                    None
+                }
+            };
+            futures::join!(
+                ask_if(t_again, reads.trace.clone()),
+                ask_if(p_again, reads.probe.clone()),
+                async {
+                    if s_again {
+                        Some(simulate().await)
+                    } else {
+                        None
+                    }
+                }
+            )
+        };
+        // Within what is left of the re-ask's own limit: past it, what is
+        // still silent is final.
+        let left = f64::from(review_state::RECHECK_MS) - (io.now().await - started);
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let cap = Box::pin(io.wait(left.max(0.0) as u64));
+        let landed = future::select(Box::pin(again), cap).await;
+        match landed {
+            future::Either::Left(((t, p, s), _)) => {
+                if let Some(t) = t {
+                    trace = t;
+                }
+                if let Some(p) = p {
+                    probe = p;
+                }
+                if let Some(s) = s {
+                    sim_reply = s;
+                }
+            }
+            future::Either::Right(_) => break,
+        }
+    }
+    answers.push(anchor);
+    answers.extend(trace.iter().chain(probe.iter()).cloned());
+    Gathered {
+        input: input(&trace, &probe, &sim_reply),
         answers,
     }
 }
@@ -311,26 +362,37 @@ fn answered(envelope: &Value) -> bool {
     envelope.get("result").is_some() || envelope.get("error").is_some()
 }
 
-/// r15-12: whether every safety check a review asked — the state trace, the
-/// probe, the simulation — came back as silence (none answered, not even
-/// with an error), and at least one was asked.
-fn checks_silent(
+/// Whether the shell's simulation came back as the network's silence: its
+/// reply says `{"unreachable": true}` (every node failed). No reply at all
+/// (a shell that does not simulate, or a question cut at its bound) is
+/// final for that check — only a network's silence is asked again.
+fn sim_silent(reply: &Option<String>) -> bool {
+    reply.as_deref().is_some_and(|r| {
+        serde_json::from_str::<Value>(r)
+            .ok()
+            .is_some_and(|v| v.get("unreachable").is_some())
+    })
+}
+
+/// r16-3: the envelopes of the safety checks a review asked — the state
+/// trace, the probe, the simulation (`{unreachable}` for its network's
+/// silence, else `{result}`) — for
+/// [`checks_final`](review_state::checks_final).
+fn check_envelopes(
     trace: Option<&Value>,
     probe: Option<&Value>,
     sim_asked: bool,
-    sim_reply: Option<&str>,
-) -> bool {
-    let silent = |e: Option<&Value>| e.is_none_or(|e| !answered(e));
-    let sim_silent = !sim_asked
-        || sim_reply.is_none_or(|r| {
-            serde_json::from_str::<Value>(r)
-                .ok()
-                .is_none_or(|v| v.get("unreachable").is_some())
+    sim_reply: &Option<String>,
+) -> Vec<Value> {
+    let mut checks: Vec<Value> = trace.into_iter().chain(probe).cloned().collect();
+    if sim_asked {
+        checks.push(if sim_silent(sim_reply) {
+            json!({ "unreachable": true })
+        } else {
+            json!({ "result": sim_reply })
         });
-    (trace.is_some() || probe.is_some() || sim_asked)
-        && silent(trace)
-        && silent(probe)
-        && sim_silent
+    }
+    checks
 }
 
 /// The one review of what was read ([`mr::multisig_review`]); `None`: the
