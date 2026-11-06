@@ -396,11 +396,26 @@ final class SafariRouteDeviceTests: XCTestCase {
         return top - 48
     }
 
+    /// The top of the open sheet's foot (r15-3: its action row stands
+    /// outside the scroll, so a row of the body can sit under it): its Back.
+    private var footTop: CGFloat? {
+        let back = safari.webViews.buttons
+            .matching(NSPredicate(format: "label == %@ OR label == %@", "Back", "返回")).firstMatch
+        return back.exists && back.frame.height > 0 ? back.frame.minY : nil
+    }
+
     /// A control under Safari's bottom bar is scrolled up into view first
     /// (a tall sheet's last button sits there), with a shot of where it landed.
-    func reveal(_ e: XCUIElement, _ label: String) {
+    /// `aboveFoot`: a row of the sheet's body, which must also clear the
+    /// sheet's foot (r16-23: in zh the network list put Gnosis under it, and
+    /// its tap landed on the foot).
+    func reveal(_ e: XCUIElement, _ label: String, aboveFoot: Bool = false) {
         var scrolled = false
-        for _ in 0..<3 where e.frame.maxY > visibleBottom {
+        let bottom = { () -> CGFloat in
+            guard aboveFoot, let foot = self.footTop else { return self.visibleBottom }
+            return min(self.visibleBottom, foot - 8)
+        }
+        for _ in 0..<4 where e.frame.maxY > bottom() {
             scrollSheet()
             scrolled = true
         }
@@ -503,7 +518,7 @@ final class SafariRouteDeviceTests: XCTestCase {
                                   XCUIElement.ElementType.staticText.rawValue)).firstMatch
         if !gnosis.waitForExistence(timeout: 5) { tapControl(["More networks", "更多网络"], timeout: 5); sleep(2) }
         XCTAssertTrue(gnosis.waitForExistence(timeout: 15), "Gnosis offered")
-        reveal(gnosis, "Gnosis"); gnosis.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        reveal(gnosis, "Gnosis", aboveFoot: true); gnosis.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         sleep(2)
         capture("\(locale)-\(tag)f-review")
         // The review's own Create — exactly: not "Create multisig", not "Create New Account".
