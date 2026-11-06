@@ -772,6 +772,18 @@ data class FeedView(
      * figure always.
      */
     val hidden: Boolean = false,
+    /**
+     * r15-1: the account these rows are for (lower-cased; empty before any
+     * was told). Drawn only under that account — never under another one
+     * shown meanwhile.
+     */
+    val account: String = "",
+    /**
+     * r15-1: "No activity yet" may be said of [account]: its store was read
+     * and its first incoming scan came back. Before that an empty Activity
+     * is still being read.
+     */
+    val settled: Boolean = false,
 )
 
 object FeedItemList : app.getvela.wallet.core.crux.FailSoftListSerializer<FeedItem>(FeedItem.serializer())

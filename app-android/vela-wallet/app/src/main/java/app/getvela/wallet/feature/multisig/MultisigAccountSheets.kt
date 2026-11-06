@@ -561,6 +561,18 @@ internal fun addPressLabel(words: MultisigWords, retry: Boolean, failed: Boolean
  * a network that only said "slow down" is named busy (r14 leftovers), never
  * "unavailable"; `null` for nothing said yet.
  */
+/**
+ * r15-8 (the web's `here`): "Already added" is for a Safe that was here
+ * before this import said anything of it. One this import added — by its
+ * row's Try again after a busy answer, say — is what the import came to
+ * ("Imported"), never "Already added".
+ */
+internal fun importAlready(here: Boolean, outcome: JsonElement?): Boolean = here && outcome == null
+
+/** One exported Safe's row status: "Already added", else what its import came to ([importStatus]). */
+internal fun importRowStatus(words: MultisigWords, here: Boolean, outcome: JsonElement?): String? =
+    if (importAlready(here, outcome)) words.t("import.already") else importStatus(words, outcome)
+
 internal fun importStatus(words: MultisigWords, outcome: JsonElement?): String? = outcome?.let {
     when (it.kind) {
         "imported" -> words.t("import.imported")
@@ -757,16 +769,17 @@ fun MultisigAddSheet(
                 MsText(words.t("import.pick"), MsType.Label, color = colors.fgSubtle)
                 for (safe in safes) {
                     val a = safe["address"].str.orEmpty()
-                    val already = view.row(a) != null
                     val outcome = view.importing.outcomes[a.lowercase()] ?: view.importing.outcomes[a]
+                    // r15-8: one this import added says "Imported", never "Already added".
+                    val here = view.row(a) != null
                     val deployed = safe["chains"].arr.any { it["deployed"].bool == true }
-                    val status = if (already) words.t("import.already") else importStatus(words, outcome)
+                    val status = importRowStatus(words, here, outcome)
                     val on = a in picked
                     // r14 leftovers: a read that did not come back (busy, unavailable,
                     // unverified) offers Try again — the core's `import.retry`.
-                    val tryAgain = !already && view.importing.offersRetry(a)
+                    val tryAgain = !here && view.importing.offersRetry(a)
                     Row(
-                        Modifier.fillMaxWidth().toggleable(value = on || already, enabled = !already, role = Role.Checkbox) { if (on) picked.remove(a) else picked.add(a) }
+                        Modifier.fillMaxWidth().toggleable(value = on || here, enabled = !here, role = Role.Checkbox) { if (on) picked.remove(a) else picked.add(a) }
                             .padding(vertical = VelaSpacing.sm).testTag("multisig.import.safe"),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -774,7 +787,7 @@ fun MultisigAddSheet(
                             MsText(safe["name"].str ?: MultisigWords.short(a), MsType.Field)
                             MsText(listOfNotNull(MultisigWords.short(a), if (deployed) null else words.t("import.undeployed"), status).joinToString(" · "), MsType.Sub, color = colors.fgSubtle)
                         }
-                        Switch(checked = on || already, onCheckedChange = null, enabled = !already, colors = SwitchDefaults.colors(checkedTrackColor = colors.fgBase))
+                        Switch(checked = on || here, onCheckedChange = null, enabled = !here, colors = SwitchDefaults.colors(checkedTrackColor = colors.fgBase))
                     }
                     if (tryAgain) {
                         MsTextButton(

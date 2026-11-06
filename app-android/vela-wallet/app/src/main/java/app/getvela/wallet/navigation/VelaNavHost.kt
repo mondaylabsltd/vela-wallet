@@ -2349,6 +2349,8 @@ fun VelaNavHost(
                         val homeModel = WalletLive.home(
                                 model, balances, feed, currency, strings, chainNames, now = homeNow, chainFilter = chainFilter,
                                 noValue = strings.t(I18nKeys.NetworkSpace.NO_VALUE).takeIf { noValue },
+                                // r15-1: the feed's rows only under their own account.
+                                shownAccount = shownAddress,
                             ).let { home ->
                                 // Spec 047 D9: no network at all is said on the hero, not guessed from a slow pool.
                                 // S4 (r9): its "Updated" is the core's stamp, which a round
@@ -3744,6 +3746,7 @@ private fun liveFlow(
             FlowBase.History(
                 FlowLive.history(
                     base.model, feed, strings, chainFilter = chainFilter, chainNames = chainNames,
+                    shownAccount = address,
                     prebuilt = history?.takeIf { it.feed === feed && it.strings === strings && it.chainNames == chainNames }?.groups,
                 ),
             )
