@@ -493,6 +493,20 @@ fn propose(sim: &mut Sim, kind: ProposalKind) -> String {
     }
 }
 
+/// Round 16 leftover 1: every press is on the figure its look drew, as the
+/// sheet presses (`Look::shown_fee`) — a press over no figure drawn signs
+/// nothing. The executor's look at `hash` (`Preview`), and the figure it
+/// draws.
+fn drawn_fee(sim: &mut Sim, hash: &str, executor: &str) -> Option<String> {
+    sim.proposals(ProposalsEvent::Preview {
+        chain_id: 100,
+        safe_tx_hash: hash.to_owned(),
+        executor: executor.to_owned(),
+    });
+    super::sheet::look_of(&sim.machines.proposals_view.previews, 100, hash, executor)
+        .and_then(|l| l.shown_fee())
+}
+
 #[test]
 fn boot_reads_the_store_and_follows_nothing() {
     let sim = booted(&[0]);
@@ -562,11 +576,8 @@ fn proposed_approved_executed_and_recorded() {
     assert_eq!(sim.world().passkeys.len(), 3, "create, propose, approve");
 
     let executor = fixture(0).address;
-    sim.proposals(ProposalsEvent::Preview {
-        chain_id: 100,
-        safe_tx_hash: hash.clone(),
-        executor: executor.clone(),
-    });
+    let shown_fee = drawn_fee(&mut sim, &hash, &executor);
+    assert!(shown_fee.is_some(), "a priced look drawn");
     let owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
     let mut after = DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2);
     after.nonce = 1;
@@ -582,7 +593,7 @@ fn proposed_approved_executed_and_recorded() {
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         executor,
-        shown_fee: None,
+        shown_fee,
     });
     assert_eq!(sim.world().sent.len(), 1, "one user operation");
     assert!(
@@ -619,6 +630,71 @@ fn proposed_approved_executed_and_recorded() {
 /// (`Look::shown_fee`): a look holding another stops with `fee_moved` —
 /// nothing signed, nothing sent — and the line names the new figure and the
 /// executor; the next press, on the figure now drawn, signs exactly it.
+/// Round 16 leftover 1 (the core's rule, every press on the sheet): an
+/// Execute that carries no figure drawn — the sheet showed none — never
+/// signs a fee priced only at the press: it stops with `fee_moved` naming
+/// that figure, nothing signed or sent, and the next press on the figure
+/// now drawn signs exactly it.
+#[test]
+fn an_execute_over_no_drawn_figure_signs_nothing_and_says_the_fee() {
+    let mut sim = booted(&[0, 1]);
+    let address = created(&mut sim);
+    let hash = propose(&mut sim, transfer("1"));
+    sim.proposals(ProposalsEvent::Approve {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        owner: fixture(1).address,
+    });
+    let executor = fixture(0).address;
+    let passkeys = sim.world().passkeys.len();
+    sim.proposals(ProposalsEvent::Execute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: executor.clone(),
+        shown_fee: None,
+    });
+    assert!(sim.world().sent.is_empty(), "nothing sent");
+    assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
+    let state = sim.machines.proposals_view.actions
+        [&format!("execute:{}", hash.to_ascii_lowercase())]
+        .clone();
+    let ActionState::Failed { detail } = state else {
+        panic!("{state:?}");
+    };
+    assert_eq!(
+        vela_core::app::multisig_failure::failure_said(&detail).kind,
+        vela_core::app::multisig_failure::FailureKind::FeeMoved
+    );
+    let loc = crate::loc::Loc::for_tag("en");
+    let line =
+        crate::wallet::page::multisig::failure_words(&loc, &detail, 100, &|_| "Ana".to_owned());
+    assert!(
+        line.starts_with("That didn't go through: Network fee"),
+        "the figure is said first: {line}"
+    );
+    // Pressed on the figure now drawn: signed at exactly it.
+    let shown_fee = drawn_fee(&mut sim, &hash, &executor);
+    assert!(shown_fee.is_some(), "a priced look drawn");
+    let owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
+    let mut after = DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2);
+    after.nonce = 1;
+    sim.world().on_send = Some(Landing {
+        chain: 100,
+        safe: address,
+        after,
+        safe_tx_hash: hash.clone(),
+        tx_hash: format!("0x{}", "cd".repeat(32)),
+        user_op_hash: format!("0x{}", "ab".repeat(32)),
+    });
+    sim.proposals(ProposalsEvent::Execute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor,
+        shown_fee,
+    });
+    assert_eq!(sim.world().sent.len(), 1, "signed at the fee drawn");
+}
+
 #[test]
 fn a_fee_that_moved_after_it_was_drawn_stops_the_press_and_names_its_executor() {
     let mut sim = booted(&[0, 1]);
@@ -809,11 +885,14 @@ fn one_short_is_looked_at_and_approved_and_executed_in_one_press() {
         user_op_hash: format!("0x{}", "ab".repeat(32)),
     });
     let passkeys = sim.world().passkeys.len();
+    // The press carries the figure its look drew (round 16 leftover 1).
+    let shown_fee = look.and_then(|l| l.shown_fee());
+    assert!(shown_fee.is_some(), "a priced look drawn");
     sim.proposals(ProposalsEvent::ApproveExecute {
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         executor: second,
-        shown_fee: None,
+        shown_fee,
     });
     assert_eq!(sim.world().sent.len(), 1, "one user operation");
     // Its approval is the execution's own sender (`msg.sender`): no
@@ -1067,11 +1146,12 @@ fn notifications_follow_the_views_and_skip_the_persons_own_moves() {
         tx_hash: format!("0x{}", "cd".repeat(32)),
         user_op_hash: format!("0x{}", "ab".repeat(32)),
     });
+    let shown_fee = drawn_fee(&mut sim, &hash, &fixture(0).address);
     sim.proposals(ProposalsEvent::Execute {
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         executor: fixture(0).address,
-        shown_fee: None,
+        shown_fee,
     });
     sim.proposals(ProposalsEvent::Refresh { fresh: true });
     let got = look(&sim, &mut n);
@@ -1492,11 +1572,12 @@ fn a_sites_transaction_from_a_multisig_is_proposed_held_and_answered() {
             tx_hash: tx.clone(),
             user_op_hash: format!("0x{}", "ab".repeat(32)),
         });
+        let shown_fee = drawn_fee(sim, hash, &fixture(0).address);
         sim.proposals(ProposalsEvent::Execute {
             chain_id: 100,
             safe_tx_hash: hash.to_owned(),
             executor: fixture(0).address,
-            shown_fee: None,
+            shown_fee,
         });
         tx
     };

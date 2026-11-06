@@ -315,6 +315,10 @@ pub struct HistoryPanel {
     /// Nothing to draw and the core HAS ruled: the line that says so. `None`
     /// draws nothing at all (a record that vanished under an open detail).
     pub empty: Option<SharedString>,
+    /// Round 16 leftover 5: the line above the rows naming the networks the
+    /// scan could not read (`FeedView.unread_key`). `None` when every
+    /// network was read, or when the empty place says it instead.
+    pub unread: Option<SharedString>,
 }
 
 #[derive(Clone)]
@@ -1845,6 +1849,7 @@ pub fn body(panel: FlowPanel, s: &FlowStrings) -> FlowBody {
             groups: history(s),
             loading: false,
             empty: None,
+            unread: None,
         }),
         FlowPanel::Da2 => FlowBody::TxDetail(tx_detail(s, true)),
         FlowPanel::Da3 => FlowBody::TxDetail(tx_detail(s, false)),

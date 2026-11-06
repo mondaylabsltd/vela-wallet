@@ -4507,6 +4507,23 @@ impl WalletPage {
         // screen that says WHICH row was the news.
         let fresh = self.celebrated_row(&home_tx_ids, cx);
         let mut activity_col = div().flex().flex_col();
+        // Round 16 leftover 5: rows listed while a network the scan could
+        // not read is named above them, in the feed's own words — the rows
+        // shown are not all there may be. (Over no rows the empty state's
+        // place says it, below.)
+        if self.identity.is_some() && !activity.is_empty() {
+            let feed = self.feed_view(cx);
+            if let Some(line) = wallet_live::activity_unread_line(&feed, &self.strings) {
+                activity_col = activity_col.child(
+                    div()
+                        .pb(px(4.))
+                        .text_size(theme::text_label())
+                        .line_height(gpui::relative(crate::wallet::components::LINE_BODY))
+                        .text_color(theme.fg_muted)
+                        .child(crate::ui::prose(line)),
+                );
+            }
+        }
         for (i, row) in activity.iter().enumerate() {
             // The day a group files under (the web's `.day`: 11, subtle,
             // 4 above and below) — spec 038 #E3, 078 H-04.
@@ -5752,15 +5769,16 @@ impl WalletPage {
         // Issue #443: when the figure was last read — "Updated 2m" — beside
         // the control that reads it again. A deposit sent from another
         // device gave no sign of when the hero would next look.
-        let ago = view.last_refreshed_at_ms.map(|at| {
+        // r16-2 / round 16 leftover 6: the core's one answer
+        // (`updated_at_ms`) — never "Updated now" while a network it lives
+        // on is unread, nor beside "Checking…".
+        model.updated = wallet_live::updated_line(&view, |at| {
             SharedString::from(crate::wallet::fill(
                 &self.strings.last_updated,
                 "ago",
                 &self.loc.relative_time(at, crate::executor::now_ms()),
             ))
         });
-        // r16-2: never "Updated now" while a network it lives on is unread.
-        model.updated = wallet_live::updated_line(&model, &view, ago);
         // Issue 462: the core's "a read they asked for is out", held for at
         // least the press's minimum turn.
         model.refreshing = wallet_live::refresh_turning(
@@ -8068,6 +8086,7 @@ impl WalletPage {
                                 groups: Vec::new(),
                                 loading: false,
                                 empty: None,
+                                unread: None,
                             })
                         },
                         flow_fixtures::FlowBody::TxDetail,

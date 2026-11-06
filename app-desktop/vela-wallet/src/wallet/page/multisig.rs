@@ -2514,9 +2514,11 @@ impl WalletPage {
                                 let host = this.ms_host(cx);
                                 let (hash, executor) = (hash.clone(), executor.clone());
                                 let shown_fee = shown_fee.clone();
-                                // "Approve and execute" is the machine's one press:
-                                // stopped before its signature, the approval is
-                                // still given and kept (r4-11).
+                                // "Approve and execute" is the machine's one press,
+                                // both or nothing (§26 r16-4): stopped before its
+                                // signature, nothing is approved either and the
+                                // stop is said beside it (`execute:`). Approving
+                                // alone is the Approve press beside it.
                                 let event = if one_tap {
                                     ms_proposals::Event::ApproveExecute {
                                         chain_id,
@@ -4923,9 +4925,14 @@ pub(crate) fn member_label(
         .unwrap_or_else(|| words::short(address))
 }
 
-/// A shell failure (`live::ShellFailure`) or the core's own words; a member
-/// it names (the executor a moved fee would have charged) is said by
-/// `name`, the fee line's own naming (`ms_member_name`).
+/// A failed action's words (round 16 leftover 4): its stable KIND, as the
+/// core reads it (`multisig_failure::failure_said`) — never its English.
+/// A kind the core keys is said in that key's words; the kinds worded from
+/// the detail's own facts (the fee that moved, what the executor has and
+/// needs, the network out of reach, the signing venue's block) are read
+/// from this shell's `live::ShellFailure` for those facts. A member it names
+/// (the executor a moved fee would have charged) is said by `name`, the fee
+/// line's own naming (`ms_member_name`).
 pub(crate) fn failure_words(
     loc: &crate::loc::Loc,
     detail: &str,
@@ -4933,17 +4940,12 @@ pub(crate) fn failure_words(
     name: &dyn Fn(&str) -> String,
 ) -> String {
     use crate::multisig::live::{ShellFailure, read_failure};
-    let reason = |key: &str| words::t(loc, &format!("proposal.reason.{key}"));
-    match read_failure(detail) {
-        Some(ShellFailure::Passkey {
-            timed_out: true, ..
-        }) => reason("passkeyTimedOut"),
-        Some(ShellFailure::Passkey { failure, .. }) if failure == "cancelled" => {
-            reason("passkeyClosed")
-        }
-        Some(ShellFailure::Passkey { .. }) => reason("passkeyMissing"),
-        Some(ShellFailure::NotSent) => words::t(loc, "proposal.notSent"),
-        Some(ShellFailure::CannotPay { need, have }) => {
+    use vela_core::app::multisig_failure::{FailureKind, failure_said};
+    let said = failure_said(detail);
+    let unknown = || words::t(loc, "proposal.reason.unknown");
+    let network = |id: u64| crate::flows::live::chain_name(u32::try_from(id).unwrap_or(u32::MAX));
+    match (said.kind, read_failure(detail)) {
+        (FailureKind::CannotPay, Some(ShellFailure::CannotPay { need, have })) => {
             let info = words::token_info(chain_id, None);
             words::tv(
                 loc,
@@ -4957,27 +4959,40 @@ pub(crate) fn failure_words(
         // r14-9: the fee moved since the press — nothing signed; said with
         // the new figure in its fee line's own words (the executor named as
         // that line names it), so the next press is on it.
-        Some(ShellFailure::FeeMoved {
-            amount, executor, ..
-        }) => fee_moved_words(loc, &amount, &name(&executor), chain_id),
+        (
+            FailureKind::FeeMoved,
+            Some(ShellFailure::FeeMoved {
+                amount, executor, ..
+            }),
+        ) => fee_moved_words(loc, &amount, &name(&executor), chain_id),
         // r16-18: a read before the passkey on a network that is failing.
-        Some(ShellFailure::ChainUnreachable { chain_id }) => words::tv(
-            loc,
-            "proposal.reason.chainUnreachable",
-            &[(
-                "network",
-                &crate::flows::live::chain_name(u32::try_from(chain_id).unwrap_or(u32::MAX)),
-            )],
-        ),
-        // r16-18: never a shell's or the core's diagnostic text as it is
-        // (`Other("…")` was said) — the web's `reasonText` rule: the core's
-        // "Something went wrong", a passkey whose signature did not check
-        // out said as that.
-        Some(_) => reason("unknown"),
-        None if detail.contains("did not check out") || detail.contains("does not check out") => {
-            reason("passkeyFailed")
+        (FailureKind::ChainUnreachable, Some(ShellFailure::ChainUnreachable { chain_id })) => {
+            words::tv(
+                loc,
+                "proposal.reason.chainUnreachable",
+                &[("network", &network(chain_id))],
+            )
         }
-        None => reason("unknown"),
+        // Spec 102: why this member cannot sign here — the venue's own
+        // sentence, filled with its domains.
+        (FailureKind::VenueBlocked, Some(ShellFailure::VenueBlocked { block })) => {
+            serde_json::from_value::<vela_core::signing_venue::VenueBlock>(block).map_or_else(
+                |_| unknown(),
+                |block| crate::signing::trusted_signer::block_words(loc, &block).to_string(),
+            )
+        }
+        // Every other kind: the core's key, worded (`{{network}}` filled
+        // where it names one). A kind whose facts could not be read, or a
+        // key this build does not word, is "Something went wrong" — never
+        // the detail as it is.
+        _ => said
+            .key
+            .map(|key| {
+                loc.t_texts(&key, &[("network", &network(chain_id))])
+                    .to_string()
+            })
+            .filter(|text| !text.starts_with("home.") && !text.starts_with("componentsUi."))
+            .unwrap_or_else(unknown),
     }
 }
 
@@ -5104,6 +5119,9 @@ fn missing_said(
             .iter()
             .find(|c| c.chain_id == chain_id)
             .map(|c| c.mailbox),
+        // Round 16 leftover 3: the service's last answer was its rate limit
+        // — the home's busy words, never "Couldn't reach".
+        view.busy,
     )
 }
 
@@ -5378,6 +5396,83 @@ mod tests {
             assert!(
                 !said.starts_with("home.multisig") && said != not_here,
                 "{tag}: {said}"
+            );
+        }
+    }
+
+    /// Round 16 leftover 3 (§25 r16-16): the multisig service answered with
+    /// its rate limit (`ProposalsView.busy`) — a sheet without a link, and
+    /// a link the service did not answer (`NotFound`, the core's
+    /// `reason_key` = `home.multisig.service.busyNote`), say the home's busy
+    /// words with Try again; never "Couldn't reach the multisig service".
+    #[test]
+    fn a_busy_service_is_said_busy_on_the_sheet_with_try_again() {
+        use vela_core::app::multisig_proposals::flows::{LinkedStand, LinkedView};
+        use vela_core::app::multisig_proposals::{ChainState, ProposalsView};
+        use vela_core::app::multisig_review_state::MISSING_BUSY_KEY;
+        use vela_core::app::multisig_shell::ChainMembers;
+        let loc = crate::loc::Loc::for_tag("en");
+        let busy_words = super::words::t(&loc, "service.busyNote");
+        assert_eq!(
+            busy_words,
+            "Multisig service busy — waiting transactions will load shortly; retrying."
+        );
+        let service_words = super::words::t(&loc, "proposal.unread.linkService");
+        let unread = |busy| ProposalsView {
+            chains: vec![ChainState {
+                chain_id: 100,
+                members: ChainMembers {
+                    deployed: true,
+                    owners: vec![],
+                    threshold: 1,
+                    nonce: 0,
+                },
+                items: vec![],
+                mailbox: false,
+            }],
+            busy,
+            ..ProposalsView::default()
+        };
+        // Without a link: the core's `missing_said(.., busy)`.
+        let said = super::no_item_lines(&loc, &unread(true), None, true, 100);
+        assert_eq!(said, vec![busy_words.clone()]);
+        assert_ne!(said[0], service_words);
+        assert!(super::missing_offers_try_again(
+            &unread(true),
+            None,
+            true,
+            100
+        ));
+        // Not busy: the service's own words, as before.
+        assert_eq!(
+            super::no_item_lines(&loc, &unread(false), None, true, 100),
+            vec![service_words.clone()]
+        );
+        // A link the busy service did not answer: the core's key, worded.
+        let link = LinkedView {
+            safe: "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32".into(),
+            chain_id: 100,
+            safe_tx_hash: "0xab".into(),
+            preview: false,
+            stand: LinkedStand::NotFound,
+            item: None,
+            members: None,
+            stale: false,
+            reason_key: Some(MISSING_BUSY_KEY.to_owned()),
+            retry: true,
+        };
+        assert!(super::link_offers_try_again(Some(&link)));
+        let said = super::no_item_lines(&loc, &unread(true), Some(&link), true, 100);
+        assert_eq!(said, vec![busy_words.clone()]);
+        assert_ne!(said[0], service_words);
+        assert!(!said[0].starts_with("home.multisig"), "{said:?}");
+        // Every language words the key (never the key echoed).
+        for tag in ["zh", "ja", "de"] {
+            let loc = crate::loc::Loc::for_tag(tag);
+            let said = super::no_item_lines(&loc, &unread(true), Some(&link), true, 100);
+            assert!(
+                !said[0].contains("busyNote") && said[0] != busy_words,
+                "{tag}: {said:?}"
             );
         }
     }

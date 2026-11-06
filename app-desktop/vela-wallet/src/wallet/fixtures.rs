@@ -260,6 +260,7 @@ pub fn unreachable_view() -> vela_core::app::balance_dashboard::BalanceView {
         hidden: false,
         refreshing: false,
         last_refreshed_at_ms: None,
+        updated_at_ms: None,
         tokens: Vec::new(),
         unpriced_tokens: Vec::new(),
         failed_chain_ids: vec![1, 56, 137],
@@ -560,6 +561,38 @@ impl FirstRead {
 /// changes is the one line under it, and only the core says which.
 #[must_use]
 pub fn first_read_view(stage: FirstRead) -> vela_core::app::balance_dashboard::BalanceView {
+    let failed = if stage == FirstRead::CantReach {
+        vec![1, 56]
+    } else {
+        Vec::new()
+    };
+    read_view(stage, failed, Vec::new(), Vec::new())
+}
+
+/// The same first read, settled with these networks refused, rate limited
+/// or failed inside Vela — through the real balance core, so whatever it
+/// says of them (`updated_at_ms` among it) is the core's answer.
+#[cfg(test)]
+#[must_use]
+pub fn settled_view(
+    failed_chain_ids: Vec<u32>,
+    rate_limited_chain_ids: Vec<u32>,
+    internal_chain_ids: Vec<u32>,
+) -> vela_core::app::balance_dashboard::BalanceView {
+    read_view(
+        FirstRead::Live,
+        failed_chain_ids,
+        rate_limited_chain_ids,
+        internal_chain_ids,
+    )
+}
+
+fn read_view(
+    stage: FirstRead,
+    failed_chain_ids: Vec<u32>,
+    rate_limited_chain_ids: Vec<u32>,
+    internal_chain_ids: Vec<u32>,
+) -> vela_core::app::balance_dashboard::BalanceView {
     use vela_core::app::balance_dashboard::{
         BalanceDashboard, BalanceOperation, BalanceShellResult as Res, Event,
     };
@@ -579,14 +612,10 @@ pub fn first_read_view(stage: FirstRead) -> vela_core::app::balance_dashboard::B
                 address: address.clone(),
                 pull: *pull,
                 tokens: Vec::new(),
-                failed_chain_ids: if stage == FirstRead::CantReach {
-                    vec![1, 56]
-                } else {
-                    Vec::new()
-                },
-                rate_limited_chain_ids: Vec::new(),
+                failed_chain_ids: failed_chain_ids.clone(),
+                rate_limited_chain_ids: rate_limited_chain_ids.clone(),
                 read_chain_ids: vec![1, 56, 100],
-                internal_chain_ids: Vec::new(),
+                internal_chain_ids: internal_chain_ids.clone(),
                 registry_chain_ids: Vec::new(),
                 own_node_chain_ids: vec![],
                 fallback_chain_ids: vec![],
@@ -1477,9 +1506,10 @@ pub fn core_feed_host(
                 now_ms: 1_756_000_000_000.0,
                 read_id: *read_id,
             },
-            FeedOperation::ScanIncomingTransfers { .. } => {
-                FeedShellResult::SyncCompleted { new_count: 0 }
-            }
+            FeedOperation::ScanIncomingTransfers { .. } => FeedShellResult::SyncCompleted {
+                new_count: 0,
+                unread_chains: Vec::new(),
+            },
             FeedOperation::ResolveRecipientIdentity { addr } => FeedShellResult::AliasResolved {
                 addr: addr.clone(),
                 name: None,

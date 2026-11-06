@@ -234,8 +234,9 @@ pub fn assets(
 /// account shown (`wallet::live::feed_is_for`); else nothing it holds is
 /// drawn, only skeletons. `mode` is the home Activity's ruling over no rows
 /// (`wallet::live::home_activity`): skeletons while it loads, the unread
-/// network named, and "No transactions yet" only where Activity may say
-/// "No activity yet".
+/// network named (round 16 leftover 5: the feed's own line, in the empty
+/// line's place — and above the rows when there are rows), and "No
+/// transactions yet" only where Activity may say "No activity yet".
 #[must_use]
 pub fn history_panel(
     view: &FeedView,
@@ -256,6 +257,9 @@ pub fn history_panel(
             groups,
             loading: false,
             empty: None,
+            // Round 16 leftover 5: a network the scan could not read is
+            // named above the rows, in the feed's own words.
+            unread: crate::wallet::live::activity_unread_line(view, wallet),
         };
     }
     let (loading, empty) = match mode {
@@ -270,6 +274,7 @@ pub fn history_panel(
         groups,
         loading,
         empty,
+        unread: None,
     }
 }
 
@@ -7584,9 +7589,10 @@ mod tests {
                     now_ms: 1_756_000_000_000.0,
                     read_id: *read_id,
                 },
-                FeedOperation::ScanIncomingTransfers { .. } => {
-                    FeedShellResult::SyncCompleted { new_count: 0 }
-                }
+                FeedOperation::ScanIncomingTransfers { .. } => FeedShellResult::SyncCompleted {
+                    new_count: 0,
+                    unread_chains: Vec::new(),
+                },
                 FeedOperation::ResolveRecipientIdentity { addr } => {
                     FeedShellResult::AliasResolved {
                         addr: addr.clone(),
@@ -8954,6 +8960,93 @@ mod tests {
         let narrowed = history_panel(&narrowed_feed, true, &said, &s, &w, false);
         assert_eq!(narrowed.empty, Some(s.history_empty_filter.clone()));
         assert_ne!(s.history_empty, s.history_empty_filter);
+    }
+
+    /// Round 16 leftover 5: History says the networks the scan could not
+    /// read in the feed's own words (`FeedView.unread_key`) — in the empty
+    /// line's place over no rows (never "No transactions yet"), above the
+    /// rows when there are rows — once, never both.
+    #[test]
+    fn a_history_says_the_networks_its_scan_could_not_read() {
+        use crate::wallet::fixtures::{FirstRead, first_read_view};
+        use crate::wallet::live::{activity_unread_line, home_activity};
+        use vela_core::app::activity_feed::{
+            ACTIVITY_UNREAD_ONE, ActivityFeed, Event as FeedEvent, FeedDirection, FeedItem,
+        };
+        let mut host = CoreHost::<ActivityFeed>::new();
+        let _ = host.dispatch(FeedEvent::AccountSwitched {
+            address: "0xme".to_owned(),
+        });
+        let feed = FeedView {
+            rows: Vec::new(),
+            unread_chains: vec![100],
+            unread_key: Some(ACTIVITY_UNREAD_ONE.to_owned()),
+            ..host.view()
+        };
+        let (s, w) = (strings(), wallet_strings());
+        let line = activity_unread_line(&feed, &w).expect("said");
+        let read = first_read_view(FirstRead::Live);
+        let mode = home_activity(&feed, "0xme", false, &read, &w);
+        let empty = history_panel(&feed, true, &mode, &s, &w, false);
+        assert!(!empty.loading);
+        assert_eq!(empty.empty, Some(line.clone()));
+        assert_ne!(empty.empty, Some(s.history_empty.clone()));
+        assert_eq!(empty.unread, None, "said once, in the empty place");
+
+        let today = crate::executor::day_start_ms(crate::executor::now_ms());
+        let rows = FeedView {
+            rows: vec![
+                FeedRow::Header {
+                    id: "day-0".to_owned(),
+                    day_start_ms: today,
+                    timestamp: today / 1000.0,
+                },
+                FeedRow::Item {
+                    item: FeedItem {
+                        id: "a".to_owned(),
+                        direction: FeedDirection::In,
+                        counterparty: None,
+                        alias: None,
+                        value: Some("1.5".to_owned()),
+                        symbol: "xDAI".to_owned(),
+                        decimals: Some(18),
+                        usd_value: 0.0,
+                        chain_id: 100,
+                        timestamp: today / 1000.0,
+                        day_start_ms: today,
+                        tx_hash: None,
+                        batch: None,
+                        kind: vela_core::app::activity_feed::FeedTxKind::Receive,
+                        status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
+                        site: None,
+                        counterparty_role: Default::default(),
+                        dapp: None,
+                        subtitle: Vec::new(),
+                        priced: false,
+                        figure_maskable: true,
+                        token: None,
+                    },
+                },
+            ],
+            ..feed.clone()
+        };
+        let mode = home_activity(&rows, "0xme", true, &read, &w);
+        let listed = history_panel(&rows, true, &mode, &s, &w, false);
+        assert_eq!(listed.groups.len(), 1);
+        assert_eq!(listed.unread, Some(line), "above the rows");
+        assert_eq!(listed.empty, None);
+
+        // Every network read: nothing above the rows.
+        let read_all = FeedView {
+            unread_chains: Vec::new(),
+            unread_key: None,
+            ..rows
+        };
+        let listed = history_panel(&read_all, true, &mode, &s, &w, false);
+        assert_eq!(listed.unread, None);
+        // Another account's feed: nothing of it is said.
+        let theirs = history_panel(&feed, false, &mode, &s, &w, false);
+        assert!(theirs.loading && theirs.unread.is_none() && theirs.empty.is_none());
     }
 
     /// Day headers become headings, and a heading with nothing under it is not

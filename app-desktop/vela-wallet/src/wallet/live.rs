@@ -529,32 +529,20 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
     }
 }
 
-/// The hero's "Updated <ago>" (issue #443) — only once a read of the
-/// account shown has ended: beside "Checking…" (its first read still out)
-/// it said "Updated now" of a figure nothing had read yet (r8 S4). `ago` is
-/// the page's words for when it was last read.
+/// The hero's "Updated <ago>" (issue #443) — round 16 leftover 6: ONE core
+/// answer (`BalanceView.updated_at_ms`), drawn from it alone: the stamp
+/// only once the first read of the account shown has ended and every
+/// network said for it was read (none refused, silent or rate limited,
+/// nothing failed inside Vela, not "nothing read at all"); `None`
+/// otherwise — never "Updated now" beside "Checking…" (r8 S4) nor over a
+/// network that was not read (r16-2). `ago` words the stamp (the page's
+/// clock and language).
 #[must_use]
 pub fn updated_line(
-    model: &BalanceModel,
     view: &BalanceView,
-    ago: Option<SharedString>,
+    ago: impl FnOnce(f64) -> SharedString,
 ) -> Option<SharedString> {
-    if model.checking.is_some() || !all_networks_read(view) {
-        return None;
-    }
-    ago
-}
-
-/// r16-2: the last round read every network the account lives on — none
-/// refused, silent or rate limited, nothing failed inside Vela, not
-/// "nothing read at all". Only then may the hero claim a fresh read
-/// ("Updated now"); otherwise its status line names what was not read.
-#[must_use]
-pub fn all_networks_read(view: &BalanceView) -> bool {
-    view.failed_chain_ids.is_empty()
-        && view.rate_limited_chain_ids.is_empty()
-        && view.internal_key.is_none()
-        && !view.unreachable
+    view.updated_at_ms.map(ago)
 }
 
 /// The hero's line while the FIRST read of the account is still out (PR 3
@@ -1537,9 +1525,10 @@ mod tests {
                         now_ms: 1_756_000_000_000.0,
                         read_id: *read_id,
                     },
-                    FeedOperation::ScanIncomingTransfers { .. } => {
-                        FeedShellResult::SyncCompleted { new_count }
-                    }
+                    FeedOperation::ScanIncomingTransfers { .. } => FeedShellResult::SyncCompleted {
+                        new_count,
+                        unread_chains: Vec::new(),
+                    },
                     FeedOperation::ResolveRecipientIdentity { addr } => {
                         FeedShellResult::AliasResolved {
                             addr: addr.clone(),
@@ -2155,7 +2144,7 @@ mod tests {
     /// is the previous one's until it names the new one: never its rows,
     /// never "No activity yet" — the skeleton. And an account whose network
     /// could not be read is not said to have no activity: the network is
-    /// named (the hero's words); a rate limit waits.
+    /// named (the feed's own words, round 16 leftover 5).
     #[test]
     fn activity_is_claimed_only_for_the_account_shown_and_only_when_read() {
         use crate::wallet::fixtures::{FirstRead, first_read_view};
@@ -2182,31 +2171,116 @@ mod tests {
             home_activity(&dana, "0xparallelone", false, &read, &s),
             HomeActivity::Loading
         );
-        // A network refused or silent: named, never "No activity yet".
-        let failed = BalanceView {
-            failed_chain_ids: vec![5_042_002],
-            ..read.clone()
-        };
+        // A network its scan could not read (round 16 leftover 5, the
+        // feed's own `unread_key`): named, never "No activity yet".
+        let unread = feed_scanned("0xdana", &[5_042_002]);
         let HomeActivity::Unreachable { title } =
-            home_activity(&dana, "0xdana", false, &failed, &s)
+            home_activity(&unread, "0xdana", false, &read, &s)
         else {
             panic!("an unread network is said");
         };
         assert_ne!(title, s.empty_activity_title);
         // Rows are rows, whatever a network says.
         assert_eq!(
-            home_activity(&dana, "0xdana", true, &failed, &s),
+            home_activity(&unread, "0xdana", true, &read, &s),
             HomeActivity::Rows
         );
-        // Rate limited: the pool waits; still loading.
-        let limited = BalanceView {
-            rate_limited_chain_ids: vec![5_042_002],
-            ..read
-        };
+    }
+
+    /// The feed of `address`, its store read (empty) and its first scan back
+    /// having failed to read `unread` — through the real feed core.
+    pub(crate) fn feed_scanned(address: &str, unread: &[u32]) -> FeedView {
+        use vela_core::app::activity_feed::{FeedOperation, FeedShellResult};
+        let mut host = CoreHost::<ActivityFeed>::new();
+        let mut pending = host.dispatch(FeedEvent::AccountSwitched {
+            address: address.to_owned(),
+        });
+        for _ in 0..32 {
+            let Some(next) = pending.pop() else {
+                break;
+            };
+            let result = match &next.operation {
+                FeedOperation::ReadTxStore { read_id, .. } => FeedShellResult::StoreLoaded {
+                    records: Vec::new(),
+                    now_ms: 1_756_000_000_000.0,
+                    read_id: *read_id,
+                },
+                FeedOperation::ScanIncomingTransfers { .. } => FeedShellResult::SyncCompleted {
+                    new_count: 0,
+                    unread_chains: unread.to_vec(),
+                },
+                _ => continue,
+            };
+            pending.extend(host.resolve(next.id, result));
+        }
+        host.view()
+    }
+
+    /// Round 16 leftover 5: Activity says which networks its scan could not
+    /// read, in the FEED's own words (`FeedView.unread_key`): over no rows
+    /// in the empty state's place — never "No activity yet" — and over the
+    /// rows when there are rows; one network by its name, several counted.
+    /// The balance's own reading of its networks is not Activity's to say.
+    #[test]
+    fn activity_names_the_networks_its_scan_could_not_read() {
+        use crate::wallet::fixtures::{FirstRead, first_read_view};
+        // English by name: another test may set the process's language.
+        let s = WalletStrings::resolve(&crate::loc::Loc::for_tag("en"));
+        let read = first_read_view(FirstRead::Live);
+        // Gnosis: a name no other test can move (a custom network's is
+        // read from the store other tests write).
+        let one = feed_scanned("0xme", &[100]);
         assert_eq!(
-            home_activity(&dana, "0xdana", false, &limited, &s),
+            one.unread_key.as_deref(),
+            Some(vela_core::app::activity_feed::ACTIVITY_UNREAD_ONE)
+        );
+        let line = activity_unread_line(&one, &s).expect("said");
+        assert_eq!(line.as_ref(), "Activity can't be read on Gnosis right now.");
+        assert_eq!(
+            home_activity(&one, "0xMe", false, &read, &s),
+            HomeActivity::Unreachable {
+                title: line.clone()
+            }
+        );
+        // Rows: drawn, with the line above them.
+        assert_eq!(
+            home_activity(&one, "0xme", true, &read, &s),
+            HomeActivity::Rows
+        );
+        // Several: counted.
+        let many = feed_scanned("0xme", &[1, 100]);
+        let line = activity_unread_line(&many, &s).expect("said");
+        assert_eq!(
+            line.as_ref(),
+            "Activity can't be read on 2 networks right now."
+        );
+        let HomeActivity::Unreachable { title } = home_activity(&many, "0xme", false, &read, &s)
+        else {
+            panic!("an unread network is said");
+        };
+        assert_eq!(title, line);
+        assert_ne!(title, s.empty_activity_title);
+        // Every network read: the core's empty line, and nothing above it.
+        let all = feed_scanned("0xme", &[]);
+        assert!(all.settled);
+        assert_eq!(activity_unread_line(&all, &s), None);
+        assert_eq!(
+            home_activity(&all, "0xme", false, &read, &s),
+            HomeActivity::Empty {
+                title: s.empty_activity_title.clone(),
+                caption: s.empty_activity_caption.clone(),
+            }
+        );
+        // Another account's feed says nothing of this one.
+        assert_eq!(
+            home_activity(&one, "0xsomeoneelse", false, &read, &s),
             HomeActivity::Loading
         );
+        // In another language, the network's line in its words.
+        let zh = WalletStrings::resolve(&crate::loc::Loc::for_tag("zh"));
+        let said = activity_unread_line(&one, &zh).expect("said");
+        assert_ne!(said, activity_unread_line(&one, &s).expect("said"));
+        assert!(!said.contains("{{"), "{said}");
     }
 
     /// Day headers are dropped for the home preview — the mocks draw a flat
@@ -2721,18 +2795,16 @@ mod tests {
     fn checking_is_never_beside_updated() {
         use crate::wallet::fixtures::{FirstRead, first_read_view};
         let hero = |stage| balance(&first_read_view(stage), &strings(), "en", &Money::default());
+        let now = |_: f64| SharedString::from("Updated now");
         let checking = hero(FirstRead::Checking);
         assert!(checking.checking.is_some());
         let checking_view = first_read_view(FirstRead::Checking);
-        assert_eq!(
-            updated_line(&checking, &checking_view, Some("Updated now".into())),
-            None
-        );
+        assert_eq!(updated_line(&checking_view, now), None);
         let live = hero(FirstRead::Live);
         let live_view = first_read_view(FirstRead::Live);
         assert_eq!(live.checking, None);
         assert_eq!(
-            updated_line(&live, &live_view, Some("Updated now".into())),
+            updated_line(&live_view, now),
             Some(SharedString::from("Updated now"))
         );
     }
@@ -2743,33 +2815,54 @@ mod tests {
     /// network instead (the core's `unreachable_key`); the ↻ stays.
     #[test]
     fn updated_is_never_claimed_over_an_unread_network() {
-        use crate::wallet::fixtures::{FirstRead, first_read_view};
+        use crate::wallet::fixtures::{FirstRead, first_read_view, settled_view};
         let read = first_read_view(FirstRead::Live);
-        let hero = balance(&read, &strings(), "en", &Money::default());
-        let ago = || Some(SharedString::from("Updated now"));
-        assert!(updated_line(&hero, &read, ago()).is_some());
+        let now = |_: f64| SharedString::from("Updated now");
+        assert!(updated_line(&read, now).is_some());
+        // Round 16 leftover 6: each through the real balance core, so what
+        // is drawn is its one answer (`updated_at_ms`).
         let unread = [
-            BalanceView {
-                failed_chain_ids: vec![5_042_002],
-                ..read.clone()
-            },
-            BalanceView {
-                rate_limited_chain_ids: vec![5_042_002],
-                ..read.clone()
-            },
-            BalanceView {
-                internal_chain_ids: vec![1],
-                internal_key: Some("x".into()),
-                ..read.clone()
-            },
-            BalanceView {
-                unreachable: true,
-                ..read.clone()
-            },
+            settled_view(vec![56], Vec::new(), Vec::new()),
+            settled_view(vec![56], vec![56], Vec::new()),
+            settled_view(Vec::new(), Vec::new(), vec![1]),
         ];
         for view in unread {
-            assert_eq!(updated_line(&hero, &view, ago()), None, "{view:?}");
+            assert!(view.last_refreshed_at_ms.is_some(), "the round settled");
+            assert_eq!(view.updated_at_ms, None, "{view:?}");
+            assert_eq!(updated_line(&view, now), None, "{view:?}");
         }
+        // Nothing read at all: no "Updated" either.
+        let checking = first_read_view(FirstRead::Checking);
+        assert_eq!(updated_line(&checking, now), None);
+    }
+
+    /// Round 16 leftover 6: "Updated" is ONE core answer
+    /// (`BalanceView.updated_at_ms`) — drawn from it alone, never this
+    /// shell's own reading of the networks: the core withholding it says
+    /// nothing even over a view that looks read, and the core's stamp is
+    /// the one drawn.
+    #[test]
+    fn updated_is_drawn_from_the_cores_one_answer_alone() {
+        use crate::wallet::fixtures::{FirstRead, first_read_view};
+        let read = first_read_view(FirstRead::Live);
+        let stamp = read.updated_at_ms.expect("every network read");
+        let withheld = BalanceView {
+            updated_at_ms: None,
+            ..read.clone()
+        };
+        assert_eq!(
+            updated_line(&withheld, |_| SharedString::from("Updated now")),
+            None
+        );
+        // The core's stamp, not the round's own field beside it.
+        let moved = BalanceView {
+            last_refreshed_at_ms: Some(stamp + 60_000.0),
+            ..read
+        };
+        assert_eq!(
+            updated_line(&moved, |at| SharedString::from(at.to_string())),
+            Some(SharedString::from(stamp.to_string()))
+        );
     }
 
     /// PR 3 final note F19. A wallet that held nothing last session opens on
@@ -4826,7 +4919,8 @@ pub enum HomeActivity {
         caption: SharedString,
     },
     /// r16-2: nothing listed, and a network the account lives on could not
-    /// be read — said as that (the hero's words), never "No activity yet".
+    /// be read — said as that (round 16 leftover 5: the feed's own words,
+    /// [`activity_unread_line`]), never "No activity yet".
     Unreachable { title: SharedString },
     /// r13-7: a multisig's history that could not be read — said as that
     /// (the panel's line), with Try again; never "No activity yet".
@@ -4883,23 +4977,30 @@ pub fn feed_is_for(feed: &FeedView, shown: &str) -> bool {
     !shown.is_empty() && !feed.account.is_empty() && feed.account.eq_ignore_ascii_case(shown)
 }
 
-/// r16-2: why an empty Activity cannot be said empty — a network refused
-/// or silent, a read that failed inside Vela, nothing read at all — in the
-/// hero's words (`assets_unread`'s title). `None` when nothing is unread
-/// but a rate limit (waited out).
-fn activity_unread(view: &BalanceView, s: &WalletStrings) -> Option<SharedString> {
-    let unread = view.unreachable
-        || view.internal_key.is_some()
-        || !view.unreachable_networks.is_empty()
-        || view
-            .failed_chain_ids
-            .iter()
-            .any(|id| !view.rate_limited_chain_ids.contains(id));
-    unread.then(|| {
-        internal_line(view, s)
-            .or_else(|| unreachable_line(view, s))
-            .unwrap_or_else(|| s.balance_unreachable.clone())
-    })
+/// Round 16 leftover 5: the feed's own line over the networks its scan
+/// could not read (`FeedView.unread_key` over `unread_chains`) — "Activity
+/// can't be read on {{network}} right now." with the one network's name,
+/// or the count of several. Drawn above the rows when there are rows, in
+/// the empty state's place when there are none. `None` when every network
+/// was read.
+#[must_use]
+pub fn activity_unread_line(feed: &FeedView, s: &WalletStrings) -> Option<SharedString> {
+    use vela_core::app::activity_feed::ACTIVITY_UNREAD_ONE;
+    feed.unread_key.as_ref()?;
+    let line = match (feed.unread_key.as_deref(), feed.unread_chains.as_slice()) {
+        (_, []) => return None,
+        (Some(ACTIVITY_UNREAD_ONE), [one]) => crate::wallet::fill(
+            &s.activity_unread_one,
+            "network",
+            &crate::flows::live::chain_name(*one),
+        ),
+        // The core names one key for several today; one this build does not
+        // know is still "not read there", counted in the words it has.
+        (_, several) => {
+            crate::wallet::fill(&s.activity_unread_many, "n", &several.len().to_string())
+        }
+    };
+    Some(SharedString::from(line))
 }
 
 /// The home Activity's state. Which empty line is the core's
@@ -4912,10 +5013,10 @@ fn activity_unread(view: &BalanceView, s: &WalletStrings) -> Option<SharedString
 /// r16-2 (§23 r15-1, the web's `feedFor` / `activityMode`): the feed's rows
 /// are drawn only under the account they are for (`FeedView.account`), and
 /// "No activity yet" is said only once the core says it has looked for it
-/// (`FeedView.settled`), the balance's first read is over (`checking_key`,
-/// vis-4) and every network the account lives on was read — one that was
-/// refused or silent is named instead (the hero's words), a rate limit is
-/// waited out (skeletons).
+/// (`FeedView.settled`) and the balance's first read is over
+/// (`checking_key`, vis-4). Round 16 leftover 5: a network the scan could
+/// not read is named in the feed's own words ([`activity_unread_line`]),
+/// never "No activity yet" (the core's `settled` waits for it).
 #[must_use]
 pub fn home_activity(
     feed: &FeedView,
@@ -4930,13 +5031,10 @@ pub fn home_activity(
     if has_rows {
         return HomeActivity::Rows;
     }
-    if !feed.settled || balance.balance_unknown || balance.checking_key.is_some() {
-        return HomeActivity::Loading;
-    }
-    if let Some(title) = activity_unread(balance, s) {
+    if let Some(title) = activity_unread_line(feed, s) {
         return HomeActivity::Unreachable { title };
     }
-    if !all_networks_read(balance) {
+    if !feed.settled || balance.balance_unknown || balance.checking_key.is_some() {
         return HomeActivity::Loading;
     }
     match feed.home_empty_key.as_str() {

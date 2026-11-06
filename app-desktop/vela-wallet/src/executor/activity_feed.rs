@@ -339,7 +339,11 @@ fn calldata_of(row: &Value) -> Option<bool> {
 /// Any failure answers 0 — the TS `catch { return 0 }`. A scan that could not
 /// run found nothing, which is a true statement, and it is not a reason to
 /// show an error over a feed that is otherwise correct.
-fn sync_received(address: &str) -> u32 {
+///
+/// Round 16 leftover 5: with the count, the networks the scan could not
+/// read (`TrustView::unread_chains` once the poll settled) — what Activity
+/// says instead of "No activity yet" (`FeedView.unread_key`).
+fn sync_received(address: &str) -> (u32, Vec<u32>) {
     // One scan per account at a time is the core's (`scan_in_flight`), and
     // a receipt is written once under the store's lock (`persist_incoming`).
     scan(address)
@@ -394,7 +398,7 @@ fn write_cursors(address: &str, cursors: &[vela_core::app::incoming_scan::TrustS
     }
 }
 
-fn scan(address: &str) -> u32 {
+fn scan(address: &str) -> (u32, Vec<u32>) {
     use crate::executor::token_trust;
     let facts = scan_facts(address);
     // Each planned network's registry is primed first, as the web's
@@ -416,9 +420,12 @@ fn scan(address: &str) -> u32 {
             );
         }
     }
-    let (incoming, cursors) = token_trust::scan(address, facts, read_cursors(address));
-    write_cursors(address, &cursors);
-    persist_incoming(address, &incoming)
+    let scanned = token_trust::scan(address, facts, read_cursors(address));
+    write_cursors(address, &scanned.cursors);
+    (
+        persist_incoming(address, &scanned.incoming),
+        scanned.unread_chains,
+    )
 }
 
 /// Store the transfers the scan admitted that the store does not hold yet,
@@ -653,8 +660,11 @@ impl Machine for ActivityFeed {
                 ));
                 let address = address.clone();
                 Answer::Blocking(Box::new(move || {
-                    let new_count = sync_received(&address);
-                    FeedShellResult::SyncCompleted { new_count }
+                    let (new_count, unread_chains) = sync_received(&address);
+                    FeedShellResult::SyncCompleted {
+                        new_count,
+                        unread_chains,
+                    }
                 }))
             }
 
@@ -1522,9 +1532,10 @@ mod tests {
                 let next = pending.remove(0);
                 performed.push(next.operation.clone());
                 let result = match &next.operation {
-                    FeedOperation::ScanIncomingTransfers { .. } => {
-                        FeedShellResult::SyncCompleted { new_count: 0 }
-                    }
+                    FeedOperation::ScanIncomingTransfers { .. } => FeedShellResult::SyncCompleted {
+                        new_count: 0,
+                        unread_chains: Vec::new(),
+                    },
                     FeedOperation::ResolveRecipientIdentity { addr } => {
                         FeedShellResult::AliasResolved {
                             addr: addr.clone(),

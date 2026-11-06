@@ -348,11 +348,19 @@ pub fn receipt_confirmed(
     });
 }
 
-/// What one planned scan found, and the coverage to keep.
-pub type Scanned = (
-    Vec<TrustIncomingView>,
-    Vec<vela_core::app::incoming_scan::TrustScanCursor>,
-);
+/// What one planned scan found, the coverage to keep, and the networks it
+/// could not read.
+#[derive(Clone, Debug, Default)]
+pub struct Scanned {
+    pub incoming: Vec<TrustIncomingView>,
+    pub cursors: Vec<vela_core::app::incoming_scan::TrustScanCursor>,
+    /// Round 16 leftover 5: the trust machine's `TrustView::unread_chains`
+    /// once the poll has settled — handed to the Activity feed with the
+    /// scan's answer (`SyncCompleted.unread_chains`), so Activity says it
+    /// cannot be read there rather than that nothing happened. Empty when
+    /// the worker was gone (nothing known, nothing claimed).
+    pub unread_chains: Vec<u32>,
+}
 
 /// r9-17 (§9.4): run one scan the core plans — its networks
 /// (`incoming_scan::scan_plan` over `facts`), the live window and a bounded
@@ -456,7 +464,14 @@ fn run(rx: &std::sync::mpsc::Receiver<Request>) {
                 } else {
                     view.cursors
                 };
-                let _ = reply.send((view.incoming, cursors));
+                // The networks this account's scan could not read on its
+                // last look at each: final once the poll is over; a scan
+                // still out (single flight) answers the last looks known.
+                let _ = reply.send(Scanned {
+                    incoming: view.incoming,
+                    cursors,
+                    unread_chains: view.unread_chains,
+                });
             }
             Request::Judge {
                 address,
@@ -844,7 +859,7 @@ mod tests {
             },
             Vec::new(),
         )
-        .0
+        .incoming
     }
 
     /// The whole scan, live: snapshots in, a poll out.

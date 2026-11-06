@@ -145,6 +145,11 @@ pub struct WalletStrings {
     /// The home Activity under a sidebar chain filter (spec 082 RG5): the
     /// core's `home_empty_key` names it, with no caption.
     pub empty_activity_network: SharedString,
+    /// Round 16 leftover 5: Activity on the networks its scan could not
+    /// read (`FeedView.unread_key`) — templates carrying `{{network}}` (one
+    /// network, by its name) / `{{n}}` (several, counted).
+    pub activity_unread_one: String,
+    pub activity_unread_many: String,
     pub empty_assets_title: SharedString,
     pub empty_assets_caption: SharedString,
     pub networks_title: SharedString,
@@ -291,6 +296,8 @@ impl WalletStrings {
             empty_activity_title: s("home.emptyNoActivity"),
             empty_activity_caption: s("home.emptySubtitle"),
             empty_activity_network: s("home.emptyNoActivityNetwork"),
+            activity_unread_one: raw(vela_core::app::activity_feed::ACTIVITY_UNREAD_ONE),
+            activity_unread_many: raw(vela_core::app::activity_feed::ACTIVITY_UNREAD_MANY),
             empty_assets_title: s("assets.emptyTitle"),
             empty_assets_caption: s("assets.emptySubtext"),
             networks_title: s("settingsModals.network.modalTitle"),

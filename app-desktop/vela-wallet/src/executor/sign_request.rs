@@ -2596,9 +2596,10 @@ mod tests {
                     now_ms: 1_757_000_001_000.0,
                     read_id: *read_id,
                 },
-                FeedOperation::ScanIncomingTransfers { .. } => {
-                    FeedShellResult::SyncCompleted { new_count: 0 }
-                }
+                FeedOperation::ScanIncomingTransfers { .. } => FeedShellResult::SyncCompleted {
+                    new_count: 0,
+                    unread_chains: Vec::new(),
+                },
                 FeedOperation::ResolveRecipientIdentity { addr } => {
                     lookups.push(addr.clone());
                     FeedShellResult::AliasResolved {
