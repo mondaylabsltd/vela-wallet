@@ -990,11 +990,15 @@
 		const lower = hash.toLowerCase();
 		// The machine looks again before the passkey unless its look is fresh,
 		// signs that look's calls and fee, and follows the operation to its end.
+		// r15: the press carries the fee drawn under it — a look that holds
+		// another figure (replaced after the paint) stops with `fee_moved`.
+		const drawn = previewOf(actor);
 		const { error } = await act(`execute:${lower}`, {
 			type: oneTap ? 'approve_execute' : 'execute',
 			chain_id: chainId,
 			safe_tx_hash: hash,
-			executor: by
+			executor: by,
+			...(drawn?.kind === 'priced' ? { shown_fee: drawn.fee.amount.toString() } : {})
 		});
 		if (!error) return;
 		// r5reg-21: its number was used meanwhile — what ran is said, not a failure.

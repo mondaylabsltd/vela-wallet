@@ -148,6 +148,7 @@ fn execute(sut: &mut Sut, world: &mut World, account: &MultisigAccount, hash: &s
             chain_id: 100,
             safe_tx_hash: hash.to_owned(),
             executor: fixture(0).address,
+            shown_fee: None,
         },
     );
     tx_hash

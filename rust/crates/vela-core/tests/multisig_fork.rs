@@ -505,6 +505,7 @@ fn create_two_of_three_propose_approve_twice_execute() {
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         executor,
+        shown_fee: None,
     });
     settle(&mut ms, &mut shell);
     let verdict = ms.view().executions[&format!("100:{hash}")].clone();

@@ -2359,6 +2359,10 @@ describe('an execution looked at before its passkey (r4-5, r4-7)', () => {
 		await settle();
 		expect(fake.calls).toEqual(['execute']);
 		expect(fake.executedWith).toEqual([look]);
+		// r15: the press carries the figure drawn under it.
+		expect(machineSent('approve_execute').map((e) => e.shown_fee)).toEqual([
+			String(35n * 10n ** 15n)
+		]);
 		await screen.unmount();
 	});
 

@@ -569,6 +569,7 @@ fn a_review_neither_check_read_is_ready_but_every_press_signs_only_anyway() {
             chain_id: 100,
             safe_tx_hash: safe_tx_hash.clone(),
             executor: fixture(1).address,
+            shown_fee: None,
         },
     );
     assert!(matches!(

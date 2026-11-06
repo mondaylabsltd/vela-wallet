@@ -612,6 +612,15 @@ pub enum Event {
         chain_id: u64,
         safe_tx_hash: String,
         executor: String,
+        /// r15 (fee moved): the fee the sheet drew under the press, in base
+        /// units (decimal) — the figure the person pressed on. When set, the
+        /// execution signs only that fee: a look that holds any other (a
+        /// re-quote landed between the paint and the press, or the press's
+        /// own re-quote) stops with `fee_moved`, nothing signed. Missing: the
+        /// executor's look on screen is taken as shown (older shells).
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        shown_fee: Option<String>,
     },
     /// core-ms-2: "Approve and execute", one press, offered where
     /// [`ProposalsView::approve_execute`] names `executor`: its execution —
@@ -627,6 +636,15 @@ pub enum Event {
         chain_id: u64,
         safe_tx_hash: String,
         executor: String,
+        /// r15 (fee moved): the fee the sheet drew under the press, in base
+        /// units (decimal) — the figure the person pressed on. When set, the
+        /// execution signs only that fee: a look that holds any other (a
+        /// re-quote landed between the paint and the press, or the press's
+        /// own re-quote) stops with `fee_moved`, nothing signed. Missing: the
+        /// executor's look on screen is taken as shown (older shells).
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        shown_fee: Option<String>,
     },
     /// core-ms-2: [`Event::ConfirmDraft`], then — when the proposer's own
     /// approval makes it ready ([`DraftView::execute_now`]: a site's
@@ -1674,6 +1692,7 @@ impl App for MultisigProposals {
                 chain_id,
                 safe_tx_hash,
                 executor,
+                shown_fee,
             } => {
                 {
                     let mut s = lock(&model.state);
@@ -1683,7 +1702,8 @@ impl App for MultisigProposals {
                     s.actions.remove(&format!("approve:{hash}"));
                 }
                 flow(model, move |io, st| async move {
-                    approve_execute(&io, &st, chain_id, &safe_tx_hash, &executor).await;
+                    let shown = shown_fee.as_deref().and_then(shell::quantity);
+                    approve_execute(&io, &st, chain_id, &safe_tx_hash, &executor, shown).await;
                 })
             }
             Event::Withdraw => {
@@ -1727,6 +1747,7 @@ impl App for MultisigProposals {
                 chain_id,
                 safe_tx_hash,
                 executor,
+                shown_fee,
             } => {
                 let key = format!("execute:{}", safe_tx_hash.to_ascii_lowercase());
                 lock(&model.state)
@@ -1734,7 +1755,9 @@ impl App for MultisigProposals {
                     .insert(key.clone(), ActionState::Working);
                 flow(model, move |io, st| async move {
                     let input = execution_input(&st, chain_id, &safe_tx_hash, &executor);
-                    let outcome = execute(&io, &st, chain_id, &safe_tx_hash, &executor).await;
+                    let shown = shown_fee.as_deref().and_then(shell::quantity);
+                    let outcome =
+                        execute(&io, &st, chain_id, &safe_tx_hash, &executor, shown).await;
                     flows::remember_execution(&io, &st, input.as_ref(), &outcome).await;
                     if matches!(outcome, ActionState::Done { .. }) {
                         note_actor(&io, &st, chain_id, &executor).await;
@@ -4344,7 +4367,7 @@ fn propose_draft(model: &Model, as_member: Option<String>, then_execute: bool) -
             .then(|| i.proposer.clone())
         });
         match proposer {
-            Some(proposer) => approve_execute(&io, &st, chain_id, &hash, &proposer).await,
+            Some(proposer) => approve_execute(&io, &st, chain_id, &hash, &proposer, None).await,
             None => {
                 lock(&st)
                     .actions
@@ -4388,6 +4411,7 @@ async fn approve_execute(
     chain_id: u64,
     hash: &str,
     executor: &str,
+    shown_fee: Option<u128>,
 ) {
     let lower = hash.to_ascii_lowercase();
     let input = execution_input(st, chain_id, hash, executor);
@@ -4395,7 +4419,7 @@ async fn approve_execute(
         i.item.approved < i.item.threshold
             && i.item.can_approve.iter().any(|o| same_address(o, executor))
     });
-    let outcome = execute(io, st, chain_id, hash, executor).await;
+    let outcome = execute(io, st, chain_id, hash, executor, shown_fee).await;
     flows::remember_execution(io, st, input.as_ref(), &outcome).await;
     if matches!(outcome, ActionState::Done { .. }) {
         note_actor(io, st, chain_id, executor).await;
@@ -4475,6 +4499,7 @@ async fn execute(
     chain_id: u64,
     hash: &str,
     executor: &str,
+    shown_fee: Option<u128>,
 ) -> ActionState {
     let Some(input) = execution_input(st, chain_id, hash, executor) else {
         return ActionState::Failed {
@@ -4515,10 +4540,13 @@ async fn execute(
                 })
                 .map(|(_, p)| p.clone()),
             // r14-9: the fee the sheet says now (its executor's look), whatever
-            // its age — what the person pressed on.
-            plan.and_then(|(_, p)| match p {
-                Preview::Priced { fee, .. } => fee_amount(fee),
-                _ => None,
+            // its age — what the person pressed on; r15: the figure the press
+            // itself carries, when the shell sends it.
+            shown_fee.or_else(|| {
+                plan.and_then(|(_, p)| match p {
+                    Preview::Priced { fee, .. } => fee_amount(fee),
+                    _ => None,
+                })
             }),
         )
     };
@@ -4531,7 +4559,11 @@ async fn execute(
     // whose fee is not the one on screen signs nothing: the execution fails
     // with the new figure (`fee_moved`), the new look is the sheet's now, and
     // the next press — inside the window — signs exactly it.
-    if let (true, Some(was), Preview::Priced { fee, .. }) = (requoted, said_fee, &preview) {
+    // r15: with the pressed figure carried, ANY look whose fee is another
+    // stops — also a fresh one that replaced the figure after it was drawn.
+    if let (true, Some(was), Preview::Priced { fee, .. }) =
+        (requoted || shown_fee.is_some(), said_fee, &preview)
+    {
         if let Some(now) = fee_amount(fee).filter(|now| *now != was) {
             return ActionState::Failed {
                 detail: fee_moved_detail(chain_id, &input.executor.address, now),
