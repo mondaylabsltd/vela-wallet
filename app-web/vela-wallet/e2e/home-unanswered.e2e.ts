@@ -107,7 +107,8 @@ test('r12-3: a network that stops answering in a warm session is named without a
 
 	// Ethereum stops answering. Nothing here reloads, focuses or pulls.
 	down = true;
-	await expect(page.getByText("Can't reach Ethereum right now", { exact: true })).toBeVisible({
+	// The hero's line (r15-4: the Assets list now says it too).
+	await expect(page.getByRole('button', { name: "Can't reach Ethereum right now" })).toBeVisible({
 		timeout: 100_000
 	});
 	await expect(page.getByText(en('home.liveIndicator'), { exact: true })).toHaveCount(0);
@@ -150,7 +151,8 @@ test('r13-4: a network whose every node hangs in a warm session is named in time
 	});
 
 	down = true;
-	await expect(page.getByText("Can't reach Ethereum right now", { exact: true })).toBeVisible({
+	// The hero's line (r15-4: the Assets list now says it too).
+	await expect(page.getByRole('button', { name: "Can't reach Ethereum right now" })).toBeVisible({
 		timeout: 120_000
 	});
 	const named = Date.now();

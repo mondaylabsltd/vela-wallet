@@ -292,8 +292,16 @@ test.describe('a new site, for an account that holds only Arc USDC', () => {
 			CHAINS.map((c) => ({ chainId: c.chainId, rpcURL: `${STUB}/${c.chainId}` }))
 		);
 		await wallet.reload();
-		// The wallet's first read ended, and the account held nothing then.
-		await expect(wallet.getByText('Deposit your first asset')).toBeVisible({ timeout: 60_000 });
+		// The wallet's first read ended, and the account held nothing then —
+		// said as an empty wallet, or (r15-4) as the network this hermetic
+		// net leaves unread (a token list it does not serve): never a claim of
+		// empty over what was not read.
+		await expect(
+			wallet
+				.getByText('Deposit your first asset')
+				.or(wallet.getByText("Your assets there aren't affected — we just can't read them right now."))
+				.first()
+		).toBeVisible({ timeout: 60_000 });
 
 		// The money comes; Arc's node is slow to say so. Nothing here waits for
 		// a page to have stored where the account now lives.

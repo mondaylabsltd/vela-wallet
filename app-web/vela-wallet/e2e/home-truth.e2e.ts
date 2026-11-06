@@ -145,11 +145,14 @@ test('an unreachable chain is SAID, never shown as a confident zero (T152 findin
 	);
 	await openHome(page);
 	// Spec 092 (F08): said without "RPC" — a fact, not an alarm.
-	await expect(page.getByText("Can't reach Ethereum right now", { exact: true })).toBeVisible({
+	// The hero's line (r15-4: the Assets list now says it too).
+	await expect(page.getByRole('button', { name: "Can't reach Ethereum right now" })).toBeVisible({
 		timeout: 20_000
 	});
 	// Not "Live · listening for payments": a partial zero is not a live zero.
 	await expect(page.getByText(en('home.liveIndicator'), { exact: true })).toHaveCount(0);
+	// r15-4: nor an empty wallet — the list says the network it could not read.
+	await expect(page.getByText(en('assets.emptyTitle'), { exact: true })).toHaveCount(0);
 });
 
 test('an unreachable chain’s status line opens the list, its row the RPC fix, and a working URL restores it (spec 028 Phase 8, 092)', async ({
