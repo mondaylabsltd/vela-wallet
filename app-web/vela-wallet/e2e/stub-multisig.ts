@@ -192,6 +192,20 @@ export class MultisigWorld {
 	readonly rpcAsked: string[] = [];
 	/** The chain refuses a search for `ExecutionSuccess`: a history that cannot be read. */
 	refuseHistory = false;
+	/**
+	 * r16-3: the chains' outage — `refused`: every request is refused at
+	 * connect; `hung`: no request is ever answered; `null`: they answer.
+	 */
+	outage: 'refused' | 'hung' | null = null;
+	/**
+	 * r16-3: until this time (ms), a network back from an outage still turns
+	 * its safety checks away (`eth_call`, `eth_simulateV1` refused at
+	 * connect) while it answers everything else — its multisig's own code
+	 * first. What Arc did for 1–5 s after R16's outages lifted.
+	 */
+	checksTurnedAwayUntil = 0;
+	/** The node simulates (`eth_simulateV1` runs and succeeds); else it says "not here". */
+	simulates = false;
 
 	/** `address`'s native balance on `chainId` here (none unless set). */
 	balance(chainId: number, address: string): bigint {
@@ -386,10 +400,17 @@ export class MultisigWorld {
 	private async rpc(route: Route): Promise<void> {
 		const request = route.request();
 		if (request.method() !== 'POST') return route.abort('failed');
+		// r16-3: down — refused at once, or never answered at all.
+		if (this.outage === 'refused') return route.abort('connectionrefused');
+		if (this.outage === 'hung') return new Promise<void>(() => {});
 		const chainId = Number(new URL(request.url()).pathname.slice(1));
 		const body = request.postDataJSON() as
 			| { id?: number; method: string; params?: unknown[] }
 			| { id?: number; method: string; params?: unknown[] }[];
+		const calls = Array.isArray(body) ? body : [body];
+		const check = (m: string) => m === 'eth_call' || m === 'eth_simulateV1';
+		if (Date.now() < this.checksTurnedAwayUntil && calls.some((c) => check(c.method)))
+			return route.abort('connectionrefused');
 		const one = (call: { id?: number; method: string; params?: unknown[] }) => {
 			const answer = this.answer(chainId, call.method, call.params ?? []);
 			return 'error' in answer
@@ -510,6 +531,16 @@ export class MultisigWorld {
 				return { result: this.call(chainId, params[0] as { to?: string; data?: string }) };
 			case 'eth_estimateGas':
 				return { result: '0x30d40' };
+			case 'eth_simulateV1':
+				if (!this.simulates) return { error: { code: -32601, message: `${method} not here` } };
+				return {
+					result: [
+						{
+							number: '0x101',
+							calls: [{ status: '0x1', returnData: '0x', gasUsed: '0x5208', logs: [] }]
+						}
+					]
+				};
 			default:
 				return { error: { code: -32601, message: `${method} not here` } };
 		}
