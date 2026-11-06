@@ -801,8 +801,8 @@ describe('empty activity, chosen by the core', () => {
 		toast: null,
 		history_empty_key: 'history.emptyTitle',
 		home_empty_key: 'home.emptyNoActivity',
-		account: '',
-		settled: false,
+		account: '0xabc',
+		settled: true,
 		hidden: false,
 		contact_rows: []
 	};
@@ -813,6 +813,7 @@ describe('empty activity, chosen by the core', () => {
 	};
 	const LOOKED = {
 		...PRISTINE,
+		address: '0xAbC',
 		balance_unknown: false,
 		unpriced_only: false,
 		display_total_usd: 0,
@@ -830,6 +831,41 @@ describe('empty activity, chosen by the core', () => {
 		expect(checking.activitySection.mode).toBe('loading');
 		const looked = withLiveWallet(base, { balance: LOOKED, currency: USD, m, feed: EMPTY_FEED });
 		expect(looked.activitySection.mode).toBe('empty');
+	});
+
+	// r15-1 (§23): the core says whose rows these are and whether it has
+	// looked; a home or a history draws rows only under that account, and
+	// says "no activity" only once the feed has settled.
+	it('a feed that has not looked yet, or is another account’s, is never drawn as this one’s (r15-1)', () => {
+		const base = buildMobileState('h1', m, IDENT);
+		const fm = resolveWalletFlowMessages('en');
+		const history = buildFlowState('a1', fm, IDENT);
+		const row = {
+			id: 'r1',
+			item: {
+				id: 'r1',
+				kind: 'receive'
+			}
+		} as unknown as FeedView['rows'][number];
+		const unsettled = withLiveWallet(base, {
+			balance: LOOKED,
+			currency: USD,
+			m,
+			feed: { ...EMPTY_FEED, settled: false }
+		});
+		expect(unsettled.activitySection.mode).toBe('loading');
+		const others: FeedView = { ...EMPTY_FEED, account: '0xdef', rows: [row], home_rows: [row] };
+		const home = withLiveWallet(base, { balance: LOOKED, currency: USD, m, feed: others });
+		expect(home.activitySection.mode).toBe('loading');
+		expect(home.activityGroups).toEqual([]);
+		const live = (feed: FeedView) =>
+			withLiveFlow(history, { balance: LOOKED, currency: USD, m, emptyCopy: undefined, feed, fm });
+		for (const feed of [others, { ...EMPTY_FEED, settled: false }]) {
+			const shown = live(feed);
+			if (shown.base.kind !== 'history') throw new Error('expected the history');
+			expect(shown.base.model.mode).toBe('loading');
+			expect(shown.base.model.groups).toEqual([]);
+		}
 	});
 
 	it('all networks → "no activity"; filtered → "none on this network"', () => {

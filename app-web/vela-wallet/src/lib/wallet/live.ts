@@ -117,10 +117,13 @@ export interface WalletLiveInputs {
  * note says it, with its Retry.
  */
 export function activitySaysHistory(
-	inputs: Pick<WalletLiveInputs, 'feed' | 'chainFilter' | 'multisigHistory'>
+	inputs: Pick<WalletLiveInputs, 'feed' | 'chainFilter' | 'multisigHistory'> & {
+		balance?: Pick<BalanceView, 'address'>;
+	}
 ): boolean {
 	const filter = inputs.chainFilter ?? null;
-	const feed = inputs.feed ? narrowedFeed(inputs.feed, filter) : inputs.feed;
+	const mine = inputs.balance ? feedFor(inputs.feed, inputs.balance.address) : inputs.feed;
+	const feed = mine ? narrowedFeed(mine, filter) : mine;
 	return !!feed && feed.rows.length === 0 && inputs.multisigHistory?.stand === 'unread';
 }
 
@@ -172,6 +175,22 @@ export function liveChainRows(
 			chainId
 		}))
 	];
+}
+
+/**
+ * r15-1 (§23): the feed, only when its rows are the shown account's
+ * (`FeedView.account`, the core's word) — else `null`, drawn as loading. A
+ * switch empties the core's rows at once; until the feed names the account
+ * shown, nothing it holds is drawn under it.
+ */
+export function feedFor(
+	feed: FeedView | null | undefined,
+	shown: string | null | undefined
+): FeedView | null | undefined {
+	if (!feed) return feed;
+	return !!shown && !!feed.account && feed.account.toLowerCase() === shown.toLowerCase()
+		? feed
+		: null;
 }
 
 /**
@@ -1283,6 +1302,9 @@ export function liveActivityGroups(
 function activityMode(view: BalanceView, feed: FeedView | null | undefined): SectionModel['mode'] {
 	if (!feed) return 'loading';
 	if (feed.rows.length > 0) return 'rows';
+	// r15-1 (§23): "No activity yet" only once the core says it has looked
+	// for this account (`settled`: its store read and its first scan back).
+	if (!feed.settled) return 'loading';
 	// vis-4: "No activity yet" is said once the wallet has finished its first
 	// look (`checking_key`, the core's "Checking…"), not over a cached total
 	// while the reads — a multisig's waiting proposals among them — are out.
@@ -1396,7 +1418,8 @@ function liveSections(inputs: WalletLiveInputs) {
 	const { balance: view, currency, m } = inputs;
 	const filter = inputs.chainFilter ?? null;
 	const tokens = filter === null ? view.tokens : view.tokens.filter((t) => t.chain_id === filter);
-	const feed = inputs.feed ? narrowedFeed(inputs.feed, filter) : inputs.feed;
+	const mine = feedFor(inputs.feed, view.address);
+	const feed = mine ? narrowedFeed(mine, filter) : mine;
 	// The networks the last read could not reach: their rows are last-known.
 	const quiet = new Set(view.unreachable_networks.map((row) => row.chain_id));
 	if (inputs.elsewhere) {
@@ -1457,7 +1480,7 @@ function liveSections(inputs: WalletLiveInputs) {
 					}
 				: {
 						title:
-							inputs.feed?.home_empty_key === 'home.emptyNoActivityNetwork'
+							feed?.home_empty_key === 'home.emptyNoActivityNetwork'
 								? m.activity.emptyTitleNetwork
 								: m.activity.emptyTitle,
 						caption: m.activity.emptyCaption
