@@ -1443,8 +1443,13 @@ impl WalletPage {
                             .child(crate::ui::prose(words::t(&loc, "create.sameEverywhere"))),
                     ),
             );
-        } else if let Some(error) = &view.create.draft_error {
-            body = body.child(ms_note(theme, error, MsTone::Danger));
+        } else if view.create.draft_error.is_some() {
+            // Round 16 leftover 4: the core's reason is English — never drawn.
+            body = body.child(ms_note(
+                theme,
+                &words::t(&loc, "proposal.reason.unknown"),
+                MsTone::Danger,
+            ));
         }
 
         // The members: one from outside this device reads in full, here,
@@ -1767,19 +1772,14 @@ impl WalletPage {
                 ),
                 false,
             ),
+            // Round 16 leftover 4: the service's refusal (or a failure's
+            // detail) is never drawn as text — what is true and what to do
+            // (the web's and iOS's words).
             _ => match (&view.create.refused, &view.create.phase) {
-                (Some(reason), _) => (
-                    words::tv(&loc, "create.refused", &[("reason", reason)]),
-                    true,
-                ),
-                (None, Phase::Working) => (words::t(&loc, "create.savedSharing"), true),
-                (None, Phase::Failed) => {
-                    let detail = view.create.error.clone().unwrap_or_default();
-                    (
-                        words::tv(&loc, "create.refused", &[("reason", &detail)]),
-                        true,
-                    )
+                (Some(_), _) | (None, Phase::Failed) => {
+                    (words::t(&loc, "settings.shareAgainNote"), true)
                 }
+                (None, Phase::Working) => (words::t(&loc, "create.savedSharing"), true),
                 _ => (words::t(&loc, "create.savedLater"), true),
             },
         };

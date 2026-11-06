@@ -2881,8 +2881,21 @@ impl WalletPage {
                 &[("network", &network(chain_id))],
             ),
             ActionState::RiskDeclined => return None,
+            // Round 16 leftover 4: a member change's refusal is the core's
+            // JSON, worded; any other reason is the core's English — said as
+            // the catalog's "other" refusal, never as text.
             ActionState::Refused { reason: why } => {
-                words::tv(loc, "proposal.refused", &[("reason", why)])
+                match crate::multisig::member_words::refusal_of(why) {
+                    Some(r) => words::tv(
+                        loc,
+                        "proposal.refused",
+                        &[(
+                            "reason",
+                            &crate::multisig::member_words::refusal_text(loc, &r),
+                        )],
+                    ),
+                    None => words::t(loc, "review.refusedWhy.other"),
+                }
             }
             ActionState::MailboxRefused { .. } => reason("serviceRefused"),
             // The look stopped it before the passkey: why, as the look says.

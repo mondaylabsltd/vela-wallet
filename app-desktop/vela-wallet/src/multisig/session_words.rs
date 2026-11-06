@@ -66,20 +66,42 @@ pub fn failure(loc: &Loc, failure: &Failure) -> String {
         Failure::OtherChain => words::tv(loc, "external.otherChain", &[("chain", "")]),
         Failure::BadSignature => words::t(loc, "external.badSignature"),
         Failure::StoppedWaiting => words::t(loc, "external.stoppedWaiting"),
-        Failure::NoRoom { reason } => {
-            words::tv(loc, "external.velaRelayFailed", &[("reason", reason)])
-        }
+        // Round 16 leftover 4: its `reason` is a transport error's text —
+        // never drawn.
+        Failure::NoRoom { .. } => words::t(loc, "proposal.reason.unknown"),
     }
 }
 
-/// How this side is getting onto the relay, when it is news.
+/// The relay's host, when `detail` is one (`relay.example:443`) — never a
+/// transport error's text.
+fn relay_host(detail: &str) -> Option<String> {
+    let (name, port) = detail.split_once(':').unwrap_or((detail, ""));
+    let host_ok = !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-');
+    let port_ok = port.chars().all(|c| c.is_ascii_digit()) && !detail.ends_with(':');
+    (host_ok && port_ok).then(|| detail.to_owned())
+}
+
+/// How this side is getting onto the relay, when it is news. Round 16
+/// leftover 4 (every shell's rule): the reason is the catalog's — the
+/// relay's refusal, a pass not got — or, unreached, the relay's host; with
+/// nothing sayable as a reason, "Vela went offline — reconnecting…".
 #[must_use]
 pub fn relay(loc: &Loc, status: &RelayStatus, now_ms: f64) -> Option<String> {
-    let why = |w: &RelayTrouble, detail: &str| match w {
-        RelayTrouble::Refused => words::t(loc, "external.relayRefused"),
-        RelayTrouble::NoToken => words::t(loc, "external.relayNoToken"),
-        RelayTrouble::Unreachable => detail.to_owned(),
+    let reason = |w: &RelayTrouble, detail: &str| match w {
+        RelayTrouble::Refused => Some(words::t(loc, "external.relayRefused")),
+        RelayTrouble::NoToken => Some(words::t(loc, "external.relayNoToken")),
+        RelayTrouble::Unreachable => relay_host(detail),
     };
+    if let RelayStatus::Retrying { why: w, detail, .. } | RelayStatus::Failed { why: w, detail } =
+        status
+        && reason(w, detail).is_none()
+    {
+        return Some(words::t(loc, "external.velaOffline"));
+    }
+    let why = |w: &RelayTrouble, detail: &str| reason(w, detail).unwrap_or_default();
     match status {
         RelayStatus::Connecting | RelayStatus::Up => None,
         RelayStatus::Retrying { why: w, detail, at } => Some(match at {
@@ -150,5 +172,36 @@ mod tests {
         )
         .unwrap();
         assert!(failed.contains("pass"), "{failed}");
+    }
+
+    /// Round 16 leftover 4: a transport error is never the reason — the
+    /// relay's host, else "offline"; a room not opened is "something went
+    /// wrong", never its error's text.
+    #[test]
+    fn a_transport_error_is_never_drawn() {
+        let loc = Loc::for_tag("en");
+        let unreached = |detail: &str| {
+            relay(
+                &loc,
+                &RelayStatus::Failed {
+                    why: RelayTrouble::Unreachable,
+                    detail: detail.to_owned(),
+                },
+                0.,
+            )
+            .unwrap()
+        };
+        let raw = unreached("Os { code: 61, kind: ConnectionRefused }");
+        assert!(!raw.contains("ConnectionRefused"), "{raw}");
+        assert_eq!(raw, words::t(&loc, "external.velaOffline"));
+        assert!(unreached("relay.getvela.app:443").contains("relay.getvela.app:443"));
+        let room = failure(
+            &loc,
+            &Failure::NoRoom {
+                reason: "WebSocket error: timed out".into(),
+            },
+        );
+        assert!(!room.contains("WebSocket"), "{room}");
+        assert_eq!(room, words::t(&loc, "proposal.reason.unknown"));
     }
 }
