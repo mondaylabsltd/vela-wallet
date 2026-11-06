@@ -423,6 +423,30 @@ struct MsProposalModel {
         }
     }
 
+    /// §24: the fee figure this sheet draws for `executor`'s execution (base
+    /// units, as the core gave it) — what a press under it carries as
+    /// `shown_fee`, so the core signs exactly that figure or stops with
+    /// `fee_moved` (§19.11). `nil` when no figure is drawn: no priced look,
+    /// or the stop's own line stands in the fee line's place. Read from the
+    /// model the sheet painted, never from a view not drawn yet.
+    func shownFee(for executor: String) -> String? {
+        guard !executeStopped, let look = preview(for: executor), look.kind == "priced",
+              let amount = look["fee"]?["amount"]?.string, !amount.isEmpty
+        else { return nil }
+        return amount
+    }
+
+    /// §24: the press that executes — Execute, or the one press "Approve and
+    /// execute" (`oneTouch`) — carrying the figure drawn with it (`shownFee`).
+    func executeEvent(executor: String, oneTouch: Bool) -> [String: Any] {
+        var event: [String: Any] = [
+            "type": oneTouch ? "approve_execute" : "execute",
+            "chain_id": chainId, "safe_tx_hash": hash, "executor": executor,
+        ]
+        if let fee = shownFee(for: executor) { event["shown_fee"] = fee }
+        return event
+    }
+
     /// core-ms-2: whose ONE press approves and executes it — the member
     /// picked, when the machine offers it that press, else the first it
     /// offers; `nil` when it offers none. Its look is the fee said before
@@ -1018,11 +1042,9 @@ struct MultisigProposalSheet: View {
                             haptic: .confirm
                         ) {
                             let executor = model.oneTouchExecutor(chosen: member) ?? oneTouch[0]
+                            // §24: the press carries the fee drawn above it (`shown_fee`).
                             signing(model, .approveExecute) {
-                                hub.sendProposal([
-                                    "type": "approve_execute", "chain_id": chainId, "safe_tx_hash": model.hash,
-                                    "executor": executor,
-                                ])
+                                hub.sendProposal(model.executeEvent(executor: executor, oneTouch: true))
                             }
                         }
                         .accessibilityIdentifier("multisig.proposal.approveExecute")
@@ -1272,8 +1294,11 @@ struct MultisigProposalSheet: View {
         }
     }
 
+    /// §24: `model` is the sheet as painted when pressed — its fee figure
+    /// travels with the press (`shown_fee`); a quote that landed since
+    /// signs nothing (`fee_moved`, said beside Execute).
     private func execute(_ model: MsProposalModel, executor: String) {
-        hub.sendProposal(["type": "execute", "chain_id": chainId, "safe_tx_hash": model.hash, "executor": executor])
+        hub.sendProposal(model.executeEvent(executor: executor, oneTouch: false))
     }
 
     /// r9-13: the cancellation's review first (the hub's review sheet, the

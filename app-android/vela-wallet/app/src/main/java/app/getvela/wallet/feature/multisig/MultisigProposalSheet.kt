@@ -320,7 +320,8 @@ fun MultisigProposalSheet(
                             if (oneTap) {
                                 // Should only the execute part be unable to run (before its
                                 // passkey), the machine still gives and keeps the approval (r4-11).
-                                val ran = hub.proposals.request(ev("approve_execute", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "executor" to owner)) { v -> settledOf(v, "execute") }
+                                // §24: it carries the fee drawn under it (`shown_fee`).
+                                val ran = hub.proposals.request(model.executeEvent(owner, oneTap = true)) { v -> settledOf(v, "execute") }
                                 if (ran.kind == "done") {
                                     haptic(VelaHaptic.Success)
                                     return@launch
@@ -385,7 +386,9 @@ fun MultisigProposalSheet(
                     words = words,
                     onConfirm = {
                         haptic(VelaHaptic.Press)
-                        hub.sendProposal(ev("execute", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "executor" to chosen))
+                        // §24: the figure drawn above it travels with the press (`shown_fee`):
+                        // a quote that landed since the paint signs nothing (`fee_moved`).
+                        hub.sendProposal(model.executeEvent(chosen, oneTap = false))
                     },
                     modifier = Modifier.fillMaxWidth().testTag("multisig.proposal.execute"),
                     enabled = !model.executeHeld(chosen) && model.canSign && !executingNow,

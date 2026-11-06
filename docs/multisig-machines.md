@@ -1783,7 +1783,7 @@ round from disk, unread list words, settle budget, fee moved).
 Left open:
 
 - iOS and Android do not send `shown_fee` yet (optional; their presses keep
-  the r14-9 rule) — for the native lane, beside r15-5.
+  the r14-9 rule) — for the native lane, beside r15-5. (Done: §24.)
 - A 429 from the multisig service reads as "Couldn't reach the multisig
   service" (the r15-11b rapid-link run could also have met the service's
   rate limit; not reproduced here).
@@ -1838,3 +1838,10 @@ Left open:
 - Android History while not `settled` draws no skeleton of its own (an empty list, never "No transactions yet"); a skeleton there is polish for a later round.
 - The web draws the core's emptied rows but not yet `account` / `settled` (its empty line waits for the balance's first look): the web lane's to adopt.
 - The iOS fee-moved stop and the one-press setup line were proven in the simulated world, not on Arc with a moving relay.
+
+## 24. Natives carry the fee shown
+
+- **Android and iOS send `shown_fee`** (§19.11, §22) on every press that executes — Execute and the one press "Approve and execute" (`MsProposalModel.executeEvent`); a site's transaction executes through the same sheet. The draft's `propose_execute` draws no figure, so it carries none (as on web and desktop).
+- **The figure** is `MsProposalModel.shownFee`: the priced look's `fee.amount` in the model the sheet painted (the press's own closure), only while drawn; no figure drawn, none carried (r14-9 holds).
+- **A quote landing between paint and press** signs nothing: `fee_moved`, said once beside the pressed button in the core's words; the next press signs the new figure.
+- **Tests:** Android `NativeShownFeeTest` (JVM, real machines) and `NativeShownFeeDeviceTest` (frame clock held while the look lands; the press is the button's own click); iOS `MultisigFlowTests` `theOnePressCarries…` / `executeCarries…` (through the hub).
