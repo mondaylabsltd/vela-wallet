@@ -1301,6 +1301,33 @@ describe('an execution the relay refused (ms-3)', () => {
 	});
 });
 
+describe('a fee that moved before the press (r14-9, r15-6)', () => {
+	it('says "failed" once: the core’s new figure inside the one prefix', async () => {
+		fake.chain.items = [
+			item({
+				approved: 1,
+				canApprove: [],
+				canExecute: [local],
+				approvals: [{ owner: OTHER, counts: true, approval: {}, createdMs: 1 }]
+			})
+		];
+		fake.executeThrows = new Error(
+			JSON.stringify({ kind: 'fee_moved', amount: '186000000000000000', chainId: 100, executor: ME })
+		);
+		const m = words();
+		m.proposal.failed = 'Failed: {{reason}}';
+		m.proposal.feeLine = 'Fee {{fee}} by {{name}}';
+		const screen = show({ m });
+		await settle();
+		press('proposal.approveAndExecute');
+		await settle();
+		const said = document.querySelector('[data-testid="proposal-failed"]')?.textContent?.trim();
+		expect(said).toMatch(/^Failed: Fee 0\.186 xDAI by /);
+		expect(said?.match(/Failed:/g)).toHaveLength(1);
+		await screen.unmount();
+	});
+});
+
 describe('a batch of calls (owner, 2026-10-28)', () => {
 	it('reads every call, and says first, in red, a call that changes the multisig', async () => {
 		const batch = {

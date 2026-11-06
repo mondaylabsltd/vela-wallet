@@ -752,12 +752,12 @@
 		}
 		// r14-9: the fee moved since the press — nothing signed; said with the
 		// new figure (its fee line's own words), so the next press is on it.
+		// A reason, like every other: the failed line adds "That didn't go
+		// through:" once where it is drawn (r15-6 — it was said twice).
 		if (error instanceof ExecutionFeeMovedError) {
-			return fillTemplate(m.proposal.failed, {
-				reason: fillTemplate(m.proposal.feeLine, {
-					fee: feeCoin(error.amount, nativeSymbol(chainId)),
-					name: names.label(error.executor)
-				})
+			return fillTemplate(m.proposal.feeLine, {
+				fee: feeCoin(error.amount, nativeSymbol(chainId)),
+				name: names.label(error.executor)
 			});
 		}
 		if (error instanceof ExecutionUnpricedError) return m.proposal.unpricedReason;
@@ -2031,7 +2031,9 @@
 		{#if drafting}
 			<!-- The review of what the site asks: nothing is signed before this. -->
 			{#if phase.kind === 'failed'}
-				<p class="warn" role="alert" data-testid="proposal-failed">{phase.reason}</p>
+				<p class="warn" role="alert" data-testid="proposal-failed">
+					{fillTemplate(m.proposal.failed, { reason: phase.reason })}
+				</p>
 			{/if}
 			{#if candidates.length > 1 && item.review.action !== null && !readOnly && !signBlocked}
 				{@render actorChoice()}
