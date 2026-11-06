@@ -34,6 +34,7 @@
 //
 
 #if DEBUG
+import CoreGraphics
 import Foundation
 import Testing
 import VelaCore
@@ -110,6 +111,9 @@ final class MsSimWorld: MultisigPorts {
     var mailbox: [[String: Any]] = []
     var submits: [[String: Any]] = []
     var httpLog: [String] = []
+    /// R15: the multisigs (lower-cased) whose record lookup is held — a slow
+    /// service for one link while another is opened.
+    var holdGenesis: Set<String> = []
 
     // The chains.
     var safes: [String: SimSafe] = [:]
@@ -167,6 +171,8 @@ final class MsSimWorld: MultisigPorts {
         }
         if path.hasPrefix("/api/genesis/") {
             let safe = String(path.dropFirst("/api/genesis/".count)).lowercased()
+            // R15: a slow service for this one multisig, until let go.
+            while holdGenesis.contains(safe), !Task.isCancelled { try? await Task.sleep(nanoseconds: 5_000_000) }
             if let record = records[safe] { return answer(200, record) }
             return answer(404, ["found": false])
         }
@@ -324,7 +330,9 @@ final class MsSimWorld: MultisigPorts {
     func storeRead(_ key: String) -> String?? { .some(store[key]) }
     func storeWrite(_ key: String, _ value: String?) -> Bool { store[key] = value; return true }
     /// A clock that runs: the world's start plus the time since.
-    func nowMs() -> Double { Self.t0 + Date().timeIntervalSince(started) * 1000 }
+    func nowMs() -> Double { Self.t0 + Date().timeIntervalSince(started) * 1000 + skewMs }
+    /// R15: the clock moved on (a look grows stale without waiting for it).
+    var skewMs = 0.0
     func random(_ bytes: Int) -> Data {
         randomByte &+= 1
         return Data(repeating: randomByte, count: bytes)
@@ -356,10 +364,15 @@ final class MsSimWorld: MultisigPorts {
 
     func askRisk(_ op: [String: Any]) async -> Bool { true }
     func sendCalls(_ op: [String: Any]) async -> [String: Any] {
-        ["type": "calls_sent", "user_op_hash": "0x" + String(repeating: "ab", count: 32), "tx_hash": NSNull()]
+        sentFees.append((op["fee"] as? [String: Any])?["amount"] as? String ?? "")
+        return ["type": "calls_sent", "user_op_hash": "0x" + String(repeating: "ab", count: 32), "tx_hash": NSNull()]
     }
+    /// R15: what each execution's operation carried as its fee (`send_calls.fee.amount`).
+    var sentFees: [String] = []
+    /// R15: the fee the relay quotes now (the gas price moves).
+    var quoteAmount = "0x1"
     func quoteCalls(_ op: [String: Any]) async -> [String: Any] {
-        ["type": "quoted", "quote": ["kind": "quoted", "fee": ["token": NSNull(), "amount": "0x1"], "totalGas": "0x1", "executorDeployed": true]]
+        ["type": "quoted", "quote": ["kind": "quoted", "fee": ["token": NSNull(), "amount": quoteAmount], "totalGas": "0x1", "executorDeployed": true]]
     }
     /// §12: while set, a review's simulation and its recipients' facts are
     /// not answered — the review stays `loading`, as on a slow network.
@@ -909,6 +922,65 @@ struct MultisigFlowTests {
         #expect(door.shows == .failed && !door.enabled && door.retry)
         #expect(MsReviewPending.failedLine(door, words: words)
                 == "\(words.t("review.state.gone")) \(words.t("review.state.blocked"))")
+    }
+
+    // MARK: r15-5 — the fee-moved stop, said where it was pressed
+
+    /// iOS R15: the first press after the fee moved "signed nothing and said
+    /// nothing". Through the hub over the world: the one press on a look
+    /// grown stale whose new quote differs signs nothing and fails
+    /// `fee_moved` — said by the sheet beside that press, in the core's words
+    /// with one "That didn't go through:" — and the next press signs exactly
+    /// the new figure.
+    @Test func aFeeThatMovedStopsThePressSaidBesideItAndTheNextPressSignsTheNewFigure() async throws {
+        let world = try MsSimWorld()
+        let (hub, _, owners, transfer) = try await Self.rejecting(world, salt: "0x6f")
+        defer { hub.proposals.dispose(); hub.accounts.dispose(); hub.members.dispose() }
+        let hash = transfer.safeTxHash
+        let words = MsWords(loc: hub.loc, hub: nil)
+        func item() -> MsProposalItem? { hub.proposalsView.items.first { $0.safeTxHash == hash } }
+        func execute() -> MsTagged? { hub.proposalsView.action("execute:\(hash)") }
+
+        hub.sendProposal(["type": "review", "chain_id": 100, "safe_tx_hash": hash, "blind": false])
+        await Wait.until({
+            ["ready", "unchecked"].contains(hub.proposalsView.lookup(hub.proposalsView.reviewStates, chainId: 100, hash: hash)?.kind ?? "")
+        }, orIdle: { hub.proposals.isIdle })
+        hub.sendProposal(["type": "preview", "chain_id": 100, "safe_tx_hash": hash, "executor": owners[1]])
+        await Wait.until({ item().map { !hub.proposalsView.approveExecute($0).isEmpty } ?? false }, orIdle: { hub.proposals.isIdle })
+        #expect(item().map { hub.proposalsView.approveExecute($0) } == [owners[1]], "the one press is offered")
+
+        // The look on screen grows stale and the relay's price moves.
+        world.quoteAmount = "0x2"
+        world.skewMs = 20_000
+        hub.sendProposal(["type": "approve_execute", "chain_id": 100, "safe_tx_hash": hash, "executor": owners[1]])
+        await Wait.until({ execute().map { $0.kind != "working" } ?? false }, orIdle: { hub.proposals.isIdle })
+        #expect(execute()?.kind == "failed", "\(String(describing: execute()?.raw))")
+        #expect(world.sentFees.isEmpty, "nothing signed at a fee nobody was shown")
+
+        let model = MsProposalModel(item: try #require(item()), view: hub.proposalsView, words: words, account: nil)
+        let said = model.pressFailures(at: .approve)
+        #expect(said.map(\.id) == ["executeFailed"], "said beside the one press: \(said)")
+        let line = try #require(said.first?.text)
+        let prefix = words.t("proposal.failed", ["reason": ""]).trimmingCharacters(in: .whitespaces)
+        #expect(line.hasPrefix(prefix) && line.components(separatedBy: prefix).count == 2, "\(line)")
+        #expect(!model.notes.contains { $0.id == "executeFailed" }, "not (only) at the head of the sheet")
+
+        // The sheet as drawn, scrolled down to the press.
+        let screen = HostedScreen(MultisigProposalSheet(hub: hub, chainId: 100, safeTxHash: hash, words: words, onClose: {}))
+        defer { screen.close() }
+        let seen = try await screen.read { $0.element("multisig.proposal.note.executeFailed") != nil }
+        let note = try #require(seen.element("multisig.proposal.note.executeFailed"))
+        // Said where the one press is: right by "Approve and execute".
+        if let press = seen.element("multisig.proposal.approveExecute") {
+            #expect(abs(note.frame.minY - press.frame.maxY) < 200, "\(note.frame) vs \(press.frame)")
+        }
+        try await screen.scroll(by: max(0, note.frame.minY - 420))
+        try await screen.save("i-r15-5-feemoved-after")
+
+        // Pressed again on the figure now shown: signed at exactly it.
+        hub.sendProposal(["type": "approve_execute", "chain_id": 100, "safe_tx_hash": hash, "executor": owners[1]])
+        await Wait.until({ !world.sentFees.isEmpty }, orIdle: { hub.proposals.isIdle })
+        #expect(world.sentFees == ["0x2"])
     }
 
     // MARK: a review swiped away — withdrawn at once

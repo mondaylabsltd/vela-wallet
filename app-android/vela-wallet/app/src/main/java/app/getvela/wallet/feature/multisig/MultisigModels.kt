@@ -316,8 +316,22 @@ class MsProposalModel(
         if (item.approved + 1 < item.threshold) return null
         if (view.approveExecuteBy(item).any { it.equals(member, ignoreCase = true) }) return null
         val look = preview(member) ?: return null
-        val stops = look.kind == "fails" || (look.kind == "priced" && look["canPay"].bool == false)
+        // r15-7: a setup whose Safe contracts went unread (`unverified`), or
+        // one read and refused, stops the one press too — said here, as iOS
+        // and the web say it, never left unsaid.
+        val stops = look.kind in setOf("fails", "refused", "unverified") || (look.kind == "priced" && look["canPay"].bool == false)
         return if (stops) feeLine(member) else null
+    }
+
+    /**
+     * r15-7: what an execution by [executor] costs, said before the press —
+     * its fee line ([feeLineBeside]) and, for a multisig not deployed yet,
+     * the one-time setup it carries ([setupLines]). The one press and
+     * Execute draw the same lines.
+     */
+    fun executionLines(executor: String, failure: MsLine?): List<MsLine> = buildList {
+        feeLineBeside(executor, failure)?.let { (text, tone) -> add(MsLine(text, tone, "fee")) }
+        setupLines(executor).forEachIndexed { i, line -> add(MsLine(line, MsTone.Neutral, "setup$i")) }
     }
 
     /** The preview stops it (would fail, nobody can pay): Execute waits. */

@@ -191,7 +191,8 @@ enum WalletLive {
         now: Date = Date(),
         spinning: Bool? = nil,
         networks: WalletNetworks = .builtin,
-        noValue: String? = nil
+        noValue: String? = nil,
+        shownAccount: String? = nil
     ) -> WalletHomeModel {
         var copy = model
         let display = Display.from(currency, language: loc.resolvedLanguage)
@@ -206,10 +207,16 @@ enum WalletLive {
             // catch up with one tap: a figure is never shown for a frame.
             // The home draws the core's cut (issue #469: the newest three);
             // "All" opens History, which draws every row.
-            copy.activityGroups = activityGroups(feed.homeRows, loc: loc,
-                                                 hidden: feed.hidden || view.hidden,
-                                                 networks: networks)
-            copy.activitySection = section(copy.activityGroups, read: feedRead,
+            // r15-1: the feed's rows only under the account they are for
+            // (`account`), and "No activity yet" only once the core looked at
+            // it (`settled`) — never another account's rows, never the empty
+            // claim over a history not read. `shownAccount` nil: a board.
+            let isShown = shownAccount.map { feed.isFor($0) } ?? true
+            copy.activityGroups = isShown
+                ? activityGroups(feed.homeRows, loc: loc, hidden: feed.hidden || view.hidden, networks: networks)
+                : []
+            let looked = feedRead && isShown && (shownAccount == nil || feed.settled)
+            copy.activitySection = section(copy.activityGroups, read: looked,
                                            fallback: model.activitySection,
                                            empty: homeEmpty(feed, fallback: model.activitySection, loc: loc))
         }

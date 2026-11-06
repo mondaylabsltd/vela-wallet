@@ -2770,7 +2770,9 @@ struct RootView: View {
                                    feedRead: activity.settled(for: shownAddress), on: base, loc: loc,
                                    now: Date(), spinning: wallet.spin.spinning,
                                    networks: walletNetworks,
-                                   noValue: space.testnet ? loc.t("networkSpace.noValue") : nil)
+                                   noValue: space.testnet ? loc.t("networkSpace.noValue") : nil,
+                                   // r15-1: the feed's rows only under their own account.
+                                   shownAccount: shownAddress)
         // r13-7: a multisig's Activity says what its history is — being read,
         // or not read (with Try again) — never "No activity yet" over either.
         let applied = WalletLive.withMultisigHistory(fed, shownMultisigHistory)
@@ -2871,7 +2873,8 @@ struct RootView: View {
                 feed, selected: chainFilter, on: history, loc: loc,
                 // The feed's own flag (PR 2), not one threaded from the
                 // balance machine.
-                hidden: feed.hidden, networks: walletNetworks
+                hidden: feed.hidden, networks: walletNetworks,
+                shownAccount: shownAddress
             ))
         }
         if case .txDetail(let detail)? = model.sheet, let feed = activity.feed,
@@ -3749,8 +3752,8 @@ struct RootView: View {
         if camera.refusal == nil, camera.running, camera.usesDataScanner {
             inputs.dataScanner = { text in camera.deliver(text) }
         }
-        if let key = camera.refusal?.actionLabelKey {
-            inputs.refusalAction = (label: loc.t(key), act: openSettings)
+        if let label = camera.refusal?.actionLabel(loc) {
+            inputs.refusalAction = (label: label, act: openSettings)
         }
         return inputs
     }
@@ -4295,7 +4298,9 @@ struct RootView: View {
             on: model,
             loc: loc,
             // §18 item 2: stored records this device cannot read, said under the list.
-            unreadable: StoredAccountsWatch.shared.unreadable
+            unreadable: StoredAccountsWatch.shared.unreadable,
+            // r15-9: one check — the account shown's.
+            multisigShown: shownMultisig != nil
         )
         // Asked of the chain for THIS wallet, or still being asked (spec 062).
         let backedUp = backupCheck.flatMap {

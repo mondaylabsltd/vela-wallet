@@ -68,4 +68,18 @@ contact_rows: Array<FeedItem>,
  * core's cadence ([`Event::PresenceChanged`]); absent before (and on
  * the wire), so a shell not moved yet keeps its own ticks.
  */
-next_scan?: FeedNextScan | null, };
+next_scan?: FeedNextScan | null, 
+/**
+ * r15-1: the account these rows are for (lower-cased; empty before any
+ * was told). A shell draws them only under that account — never under
+ * another one shown meanwhile (the D3 rule for the balance, here for
+ * Activity). An account switch empties the rows at once.
+ */
+account: string, 
+/**
+ * r15-1: "nothing has happened here" may be said of [`Self::account`]:
+ * its store was read AND its first incoming scan came back since it was
+ * switched to. Before that an empty Activity is still being read (the
+ * skeleton) — never "No activity yet".
+ */
+settled: boolean, };

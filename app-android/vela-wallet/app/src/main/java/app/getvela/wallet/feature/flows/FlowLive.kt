@@ -219,12 +219,20 @@ object FlowLive {
          * does not build 200 rows inside its first frame. `null`: built here.
          */
         prebuilt: List<app.getvela.wallet.feature.wallet.ActivityGroupModel>? = null,
+        /** r15-1: the account shown (the home's rule, [WalletLive.activityMode]); `null`, a fixture board. */
+        shownAccount: String? = null,
     ): HistoryModel {
+        // r15-1: another account's rows are never drawn under this one.
+        val feedIsShown = shownAccount == null || feed.account.equals(shownAccount, ignoreCase = true)
         // The feed machine narrows the rows itself (`chain_filter_changed`); the pill says which chain.
-        val groups = prebuilt ?: WalletLive.activity(feed, strings, now, chainNames)
+        val groups = if (!feedIsShown) emptyList() else prebuilt ?: WalletLive.activity(feed, strings, now, chainNames)
         return fallback.copy(
             header = fallback.header.copy(pill = pill(fallback.header.pill, chainFilter, chainNames)),
-            mode = if (groups.isEmpty()) HistoryMode.Empty else HistoryMode.Rows,
+            mode = when (WalletLive.activityMode(groups.isNotEmpty(), feedIsShown, feed.settled, live = shownAccount != null)) {
+                app.getvela.wallet.feature.wallet.SectionMode.Rows -> HistoryMode.Rows
+                app.getvela.wallet.feature.wallet.SectionMode.Empty -> HistoryMode.Empty
+                else -> HistoryMode.Loading
+            },
             // Spec 082 RG5: the empty line is the core's key, chosen by the
             // chain filter — never the drawn state's "none on this network".
             emptyText = strings.t(feed.history_empty_key),

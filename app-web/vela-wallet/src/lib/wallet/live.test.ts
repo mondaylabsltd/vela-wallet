@@ -801,6 +801,8 @@ describe('empty activity, chosen by the core', () => {
 		toast: null,
 		history_empty_key: 'history.emptyTitle',
 		home_empty_key: 'home.emptyNoActivity',
+		account: '',
+		settled: false,
 		hidden: false,
 		contact_rows: []
 	};

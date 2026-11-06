@@ -41,6 +41,8 @@ export const INITIAL_VIEW: FeedView = {
 	// until the first view lands.
 	history_empty_key: 'history.emptyTitle',
 	home_empty_key: 'home.emptyNoActivity',
+	account: '',
+	settled: false,
 	// Spec 093: no contact's page is open.
 	contact_rows: [],
 	// Nothing is drawn yet, so nothing is masked yet: the core's own flag

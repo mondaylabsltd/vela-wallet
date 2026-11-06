@@ -344,7 +344,10 @@ fun MultisigProposalSheet(
                 // S4: what the one press costs, before it is pressed — the
                 // machine's look for this member (`previews`), as Execute's.
                 if (oneTap && chosen != null) {
-                    model.feeLineBeside(chosen, model.executeFailure)?.let { (text, tone) -> MsNote(text, tone = tone, tag = "multisig.proposal.oneTapFee") }
+                    // r15-7: and, for a multisig not deployed yet, its one-time setup.
+                    model.executionLines(chosen, model.executeFailure).forEach { line ->
+                        MsNote(line.text, tone = line.tone, tag = if (line.id == "fee") "multisig.proposal.oneTapFee" else "multisig.proposal.oneTapSetup")
+                    }
                     // r14-6: a fee that could not be worked out or checked offers
                     // Check again here too (the web's), as under Execute.
                     if (LookAsk.offersCheckAgain(model.preview(chosen).kind)) {
@@ -372,8 +375,9 @@ fun MultisigProposalSheet(
                 if (model.canExecute.size > 1) {
                     MemberPicker(words, words.t("proposal.as"), model.canExecute, chosen, "multisig.proposal.executor") { executor = it }
                 }
-                model.feeLineBeside(chosen, model.executeFailure)?.let { (text, tone) -> MsNote(text, tone = tone, tag = "multisig.proposal.fee") }
-                for (line in model.setupLines(chosen)) MsNote(line)
+                model.executionLines(chosen, model.executeFailure).forEach { line ->
+                    MsNote(line.text, tone = line.tone, tag = if (line.id == "fee") "multisig.proposal.fee" else "multisig.proposal.setup")
+                }
                 MsSignButton(
                     text = words.t(if (model.signAnyway) "review.executeAnyway" else "proposal.execute"),
                     anyway = model.signAnyway,
