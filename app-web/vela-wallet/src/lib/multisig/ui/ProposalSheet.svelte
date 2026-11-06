@@ -892,9 +892,11 @@
 		key: string,
 		event: Parameters<typeof proposalsHost.send>[0]
 	): Promise<{ error: unknown; state: MultisigActionState | null }> {
+		// Read before the wait: a sheet closed meanwhile has no props to read.
+		const chain = chainId;
 		proposalsHost.send(event);
 		const state = await proposalsHost.settled(key);
-		return { error: state ? actionError(state, chainId) : null, state };
+		return { error: state ? actionError(state, chain) : null, state };
 	}
 
 	/** The person confirmed the transaction: propose it, approved by this device's member. */
