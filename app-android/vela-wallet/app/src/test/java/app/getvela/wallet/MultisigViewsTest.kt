@@ -273,6 +273,11 @@ class MultisigViewsTest {
         assertTrue(note.contains("Gnosis"))
         assertTrue("chainUnreachable goes with Retry", retry)
         assertNull(w.waitingParts(emptyList()))
+        // r16-16: a rate-limited service is said busy, with Retry — never silence.
+        val (busy, busyRetry) = waitingNote(w, json("""{"kind":"busy"}""")) { "12:00" }!!
+        assertEquals(w.t("service.busyNote"), busy)
+        assertTrue(busy.isNotBlank() && busy != "service.busyNote")
+        assertTrue("busy goes with Retry", busyRetry)
     }
 
     // -- the transaction sheet's model ------------------------------------------------

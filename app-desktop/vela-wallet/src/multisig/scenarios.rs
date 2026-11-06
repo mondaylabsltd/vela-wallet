@@ -685,6 +685,37 @@ fn a_fee_that_moved_after_it_was_drawn_stops_the_press_and_names_its_executor() 
     );
     assert!(line.contains("paid by Ana"), "{line}");
     assert_eq!(line.matches("That didn't go through").count(), 1, "{line}");
+    // r16-1: the sheet's re-quote moves the figure again while the stop is
+    // shown — the stop said beside the press is the figure the fee line and
+    // the next press carry, read from the view at this render.
+    sim.world().now += 20_000.0;
+    sim.world().quote_answer = Some(Res::Quoted {
+        quote: serde_json::json!({"kind": "quoted", "fee": {"token": null, "amount": "0x2b"}, "totalGas": "0x1", "executorDeployed": true}),
+    });
+    sim.proposals(ProposalsEvent::Preview {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: executor.clone(),
+    });
+    let now = look(&sim)
+        .and_then(|l| l.shown_fee())
+        .expect("the newest look");
+    let lines = crate::multisig::sheet::press_failure_lines(
+        &sim.machines.proposals_view.actions,
+        &hash,
+        |state| {
+            match state {
+                ActionState::Failed { detail } => crate::multisig::live::read_failure(detail),
+                _ => None,
+            }
+            .map(|failure| format!("{failure:?}"))
+        },
+    );
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(
+        lines[0].contains(&format!("amount: \"{now}\"")),
+        "the stop says the look's figure now ({now}): {lines:?}"
+    );
     // Pressed on the figure now drawn: signed at exactly it.
     sim.proposals(ProposalsEvent::Execute {
         chain_id: 100,

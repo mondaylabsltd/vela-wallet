@@ -300,7 +300,8 @@ pub fn standing_of(item: &ProposalItem, block: Option<ReadyBlock>) -> Standing {
 // ---------------------------------------------------------------------------
 
 /// What the waiting group says of the list it shows, first match wins
-/// (`group`'s note): offline, the service away, a network that did not
+/// (`group`'s note): offline, the service away, the service busy (its rate
+/// limit), a network that did not
 /// answer, the list kept from an earlier page, stale, the history unread,
 /// still reading.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -313,6 +314,9 @@ pub enum WaitingNote {
     },
     /// The service is away: said once, with a Retry.
     Unreachable,
+    /// r16-16: the service answered its rate limit (`429`): busy, its reads
+    /// backing off — said once, with a Retry (never silence over the list).
+    Busy,
     /// r4b-3: these networks did not answer — named, with a Retry, never
     /// "nothing waits".
     ChainUnreachable {
@@ -338,7 +342,10 @@ impl WaitingNote {
     pub fn retry(&self) -> bool {
         matches!(
             self,
-            Self::Unreachable | Self::ChainUnreachable { .. } | Self::HistoryUnreadable { .. }
+            Self::Unreachable
+                | Self::Busy
+                | Self::ChainUnreachable { .. }
+                | Self::HistoryUnreadable { .. }
         )
     }
 }
@@ -349,6 +356,8 @@ pub struct ListFacts {
     pub offline: bool,
     pub read_at: Option<f64>,
     pub unreachable: bool,
+    /// r16-16: the service's last read answer was its rate limit.
+    pub busy: bool,
     pub unreadable: Vec<u64>,
     pub cached_at: Option<f64>,
     pub stale: bool,
@@ -366,6 +375,9 @@ pub fn waiting_note(f: &ListFacts) -> Option<WaitingNote> {
     }
     if f.unreachable {
         return Some(WaitingNote::Unreachable);
+    }
+    if f.busy {
+        return Some(WaitingNote::Busy);
     }
     if !f.unreadable.is_empty() {
         return Some(WaitingNote::ChainUnreachable {

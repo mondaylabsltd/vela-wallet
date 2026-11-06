@@ -331,6 +331,8 @@ pub struct World {
     // The genesis service.
     pub service_url: String,
     pub service_down: bool,
+    /// r16-16: every read of the service answers `429` (its rate limit).
+    pub service_rate_limited: bool,
     pub home_chain: Option<u64>,
     pub served: Vec<u64>,
     pub records: BTreeMap<String, Value>,
@@ -400,6 +402,7 @@ impl Default for World {
             store: BTreeMap::new(),
             service_url: SERVICE.to_owned(),
             service_down: false,
+            service_rate_limited: false,
             home_chain: Some(100),
             served: vec![100],
             records: BTreeMap::new(),
@@ -551,6 +554,9 @@ impl World {
             return Res::HttpUnreachable {
                 detail: "connection refused".to_owned(),
             };
+        }
+        if self.service_rate_limited && method == "GET" {
+            return answer(429, json!({"error": "rate limited"}));
         }
         if path == "/api/health" {
             return answer(
@@ -1051,7 +1057,7 @@ where
         let Some(op) = outstanding
             .iter()
             .find(|op| !matches!(op, Op::Wait { .. }))
-            .or_else(|| outstanding.first())
+            .or_else(|| soonest_wait(&outstanding))
             .cloned()
         else {
             break;
@@ -1061,6 +1067,21 @@ where
         answered += 1;
     }
     answered
+}
+
+/// The wait a clock ends first among `outstanding`: the shortest (r16-3: a
+/// review's 1 s re-ask pause runs out long before its 40 s bound, whichever
+/// was asked first).
+pub fn soonest_wait(outstanding: &[Op]) -> Option<&Op> {
+    outstanding
+        .iter()
+        .filter_map(|op| match op {
+            Op::Wait { ms } => Some((*ms, op)),
+            _ => None,
+        })
+        .min_by_key(|(ms, _)| *ms)
+        .map(|(_, op)| op)
+        .or_else(|| outstanding.first())
 }
 
 impl World {

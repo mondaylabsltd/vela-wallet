@@ -633,6 +633,7 @@
       "service": {
         "customNote": "Đang dùng dịch vụ đa chữ ký tùy chỉnh ({{host}})",
         "unreachableNote": "Không kết nối được dịch vụ đa chữ ký — không tải được các giao dịch đang chờ; đang thử lại.",
+        "busyNote": "Dịch vụ đa chữ ký đang bận — các giao dịch đang chờ sẽ sớm được tải; đang thử lại.",
         "retry": "Thử lại",
         "offline": "Đang hiển thị dữ liệu đã tải trước đó.",
         "offlineSince": "Đang hiển thị dữ liệu đã tải lúc {{time}}.",

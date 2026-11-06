@@ -28,6 +28,16 @@ describe('review state door (§12, shared vectors)', () => {
 		});
 	}
 
+	// r16-3: whether a review's safety checks are final for the read —
+	// "unchecked" (… anyway) is published only once they are.
+	for (const c of vectors.recheck) {
+		it(`recheck: ${c.name}`, () => {
+			expect(
+				JSON.parse(wasm.multisigLinkCall('review.checksFinal', JSON.stringify(c.args)))
+			).toEqual(c.expect);
+		});
+	}
+
 	// §18 (b): a sheet opened without a link, its transaction not listed.
 	for (const c of vectors.missing) {
 		it(`missing: ${c.name}`, () => {

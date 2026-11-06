@@ -161,3 +161,38 @@ fn try_again_reads_now_never_behind_a_read_hung_in_the_outage() {
     assert!(!sut.view().loading);
     assert_eq!(mailbox_read(&sut), Some(true), "read at the press");
 }
+
+/// Round 16 (r16-16): a `429` from the multisig service was never said —
+/// the home sat silent over its kept list for 45 s, while a refused service
+/// was said at 4 s. A rate-limited service is said as busy, with Retry; its
+/// background reads back off (they ask nothing until its wait — the
+/// service's Retry-After, else a growing step — has passed); the person's
+/// Retry asks at once; and an answer that is not a `429` ends it.
+#[test]
+fn a_rate_limited_service_is_said_busy_backs_off_and_retry_asks_now() {
+    use vela_core::app::multisig_presence::WaitingNote;
+    let (mut world, mut sut, _, _) = two_multisigs();
+    world.service_rate_limited = true;
+    run(&mut sut, &mut world, Event::Tick);
+    assert_eq!(mailbox_read(&sut), Some(false));
+    assert_eq!(
+        sut.view().waiting_note,
+        Some(WaitingNote::Busy),
+        "said busy, never silent"
+    );
+    assert!(WaitingNote::Busy.retry(), "with Retry");
+    // Backing off: a tick inside the service's wait asks the service nothing.
+    let asked = world.http_log.len();
+    run(&mut sut, &mut world, Event::Tick);
+    let service_asks = world.http_log[asked..]
+        .iter()
+        .filter(|l| l.contains(SERVICE))
+        .count();
+    assert_eq!(service_asks, 0, "no read while it said to wait");
+    assert_eq!(sut.view().waiting_note, Some(WaitingNote::Busy));
+    // The limit lifts; the person's Retry reads at once.
+    world.service_rate_limited = false;
+    run(&mut sut, &mut world, Event::Retry);
+    assert_eq!(mailbox_read(&sut), Some(true));
+    assert_eq!(sut.view().waiting_note, None);
+}

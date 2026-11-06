@@ -151,16 +151,18 @@ final class SafariRouteDeviceTests: XCTestCase {
     private struct Words {
         let createWallet, thisDevice, openPage, addPasskey, confirm, finish, enter: String
         let connect, sign, confirmSend: String
+        /// The page's "Multisig created" (`home.multisig.create.created`).
+        let created: String
     }
 
     private var words: Words {
         locale == "zh"
             ? Words(createWallet: "创建钱包", thisDevice: "这台设备", openPage: "去签名页确认",
                     addPasskey: "添加通行密钥", confirm: "确认", finish: "继续", enter: "进入钱包",
-                    connect: "连接", sign: "签名", confirmSend: "确认发送")
+                    connect: "连接", sign: "签名", confirmSend: "确认发送", created: "多签账户已创建")
             : Words(createWallet: "Create Wallet", thisDevice: "This device", openPage: "Continue to signing page",
                     addPasskey: "Add a passkey", confirm: "Confirm", finish: "Continue", enter: "Enter Wallet",
-                    connect: "Connect", sign: "Sign", confirmSend: "Confirm send")
+                    connect: "Connect", sign: "Sign", confirmSend: "Confirm send", created: "Multisig created")
     }
 
     // MARK: - Steps
@@ -360,16 +362,18 @@ final class SafariRouteDeviceTests: XCTestCase {
         capture("\(locale)-\(tag)-wallet-tab")
     }
 
-    /// A web view's control by the start of its label (`anywhere`: any part of it; never a bare text),
-    /// tapped through its own coordinate: a web view's frames are offset
-    /// from the screen's here.
+    /// A web view's control by the start of its label (`anywhere`: any part of it; `exact`: the
+    /// whole of it; never a bare text), tapped through its own coordinate: a web view's frames are
+    /// offset from the screen's here.
     @discardableResult
-    func tapControl(_ labels: [String], timeout: TimeInterval = 15, anywhere: Bool = false) -> Bool {
+    func tapControl(_ labels: [String], timeout: TimeInterval = 15, anywhere: Bool = false,
+                    exact: Bool = false) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
+        let match = exact ? "==" : anywhere ? "CONTAINS" : "BEGINSWITH"
         while Date() < deadline {
             for label in labels {
                 let e = safari.webViews.descendants(matching: .any).matching(NSPredicate(
-                    format: "label \(anywhere ? "CONTAINS" : "BEGINSWITH") %@ AND elementType != %d", label,
+                    format: "label \(match) %@ AND elementType != %d", label,
                     XCUIElement.ElementType.staticText.rawValue)).firstMatch
                 if e.exists, e.frame.height > 0 {
                     // A tall sheet's last button sits under Safari's bottom
@@ -392,11 +396,26 @@ final class SafariRouteDeviceTests: XCTestCase {
         return top - 48
     }
 
+    /// The top of the open sheet's foot (r15-3: its action row stands
+    /// outside the scroll, so a row of the body can sit under it): its Back.
+    private var footTop: CGFloat? {
+        let back = safari.webViews.buttons
+            .matching(NSPredicate(format: "label == %@ OR label == %@", "Back", "返回")).firstMatch
+        return back.exists && back.frame.height > 0 ? back.frame.minY : nil
+    }
+
     /// A control under Safari's bottom bar is scrolled up into view first
     /// (a tall sheet's last button sits there), with a shot of where it landed.
-    func reveal(_ e: XCUIElement, _ label: String) {
+    /// `aboveFoot`: a row of the sheet's body, which must also clear the
+    /// sheet's foot (r16-23: in zh the network list put Gnosis under it, and
+    /// its tap landed on the foot).
+    func reveal(_ e: XCUIElement, _ label: String, aboveFoot: Bool = false) {
         var scrolled = false
-        for _ in 0..<3 where e.frame.maxY > visibleBottom {
+        let bottom = { () -> CGFloat in
+            guard aboveFoot, let foot = self.footTop else { return self.visibleBottom }
+            return min(self.visibleBottom, foot - 8)
+        }
+        for _ in 0..<4 where e.frame.maxY > bottom() {
             scrollSheet()
             scrolled = true
         }
@@ -442,9 +461,12 @@ final class SafariRouteDeviceTests: XCTestCase {
     }
 
     /// The wallet's home (the wallet tab may open on another screen, or with a sheet up).
+    /// r16-23: the tab by its whole label — the zh account "钱包E2E" (the
+    /// header's switcher) also begins with "钱包", and opening the switcher
+    /// left the run on a sheet.
     func toWalletHome(_ tag: String) {
         closeSheets()
-        if tapControl(["Wallet", "钱包"], timeout: 5) { sleep(3) }
+        if tapControl(["Wallet", "钱包"], timeout: 5, exact: true) { sleep(3) }
         capture("\(locale)-\(tag)-home")
     }
 
@@ -496,7 +518,7 @@ final class SafariRouteDeviceTests: XCTestCase {
                                   XCUIElement.ElementType.staticText.rawValue)).firstMatch
         if !gnosis.waitForExistence(timeout: 5) { tapControl(["More networks", "更多网络"], timeout: 5); sleep(2) }
         XCTAssertTrue(gnosis.waitForExistence(timeout: 15), "Gnosis offered")
-        reveal(gnosis, "Gnosis"); gnosis.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        reveal(gnosis, "Gnosis", aboveFoot: true); gnosis.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         sleep(2)
         capture("\(locale)-\(tag)f-review")
         // The review's own Create — exactly: not "Create multisig", not "Create New Account".
@@ -518,9 +540,9 @@ final class SafariRouteDeviceTests: XCTestCase {
         approvePasskeySheet(shot: "\(locale)-\(tag)i")
         sleep(6)
         capture("\(locale)-\(tag)j-back")
-        let created = pageText(containing: "Multisig created")
-        XCTAssertTrue(created.waitForExistence(timeout: 90) || pageText(containing: "多签已创建").exists,
-                      "the multisig is created")
+        // r16-23: in the run's own words (zh "多签账户已创建").
+        let created = pageText(containing: words.created)
+        XCTAssertTrue(created.waitForExistence(timeout: 90), "the multisig is created (\(words.created))")
         sleep(3)
         capture("\(locale)-\(tag)k-created")
         XCTAssertTrue(tapControl(["Done", "完成"]), "Done")

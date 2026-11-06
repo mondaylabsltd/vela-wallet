@@ -140,4 +140,15 @@ struct R13FollowupsTests {
         let away = try JSONDecoder().decode(MsTagged.self, from: Data(#"{"kind":"unreachable"}"#.utf8))
         #expect(MultisigHomeCard.cardNote(away, historySaidInActivity: true) == away)
     }
+
+    /// r16-16: a rate-limited multisig service is said as busy, with Retry —
+    /// never silence over the kept list.
+    @Test func aBusyServiceIsSaidWithRetry() throws {
+        let words = MsWords(loc: loc, hub: nil)
+        let busy = try JSONDecoder().decode(MsTagged.self, from: Data(#"{"kind":"busy"}"#.utf8))
+        let said = try #require(MultisigHomeCard.noteWords(busy, words: words))
+        #expect(said.retry)
+        #expect(said.text == words.t("service.busyNote"))
+        #expect(said.text.contains("busy"))
+    }
 }

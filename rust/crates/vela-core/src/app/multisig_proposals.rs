@@ -1161,6 +1161,10 @@ pub struct State {
     /// review (a shell asking again never pushes the bound back), and only
     /// the latest (`review_again`) is kept.
     reviewing: BTreeMap<String, u64>,
+    /// r16-19: reviews asked before their multisig's list was read (key →
+    /// chain, hash, blind): Reading until the list lands, then read — or
+    /// said gone when the list, read, does not hold them.
+    pub(crate) review_waiting: BTreeMap<String, (u64, String, bool)>,
     review_seq: u64,
     previews: BTreeMap<String, Value>,
     /// Each executor's last look ([`preview_key`]): when it was taken, what it said.
@@ -1880,7 +1884,7 @@ impl App for MultisigProposals {
                     default_member,
                 }
             }),
-            actions: s.actions.clone(),
+            actions: stops_follow_looks(&s.actions, &s.previews),
             reviews: one_note_per_failure(&s.reviews, &s.previews, &s.actions),
             review_states: s.review_states.clone(),
             previews: s.previews.clone(),
@@ -3478,10 +3482,23 @@ async fn review_proposal(
     // The followed list's proposal, or a link's read-only one.
     let found = flows::find_item(&lock(st), chain_id, hash);
     let (key, gathered) = match found {
-        None => (
-            format!("{chain_id}:{}", hash.to_ascii_lowercase()),
-            Err(ReviewState::failed(review_state::REASON_GONE)),
-        ),
+        None => {
+            let key = format!("{chain_id}:{}", hash.to_ascii_lowercase());
+            // r16-19: asked before the list was read (a sheet opened at
+            // launch): not found is no verdict yet — Reading, and read once
+            // the list lands (`reviews_after_refresh`).
+            let mut s = lock(st);
+            if list_unread(&s, chain_id) {
+                if s.reviewing.get(&key) == Some(&run) {
+                    s.reviewing.remove(&key);
+                    s.review_waiting
+                        .insert(key, (chain_id, hash.to_owned(), blind));
+                }
+                return;
+            }
+            drop(s);
+            (key, Err(ReviewState::failed(review_state::REASON_GONE)))
+        }
         Some((item, chain, account)) => {
             let gathered = review_state::bounded(io, async {
                 let gathered =
@@ -3495,6 +3512,44 @@ async fn review_proposal(
         }
     };
     keep_review(&mut lock(st), &key, run, gathered);
+}
+
+/// r16-19: whether the list a proposal of `chain_id` would be found in is
+/// not read yet — the first read is out, or the multisig's mailbox on that
+/// network was not read — so its absence says nothing.
+fn list_unread(s: &State, chain_id: u64) -> bool {
+    s.loading || !s.chains.iter().any(|c| c.chain_id == chain_id && c.mailbox)
+}
+
+/// r16-19: after a read of the list, each review that waited for it is read
+/// now when the list holds its transaction, said gone when the list — read
+/// — does not, and waits on while the list is still unread.
+pub(crate) async fn reviews_after_refresh(io: &Io<Event>, st: &Shared<State>) {
+    let ready: Vec<(u64, String, bool, u64)> = {
+        let mut s = lock(st);
+        let waiting = std::mem::take(&mut s.review_waiting);
+        let mut ready = Vec::new();
+        for (key, (chain_id, hash, blind)) in waiting {
+            if flows::find_item(&s, chain_id, &hash).is_some() {
+                let run = start_review_run(&mut s, &key);
+                ready.push((chain_id, hash, blind, run));
+            } else if list_unread(&s, chain_id) {
+                s.review_waiting.insert(key, (chain_id, hash, blind));
+            } else {
+                s.review_states
+                    .insert(key, ReviewState::failed(review_state::REASON_GONE));
+            }
+        }
+        ready
+    };
+    if ready.is_empty() {
+        return;
+    }
+    io.emit(Event::Changed);
+    future::join_all(ready.iter().map(|(chain_id, hash, blind, run)| {
+        review_proposal(io, st, *chain_id, hash, *blind, *run)
+    }))
+    .await;
 }
 
 /// A review's read landed: kept when it is the latest one asked.
@@ -4051,6 +4106,56 @@ async fn balance_of(
     shell::quantity(if raw.len() > 66 { &raw[..66] } else { raw })
         .map(Some)
         .ok_or(Unread)
+}
+
+/// r16-1 / r16-7: a fee-moved stop names the figure the next press signs.
+/// The stop (`execute:<hash>` failed `{kind: "fee_moved", amount, chainId,
+/// executor}`) was the figure of the moment it was said, while the sheet's
+/// fee line kept re-quoting — two figures on one sheet, and the next press
+/// signed the fee line's. Served, the stop follows its executor's look now:
+/// a priced look's fee is its `amount` (the figure Execute carries next), and
+/// a look with no figure withdraws it (the fee line says why nothing can
+/// run). Chosen over freezing the re-quotes: a frozen look ages past
+/// `PREVIEW_FRESH_MS`, and the next press would re-quote and stop again.
+pub fn stops_follow_looks(
+    actions: &BTreeMap<String, ActionState>,
+    previews: &BTreeMap<String, Value>,
+) -> BTreeMap<String, ActionState> {
+    actions
+        .iter()
+        .filter_map(|(key, action)| {
+            let kept = Some((key.clone(), action.clone()));
+            let ActionState::Failed { detail } = action else {
+                return kept;
+            };
+            let Some(hash) = key.strip_prefix("execute:") else {
+                return kept;
+            };
+            let Ok(said) = serde_json::from_str::<Value>(detail) else {
+                return kept;
+            };
+            if said.get("kind").and_then(Value::as_str) != Some("fee_moved") {
+                return kept;
+            }
+            let (Some(chain_id), Some(executor)) = (
+                said.get("chainId").and_then(Value::as_u64),
+                said.get("executor").and_then(Value::as_str),
+            ) else {
+                return kept;
+            };
+            let Some(look) = previews.get(&preview_key(chain_id, hash, executor)) else {
+                return kept;
+            };
+            let priced = look.get("kind").and_then(Value::as_str) == Some("priced");
+            let amount = look.get("fee").and_then(fee_amount).filter(|_| priced)?;
+            Some((
+                key.clone(),
+                ActionState::Failed {
+                    detail: fee_moved_detail(chain_id, executor, amount),
+                },
+            ))
+        })
+        .collect()
 }
 
 /// r12 S4: one note for one fact. A proposal whose execution look says it

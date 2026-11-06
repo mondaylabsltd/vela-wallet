@@ -444,11 +444,15 @@ pub fn view_more(s: &mut State) -> MoreView {
             )
         })
         .collect();
-    let down = lock(&s.service.outage).down;
+    let (down, limited) = {
+        let outage = lock(&s.service.outage);
+        (outage.down, outage.rate_limited)
+    };
     let note = waiting_note(&ListFacts {
         offline: s.offline,
         read_at: s.read_at,
         unreachable: service_unreachable(s, down),
+        busy: service_unreachable(s, limited),
         unreadable: s.unreadable.clone(),
         cached_at: s.cached_at,
         stale: s.stale,
@@ -1203,6 +1207,7 @@ pub async fn on_proposed(
 /// another) the members' cancellation; a link's read-only proposal is read
 /// again.
 pub async fn after_refresh(io: &Io<Event>, st: &Shared<State>) {
+    super::reviews_after_refresh(io, st).await;
     follow_held(io, st).await;
     let preview = lock(st)
         .more

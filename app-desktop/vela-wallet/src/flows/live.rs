@@ -229,20 +229,47 @@ pub fn assets(
 /// about THIS network when the feed is narrowed to one, because "no
 /// transactions" under a filter would read as "none at all". Which line is
 /// the core's; loading versus empty stays here.
+///
+/// r16-2 (§23 r15-1, the web's `feedFor`): `ours` — the feed names the
+/// account shown (`wallet::live::feed_is_for`); else nothing it holds is
+/// drawn, only skeletons. `mode` is the home Activity's ruling over no rows
+/// (`wallet::live::home_activity`): skeletons while it loads, the unread
+/// network named, and "No transactions yet" only where Activity may say
+/// "No activity yet".
 #[must_use]
 pub fn history_panel(
     view: &FeedView,
-    balance_unknown: bool,
+    ours: bool,
+    mode: &crate::wallet::live::HomeActivity,
     s: &FlowStrings,
     wallet: &crate::wallet::WalletStrings,
     hidden: bool,
 ) -> HistoryPanel {
-    let groups = history(view, s, wallet, hidden);
-    let bare = groups.is_empty();
+    use crate::wallet::live::HomeActivity;
+    let groups = if ours {
+        history(view, s, wallet, hidden)
+    } else {
+        Vec::new()
+    };
+    if !groups.is_empty() {
+        return HistoryPanel {
+            groups,
+            loading: false,
+            empty: None,
+        };
+    }
+    let (loading, empty) = match mode {
+        _ if !ours => (true, None),
+        HomeActivity::Rows | HomeActivity::Loading => (true, None),
+        HomeActivity::Unreachable { title } => (false, Some(title.clone())),
+        HomeActivity::Empty { .. } | HomeActivity::Unread { .. } => {
+            (false, Some(s.history_empty_of(&view.history_empty_key)))
+        }
+    };
     HistoryPanel {
         groups,
-        loading: bare && balance_unknown,
-        empty: (bare && !balance_unknown).then(|| s.history_empty_of(&view.history_empty_key)),
+        loading,
+        empty,
     }
 }
 
@@ -8886,12 +8913,34 @@ mod tests {
         };
         let (s, w) = (strings(), wallet_strings());
 
-        let loading = history_panel(&feed, true, &s, &w, false);
+        use crate::wallet::live::HomeActivity;
+        let said = HomeActivity::Empty {
+            title: "".into(),
+            caption: "".into(),
+        };
+        let loading = history_panel(&feed, true, &HomeActivity::Loading, &s, &w, false);
         assert!(loading.loading && loading.empty.is_none());
 
-        let empty = history_panel(&feed, false, &s, &w, false);
+        let empty = history_panel(&feed, true, &said, &s, &w, false);
         assert!(!empty.loading);
         assert_eq!(empty.empty, Some(s.history_empty.clone()));
+
+        // r16-2: a network not read is named, never "No transactions yet".
+        let unread = history_panel(
+            &feed,
+            true,
+            &HomeActivity::Unreachable {
+                title: "Can't reach Arc Testnet right now".into(),
+            },
+            &s,
+            &w,
+            false,
+        );
+        assert!(!unread.loading);
+        assert_eq!(
+            unread.empty,
+            Some("Can't reach Arc Testnet right now".into())
+        );
 
         // Narrowed: the core says which line (spec 082 RG5), from the filter
         // it was told.
@@ -8902,7 +8951,7 @@ mod tests {
             rows: Vec::new(),
             ..host.view()
         };
-        let narrowed = history_panel(&narrowed_feed, false, &s, &w, false);
+        let narrowed = history_panel(&narrowed_feed, true, &said, &s, &w, false);
         assert_eq!(narrowed.empty, Some(s.history_empty_filter.clone()));
         assert_ne!(s.history_empty, s.history_empty_filter);
     }
@@ -8973,6 +9022,27 @@ mod tests {
         };
 
         let s = strings();
+        // r16-2: another account's rows are never drawn under this one —
+        // History waits (skeletons) until the feed names the account shown.
+        let theirs = history_panel(
+            &view,
+            false,
+            &crate::wallet::live::HomeActivity::Loading,
+            &s,
+            &wallet_strings(),
+            false,
+        );
+        assert!(theirs.groups.is_empty() && theirs.loading && theirs.empty.is_none());
+        let ours = history_panel(
+            &view,
+            true,
+            &crate::wallet::live::HomeActivity::Loading,
+            &s,
+            &wallet_strings(),
+            false,
+        );
+        assert_eq!(ours.groups.len(), 2);
+        assert!(!ours.loading);
         let groups = history(&view, &s, &wallet_strings(), false);
         assert_eq!(groups.len(), 2, "the empty heading is not drawn");
         assert_eq!(groups[0].label, s.today);

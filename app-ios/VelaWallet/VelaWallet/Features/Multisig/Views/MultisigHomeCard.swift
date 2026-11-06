@@ -236,6 +236,12 @@ struct MultisigHomeCard: View {
     private var waitingNote: (text: String, retry: Bool)? {
         guard following, let note = Self.cardNote(view.waitingNote, historySaidInActivity: historySaidInActivity)
         else { return nil }
+        return Self.noteWords(note, words: words)
+    }
+
+    /// The core's note (`waiting_note`) in words, and whether Retry goes
+    /// with it — the core says which; this only words it. Pure.
+    static func noteWords(_ note: MsTagged, words: MsWords) -> (text: String, retry: Bool)? {
         let networks = { words.loc.list((note["chain_ids"]?.array ?? []).compactMap(\.int).map(words.network)) }
         switch note.kind {
         case "offline":
@@ -245,6 +251,8 @@ struct MultisigHomeCard: View {
             }
             return (words.t("service.offline"), false)
         case "unreachable": return (words.t("service.unreachableNote"), true)
+        // r16-16: the service answered its rate limit — busy, with Retry.
+        case "busy": return (words.t("service.busyNote"), true)
         case "chainUnreachable": return (words.t("service.chainUnreachable", ["network": networks()]), true)
         case "lastKnown":
             let time = Date(timeIntervalSince1970: Double(note["at"]?.int ?? 0) / 1000).formatted(date: .omitted, time: .shortened)

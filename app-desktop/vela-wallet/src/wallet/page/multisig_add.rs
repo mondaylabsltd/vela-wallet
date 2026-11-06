@@ -101,6 +101,27 @@ pub(crate) struct LinkPress {
     pub said: Option<AddSaid>,
     pub reading: bool,
     pub event: Option<ms_accounts::Event>,
+    /// r16-17: a damaged link: the field's new text and the corpus key
+    /// saying what is wrong — remembered, so Add on that text says it again.
+    pub broken: Option<(String, &'static str)>,
+}
+
+/// r16-17: what is wrong with the add field's `text`, as a corpus key — a
+/// damaged multisig link (the core's `broken_link`), or the text a damaged
+/// link left in the field (`broken`: that text and its key). `None` for
+/// anything else: an address is checked on Add, as the web does.
+pub(crate) fn field_damage(
+    text: &str,
+    broken: Option<&(String, &'static str)>,
+) -> Option<&'static str> {
+    if let AddField::Link(hash) = read_field(text)
+        && let Some(LinkRead::Broken { key, .. }) = read_link(&hash)
+    {
+        return Some(key);
+    }
+    broken
+        .filter(|(left, _)| !left.trim().is_empty() && left.trim() == text.trim())
+        .map(|(_, key)| *key)
 }
 
 /// [`LinkPress`] for `hash`. A damaged link is said and nothing is sent; an
@@ -114,6 +135,7 @@ pub(crate) fn press_link(loc: &Loc, hash: &str) -> LinkPress {
     };
     match read_link(hash) {
         Some(LinkRead::Broken { text, key }) => LinkPress {
+            broken: Some((text.clone(), key)),
             text,
             link: None,
             said: Some(AddSaid::Line(words::t(loc, key))),
@@ -126,6 +148,7 @@ pub(crate) fn press_link(loc: &Loc, hash: &str) -> LinkPress {
             said: None,
             reading: false,
             event: Some(open()),
+            broken: None,
         },
         Some(LinkRead::Proposal(proposal)) => LinkPress {
             text: proposal.multisig,
@@ -133,6 +156,7 @@ pub(crate) fn press_link(loc: &Loc, hash: &str) -> LinkPress {
             said: None,
             reading: true,
             event: Some(open()),
+            broken: None,
         },
         None => LinkPress {
             text: hash.to_owned(),
@@ -140,6 +164,7 @@ pub(crate) fn press_link(loc: &Loc, hash: &str) -> LinkPress {
             said: Some(AddSaid::Line(words::t(loc, "add.badInvite"))),
             reading: false,
             event: None,
+            broken: Some((hash.to_owned(), "add.badInvite")),
         },
     }
 }
@@ -179,6 +204,9 @@ pub(crate) struct AddForm {
     pub retry_link: bool,
     /// r15-2: a link pasted here is being read by the core: Add spins.
     pub reading: bool,
+    /// r16-17: the text a damaged link left in the field, and the corpus
+    /// key saying what is wrong with it (`field_damage`).
+    pub broken: Option<(String, &'static str)>,
     /// The address an `add` was sent for: its outcome is awaited.
     pub asked: Option<String>,
     /// Nothing says which network: the person picks one, then Add.
@@ -214,6 +242,7 @@ impl AddForm {
             retry: false,
             retry_link: false,
             reading: false,
+            broken: None,
             asked: None,
             choosing: false,
             chosen: None,
@@ -492,6 +521,7 @@ impl WalletPage {
                 form.link = press.link;
                 form.said = press.said;
                 form.reading = press.reading;
+                form.broken = press.broken;
                 form.retry_link = false;
                 form.choosing = false;
                 form.chosen = None;
@@ -515,6 +545,13 @@ impl WalletPage {
             }
             AddField::Address(address) => address,
         };
+        // r16-17: what a damaged link left in the field is said as that
+        // link, never as an address that is not valid.
+        if let Some(key) = field_damage(&address, form.broken.as_ref()) {
+            form.said = Some(AddSaid::Line(words::t(&loc, key)));
+            cx.notify();
+            return;
+        }
         // The core's one address rule (send-2), checksum included.
         match member_problem(&address, &[]) {
             Some(MemberProblem::Checksum) => {
@@ -793,10 +830,14 @@ impl WalletPage {
                     window,
                     move |text: String, _: &mut Window, cx: &mut gpui::App| {
                         page.update(cx, |this: &mut Self, cx| {
-                            this.multisig.add = Some(text);
+                            let loc = this.ms_loc();
                             let mut let_go = false;
                             if let Some(form) = this.multisig.add_form.as_mut() {
-                                form.said = None;
+                                // r16-17: a damaged link is said the moment
+                                // it lands in the field (pasted), in the
+                                // web's words; anything else waits for Add.
+                                form.said = field_damage(&text, form.broken.as_ref())
+                                    .map(|key| AddSaid::Line(words::t(&loc, key)));
                                 form.choosing = false;
                                 form.chosen = None;
                                 form.ens = None;
@@ -804,6 +845,7 @@ impl WalletPage {
                                 // link's: Add is Add again.
                                 let_go = std::mem::take(&mut form.retry_link);
                             }
+                            this.multisig.add = Some(text);
                             if let_go {
                                 this.ms_let_failed_link_go(cx);
                             }
@@ -1797,6 +1839,52 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    /// r16-17: a damaged invite pasted into the field is said as damaged
+    /// the moment it lands (the web's words, `add.badInvite`), and still is
+    /// on Add — also once Add has put what the link held in the field (or a
+    /// damaged link opened the sheet with it): never "Enter a valid
+    /// address" for it. Any other text says nothing until Add.
+    #[test]
+    fn a_damaged_invite_is_said_as_damaged_on_paste_and_on_every_add() {
+        // The tester's link, its address cut short.
+        let pasted = "https://wallet.getvela.app/en/wallet#msa=5042002:0xda5255E63cc0008C0eC7e00c3353&a=b6eaa3ac7dc579e91c7bf69ea85c18bc8086c5e3p";
+        assert_eq!(field_damage(pasted, None), Some("add.badInvite"));
+        // Add pressed: the field takes what the link held, and is said so.
+        let AddField::Link(hash) = read_field(pasted) else {
+            panic!("a link");
+        };
+        let loc = Loc::for_tag("en");
+        let press = press_link(&loc, &hash);
+        let broken = press.broken.clone().expect("remembered as damaged");
+        assert_eq!(broken.0, press.text);
+        assert!(
+            !press.text.contains("#msa="),
+            "the field shows what it held: {}",
+            press.text
+        );
+        // Add again on that text: the damaged words again.
+        assert_eq!(
+            field_damage(&press.text, Some(&broken)),
+            Some("add.badInvite")
+        );
+        assert_eq!(
+            words::t(&loc, "add.badInvite"),
+            "This invite link is damaged — part of it is missing or was changed on the way. Ask for the link again, or enter the multisig's address."
+        );
+        // Edited into something else: no longer that link's.
+        assert_eq!(field_damage("0xda52", Some(&broken)), None);
+        assert_eq!(field_damage(SAFE, None), None);
+        assert_eq!(field_damage("", None), None);
+        // A proposal link damaged: its own words.
+        assert_eq!(
+            field_damage("#ms=100:0x88cc", None),
+            Some("proposal.badLink")
+        );
+        // A whole invite is not damaged.
+        let invite = format!("https://wallet.getvela.app/en/wallet#msa=100:{SAFE}");
+        assert_eq!(field_damage(&invite, None), None);
     }
 
     /// r15-2: a link's lookup that did not come back offers Try again, and

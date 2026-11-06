@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AddressText from '$lib/ui/AddressText.svelte';
 	import SourceMark from './SourceMark.svelte';
 	import type { KeyValueRow } from '../model';
 
@@ -15,7 +16,9 @@
 			<dt>
 				{row.label}{#if row.source}<SourceMark text={row.source} />{/if}
 			</dt>
-			<dd class:mono={row.mono} data-tone={row.valueTone ?? 'neutral'}>{row.value}</dd>
+			<dd class:mono={row.mono} data-tone={row.valueTone ?? 'neutral'}>
+				<AddressText text={row.value} />
+			</dd>
 		</div>
 	{/each}
 </dl>

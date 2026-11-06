@@ -543,6 +543,8 @@ fun waitingNote(words: MultisigWords, note: JsonElement?, time: (Long) -> String
     return when (note.kind) {
         "offline" -> note["since"].long?.let { words.t("service.offlineSince", "time" to time(it)) to false } ?: (words.t("service.offline") to false)
         "unreachable" -> words.t("service.unreachableNote") to true
+        // r16-16: the service answered its rate limit — busy, with Retry.
+        "busy" -> words.t("service.busyNote") to true
         "chainUnreachable" -> words.t("service.chainUnreachable", "network" to networks()) to true
         "lastKnown" -> words.t("panel.lastKnown", "time" to time(note["at"].long ?: 0)) to false
         "stale" -> words.t("panel.stale") to false

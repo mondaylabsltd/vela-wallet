@@ -9,7 +9,7 @@
  * whole.
  */
 import { describe, expect, it } from 'vitest';
-import { addressRuns } from './address-runs';
+import { addressHalves, addressRuns } from './address-runs';
 
 describe('addressRuns', () => {
 	it('finds the short form inside a sentence, in any language', () => {
@@ -40,5 +40,30 @@ describe('addressRuns', () => {
 		expect(addressRuns(full)).toEqual([{ text: full, address: false }]);
 		expect(addressRuns('Arc Testnet')).toEqual([{ text: 'Arc Testnet', address: false }]);
 		expect(addressRuns('')).toEqual([]);
+	});
+});
+
+/**
+ * r16-21: a full address in a batch row broke wherever the line ran out
+ * ("…ab3169 / 2D", "…C7C8 / 102e2"). As on the desktop (r15-10), a full
+ * address breaks only between its two halves — 22 + 20 for an address —
+ * never one digit on its own.
+ */
+describe('addressHalves', () => {
+	it('splits a full address 22 + 20, the 0x with the first half', () => {
+		const full = '0x9641d764fc13c8B624c04430C7356C1C7C8102e2';
+		expect(addressHalves(full)).toEqual(['0x9641d764fc13c8B624c0', '4430C7356C1C7C8102e2']);
+		expect(addressHalves(full)!.map((h) => h.length)).toEqual([22, 20]);
+	});
+
+	it('splits a hash near evenly, and leaves short forms, words and calldata whole', () => {
+		const hash = `0x${'ab'.repeat(32)}`;
+		const [head, tail] = addressHalves(hash)!;
+		expect(head + tail).toBe(hash);
+		expect(head.length).toBe(34);
+		expect(addressHalves('0x5fb7e1…47B271')).toBeNull();
+		expect(addressHalves('Arc Testnet')).toBeNull();
+		expect(addressHalves(`0x${'00'.repeat(40)}`)).toBeNull();
+		expect(addressHalves('0xnothexnothexnothexnothexnothexnothexnoth')).toBeNull();
 	});
 });

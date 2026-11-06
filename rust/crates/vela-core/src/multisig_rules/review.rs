@@ -93,6 +93,13 @@ pub fn call(method: &str, args: &Value) -> Result<String, CoreError> {
         "settle" => to_json(
             &crate::app::multisig_review_state::settle_json(args).map_err(CoreError::Multisig)?,
         ),
+        // r16-3: whether a review's safety checks are final for this read —
+        // `{review?, anchor, checks, rechecked_ms}` → bool; "unchecked" is
+        // published only once they are.
+        "checksFinal" => to_json(
+            &crate::app::multisig_review_state::checks_final_json(args)
+                .map_err(CoreError::Multisig)?,
+        ),
         // §18 (b): a proposal sheet opened without a link, its transaction
         // not in the list — `{loading, unreadable, mailbox?}` →
         // `{key, retry}`: a service that did not answer is said as that.

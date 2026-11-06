@@ -4552,16 +4552,17 @@ impl WalletPage {
         // Try again) — the waiting group then does not say it again.
         let mut history_said = false;
         if self.identity.is_some() {
+            // r16-2: the feed's own words — whose rows they are, and whether
+            // it has looked (`FeedView.account` / `settled`) — over the
+            // account whose activity this is (the multisig shown, else the
+            // session's), and what the balance read of its networks.
+            let feed = self.feed_view(cx);
+            let shown = self.feed_shown(&feed, cx);
             let state = wallet_live::home_activity(
+                &feed,
+                &shown,
                 !activity.is_empty(),
-                resident::resident::<BalanceDashboard>(cx)
-                    .read(cx)
-                    .view()
-                    .balance_unknown,
-                // R12 S4: the account whose activity this is (the multisig
-                // shown, else the session's) has had its first scan back.
-                crate::executor::activity_feed::scanned(&crate::multisig::shown::address(cx)),
-                &resident::resident::<ActivityFeed>(cx).read(cx).shared(),
+                &crate::network_space::balance_view(cx),
                 &self.strings,
             );
             // r13-7: a multisig's Activity says what its history is — being
@@ -4579,8 +4580,19 @@ impl WalletPage {
                         .child(skeleton_row(theme));
                 }
                 wallet_live::HomeActivity::Empty { .. }
+                | wallet_live::HomeActivity::Unreachable { .. }
                 | wallet_live::HomeActivity::Unread { .. }
                     if elsewhere => {}
+                // r16-2: a network not read is named, never "No activity yet".
+                wallet_live::HomeActivity::Unreachable { title } => {
+                    activity_col = activity_col.child(empty_state(
+                        theme,
+                        &mut self.icons,
+                        Icon::Inbox,
+                        title,
+                        SharedString::default(),
+                    ));
+                }
                 wallet_live::HomeActivity::Unread { title, retry } => {
                     activity_col = activity_col.child(
                         div()
@@ -5195,7 +5207,21 @@ impl WalletPage {
             return fixtures::activity_default(&self.strings);
         }
         let feed = self.feed_view(cx);
+        // r16-2: another account's rows are never drawn under this one.
+        if !wallet_live::feed_is_for(&feed, &self.feed_shown(&feed, cx)) {
+            return Vec::new();
+        }
         wallet_live::activity_rows(&feed, &self.strings, &self.flow_strings, feed.hidden)
+    }
+
+    /// r16-2: the account whose activity is drawn — the multisig shown, else
+    /// the session's (`multisig::shown::address`, the feed's own
+    /// `AccountSwitched`); a pinned fixture feed is its own.
+    fn feed_shown(&self, feed: &vela_core::app::activity_feed::FeedView, cx: &gpui::App) -> String {
+        if Self::pinned_feed().is_some() {
+            return feed.account.clone();
+        }
+        crate::multisig::shown::address(cx)
     }
 
     /// The activity feed's view, with the balance's privacy told to it first:
@@ -5223,7 +5249,17 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) -> std::rc::Rc<vela_core::app::activity_feed::FeedView> {
         if let Some(pinned) = Self::pinned_feed() {
-            return std::rc::Rc::new(pinned);
+            // A fixture is its own account, read (r16-2's `feed_shown`).
+            let account = if pinned.account.is_empty() {
+                "0xme".to_owned()
+            } else {
+                pinned.account.clone()
+            };
+            return std::rc::Rc::new(vela_core::app::activity_feed::FeedView {
+                account,
+                settled: true,
+                ..pinned
+            });
         }
         self.sync_feed_privacy(cx);
         resident::resident::<ActivityFeed>(cx).read(cx).shared()
@@ -5723,7 +5759,8 @@ impl WalletPage {
                 &self.loc.relative_time(at, crate::executor::now_ms()),
             ))
         });
-        model.updated = wallet_live::updated_line(&model, ago);
+        // r16-2: never "Updated now" while a network it lives on is unread.
+        model.updated = wallet_live::updated_line(&model, &view, ago);
         // Issue 462: the core's "a read they asked for is out", held for at
         // least the press's minimum turn.
         model.refreshing = wallet_live::refresh_turning(
@@ -7921,14 +7958,23 @@ impl WalletPage {
             FlowPanel::Da1 => {
                 // Privacy is the feed's own flag, told from the balance's
                 // first (`feed_view`).
-                let balance_unknown = resident::resident::<BalanceDashboard>(cx)
-                    .read(cx)
-                    .shared()
-                    .balance_unknown;
                 let feed = self.feed_view(cx);
+                // r16-2: the feed's rows only under the account they are
+                // for, and its empty line only where Activity may say its
+                // own (`home_activity` over no rows).
+                let shown = self.feed_shown(&feed, cx);
+                let ours = wallet_live::feed_is_for(&feed, &shown);
+                let mode = wallet_live::home_activity(
+                    &feed,
+                    &shown,
+                    false,
+                    &crate::network_space::balance_view(cx),
+                    &self.strings,
+                );
                 let key = HistoryKey {
                     feed,
-                    balance_unknown,
+                    ours,
+                    mode,
                     language: self.loc.language().to_owned(),
                     day_ms: crate::executor::day_start_ms(crate::executor::now_ms()),
                 };
@@ -7940,7 +7986,8 @@ impl WalletPage {
                     _ => {
                         let panel = flows_live::history_panel(
                             &key.feed,
-                            balance_unknown,
+                            key.ours,
+                            &key.mode,
                             &self.flow_strings,
                             &self.strings,
                             key.feed.hidden,
@@ -12106,12 +12153,7 @@ impl WalletPage {
         } else {
             (create, sign_in)
         };
-        div()
-            .flex()
-            .gap(px(12.))
-            .pt(px(24.))
-            .child(create)
-            .child(sign_in)
+        account_button_row().child(create).child(sign_in)
     }
 
     /// Sign out and erase, shared by the live and mock account panels.
@@ -22919,12 +22961,22 @@ impl WalletPage {
     }
 }
 
+/// r16-20: the row "Create New Account" and "Sign In with Existing" stand
+/// in — side by side where they fit, the second under the first where they
+/// do not (Settings beside a sheet at the smallest window): each keeps its
+/// label's width, never both shrunk into labels cut at both ends.
+fn account_button_row() -> Div {
+    div().flex().flex_wrap().gap(px(12.)).pt(px(24.))
+}
+
 /// What History's rows are built from: the core's feed (the same view, by
 /// identity — the core hands over a new one whenever anything in it moves),
-/// the hero's ruling, the language and the day "Today" is.
+/// whose account it is, the Activity's ruling over no rows, the language and
+/// the day "Today" is.
 struct HistoryKey {
     feed: std::rc::Rc<vela_core::app::activity_feed::FeedView>,
-    balance_unknown: bool,
+    ours: bool,
+    mode: wallet_live::HomeActivity,
     language: String,
     day_ms: f64,
 }
@@ -22932,7 +22984,8 @@ struct HistoryKey {
 impl HistoryKey {
     fn same(&self, other: &Self) -> bool {
         std::rc::Rc::ptr_eq(&self.feed, &other.feed)
-            && self.balance_unknown == other.balance_unknown
+            && self.ours == other.ours
+            && self.mode == other.mode
             && self.language == other.language
             && self.day_ms.total_cmp(&other.day_ms).is_eq()
     }
@@ -23554,6 +23607,44 @@ fn signing_clock(chain_id: u32) -> crate::signing::status::Clock {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// r16-20: Settings → Account with a sheet open, at the smallest window
+    /// the app allows. The content column is what the sidebar, the settings
+    /// nav, the third column and the panel's sides leave; "Create New
+    /// Account" and "Sign In with Existing" do not fit side by side there
+    /// (both shrank, centred labels cut at both ends: "reate New Accoun").
+    /// The row wraps, each button at its label's width; and each alone fits
+    /// the column — its label at a full 0.62 em per character (wider than
+    /// the bundled face's average advance) plus its 32 px sides.
+    #[test]
+    fn the_account_buttons_wrap_and_each_fits_beside_a_sheet() {
+        let column = theme::WINDOW_W
+            - SIDEBAR_W
+            - theme::SETTINGS_NAV_W
+            - theme::THIRD_PANEL_W
+            - 2. * SETTINGS_PANEL_PAD_X;
+        let loc = crate::loc::Loc::for_tag("en");
+        let strings = crate::settings::SettingsStrings::resolve(&loc);
+        let size = 17.;
+        #[allow(clippy::cast_precision_loss, reason = "short labels")]
+        let width = |label: &str| label.chars().count() as f32 * 0.62 * size + 64.;
+        let (create, sign_in) = (
+            width(&strings.account_create),
+            width(&strings.account_sign_in),
+        );
+        assert!(create <= column, "{create} > {column}");
+        assert!(sign_in <= column, "{sign_in} > {column}");
+        assert!(
+            create + 12. + sign_in > column,
+            "side by side they do not fit"
+        );
+        let mut row = account_button_row();
+        assert_eq!(
+            row.style().flex_wrap,
+            Some(gpui::FlexWrap::Wrap),
+            "the second goes under the first"
+        );
+    }
 
     /// Issue 465: "Manage groups" is the start page's two sections and
     /// nothing else — Favorites with its count, Recent dApps with no second

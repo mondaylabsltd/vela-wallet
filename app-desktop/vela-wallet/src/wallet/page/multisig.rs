@@ -524,16 +524,36 @@ impl WalletPage {
         self.account_switcher = false;
         self.panel = PanelId::Multisig;
         let host = self.ms_host(cx);
+        // r16-19: the review (and the history) only of a transaction the
+        // machine holds — asked before its list was read (a sheet opened at
+        // launch), the core found nothing and said "no longer in the list"
+        // until Try again. Not listed yet, the sheet says Opening… and its
+        // asks (`ms_sheet_asks`) ask once it is.
+        let listed = Self::ms_listed(&host.read(cx).machines().proposals_view, chain_id, &hash);
+        let key = item_key(chain_id, &hash.to_ascii_lowercase());
+        self.multisig.previewed.remove(&format!("review:{key}"));
+        self.multisig
+            .previewed
+            .remove(&format!("timeline-open:{key}"));
+        if listed {
+            let now = crate::executor::now_ms();
+            self.multisig.previewed.insert(format!("review:{key}"), now);
+            self.multisig
+                .previewed
+                .insert(format!("timeline-open:{key}"), now);
+        }
         host.update(cx, |host, cx| {
             host.proposals(ms_proposals::Event::Watch, cx);
-            host.proposals(
-                ms_proposals::Event::Review {
-                    chain_id,
-                    safe_tx_hash: hash.clone(),
-                    blind: false,
-                },
-                cx,
-            );
+            if listed {
+                host.proposals(
+                    ms_proposals::Event::Review {
+                        chain_id,
+                        safe_tx_hash: hash.clone(),
+                        blind: false,
+                    },
+                    cx,
+                );
+            }
             host.proposals(
                 ms_proposals::Event::ReadSigners {
                     chain_id,
@@ -541,15 +561,31 @@ impl WalletPage {
                 },
                 cx,
             );
-            host.proposals(
-                ms_proposals::Event::Timeline {
-                    chain_id,
-                    safe_tx_hash: hash,
-                },
-                cx,
-            );
+            if listed {
+                host.proposals(
+                    ms_proposals::Event::Timeline {
+                        chain_id,
+                        safe_tx_hash: hash,
+                    },
+                    cx,
+                );
+            }
         });
         cx.notify();
+    }
+
+    /// r16-19: the machine holds this transaction — in its list, or as a
+    /// link's read-only one.
+    fn ms_listed(view: &ms_proposals::ProposalsView, chain_id: u64, hash: &str) -> bool {
+        view.items
+            .iter()
+            .any(|i| i.chain_id == chain_id && same(&i.safe_tx_hash, hash))
+            || view.linked.as_ref().is_some_and(|l| {
+                same(&l.safe_tx_hash, hash)
+                    && l.item
+                        .as_ref()
+                        .is_some_and(|i| i.chain_id == chain_id && same(&i.safe_tx_hash, hash))
+            })
     }
 
     /// The sheet went: the slower pace again, a link's transaction let go.
@@ -1525,39 +1561,48 @@ impl WalletPage {
     }
 
     fn ms_note_words(&self, note: &WaitingNote) -> (String, bool) {
-        let loc = &self.loc;
-        let names = |ids: &[u64]| loc.list(&ids.iter().map(|c| network(*c)).collect::<Vec<_>>());
-        let text = match note {
-            WaitingNote::Offline { since } => match since {
-                Some(at) => words::tv(
-                    loc,
-                    "service.offlineSince",
-                    &[("time", &loc.relative_time(*at, crate::executor::now_ms()))],
-                ),
-                None => words::t(loc, "service.offline"),
-            },
-            WaitingNote::Unreachable => words::t(loc, "service.unreachableNote"),
-            WaitingNote::ChainUnreachable { chain_ids } => words::tv(
+        waiting_note_words(&self.loc, note)
+    }
+}
+
+/// The waiting group's note in words, and whether it offers Retry (the
+/// core's `WaitingNote::retry`).
+pub(crate) fn waiting_note_words(loc: &crate::loc::Loc, note: &WaitingNote) -> (String, bool) {
+    let names = |ids: &[u64]| loc.list(&ids.iter().map(|c| network(*c)).collect::<Vec<_>>());
+    let text = match note {
+        WaitingNote::Offline { since } => match since {
+            Some(at) => words::tv(
                 loc,
-                "service.chainUnreachable",
-                &[("network", &names(chain_ids))],
-            ),
-            WaitingNote::LastKnown { at } => words::tv(
-                loc,
-                "panel.lastKnown",
+                "service.offlineSince",
                 &[("time", &loc.relative_time(*at, crate::executor::now_ms()))],
             ),
-            WaitingNote::Stale => words::t(loc, "panel.stale"),
-            WaitingNote::HistoryUnreadable { chain_ids } => words::tv(
-                loc,
-                "panel.historyUnreadable",
-                &[("network", &names(chain_ids))],
-            ),
-            WaitingNote::Checking => words::t(loc, "panel.checking"),
-        };
-        (text, note.retry())
-    }
+            None => words::t(loc, "service.offline"),
+        },
+        WaitingNote::Unreachable => words::t(loc, "service.unreachableNote"),
+        // r16-16: the service answered only "slow down".
+        WaitingNote::Busy => words::t(loc, "service.busyNote"),
+        WaitingNote::ChainUnreachable { chain_ids } => words::tv(
+            loc,
+            "service.chainUnreachable",
+            &[("network", &names(chain_ids))],
+        ),
+        WaitingNote::LastKnown { at } => words::tv(
+            loc,
+            "panel.lastKnown",
+            &[("time", &loc.relative_time(*at, crate::executor::now_ms()))],
+        ),
+        WaitingNote::Stale => words::t(loc, "panel.stale"),
+        WaitingNote::HistoryUnreadable { chain_ids } => words::tv(
+            loc,
+            "panel.historyUnreadable",
+            &[("network", &names(chain_ids))],
+        ),
+        WaitingNote::Checking => words::t(loc, "panel.checking"),
+    };
+    (text, note.retry())
+}
 
+impl WalletPage {
     /// A transaction's one word (`standings`).
     fn ms_standing_words(&self, standing: &Standing, chain_id: u64) -> String {
         let loc = &self.loc;
@@ -1709,7 +1754,8 @@ impl WalletPage {
             .or_else(|| linked.as_ref().and_then(|l| l.item.clone()));
         let title: SharedString = words::t(&loc, "proposal.title").into();
         let Some(item) = item else {
-            let lines = no_item_lines(&loc, &view, linked.as_ref(), account.is_some(), chain_id);
+            let shown = account.as_ref().map(|a| a.address.as_str());
+            let lines = sheet_missing_lines(&loc, &view, linked.as_ref(), shown, chain_id);
             let mut body = div().flex().flex_col().gap(px(8.));
             for line in lines {
                 body = body.child(
@@ -1723,7 +1769,7 @@ impl WalletPage {
             // r13-3: a link not read in time offers Try again (iOS, the web)
             // — the machine's `retry`, which starts the link's bound again.
             if link_offers_try_again(linked.as_ref())
-                || missing_offers_try_again(&view, linked.as_ref(), account.is_some(), chain_id)
+                || sheet_missing_retry(&view, linked.as_ref(), shown, chain_id)
             {
                 body = body.child(div().pt(px(4.)).child(crate::ui::vela_button(
                     "ms-proposal-open-retry",
@@ -1793,6 +1839,16 @@ impl WalletPage {
                     )
                 })),
         );
+        // r16-1: a press's failure is said beside the press, in the pinned
+        // foot (`ms_actions`); a sheet with no foot (done) says it here, at
+        // its head — never in both places.
+        if crate::multisig::sheet::failure_place(item.status)
+            == crate::multisig::sheet::FailurePlace::Head
+        {
+            for text in self.ms_press_failures(&view, &item, cx) {
+                body = body.child(ms_note(theme, &text, Tone::Caution));
+            }
+        }
 
         if let Some(note) = self.ms_dapp_sheet_note(theme, &item, cx) {
             body = body.child(note);
@@ -1873,19 +1929,9 @@ impl WalletPage {
             cx,
         ));
 
-        // What happened to the last press, said.
-        for action in [
-            format!("approve:{}", item.safe_tx_hash.to_ascii_lowercase()),
-            format!("execute:{}", item.safe_tx_hash.to_ascii_lowercase()),
-        ] {
-            if let Some(text) = view
-                .actions
-                .get(&action)
-                .and_then(|state| self.ms_action_words(state, chain_id, cx))
-            {
-                body = body.child(ms_note(theme, &text, Tone::Caution));
-            }
-        }
+        // r16-1: what happened to the last press is said beside the press,
+        // in the pinned foot (`ms_actions`) — never down here in the
+        // scrolling body, off screen at the press.
         if let Some(text) = view
             .executions
             .get(&key)
@@ -2029,37 +2075,49 @@ impl WalletPage {
         // The review: read once for one done; again while it waits — once
         // read (§12: one being read is the machine's; one that failed is the
         // person's "Try again", never asked again quietly here).
+        // r16-19: drawn means listed — a sheet opened before its list was
+        // read asks for its review (and its history) now, its first time.
         let state = crate::multisig::sheet::state_of(&view.review_states, chain_id, &hash);
+        let review = crate::multisig::sheet::review_of(&view.reviews, chain_id, &hash);
+        let unread = review.is_none_or(|r| {
+            r.is_null()
+                || r.pointer("/state/verdict/kind").and_then(Value::as_str) == Some("unavailable")
+                || r.pointer("/simulation/kind").and_then(Value::as_str) == Some("unreachable")
+        });
+        let every = if unread {
+            REVIEW_RETRY_MS
+        } else {
+            REVIEW_FRESH_MS
+        };
+        let listed_key = item_key(chain_id, &hash.to_ascii_lowercase());
+        let key = format!("review:{listed_key}");
         if item.status != ms_proposals::ProposalStatus::Done
-            && crate::multisig::sheet::asks_review_again(state)
+            && crate::multisig::sheet::asks_review_now(
+                true,
+                state,
+                self.multisig.previewed.get(&key).copied(),
+                now,
+                every,
+            )
         {
-            let review = crate::multisig::sheet::review_of(&view.reviews, chain_id, &hash);
-            let unread = review.is_none_or(|r| {
-                r.is_null()
-                    || r.pointer("/state/verdict/kind").and_then(Value::as_str)
-                        == Some("unavailable")
-                    || r.pointer("/simulation/kind").and_then(Value::as_str) == Some("unreachable")
+            self.multisig.previewed.insert(key, now);
+            events.push(ms_proposals::Event::Review {
+                chain_id,
+                safe_tx_hash: hash.clone(),
+                blind: false,
             });
-            let every = if unread {
-                REVIEW_RETRY_MS
-            } else {
-                REVIEW_FRESH_MS
-            };
-            let key = format!("review:{}", item_key(chain_id, &hash.to_ascii_lowercase()));
-            match self.multisig.previewed.get(&key) {
-                // First drawn: the open asked for it already.
-                None => {
-                    self.multisig.previewed.insert(key, now);
-                }
-                Some(at) if now - at >= every => {
-                    self.multisig.previewed.insert(key, now);
-                    events.push(ms_proposals::Event::Review {
-                        chain_id,
-                        safe_tx_hash: hash.clone(),
-                        blind: false,
-                    });
-                }
-                Some(_) => {}
+        }
+        if let std::collections::btree_map::Entry::Vacant(slot) = self
+            .multisig
+            .previewed
+            .entry(format!("timeline-open:{listed_key}"))
+        {
+            slot.insert(now);
+            if item.status != ms_proposals::ProposalStatus::Done {
+                events.push(ms_proposals::Event::Timeline {
+                    chain_id,
+                    safe_tx_hash: hash.clone(),
+                });
             }
         }
         if events.is_empty() {
@@ -2335,6 +2393,19 @@ impl WalletPage {
             },
             picked.as_deref(),
         );
+        // r16-1 (iOS `pressFailures(at:)`): the last press's failure is
+        // said right under the presses — or, none drawn, at the foot's top —
+        // so it is on screen where the person pressed, whatever the scroll.
+        let failures: Vec<Div> = self
+            .ms_press_failures(view, item, cx)
+            .iter()
+            .map(|text| ms_note(theme, text, Tone::Caution))
+            .collect();
+        let beside_presses = rule::presses_drawn(&plan.kind, plan.actor.is_some());
+        let mut failures = Some(failures);
+        if !beside_presses {
+            foot = foot.children(failures.take().unwrap_or_default());
+        }
         if plan.candidates.len() > 1
             && let Some(actor) = &plan.actor
         {
@@ -2359,6 +2430,7 @@ impl WalletPage {
                     approving,
                     cx,
                 ));
+                foot = foot.children(failures.take().unwrap_or_default());
             }
             (
                 FootKind::Execute {
@@ -2466,9 +2538,11 @@ impl WalletPage {
                     ));
                 }
                 foot = foot.child(presses);
+                // r16-1: said beside the presses pressed.
+                foot = foot.children(failures.take().unwrap_or_default());
                 // r11 one-press: a press the look stopped says why in its own
-                // line (`ActionState::Stopped`), which replaces the fee line —
-                // never the two side by side.
+                // line (`ActionState::Stopped`, drawn just above), which
+                // replaces the fee line — never the two side by side.
                 let stopped = matches!(
                     view.actions.get(&format!(
                         "execute:{}",
@@ -2762,6 +2836,19 @@ impl WalletPage {
                 });
             }),
         )
+    }
+
+    /// r16-1: what the last Approve / Execute of `item` came to when it did
+    /// not go, worded now from the view (`sheet::press_failure_lines`).
+    fn ms_press_failures(
+        &self,
+        view: &ms_proposals::ProposalsView,
+        item: &ProposalItem,
+        cx: &App,
+    ) -> Vec<String> {
+        crate::multisig::sheet::press_failure_lines(&view.actions, &item.safe_tx_hash, |state| {
+            self.ms_action_words(state, item.chain_id, cx)
+        })
     }
 
     /// What the last press came to, when it did not go (`ActionState`).
@@ -4873,11 +4960,24 @@ pub(crate) fn failure_words(
         Some(ShellFailure::FeeMoved {
             amount, executor, ..
         }) => fee_moved_words(loc, &amount, &name(&executor), chain_id),
-        Some(ShellFailure::Unknown { message }) => {
-            words::tv(loc, "proposal.failed", &[("reason", &message)])
-        }
+        // r16-18: a read before the passkey on a network that is failing.
+        Some(ShellFailure::ChainUnreachable { chain_id }) => words::tv(
+            loc,
+            "proposal.reason.chainUnreachable",
+            &[(
+                "network",
+                &crate::flows::live::chain_name(u32::try_from(chain_id).unwrap_or(u32::MAX)),
+            )],
+        ),
+        // r16-18: never a shell's or the core's diagnostic text as it is
+        // (`Other("…")` was said) — the web's `reasonText` rule: the core's
+        // "Something went wrong", a passkey whose signature did not check
+        // out said as that.
         Some(_) => reason("unknown"),
-        None => words::tv(loc, "proposal.failed", &[("reason", detail)]),
+        None if detail.contains("did not check out") || detail.contains("does not check out") => {
+            reason("passkeyFailed")
+        }
+        None => reason("unknown"),
     }
 }
 
@@ -4903,6 +5003,41 @@ pub(crate) fn fee_moved_words(
             ),
         )],
     )
+}
+
+/// r16-19 (§22 r15-11): the multisig shown is not (yet) the one the
+/// proposals machine follows — its list, read or kept, is another's: a
+/// sheet without a link can say nothing of it but that it is opening.
+fn following_another(view: &ms_proposals::ProposalsView, shown: Option<&str>) -> bool {
+    shown.is_some_and(|shown| view.followed.as_deref().is_none_or(|f| !same(f, shown)))
+}
+
+/// What a sheet whose transaction is not in the list says: Opening… while
+/// the multisig shown is not the one followed yet ([`following_another`]),
+/// else [`no_item_lines`].
+pub(crate) fn sheet_missing_lines(
+    loc: &crate::loc::Loc,
+    view: &ms_proposals::ProposalsView,
+    linked: Option<&ms_proposals::flows::LinkedView>,
+    shown: Option<&str>,
+    chain_id: u64,
+) -> Vec<String> {
+    if linked.is_none() && following_another(view, shown) {
+        return vec![words::t(loc, "proposal.opening")];
+    }
+    no_item_lines(loc, view, linked, shown.is_some(), chain_id)
+}
+
+/// Whether that sheet offers Try again ([`missing_offers_try_again`]) —
+/// never while it is opening.
+pub(crate) fn sheet_missing_retry(
+    view: &ms_proposals::ProposalsView,
+    linked: Option<&ms_proposals::flows::LinkedView>,
+    shown: Option<&str>,
+    chain_id: u64,
+) -> bool {
+    !(linked.is_none() && following_another(view, shown))
+        && missing_offers_try_again(view, linked, shown.is_some(), chain_id)
 }
 
 pub(crate) fn no_item_lines(
@@ -5040,6 +5175,64 @@ mod tests {
         assert_eq!(
             super::member_label(None, executor, Some("Mine".into()), None),
             "Mine"
+        );
+    }
+
+    /// r16-19 (§22 r15-11, the web's adoption): a sheet opened while the
+    /// multisig shown is not yet the one the proposals machine follows — at
+    /// launch, the list it holds is not this multisig's — says Opening…,
+    /// never "no longer in the list" nor "isn't shown here", and offers no
+    /// Try again; once followed, the core's `missing_said` speaks.
+    #[test]
+    fn a_sheet_whose_multisig_is_not_followed_yet_says_opening() {
+        use vela_core::app::multisig_proposals::ProposalsView;
+        let loc = crate::loc::Loc::for_tag("en");
+        let opening = vec![super::words::t(&loc, "proposal.opening")];
+        let shown = "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32";
+        let none = ProposalsView::default();
+        assert_eq!(
+            super::sheet_missing_lines(&loc, &none, None, Some(shown), 100),
+            opening
+        );
+        assert!(!super::sheet_missing_retry(&none, None, Some(shown), 100));
+        let chain = |mailbox| vela_core::app::multisig_proposals::ChainState {
+            chain_id: 100,
+            members: vela_core::app::multisig_shell::ChainMembers {
+                deployed: true,
+                owners: vec![],
+                threshold: 1,
+                nonce: 0,
+            },
+            items: vec![],
+            mailbox,
+        };
+        // Another multisig's list, read (or a kept copy): still Opening….
+        for mailbox in [true, false] {
+            let other = ProposalsView {
+                followed: Some("0x1111111111111111111111111111111111111111".into()),
+                chains: vec![chain(mailbox)],
+                ..ProposalsView::default()
+            };
+            assert_eq!(
+                super::sheet_missing_lines(&loc, &other, None, Some(shown), 100),
+                opening
+            );
+            assert!(!super::sheet_missing_retry(&other, None, Some(shown), 100));
+        }
+        // Followed (any case), its list read and without it: the core's words.
+        let followed = ProposalsView {
+            followed: Some(shown.to_ascii_lowercase()),
+            chains: vec![chain(true)],
+            ..ProposalsView::default()
+        };
+        assert_eq!(
+            super::sheet_missing_lines(&loc, &followed, None, Some(shown), 100),
+            vec![super::words::t(&loc, "proposal.notInMailbox")]
+        );
+        // No multisig shown: as before.
+        assert_eq!(
+            super::sheet_missing_lines(&loc, &none, None, None, 100),
+            vec![super::words::t(&loc, "proposal.notHere")]
         );
     }
 
@@ -5206,6 +5399,35 @@ mod tests {
             Some(&WaitingNote::Unreachable)
         );
         assert_eq!(card_note(None, true), None);
+    }
+
+    /// r16-20: a multisig's heading in Settings — its name and the rule chip
+    /// share a line that wraps (the chip goes under the name, never beside
+    /// a squeezed address); the full address below has the text column's
+    /// whole width.
+    #[test]
+    fn the_multisig_heading_wraps_its_chip_never_squeezing_the_address() {
+        let mut line = super::settings::name_and_rule_line();
+        let style = line.style();
+        assert_eq!(style.flex_wrap, Some(gpui::FlexWrap::Wrap));
+        assert_eq!(style.min_size.width, Some(px(0.).into()));
+    }
+
+    /// r16-16 (core `WaitingNote::Busy`): a multisig service that answers
+    /// only "slow down" is said as busy, with Retry as an unreachable one —
+    /// never left silent over the kept list, never "unreachable".
+    #[test]
+    fn a_busy_multisig_service_is_said_busy_with_retry() {
+        let loc = crate::loc::Loc::for_tag("en");
+        let (busy, retry) = waiting_note_words(&loc, &WaitingNote::Busy);
+        assert_eq!(
+            busy,
+            "Multisig service busy — waiting transactions will load shortly; retrying."
+        );
+        assert!(retry);
+        let (unreachable, retry) = waiting_note_words(&loc, &WaitingNote::Unreachable);
+        assert_ne!(busy, unreachable);
+        assert!(retry);
     }
 
     /// r9-9: a delegatecall to a contract Vela does not sign for is refused
