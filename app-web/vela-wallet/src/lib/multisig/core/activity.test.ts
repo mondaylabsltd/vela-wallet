@@ -154,6 +154,7 @@ const m = {
 	},
 	service: {
 		unreachableNote: 'service away',
+		busyNote: 'service busy',
 		retry: 'Retry',
 		offline: 'offline',
 		offlineSince: 'offline since {{time}}',
@@ -197,6 +198,18 @@ describe('the waiting group while the multisig service is away', () => {
 		// Nothing waiting is not "no activity": the group stays to say it.
 		seams.open = [];
 		expect(waitingRows.group(m)?.note).toBe('service away');
+	});
+
+	// r16-16: a rate-limited service (429) is said as busy, with Retry —
+	// never silence over the kept list.
+	it('a busy service is said once, over the last list, with a Retry', () => {
+		seams.open = [call('0xdeadbeef')];
+		seams.note = { kind: 'busy' };
+		const group = waitingRows.group(m)!;
+		expect(group.note).toBe('service busy');
+		expect(group.action).toEqual({ id: MULTISIG_RETRY, label: 'Retry' });
+		expect(group.rows).toHaveLength(1);
+		seams.note = null;
 	});
 
 	/**

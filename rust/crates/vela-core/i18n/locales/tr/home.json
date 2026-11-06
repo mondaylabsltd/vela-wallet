@@ -633,6 +633,7 @@
       "service": {
         "customNote": "Özel bir çoklu imza hizmeti kullanılıyor ({{host}})",
         "unreachableNote": "Çoklu imza hizmetine ulaşılamıyor — bekleyen işlemler yüklenemiyor; yeniden denenecek.",
+        "busyNote": "Çoklu imza hizmeti meşgul — bekleyen işlemler birazdan yüklenecek; yeniden denenecek.",
         "retry": "Tekrar dene",
         "offline": "Daha önce yüklenenler gösteriliyor.",
         "offlineSince": "{{time}} saatinde yüklenenler gösteriliyor.",

@@ -3160,6 +3160,68 @@ fn the_empty_state_needs_a_chain_to_have_answered() {
     assert_eq!(back.view().empty_key.as_deref(), Some(ASSETS_EMPTY));
 }
 
+/// Round 16 (r16-22): an empty account switched to under a hung Arc said
+/// "Deposit your first asset" (and "Updated now") for ~18 s before naming
+/// the outage. Its round was the shell's TTL cache — rows read minutes ago,
+/// no network asked now — while the live read of Arc was still out: the
+/// cache's "nothing" was taken as every network's. An empty-state claim
+/// needs every network read: rows only the cache answered never make one,
+/// and a cache that says "nothing" is read live at once (forced) — the
+/// claim is made, or the outage named, by that read.
+#[test]
+fn a_cache_that_says_nothing_never_claims_an_empty_wallet_until_read_live() {
+    use vela_core::app::balance_dashboard::ASSETS_EMPTY;
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: None,
+    });
+    let cached = Res::FetchSettled {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        tokens: vec![],
+        failed_chain_ids: vec![],
+        rate_limited_chain_ids: vec![],
+        read_chain_ids: vec![1, 56, ARC_TESTNET],
+        internal_chain_ids: vec![],
+        registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
+        read_at_ms: Some(NOW - 30_000.0),
+        now_ms: NOW,
+    };
+    let ops = sut.resolve(cached);
+    let view = sut.view();
+    assert_eq!(view.empty_key, None, "the cache's nothing is no network's");
+    assert_eq!(view.live_key, None, "nor 'listening' on a cache's word");
+    assert!(
+        ops.iter().any(|op| matches!(
+            op,
+            Op::FetchTokens { force: true, address, .. } if address == ADDR_A
+        )),
+        "read live at once: {ops:?}"
+    );
+    // The live read: Arc unread — named, never empty.
+    sut.resolve(settled_read(
+        vec![],
+        vec![ARC_TESTNET],
+        vec![1, 56, ARC_TESTNET],
+    ));
+    let view = sut.view();
+    assert_eq!(view.empty_key, None);
+    assert!(view
+        .unreachable_networks
+        .iter()
+        .any(|n| n.chain_id == ARC_TESTNET));
+    // Every network read, nothing held: now it may say so.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled_read(vec![], vec![], vec![1, 56, ARC_TESTNET]));
+    assert_eq!(sut.view().empty_key.as_deref(), Some(ASSETS_EMPTY));
+}
+
 /// Round 15 (r15-4): Dana held 10.53 USDC on Arc Testnet; with Arc unread
 /// (refused, or answering only "slow down") and its last-known rows lost,
 /// the other networks' empty answers made the Assets list say "Deposit your

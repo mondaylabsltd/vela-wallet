@@ -565,6 +565,7 @@
    "service": {
     "customNote": "Usando un servicio multifirma propio ({{host}})",
     "unreachableNote": "El servicio multifirma no está accesible: no se pueden cargar las transacciones pendientes; se reintentará.",
+    "busyNote": "El servicio multifirma está ocupado: las transacciones pendientes se cargarán en breve; se reintentará.",
     "retry": "Reintentar",
     "offline": "Se muestra lo que se cargó antes.",
     "offlineSince": "Se muestra lo que se cargó a las {{time}}.",

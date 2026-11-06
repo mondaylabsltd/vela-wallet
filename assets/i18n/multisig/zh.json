@@ -559,6 +559,7 @@
    "service": {
     "customNote": "正在使用自定义多签服务（{{host}}）",
     "unreachableNote": "多签服务无法连接——待批准交易无法加载，正在重试。",
+    "busyNote": "多签服务繁忙——待批准交易稍后加载，正在重试。",
     "retry": "重试",
     "offline": "显示的是之前加载的内容。",
     "offlineSince": "显示的是 {{time}} 加载的内容。",
