@@ -4605,8 +4605,7 @@ async fn execute_as(
     }
     // r16-4: the one press over no figure at all (its look could not price
     // it): the figure priced now is said, never signed unseen.
-    if let (true, None, Preview::Priced { fee, .. }) = (one_press && requoted, said_fee, &preview)
-    {
+    if let (true, None, Preview::Priced { fee, .. }) = (one_press && requoted, said_fee, &preview) {
         if let Some(now) = fee_amount(fee) {
             return ActionState::Failed {
                 detail: fee_moved_detail(chain_id, &input.executor.address, now),

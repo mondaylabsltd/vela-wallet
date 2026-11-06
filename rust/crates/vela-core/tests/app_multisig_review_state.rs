@@ -575,7 +575,7 @@ fn a_review_neither_check_read_is_ready_but_every_press_signs_only_anyway() {
         safe_tx_hash.to_ascii_lowercase(),
         fixture(1).address.to_ascii_lowercase()
     )]
-    .clone();
+        .clone();
     let shown = look["fee"]["amount"]
         .as_str()
         .and_then(vela_core::app::multisig_shell::quantity)

@@ -2345,7 +2345,12 @@ fn a_one_press_whose_fee_is_unknown_at_the_press_signs_nothing_and_says_why() {
     );
     assert_eq!(world.passkeys.len(), passkeys, "nothing signed");
     assert!(world.sent.is_empty());
-    let item = sut.view().items.into_iter().find(|i| i.safe_tx_hash == hash).unwrap();
+    let item = sut
+        .view()
+        .items
+        .into_iter()
+        .find(|i| i.safe_tx_hash == hash)
+        .unwrap();
     assert_eq!(item.approved, 1);
     // Check again: the network prices it now — the stop is lifted, the new
     // figure is drawn, and the one press is offered on it.
@@ -2376,8 +2381,14 @@ fn a_one_press_over_no_figure_signs_nothing_until_a_figure_is_shown() {
             quote: json!({"kind": "failed"}),
         },
     );
-    assert_eq!(preview_of(&mut sut, &mut world, &hash, &b)["kind"], "unpriced");
-    assert_eq!(sut.view().approve_execute[&format!("100:{lower}")], vec![b.clone()]);
+    assert_eq!(
+        preview_of(&mut sut, &mut world, &hash, &b)["kind"],
+        "unpriced"
+    );
+    assert_eq!(
+        sut.view().approve_execute[&format!("100:{lower}")],
+        vec![b.clone()]
+    );
     world.quote_answer = None;
     world.now += 20_000.0;
     let passkeys = world.passkeys.len();
@@ -2409,7 +2420,11 @@ fn a_one_press_over_no_figure_signs_nothing_until_a_figure_is_shown() {
         tx_hash: format!("0x{}", "cd".repeat(32)),
         user_op_hash: format!("0x{}", "ab".repeat(32)),
     });
-    run(&mut sut, &mut world, press(detail["amount"].as_str().map(str::to_owned)));
+    run(
+        &mut sut,
+        &mut world,
+        press(detail["amount"].as_str().map(str::to_owned)),
+    );
     assert_eq!(world.sent.len(), 1, "signed at the figure shown");
     assert!(matches!(
         sut.view().actions[&format!("execute:{lower}")],
