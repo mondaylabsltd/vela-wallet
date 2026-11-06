@@ -154,19 +154,29 @@ object WalletLive {
          * on a row. `null`, the mainnet space.
          */
         noValue: String? = null,
+        /**
+         * r15-1: the account the home shows. The feed's rows are drawn only
+         * when they are this account's (`FeedView.account`), and an empty
+         * Activity says "No activity yet" only once the core says it looked
+         * (`FeedView.settled`) — otherwise it is being read. `null`: a
+         * fixture board, drawn as given.
+         */
+        shownAccount: String? = null,
     ): WalletHomeModel {
         // The symbol is the language's (`fiatSymbol`): this screen's own, as its words are.
         val money = Money.of(currency, strings.language)
         val rows = assetRows(view, chainNames, currency, strings.language, noValue = noValue != null)
             .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
+        // r15-1: another account's rows are never drawn under this one.
+        val feedIsShown = shownAccount == null || feed.account.equals(shownAccount, ignoreCase = true)
         // Issue #469: the home draws the core's short list (`home_rows`, the
         // newest three); History keeps every row. The cut is the core's — the
         // shared helper below also builds History, so it never caps.
-        val groups = activity(feed.copy(rows = feed.home_rows), strings, now, chainNames)
+        val groups = if (feedIsShown) activity(feed.copy(rows = feed.home_rows), strings, now, chainNames) else emptyList()
         return fallback.copy(
             balance = balance(fallback.balance, view, strings, money, chainNames, noValue).copy(refresh = refresh(view, strings, now)),
             activitySection = fallback.activitySection.copy(
-                mode = if (groups.isEmpty()) SectionMode.Empty else SectionMode.Rows,
+                mode = activityMode(groups.isNotEmpty(), feedIsShown, feed.settled, live = shownAccount != null),
                 // Spec 082 RG5: which empty line — "no activity yet" or "none
                 // on this network" — is the core's, by the chain filter.
                 empty = fallback.activitySection.empty?.copy(title = strings.t(feed.home_empty_key)),
@@ -194,6 +204,20 @@ object WalletLive {
             ),
             assetRows = rows,
         )
+    }
+
+    /**
+     * r15-1: the home Activity's three states. Rows when the shown account's
+     * rows are there; the empty line only once the core looked at THIS
+     * account (its store read and first scan back, `settled`); otherwise the
+     * skeleton — never "No activity yet" over a history not read, never
+     * another account's rows. A fixture board ([live] false) draws as given.
+     */
+    fun activityMode(hasRows: Boolean, feedIsShown: Boolean, settled: Boolean, live: Boolean): SectionMode = when {
+        hasRows -> SectionMode.Rows
+        !live -> SectionMode.Empty
+        feedIsShown && settled -> SectionMode.Empty
+        else -> SectionMode.Loading
     }
 
     /**

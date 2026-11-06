@@ -266,12 +266,9 @@ struct MsProposalModel {
             out.append((outboxLine(entry), entry["sending"]?.bool == true ? .neutral : .warning, "outbox"))
         }
         if let line = executionLine { out.append(line) }
-        if let failure = words.actionFailure(approveState, chainId: chainId) {
-            out.append((failure, .danger, "approveFailed"))
-        }
-        if let failure = words.actionFailure(executeState, chainId: chainId) {
-            out.append((failure, .danger, "executeFailed"))
-        }
+        // r15-5: why a press did not go is said beside the button pressed
+        // (`pressFailures`); here only when no button is drawn for it.
+        out.append(contentsOf: pressFailures(at: .top).map { ($0.text, $0.tone, $0.id) })
         if let failure = words.actionFailure(rejectState, chainId: chainId) {
             out.append((failure, .danger, "rejectFailed"))
         }
@@ -283,6 +280,42 @@ struct MsProposalModel {
         }
         return out.map { (text: $0.0, tone: $0.1, id: $0.2) }
     }
+
+    /// r15-5: where a press's failure is said — beside the button that was
+    /// pressed, never only at the head of a long sheet the person has
+    /// scrolled away from (the fee-moved stop on iOS read as "nothing
+    /// happened"): Approve's (and the one press's) under Approve, Execute's
+    /// under Execute, at the head only when no such button is drawn.
+    enum PressArea { case approve, execute, top }
+
+    /// Where Execute's buttons and their notes are drawn.
+    var executeArea: PressArea {
+        if isDone { return .top }
+        if isReady, !canExecute.isEmpty { return .execute }
+        return canApprove.isEmpty ? .top : .approve
+    }
+
+    /// Where Approve's notes are drawn.
+    var approveArea: PressArea { !isDone && !canApprove.isEmpty ? .approve : .top }
+
+    /// Why the last Approve / Execute (or one press) did not go, for `area`
+    /// — the core's words (`actionFailure`), each said once.
+    func pressFailures(at area: PressArea) -> [(text: String, tone: MsNote.Tone, id: String)] {
+        var out: [(text: String, tone: MsNote.Tone, id: String)] = []
+        if approveArea == area, let failure = words.actionFailure(approveState, chainId: chainId) {
+            out.append((failure, .danger, "approveFailed"))
+        }
+        if executeArea == area, let failure = words.actionFailure(executeState, chainId: chainId),
+           !out.contains(where: { $0.text == failure }) {
+            out.append((failure, .danger, "executeFailed"))
+        }
+        return out
+    }
+
+    /// r15-14: "The network fee is paid by the executing member's account."
+    /// is said once — under the one press when it is offered, else where
+    /// Execute would be while it is not ready.
+    func feeNoteUnderExecute(oneTouchOffered: Bool) -> Bool { !isReady && !oneTouchOffered }
 
     /// One of this device's members approved it already.
     var approvedByHere: Bool {
@@ -1013,6 +1046,9 @@ struct MultisigProposalSheet: View {
                         signing(model, .approve) { approve(model) }
                     }
                     .accessibilityIdentifier("multisig.proposal.approve")
+                    // r15-5: why the press did not go, here where it was pressed
+                    // (the fee-moved stop: the new figure, for the next press).
+                    pressFailures(model, at: .approve)
                 }
                 if model.isReady, !model.canExecute.isEmpty {
                     let chosen = executor ?? model.canExecute.first ?? ""
@@ -1035,12 +1071,14 @@ struct MultisigProposalSheet: View {
                         signing(model, .execute) { execute(model, executor: chosen) }
                     }
                     .accessibilityIdentifier("multisig.proposal.execute")
+                    pressFailures(model, at: .execute)
                     if ["unpriced", "unchecked", "unverified"].contains(model.preview(for: chosen)?.kind ?? "") {
                         Button(words.t("proposal.feeRetry")) { askPreviews(force: true) }
                             .font(Typography.actionLabel.scaled(textScale).font)
                             .foregroundStyle(theme.fgBase)
                     }
-                } else if !model.isReady {
+                } else if model.feeNoteUnderExecute(oneTouchOffered: !model.canApprove.isEmpty && !model.view.approveExecute(model.item).isEmpty) {
+                    // r15-14: said once — the one press says it under itself.
                     MsNote(text: words.t("proposal.feeNote"))
                 }
                 if model.offersSendAgain {
@@ -1068,6 +1106,13 @@ struct MultisigProposalSheet: View {
                 }
             }
             .padding(.top, Tokens.Space.s8)
+        }
+    }
+
+    /// r15-5: the failures said beside the buttons of `area`.
+    @ViewBuilder private func pressFailures(_ model: MsProposalModel, at area: MsProposalModel.PressArea) -> some View {
+        ForEach(model.pressFailures(at: area), id: \.id) { note in
+            MsNote(text: note.text, tone: note.tone, identifier: "multisig.proposal.note.\(note.id)")
         }
     }
 

@@ -54,6 +54,12 @@ final class CameraScanner: NSObject {
         var actionLabelKey: String? {
             self == .denied ? "onboarding.create.openSettings" : nil
         }
+
+        /// The one way out's label, in `loc`'s words — what the scan sheet and
+        /// Explore's scanner put on the button that opens Settings (`nil`:
+        /// no button; Settings cannot grant a camera that is restricted,
+        /// missing or in use).
+        func actionLabel(_ loc: Loc) -> String? { actionLabelKey.map { loc.t($0) } }
     }
 
     private(set) var refusal: Refusal?

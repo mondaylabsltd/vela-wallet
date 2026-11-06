@@ -1568,12 +1568,17 @@ fn switching_accounts_drops_in_flight_answers() {
             }
         ]
     );
+    // r15-1: a feed never paints an account other than the one it is for —
+    // the previous account's rows go with the switch, and the view names
+    // the account it now stands for, not read yet.
     let before = sut.view();
-    assert_eq!(
-        before.rows.len(),
-        2,
-        "the previous feed keeps painting until the new read commits"
+    assert!(
+        before.rows.is_empty() && before.home_rows.is_empty(),
+        "the previous account's rows are never drawn under the new one"
     );
+    assert!(before.transactions.is_empty());
+    assert_eq!(before.account, "0xnewaccount");
+    assert!(!before.settled);
 
     // The OLD account's answers land late — and change nothing.
     let stale_extra = send("s2", "0xU2", "0xCafe", "99", 300_000.0);
@@ -1594,6 +1599,84 @@ fn switching_accounts_drops_in_flight_answers() {
     sut.resolve(Res::SyncCompleted { new_count: 0 });
     let ids: Vec<String> = items(&sut).into_iter().map(|i| i.id).collect();
     assert_eq!(ids, vec!["n1"]);
+}
+
+/// r15-1 (S3, Android): a cold start opened one account, then a link put a
+/// never-funded multisig in front while every Arc node hung — its home listed
+/// the first account's "Received" rows for as long as its own store read
+/// took. The feed says whose rows it holds (`account`) and whether "No
+/// activity yet" may be said (`settled`: this account's store read AND its
+/// first incoming scan came back); the previous account's rows go with the
+/// switch, on every shell at once.
+#[test]
+fn a_switched_feed_never_shows_the_previous_accounts_rows_and_says_when_it_has_looked() {
+    // Nothing told yet: no account, nothing settled.
+    let fresh = Sut::new().view();
+    assert_eq!(fresh.account, "");
+    assert!(!fresh.settled);
+
+    let mine = recv("r1", "0x3e9b95", "0.3", "USDC", 100_000.0);
+    let mut sut = boot(vec![mine.clone()]);
+    let view = sut.view();
+    assert_eq!(
+        view.account,
+        ADDR.to_lowercase(),
+        "the account the rows are for"
+    );
+    assert!(
+        view.settled,
+        "read and scanned: its rows (or its emptiness) are said"
+    );
+    assert_eq!(items(&sut).len(), 1);
+
+    // A link puts a multisig in front.
+    sut.dispatch(Event::AccountSwitched {
+        address: "0x7F3C000000000000000000000000000000De87".to_owned(),
+    });
+    let view = sut.view();
+    assert!(
+        view.rows.is_empty() && view.home_rows.is_empty(),
+        "never another account's rows"
+    );
+    assert!(view.transactions.is_empty(), "nor its records");
+    assert!(view.contact_rows.is_empty());
+    assert_eq!(view.account, "0x7f3c000000000000000000000000000000de87");
+    assert!(!view.settled, "not looked yet: never 'No activity yet'");
+
+    // Its store read lands (it holds nothing of its own) — still not settled
+    // while its first scan is out (Arc hung): reading, never "No activity yet".
+    sut.resolve(loaded(&sut, vec![mine.clone()], T0 + 1_000.0));
+    let view = sut.view();
+    assert!(view.rows.is_empty());
+    assert!(!view.settled, "the chains have not been asked what came in");
+    // The scan comes back: now its emptiness is a claim the core makes.
+    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    assert!(sut.view().settled);
+
+    // The same account told again (a shell re-entering its home) keeps what
+    // it has: no flash of "reading" over rows already read.
+    sut.dispatch(Event::AccountSwitched {
+        address: "0x7f3c000000000000000000000000000000DE87".to_owned(),
+    });
+    assert!(
+        sut.view().settled,
+        "the same account, said again, is not a switch"
+    );
+    sut.resolve(loaded(&sut, vec![], T0 + 1_500.0));
+    sut.resolve(Res::SyncCompleted { new_count: 0 });
+
+    // Back to the first account: its rows come back with its own read only.
+    sut.dispatch(Event::AccountSwitched {
+        address: ADDR.to_owned(),
+    });
+    assert!(sut.view().rows.is_empty());
+    assert!(!sut.view().settled);
+    sut.resolve(loaded(&sut, vec![mine], T0 + 2_000.0));
+    assert_eq!(items(&sut).len(), 1, "its own rows, read for it");
+    assert!(
+        !sut.view().settled,
+        "rows drawn; the empty claim still waits for the scan"
+    );
 }
 
 #[test]

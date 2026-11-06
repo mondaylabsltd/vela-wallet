@@ -440,7 +440,7 @@ private struct AccountsSheetBody: View {
                         Text(row.name)
                             .typeRole(Typography.fieldLabel)
                             .fontWeight(.semibold)
-                            .foregroundStyle(row.selected ? theme.accentBase : theme.fgBase)
+                            .foregroundStyle(theme.fgBase)
                         Text(row.addressDisplay)
                             .typeRole(Typography.monoSmall)
                             .foregroundStyle(theme.fgSubtle)
@@ -452,8 +452,10 @@ private struct AccountsSheetBody: View {
                         .typeRole(Typography.fieldLabel)
                         .foregroundStyle(theme.fgBase)
                     if row.selected {
+                        // r15-9: choosing an account moves no value and signs
+                        // nothing — neutral ink, as the multisig rows' check.
                         LucideIcon(.check, size: LucideIconSize.action)
-                            .foregroundStyle(theme.accentBase)
+                            .foregroundStyle(theme.fgBase)
                     }
                     if onRemove != nil, !sheet.remove.isEmpty {
                         Button { removing = offset } label: {

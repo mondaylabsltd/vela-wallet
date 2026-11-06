@@ -240,9 +240,12 @@ struct MultisigAddSheet: View {
                 ForEach(Array(safes.enumerated()), id: \.offset) { _, safe in
                     safeRow(safe)
                 }
+                // r15-8: a Safe already here (imported a moment ago) is not counted
+                // again — a press that would import nothing is never offered.
+                let toImport = picked.filter { view.row($0) == nil }
                 VelaButton(
-                    title: words.t("import.importSome", ["total": String(picked.count)]), kind: .ink,
-                    enabled: !picked.isEmpty, loading: view.importing.busy != nil
+                    title: words.t("import.importSome", ["total": String(toImport.count)]), kind: .ink,
+                    enabled: !toImport.isEmpty, loading: view.importing.busy != nil
                 ) { importPicked() }
                     .accessibilityIdentifier("multisig.import.go")
             }
@@ -251,13 +254,16 @@ struct MultisigAddSheet: View {
 
     private func safeRow(_ safe: MsJSON) -> some View {
         let address = safe["address"]?.string ?? ""
-        let already = view.row(address) != nil
         let outcome = view.importing.outcomes[address.lowercased()] ?? view.importing.outcomes[address]
+        // r15-8: a Safe this import added (by its row's Try again, say) says
+        // "Imported", never "Already added".
+        let here = view.row(address) != nil
+        let already = Self.importAlready(here: here, outcome: outcome)
         let deployed = (safe["chains"]?.array ?? []).contains { $0["deployed"]?.bool == true }
         let status = Self.importStatus(outcome, already: already, words: words)
         // A read that did not come back (the core's `import.retry`): said in
         // full under the row, with Try again — the same `import` asked again.
-        let retry = !already && view.importing.offersRetry(address)
+        let retry = !here && view.importing.offersRetry(address)
         let flags = [MsWords.short(address)] + (deployed ? [] : [words.t("import.undeployed")]) + (retry ? [] : [status].compactMap { $0 })
         return VStack(alignment: .leading, spacing: Tokens.Space.s8) {
             Toggle(isOn: Binding(
@@ -272,7 +278,7 @@ struct MultisigAddSheet: View {
                         .foregroundStyle(theme.fgSubtle)
                 }
             }
-            .disabled(already)
+            .disabled(here)
             .tint(theme.fgBase)
             .accessibilityIdentifier("multisig.import.safe")
             if retry, let status {
@@ -284,6 +290,11 @@ struct MultisigAddSheet: View {
             }
         }
     }
+
+    /// r15-8 (the web's `here`): "Already added" is for a Safe that was here
+    /// before this import said anything of it; one this import added says
+    /// what the import came to.
+    static func importAlready(here: Bool, outcome: MsJSON?) -> Bool { here && outcome == nil }
 
     /// What a Safe's row says it came to — the add's words for the same
     /// outcomes (`said`): a rate-limited import is busy with its network

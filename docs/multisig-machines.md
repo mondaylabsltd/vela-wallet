@@ -1791,3 +1791,49 @@ Left open:
   settle no longer waits on the pool thread).
 - Desktop: with only a rate-limited network and no rows the Assets strip
   stays loading, as the web's skeleton does.
+
+## 23. Round 15 native fixes
+
+Round 15's Android and iOS findings (r15-1, r15-5, r15-7, r15-8, r15-9,
+r15-14) and the iOS checks R15 left unconcluded. Decided by best practice
+under the owner's rules: one core owns the rules, the shells draw it; never
+another account's data; never act or fail silently; orange only for what
+moves value or signs. Each item was written test first.
+
+| Item | Cause | Decision |
+| --- | --- | --- |
+| **r15-1 (S3) Another account's activity** | The core's feed. `AccountSwitched` bumped the attempt (dropping late answers) but KEPT the previous account's folded rows and rendered them at once — "the previous feed keeps painting until the new read commits", a port of the TypeScript `addressRef` behaviour, pinned by a test. On Android the switch reaches the feed only after the wallet route's awaits (networks loaded, the space, the currency), so on a cold start whose link put a multisig in front the multisig's home drew the first account's "Received" rows for as long as that took. The view also never said whose rows it held, nor whether it had looked: Android drew "No activity yet" over any empty feed, before any read. | **Core:** a switch to another account empties the rows and records at once (the same account said again is not a switch). `FeedView` names the account its rows are for (`account`, lower-cased) and says when "No activity yet" may be claimed (`settled`: this account's store read AND its first incoming scan came back since it was switched to — the iOS/desktop R12 S4 rule, now the core's). The first scan back is drawn by a render the feed makes anyway (the cadence's armed timer, the re-read of what it found, or — a scan asked for again while it was out — the next scan's answer); a shell not following the cadence gets one render. The shared cadence vectors (one redraw per scan) are unchanged. Additive wire fields with serde defaults. **Shells:** the home's Activity and History draw the feed's rows only under the account they are for, and an empty list says "No activity yet" only when `settled`; otherwise the skeleton — the D3 rule for the balance, applied to Activity. Android `WalletLive.home(shownAccount =)` / `activityMode`, `FlowLive.history(shownAccount =)`; iOS `WalletLive.apply(shownAccount:)`, `FlowsLive.history(shownAccount:)`, `FeedViewWire.isFor`. Desktop: no shell change — its rows are the core's (now emptied on a switch) and its empty line already waits for the account's scan. Web: the core's emptying reaches it unchanged (its empty line waits for the balance's first look); adopting `account`/`settled` is the web lane's. |
+| **r15-5 (S3) iOS: the first press after a fee move did nothing** | The core's `fee_moved` stop (§19.11) worked: nothing was signed and the action recorded `failed {fee_moved}` in the right words. iOS drew every action's failure among the notes under the sheet's TITLE — off screen at the top of a long sheet, while the person was at the bottom pressing. To them the press did nothing. | A press's failure is said beside the button pressed (`MsProposalModel.pressFailures(at:)`): Approve's and the one press's under Approve, Execute's under Execute; at the head only when no button is drawn for it (done, or nothing here can act). Said once, in the core's words, with one "That didn't go through:" (`failureText` composes `proposal.failed` over `proposal.feeLine`; the web's doubled prefix, r15-6, is the web lane's). The next press signs the new figure, as the core rules. Android already drew it beside the button. |
+| **r15-7 (S4) Android: undeployed multisig's fee line** | The one-time setup lines (`setupLines`) were drawn only under Execute, never under the one press ("Approve and execute") the tester used. And a look whose Safe contracts went unread (`unverified`) or were read and refused is not offered as a one press (`approve_executors`), while `approveOnlyWhy` said only "would fail" and "cannot pay" — so nothing was said. | `MsProposalModel.executionLines(executor, failure)`: the fee line, then the setup lines — one function the one press and Execute both draw. `approveOnlyWhy` also says `unverified` ("Vela couldn't check the Safe contracts on {network}…", warning) and `refused` (danger), as iOS and the web do. |
+| **r15-8 (S4) Android: "Already added" after Try again** | The row said "Already added" whenever the Safe was on this device, so a Safe this very import added (busy, then Try again) read as one added before. | The web's rule: "Already added" only for a Safe that was here before this import said anything of it (`importAlready(here, outcome) = here && outcome == null`); otherwise what the import came to ("Imported"). A Safe here is not pickable again, and "Import N" counts only Safes not here yet — a press that would import nothing is never offered (it was: "Import 1" over a Safe just imported, a silent no-op). The same fix on iOS (`MultisigAddSheet.importAlready`), which had the same rule. |
+| **r15-9 (S4) iOS: orange in Switch account** | The Accounts sheet drew the selected Vela account's name and check in the accent; and Settings → Switch account (unlike the header switcher) kept the Vela account checked while a multisig was in front — two checks. | Choosing an account moves no value and signs nothing: name and check in neutral ink (`fgBase`). One check: while a multisig is shown no Vela account row wears it, in every switcher (`SettingsLive.withAccounts(multisigShown:)`). |
+| **r15-14 (S4) iOS: the fee note twice** | With the one press offered and the transaction not ready, the note was drawn under the one press AND in Execute's place. | Said once: Execute's place draws it only when no one press is offered (`feeNoteUnderExecute`), as Android does. |
+
+R15's unconcluded iOS checks, now covered by tests on the simulator:
+
+- **r14-10 "Open Settings":** the label choice is one function
+  (`CameraScanner.Refusal.actionLabel(loc)`) used by the scan sheet and
+  Explore's scanner: "Open Settings" for a camera refused for good, no button
+  for restricted, missing or busy cameras (the simulator has no camera, so the
+  live path stays a device check).
+- **Import busy with Try again:** a busy row offers Try again with the
+  network named; Try again asks the same import; the landed import says
+  "Imported".
+- **Newest link wins:** through the real accounts machine and the iOS
+  executor, an older link whose lookup is held while a newer one opens:
+  the newer stand and account stay, the older lookup's landing switches,
+  opens and says nothing (`MsSimWorld.holdGenesis`).
+
+Tests:
+
+- **Core:** `a_switched_feed_never_shows_the_previous_accounts_rows_and_says_when_it_has_looked`, `the_first_scan_back_settles_the_empty_claim_on_a_render_the_cadence_makes`; `switching_accounts_drops_in_flight_answers` now asserts the rows go with the switch; `privacy-hidden.json` regenerated (two new view fields).
+- **Android JVM:** `R15NativeFixesTest` (Activity keyed to the account, not settled is loading, the multisig's unread history still said; the one press's setup lines and the unread setup said; Imported after Try again).
+- **Android device:** `R15NativeDeviceTest` (an undeployed multisig's one press shows "Includes one-time setup on Gnosis:" and "deploying this multisig"; a rate-limited import's Try again lands as "Imported", never "Already added", with Import N shut). The unread-setup case stays JVM-only: the simulated world cannot leave the Safe contracts unread while the look's balance read answers (it says `unchecked` first).
+- **iOS:** `MultisigR15NativeTests` (the same r15-1 rules on the home and History; press failures beside their buttons with one prefix; the fee note once; Imported; one neutral check, no accent pixel on the hosted Accounts sheet; the camera label; newest link wins) and `MultisigFlowTests.aFeeThatMovedStopsThePressSaidBesideItAndTheNextPressSignsTheNewFigure` (through the hub over the world: a stale look whose re-quote moved signs nothing, `fee_moved` is said beside the one press with one prefix, and the next press signs exactly the new figure; `MsSimWorld` gains `skewMs`, `quoteAmount`, `sentFees`, `holdGenesis`).
+
+Left open:
+
+- r15-1 on a device end to end (cold start, killed process, hung Arc, a second link) was not re-run; the rule is the core's and every shell's draw is unit-tested. Android still tells the feed about a switch only after the wallet route's awaits; the home now says "reading" for that time instead of another account's rows.
+- Android History while not `settled` draws no skeleton of its own (an empty list, never "No transactions yet"); a skeleton there is polish for a later round.
+- The web draws the core's emptied rows but not yet `account` / `settled` (its empty line waits for the balance's first look): the web lane's to adopt.
+- The iOS fee-moved stop and the one-press setup line were proven in the simulated world, not on Arc with a moving relay.

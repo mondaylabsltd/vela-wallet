@@ -185,7 +185,8 @@ enum FlowsLive {
         on model: HistoryModel,
         loc: Loc,
         hidden: Bool,
-        networks: WalletNetworks = .builtin
+        networks: WalletNetworks = .builtin,
+        shownAccount: String? = nil
     ) -> HistoryModel {
         let header = FlowHeaderModel(
             title: model.header.title,
@@ -194,10 +195,14 @@ enum FlowsLive {
             pill: pill(selected: selected, loc: loc, fallback: model.header.pill,
                        networks: networks)
         )
-        let groups = WalletLive.activityGroups(feed.rows, loc: loc, hidden: hidden, networks: networks)
+        // r15-1 (the home's rule): the rows only under their own account;
+        // an empty history not looked at yet is being read.
+        let isShown = shownAccount.map { feed.isFor($0) } ?? true
+        let groups = isShown ? WalletLive.activityGroups(feed.rows, loc: loc, hidden: hidden, networks: networks) : []
+        let looked = shownAccount == nil || (isShown && feed.settled)
         return HistoryModel(
             header: header,
-            mode: groups.isEmpty ? .empty : .rows,
+            mode: !groups.isEmpty ? .rows : (looked ? .empty : .loading),
             // The core's choice (spec 082 RG5): "no transactions yet" on
             // every network, "none on this network" under a filter — never
             // the gallery board's filter sentence on an unfiltered history.
