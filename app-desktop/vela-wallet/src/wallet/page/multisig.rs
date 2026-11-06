@@ -1561,39 +1561,48 @@ impl WalletPage {
     }
 
     fn ms_note_words(&self, note: &WaitingNote) -> (String, bool) {
-        let loc = &self.loc;
-        let names = |ids: &[u64]| loc.list(&ids.iter().map(|c| network(*c)).collect::<Vec<_>>());
-        let text = match note {
-            WaitingNote::Offline { since } => match since {
-                Some(at) => words::tv(
-                    loc,
-                    "service.offlineSince",
-                    &[("time", &loc.relative_time(*at, crate::executor::now_ms()))],
-                ),
-                None => words::t(loc, "service.offline"),
-            },
-            WaitingNote::Unreachable => words::t(loc, "service.unreachableNote"),
-            WaitingNote::ChainUnreachable { chain_ids } => words::tv(
+        waiting_note_words(&self.loc, note)
+    }
+}
+
+/// The waiting group's note in words, and whether it offers Retry (the
+/// core's `WaitingNote::retry`).
+pub(crate) fn waiting_note_words(loc: &crate::loc::Loc, note: &WaitingNote) -> (String, bool) {
+    let names = |ids: &[u64]| loc.list(&ids.iter().map(|c| network(*c)).collect::<Vec<_>>());
+    let text = match note {
+        WaitingNote::Offline { since } => match since {
+            Some(at) => words::tv(
                 loc,
-                "service.chainUnreachable",
-                &[("network", &names(chain_ids))],
-            ),
-            WaitingNote::LastKnown { at } => words::tv(
-                loc,
-                "panel.lastKnown",
+                "service.offlineSince",
                 &[("time", &loc.relative_time(*at, crate::executor::now_ms()))],
             ),
-            WaitingNote::Stale => words::t(loc, "panel.stale"),
-            WaitingNote::HistoryUnreadable { chain_ids } => words::tv(
-                loc,
-                "panel.historyUnreadable",
-                &[("network", &names(chain_ids))],
-            ),
-            WaitingNote::Checking => words::t(loc, "panel.checking"),
-        };
-        (text, note.retry())
-    }
+            None => words::t(loc, "service.offline"),
+        },
+        WaitingNote::Unreachable => words::t(loc, "service.unreachableNote"),
+        // r16-16: the service answered only "slow down".
+        WaitingNote::Busy => words::t(loc, "service.busyNote"),
+        WaitingNote::ChainUnreachable { chain_ids } => words::tv(
+            loc,
+            "service.chainUnreachable",
+            &[("network", &names(chain_ids))],
+        ),
+        WaitingNote::LastKnown { at } => words::tv(
+            loc,
+            "panel.lastKnown",
+            &[("time", &loc.relative_time(*at, crate::executor::now_ms()))],
+        ),
+        WaitingNote::Stale => words::t(loc, "panel.stale"),
+        WaitingNote::HistoryUnreadable { chain_ids } => words::tv(
+            loc,
+            "panel.historyUnreadable",
+            &[("network", &names(chain_ids))],
+        ),
+        WaitingNote::Checking => words::t(loc, "panel.checking"),
+    };
+    (text, note.retry())
+}
 
+impl WalletPage {
     /// A transaction's one word (`standings`).
     fn ms_standing_words(&self, standing: &Standing, chain_id: u64) -> String {
         let loc = &self.loc;
@@ -5390,6 +5399,23 @@ mod tests {
             Some(&WaitingNote::Unreachable)
         );
         assert_eq!(card_note(None, true), None);
+    }
+
+    /// r16-16 (core `WaitingNote::Busy`): a multisig service that answers
+    /// only "slow down" is said as busy, with Retry as an unreachable one —
+    /// never left silent over the kept list, never "unreachable".
+    #[test]
+    fn a_busy_multisig_service_is_said_busy_with_retry() {
+        let loc = crate::loc::Loc::for_tag("en");
+        let (busy, retry) = waiting_note_words(&loc, &WaitingNote::Busy);
+        assert_eq!(
+            busy,
+            "Multisig service busy — waiting transactions will load shortly; retrying."
+        );
+        assert!(retry);
+        let (unreachable, retry) = waiting_note_words(&loc, &WaitingNote::Unreachable);
+        assert_ne!(busy, unreachable);
+        assert!(retry);
     }
 
     /// r9-9: a delegatecall to a contract Vela does not sign for is refused
