@@ -793,6 +793,136 @@ fn a_press_signs_only_the_fee_it_carries_even_on_a_fresh_look() {
     assert_eq!(world.sent.len(), 1, "signed at the fee shown");
 }
 
+/// Round 16 (r16-1 desktop, r16-7 iOS): after a fee-moved stop the footer
+/// kept re-quoting (0.10692, then 0.11975) while the stop still said
+/// "Network fee ≈ 0.099144" — two figures, and the next press signed the
+/// footer's. The rule: while the stop is shown it names the figure the next
+/// press signs — the executor's look now. It follows every re-quote; a look
+/// with no figure withdraws it (the fee line says why nothing can run).
+#[test]
+fn a_fee_moved_stop_names_the_figure_the_next_press_signs() {
+    let (mut world, mut sut, _) = setup(&[0, 1]);
+    let hash = hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
+    run(
+        &mut sut,
+        &mut world,
+        Event::Approve {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            owner: fixture(1).address,
+        },
+    );
+    let preview = || Event::Preview {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: fixture(0).address,
+    };
+    let quote = |amount: &str| vela_core::app::multisig_shell::MultisigShellResult::Quoted {
+        quote: serde_json::json!({"kind": "quoted", "fee": {"token": null, "amount": amount}, "totalGas": "0x1", "executorDeployed": true}),
+    };
+    world.now += 60_000.0;
+    world.quote_answer = Some(quote("0x100"));
+    run(&mut sut, &mut world, preview());
+    let key = format!("execute:{hash}");
+    let stop = |sut: &Sut| -> Option<Value> {
+        match sut.view().actions.get(&key) {
+            Some(ActionState::Failed { detail }) => serde_json::from_str(detail).ok(),
+            None => None,
+            other => panic!("{other:?}"),
+        }
+    };
+    // Pressed on a figure that moved: stopped at the look's (256).
+    run(
+        &mut sut,
+        &mut world,
+        Event::Execute {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            executor: fixture(0).address,
+            shown_fee: Some("255".to_owned()),
+        },
+    );
+    let said = stop(&sut).expect("the stop is said");
+    assert_eq!(said["kind"], "fee_moved");
+    assert_eq!(said["amount"], "256");
+    assert!(world.sent.is_empty());
+    // The footer re-quotes while the stop is shown: the stop follows it.
+    world.now += 20_000.0;
+    world.quote_answer = Some(quote("0x200"));
+    run(&mut sut, &mut world, preview());
+    let look = sut.view().previews[&look_key(&hash, &fixture(0).address)].clone();
+    assert_eq!(look["kind"], "priced", "{look}");
+    let said = stop(&sut).expect("still said");
+    assert_eq!(said["kind"], "fee_moved");
+    assert_eq!(said["amount"], "512", "the stop names the footer's figure");
+    // The next press, on that figure, signs exactly it.
+    run(
+        &mut sut,
+        &mut world,
+        Event::Execute {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            executor: fixture(0).address,
+            shown_fee: Some("512".to_owned()),
+        },
+    );
+    assert_eq!(world.sent.len(), 1, "signed at the figure the stop named");
+}
+
+/// r16-1, the other half: a stop whose look loses its figure (the fee
+/// could not be worked out) is withdrawn — it never names a figure no press
+/// would sign; the fee line says why nothing can run.
+#[test]
+fn a_fee_moved_stop_is_withdrawn_when_the_look_has_no_figure() {
+    let (mut world, mut sut, _) = setup(&[0, 1]);
+    let hash = hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
+    run(
+        &mut sut,
+        &mut world,
+        Event::Approve {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            owner: fixture(1).address,
+        },
+    );
+    let preview = || Event::Preview {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: fixture(0).address,
+    };
+    world.now += 60_000.0;
+    run(&mut sut, &mut world, preview());
+    run(
+        &mut sut,
+        &mut world,
+        Event::Execute {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            executor: fixture(0).address,
+            shown_fee: Some("999".to_owned()),
+        },
+    );
+    let key = format!("execute:{hash}");
+    assert!(matches!(
+        sut.view().actions.get(&key),
+        Some(ActionState::Failed { .. })
+    ));
+    world.now += 20_000.0;
+    world.quote_answer = Some(
+        vela_core::app::multisig_shell::MultisigShellResult::QuoteFailed {
+            detail: "no quote".to_owned(),
+        },
+    );
+    run(&mut sut, &mut world, preview());
+    let look = sut.view().previews[&look_key(&hash, &fixture(0).address)].clone();
+    assert_ne!(look["kind"], "priced", "{look}");
+    assert!(
+        sut.view().actions.get(&key).is_none(),
+        "no stop names a figure no press would sign: {:?}",
+        sut.view().actions.get(&key)
+    );
+}
+
 /// Round 14 (r14-4): with the network refusing, the desktop said "Vela won't
 /// use this multisig — its setup could give control of its funds to someone
 /// other than its members" of a multisig Vela created: the deploy gate's
