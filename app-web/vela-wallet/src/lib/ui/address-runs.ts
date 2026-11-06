@@ -32,3 +32,22 @@ export function addressRuns(text: string): AddressRun[] {
 	if (at < text.length) runs.push({ text: text.slice(at), address: false });
 	return runs;
 }
+
+/** Hex longer than this is split in two (a 6+6 short form never is). */
+const SPLIT_FROM = 24;
+/** Longer hex (calldata) wraps as text does: two halves would not fit. */
+const SPLIT_UP_TO = 66;
+
+/**
+ * r16-21: the two halves a full address (or hash) is drawn as — a line may
+ * break between them and nowhere else, the desktop's rule (r15-10,
+ * `ui::address::address_halves`): `0x` with the first half, the halves as
+ * near even as hex allows (22 + 20 for an address). `null`: drawn whole —
+ * a short form, words, calldata.
+ */
+export function addressHalves(text: string): [string, string] | null {
+	if (!/^0[xX][0-9a-fA-F]+$/.test(text)) return null;
+	if (text.length < SPLIT_FROM || text.length > SPLIT_UP_TO) return null;
+	const mid = 2 + Math.ceil((text.length - 2) / 2);
+	return [text.slice(0, mid), text.slice(mid)];
+}
