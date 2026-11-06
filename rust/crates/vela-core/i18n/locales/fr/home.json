@@ -245,7 +245,6 @@
         "setupExecutor": "activer le compte de {{name}}, qui paie les frais",
         "cantPayOther": "{{name}} ne peut pas payer les frais de réseau — {{other}} peut l’exécuter.",
         "pickerCantPay": "ne peut pas payer les frais",
-        "approvedNotExecuted": "Votre approbation est enregistrée. L’exécution n’a pas pu avoir lieu : {{reason}}",
         "notNeeded": "Pas nécessaire",
         "sendLink": "Envoyer le lien",
         "approvesInVela": "Approuve dans Vela sur son propre appareil : {{names}}. Envoyez-leur ce lien.",

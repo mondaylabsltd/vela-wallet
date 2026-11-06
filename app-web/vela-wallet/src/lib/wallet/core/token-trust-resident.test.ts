@@ -32,7 +32,8 @@ vi.mock('./token-trust-session', () => ({
 					address: event.address.toLowerCase(),
 					scanning: true,
 					incoming: [],
-					sim: null
+					sim: null,
+					unread_chains: []
 				});
 			}
 		};
@@ -40,7 +41,8 @@ vi.mock('./token-trust-session', () => ({
 	}
 }));
 
-const { pollIncoming, SCAN_CURSORS_KEY_PREFIX } = await import('./token-trust-resident');
+const { pollIncoming, scanUnreadChains, SCAN_CURSORS_KEY_PREFIX } =
+	await import('./token-trust-resident');
 
 const SAFE = '0x710311C8d71cc405c5b7782be1367eafa3d78937';
 const FACTS: TrustScanFacts = {
@@ -74,10 +76,14 @@ describe('a planned scan (r9-17)', () => {
 			scanning: false,
 			incoming: [],
 			sim: null,
-			cursors: READ
+			cursors: READ,
+			unread_chains: [5042002]
 		});
 		await polled;
 		expect(JSON.parse(kv.get(SCAN_CURSORS_KEY_PREFIX + SAFE.toLowerCase())!)).toEqual(READ);
+		// Round 16 leftover 5: what the poll could not read, for this account only.
+		expect(scanUnreadChains(SAFE)).toEqual([5042002]);
+		expect(scanUnreadChains('0x' + 'cc'.repeat(20))).toEqual([]);
 	});
 
 	it('a garbled kept coverage is no coverage', async () => {
@@ -85,7 +91,13 @@ describe('a planned scan (r9-17)', () => {
 		const polled = pollIncoming(SAFE, FACTS, [5042002]);
 		await vi.waitFor(() => expect(machine.events).toHaveLength(1));
 		expect(machine.events[0]).toMatchObject({ type: 'scan_requested', cursors: [] });
-		machine.onView!({ address: SAFE.toLowerCase(), scanning: false, incoming: [], sim: null });
+		machine.onView!({
+			address: SAFE.toLowerCase(),
+			scanning: false,
+			incoming: [],
+			sim: null,
+			unread_chains: []
+		});
 		await polled;
 	});
 });

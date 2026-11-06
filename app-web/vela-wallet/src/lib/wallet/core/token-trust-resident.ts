@@ -51,7 +51,13 @@ import type { TrustView } from '$lib/core/generated/TrustView';
  */
 const POLL_DEADLINE_MS = 60_000;
 
-const EMPTY_VIEW: TrustView = { address: null, scanning: false, incoming: [], sim: null };
+const EMPTY_VIEW: TrustView = {
+	address: null,
+	scanning: false,
+	incoming: [],
+	sim: null,
+	unread_chains: []
+};
 
 let session: TokenTrustSession | null = null;
 let started = false;
@@ -250,6 +256,17 @@ export function pollIncoming(
 		}
 		return settled.incoming;
 	});
+}
+
+/**
+ * Round 16 leftover 5: the networks of `address` the scan could not read on
+ * its last look at each (`TrustView.unread_chains`) — handed to the Activity
+ * feed with the scan's answer. Nothing for another account, or before any
+ * poll of this one.
+ */
+export function scanUnreadChains(address: string): number[] {
+	if (!address || view.address !== address.toLowerCase()) return [];
+	return [...(view.unread_chains ?? [])];
 }
 
 /**

@@ -242,7 +242,6 @@
         "setupExecutor": "手数料を支払う {{name}} のアカウントの有効化",
         "cantPayOther": "{{name}} はネットワーク手数料を支払えません — {{other}} なら実行できます。",
         "pickerCantPay": "手数料を支払えません",
-        "approvedNotExecuted": "承認は完了しました。実行はできませんでした：{{reason}}",
         "notNeeded": "不要",
         "sendLink": "リンクを送る",
         "approvesInVela": "自分のデバイスの Vela で承認します：{{names}}。このリンクを送ってください。",

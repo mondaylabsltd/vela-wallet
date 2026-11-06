@@ -1518,7 +1518,12 @@ if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.siz
   // 693 (round 16, r16-16, 2026-11-06): + `home.multisig.service.busyNote`
   //   (a multisig service answering its rate limit is said as busy, with
   //   Retry — never silence over the kept list). 692 + 1 = 693.
-  const pins = { multisig: 693 };
+  // 692 (round 16 leftovers, 2026-11-07): − `home.multisig.proposal.
+  //   approvedNotExecuted` ("Your approval is in. Executing couldn't run: …").
+  //   The one press does both or nothing (r16-4, §26): it never approves
+  //   alone, so no shell can reach those words; the web's `partial` phase that
+  //   said them is gone. 693 − 1 = 692.
+  const pins = { multisig: 692 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

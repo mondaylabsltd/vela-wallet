@@ -245,7 +245,6 @@
         "setupExecutor": "ativar a conta de {{name}}, que paga a taxa",
         "cantPayOther": "{{name}} não pode pagar a taxa de rede — {{other}} pode executá-la.",
         "pickerCantPay": "não pode pagar a taxa",
-        "approvedNotExecuted": "Sua aprovação foi registrada. A execução não pôde ser feita: {{reason}}",
         "notNeeded": "Não é necessário",
         "sendLink": "Enviar link",
         "approvesInVela": "Aprova no Vela pelo próprio dispositivo: {{names}}. Envie este link a eles.",

@@ -59,7 +59,7 @@
 	import { memberProblem } from '../core/members';
 	import { names } from '../core/names.svelte';
 	import { multisig, type MemberInfo } from '../core/store.svelte';
-	import { failureText } from '../shell/failure';
+	import { failureWords } from '../shell/failure';
 	import { localAccounts } from '../shell/local-accounts';
 	import CustomServiceNote from './CustomServiceNote.svelte';
 	import MemberKindChoice from './MemberKindChoice.svelte';
@@ -426,7 +426,7 @@
 			return;
 		}
 		// The person closed the passkey: nothing to say.
-		if (first.phase === 'failed') failure = failureText(first.error);
+		if (first.phase === 'failed') failure = failureWords(first.error, m.proposal);
 	}
 
 	/** The created multisig as the machine holds it now (its sharing moves on its own). */

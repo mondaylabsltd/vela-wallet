@@ -166,7 +166,6 @@
     "setupExecutor": "kích hoạt tài khoản của {{name}}, tài khoản trả phí",
     "cantPayOther": "{{name}} không trả được phí mạng — {{other}} có thể thực thi.",
     "pickerCantPay": "không trả được phí",
-    "approvedNotExecuted": "Đã ghi nhận phê duyệt của bạn. Không thể thực thi: {{reason}}",
     "notNeeded": "Không cần",
     "sendLink": "Gửi liên kết",
     "approvesInVela": "Phê duyệt trong Vela trên thiết bị của họ: {{names}}. Hãy gửi họ liên kết này.",

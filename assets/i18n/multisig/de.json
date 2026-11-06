@@ -166,7 +166,6 @@
     "setupExecutor": "Aktivieren des Kontos von {{name}}, das die Gebühr zahlt",
     "cantPayOther": "{{name}} kann die Netzwerkgebühr nicht zahlen — {{other}} kann es ausführen.",
     "pickerCantPay": "kann die Gebühr nicht zahlen",
-    "approvedNotExecuted": "Deine Genehmigung ist erteilt. Das Ausführen konnte nicht laufen: {{reason}}",
     "notNeeded": "Nicht nötig",
     "sendLink": "Link senden",
     "approvesInVela": "Genehmigt in Vela auf dem eigenen Gerät: {{names}}. Schick ihnen diesen Link.",

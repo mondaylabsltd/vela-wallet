@@ -250,7 +250,12 @@
 		const linked = machine?.linked;
 		if (!linked || drafting || !linked.retry || !linked.reason_key) return null;
 		if (linked.safe_tx_hash.toLowerCase() !== safeTxHash.toLowerCase()) return null;
-		return unreadWords(m.proposal, linked.reason_key, chainName(linked.chain_id));
+		return unreadWords(
+			m.proposal,
+			linked.reason_key,
+			chainName(linked.chain_id),
+			m.service.busyNote
+		);
 	});
 	let linkRetrying = $state(false);
 	/** r13-3: Try again — the machine's `retry`, which starts the link's bound again. */
@@ -680,9 +685,7 @@
 		| { kind: 'sent'; txHash: string | null; by: string }
 		/** r4b-1: how this device's execution ended when it was not the one that ran. */
 		| { kind: 'ended'; verdict: ExecutionVerdict; by: string }
-		| { kind: 'failed'; reason: string }
-		/** r4-11: "Approve and execute" approved; only the execute part could not run. */
-		| { kind: 'partial'; reason: string };
+		| { kind: 'failed'; reason: string };
 	let phase = $state<Phase>({ kind: 'idle' });
 	/**
 	 * r5reg-20: executed (here, or anywhere: its number is used) — a past
@@ -980,9 +983,9 @@
 	async function onExecute() {
 		if (!item || !actor || !members) return;
 		// "Approve and execute" is the machine's one press (`approve_execute`):
-		// should only the execute part be unable to run (before its passkey —
-		// a fee it cannot pay, a transaction that would fail), the machine
-		// still gives and keeps the approval (r4-11).
+		// both or nothing (r16-4, §26) — stopped before its signature, nothing
+		// is approved either, and the stop is said beside the press like any
+		// failure. The approval alone is the person's own Approve.
 		const oneTap = oneTapOffered;
 		phase = { kind: 'busy', what: 'execute' };
 		const by = actor.address;
@@ -1006,16 +1009,6 @@
 		// r5reg-21: its number was used meanwhile — what ran is said, not a failure.
 		if (error instanceof ExecutionSpentError) {
 			phase = { kind: 'idle' };
-			return;
-		}
-		// The approval the machine gave instead: said as approved, not executed.
-		if (oneTap && machine?.actions[`approve:${lower}`]) {
-			const reason =
-				error instanceof ExecutionWouldFailError ? whyText(m, error.why) : reasonOf(error);
-			phase = { kind: 'busy', what: 'approve' };
-			const approved = await proposalsHost.settled(`approve:${lower}`);
-			const again = approved ? actionError(approved, chainId) : null;
-			phase = again ? failedPhase(again) : { kind: 'partial', reason };
 			return;
 		}
 		phase = failedPhase(error);
@@ -1498,10 +1491,17 @@
 	 * §18 (b), round 14: a sheet opened without a link whose transaction is
 	 * not in the list — the core's rule (`review.missing`): a multisig service
 	 * that did not answer is said as that, with Try again; never "it hasn't
-	 * been shared with the members yet".
+	 * been shared with the members yet". Round 16 leftover 3: a service that
+	 * answered with its rate limit is said busy (`machine.busy`), in the
+	 * home's words.
 	 */
 	const missing = $derived(
-		missingSaid(listLoading, chainDown, store.chain(chainId)?.mailbox ?? null)
+		missingSaid(
+			listLoading,
+			chainDown,
+			store.chain(chainId)?.mailbox ?? null,
+			machine?.busy ?? false
+		)
 	);
 	let retrying = $state(false);
 	/** Withdraw the person's own proposal on its review (§3.6), or decline a site's request. */
@@ -1564,7 +1564,7 @@
 		{:else if missing.retry}
 			<!-- §18 (b): its read did not come back — which, and Try again. -->
 			<p class="warn" role="alert" data-testid="proposal-missing-unread">
-				{missingWords(m.proposal, missing.key, chainName(chainId))}
+				{missingWords(m.proposal, missing.key, chainName(chainId), m.service.busyNote)}
 			</p>
 			<Button
 				variant="secondary"
@@ -2131,10 +2131,6 @@
 			{#if phase.kind === 'failed'}
 				<p class="warn" role="alert" data-testid="proposal-failed">
 					{fillTemplate(m.proposal.failed, { reason: phase.reason })}
-				</p>
-			{:else if phase.kind === 'partial'}
-				<p class="fine" role="status" data-testid="approved-not-executed">
-					{fillTemplate(m.proposal.approvedNotExecuted, { reason: phase.reason })}
 				</p>
 			{/if}
 

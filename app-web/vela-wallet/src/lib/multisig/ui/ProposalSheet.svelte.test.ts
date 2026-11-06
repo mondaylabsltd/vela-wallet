@@ -78,6 +78,8 @@ const fake = vi.hoisted(() => ({
 	held: 0,
 	/** The person's Retry on what the machine could not read. */
 	retried: 0,
+	/** r16 leftover 3: the service's last answer was its rate limit (`view.busy`). */
+	busy: false,
 	/** The machine's draft, while a review-first sheet shows it (§3.6). */
 	machineDraft: null as any,
 	/** What "Propose and approve" on a dApp's draft comes to (the machine's `propose` state). */
@@ -151,6 +153,7 @@ vi.mock('../core/proposals.svelte', async () => {
 		if (fake.kept) outbox[`100:${SAFE.toLowerCase()}:${HASH}:${ME}`] = fake.kept;
 		return {
 			followed: fake.followed,
+			busy: fake.busy,
 			actions: machineSeam.actions,
 			// r4b-7: a flight read back after a reload, watched by the machine.
 			executions: fake.inflight
@@ -331,20 +334,11 @@ vi.mock('../shell/proposals-host.svelte', async () => {
 				}
 				case 'execute':
 					return execute(event);
-				case 'approve_execute': {
-					// core-ms-2: the machine's one press — stopped before any
-					// signature, it approves instead and keeps it (r4-11).
-					execute(event);
-					const lower = event.safe_tx_hash.toLowerCase();
-					const ran = machineSeam.actions[`execute:${lower}`] as
-						{ kind: string; preview?: { kind?: string } } | undefined;
-					const before = ['fails', 'unpriced', 'unchecked', 'priced'];
-					if (ran?.kind === 'stopped' && before.includes(ran.preview?.kind ?? '')) {
-						fake.calls.push('approve');
-						settle(`approve:${lower}`, { kind: 'done', kept: false });
-					}
-					return;
-				}
+				case 'approve_execute':
+					// core-ms-2: the machine's one press. r16-4 (§26): both or
+					// nothing — stopped before its signature, nothing is
+					// approved either; the stop is on `execute:<hash>`.
+					return execute(event);
 				case 'review_again':
 					// §12: the machine reads it again — here, read at once.
 					reviewSeam.state = { kind: 'ready' };
@@ -732,6 +726,7 @@ beforeEach(() => {
 	fake.executedBy = {};
 	fake.chains = [];
 	fake.followed = null;
+	fake.busy = false;
 	fake.kept = null;
 	fake.sentAgain = 0;
 	fake.checked = [];
@@ -1571,6 +1566,31 @@ describe('a link whose read did not come back (§18 item 1)', () => {
 			await screen.unmount();
 		});
 	}
+
+	it('notFound while the service is busy: the home busy words with Try again, never "couldn’t reach" (r16 leftover 3)', async () => {
+		fake.chain = { chainId: 100, members, items: [], mailbox: false };
+		fake.machineLinked = linkedAs('notFound', 'home.multisig.service.busyNote', true);
+		const screen = show();
+		await settle();
+		const note = document.querySelector('[data-testid="proposal-open-failed"]');
+		expect(note?.textContent).toContain('service.busyNote');
+		expect(note?.textContent).not.toContain('proposal.unread.linkService');
+		expect(document.querySelector('[data-testid="proposal-open-retry"]')).not.toBeNull();
+		await screen.unmount();
+	});
+
+	it('no link, its list unread because the service is busy: said busy with Try again (r16 leftover 3)', async () => {
+		fake.followed = SAFE;
+		fake.busy = true;
+		fake.chain = { chainId: 100, members, items: [], mailbox: false };
+		const screen = show();
+		await settle();
+		const note = document.querySelector('[data-testid="proposal-missing-unread"]');
+		expect(note?.textContent).toContain('service.busyNote');
+		expect(document.body.textContent).not.toContain('proposal.unread.linkService');
+		expect(document.querySelector('[data-testid="proposal-missing-retry"]')).not.toBeNull();
+		await screen.unmount();
+	});
 
 	it('notInMailbox: an answer — said as that, and no Try again', async () => {
 		// The multisig's own list, read (r15-11: never said of another's).
@@ -2499,19 +2519,23 @@ describe('who proposes, on the review before the passkey (r5reg-5)', () => {
 	});
 });
 
-describe('"Approve and execute" whose execute part cannot run (r4-11)', () => {
-	it('keeps the approval, and says only executing could not run', async () => {
+describe('"Approve and execute" whose execute part cannot run (r16-4, round 16 leftover 2)', () => {
+	it('approves nothing, and says why beside the press — never "approved, not executed"', async () => {
 		fake.chain.items = [item({ approved: 1, canExecute: [local], canApprove: [local] })];
 		const { ExecutorCannotPayError } = await import('../core/execution');
 		fake.executeThrows = new ExecutorCannotPayError(1n, 0n);
-		const screen = show();
+		const m = words();
+		m.proposal.failed = 'Failed: {{reason}}';
+		const screen = show({ m });
 		await settle();
 		press('proposal.approveAndExecute');
 		await settle();
-		expect(fake.calls).toEqual(['approve']);
-		const said = document.querySelector('[data-testid="approved-not-executed"]');
-		expect(said?.textContent).toContain('proposal.approvedNotExecuted');
-		expect(document.body.textContent).not.toContain('Failed:');
+		expect(fake.calls, 'nothing approved').toEqual([]);
+		expect(document.querySelector('[data-testid="approved-not-executed"]')).toBeNull();
+		expect(
+			document.querySelector('[data-testid="proposal-failed"]')?.textContent,
+			'the stop is said beside the press'
+		).toContain('Failed:');
 		await screen.unmount();
 	});
 });

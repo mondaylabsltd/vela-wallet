@@ -85,6 +85,8 @@ const FEED: FeedView = {
 	home_empty_key: 'home.emptyNoActivity',
 	account: '',
 	settled: false,
+	unread_chains: [],
+	unread_key: null,
 	hidden: false,
 	contact_rows: [],
 	// The detail is opened from History's list (`rows`); the home's cut plays
@@ -111,6 +113,7 @@ function view(tokens: BalanceToken[]): BalanceView {
 		hidden: false,
 		refreshing: false,
 		last_refreshed_at_ms: 0,
+		updated_at_ms: 0,
 		tokens,
 		unpriced_tokens: [],
 		failed_chain_ids: [],

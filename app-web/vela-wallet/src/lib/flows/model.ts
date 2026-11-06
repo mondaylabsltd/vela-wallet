@@ -279,6 +279,8 @@ export interface HistoryModel {
 	/** 'rows' renders the groups, 'empty' the filtered-empty line, 'loading' skeletons. */
 	mode: 'rows' | 'empty' | 'loading';
 	emptyText: string;
+	/** Round 16 leftover 5: a line over the rows — the networks the scan could not read. */
+	note?: string;
 	groups: ActivityGroupModel[];
 }
 

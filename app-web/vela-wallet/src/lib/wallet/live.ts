@@ -632,10 +632,12 @@ export function balanceRefresh(
 	m: WalletMessages,
 	input: BalanceRefreshInput
 ): NonNullable<BalanceModel['refresh']> {
-	const at = view.last_refreshed_at_ms;
+	// Round 16 leftover 6: "Updated" is the core's one answer (`updated_at_ms`):
+	// never a freshness claim while a network said for the account is unread.
+	const at = view.updated_at_ms;
 	return {
 		updated:
-			at === null
+			at === null || at === undefined
 				? undefined
 				: fill(m.balance.lastUpdated, {
 						ago: agoText(at, input.now, m.balance.ago, input.language)
@@ -1299,9 +1301,16 @@ export function liveActivityGroups(
  * takes seconds, so "the balance has looked" is a safe proxy for "the feed
  * has looked" — a presentation choice, recorded as such.
  */
-function activityMode(view: BalanceView, feed: FeedView | null | undefined): SectionModel['mode'] {
+function activityMode(
+	view: BalanceView,
+	feed: FeedView | null | undefined,
+	unread: string | undefined
+): SectionModel['mode'] {
 	if (!feed) return 'loading';
 	if (feed.rows.length > 0) return 'rows';
+	// Round 16 leftover 5: a network the scan could not read is said in the
+	// empty state's place — never "No activity yet", never a skeleton for ever.
+	if (unread !== undefined) return 'empty';
 	// r15-1 (§23): "No activity yet" only once the core says it has looked
 	// for this account (`settled`: its store read and its first scan back).
 	if (!feed.settled) return 'loading';
@@ -1309,6 +1318,31 @@ function activityMode(view: BalanceView, feed: FeedView | null | undefined): Sec
 	// look (`checking_key`, the core's "Checking…"), not over a cached total
 	// while the reads — a multisig's waiting proposals among them — are out.
 	return view.balance_unknown || (view.checking_key ?? null) !== null ? 'loading' : 'empty';
+}
+
+/**
+ * Round 16 leftover 5: the core's line for the networks the last scan could
+ * not read (`FeedView.unread_key`): "Activity can't be read on {{network}}
+ * right now." (the one network named) or "… on {{n}} networks …". `undefined`
+ * when every network was read — or a fixture has no words for it.
+ */
+export function activityUnreadLine(
+	feed: FeedView | null | undefined,
+	m: WalletMessages
+): string | undefined {
+	const chains = feed?.unread_chains ?? [];
+	const first = chains[0];
+	if (
+		feed?.unread_key === 'home.activityUnreadOne' &&
+		first !== undefined &&
+		m.activity.unreadOne
+	) {
+		return fill(m.activity.unreadOne, { network: chainName(first) });
+	}
+	if (feed?.unread_key === 'home.activityUnreadMany' && m.activity.unreadMany) {
+		return fill(m.activity.unreadMany, { n: String(chains.length) });
+	}
+	return undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -1438,6 +1472,7 @@ function liveSections(inputs: WalletLiveInputs) {
 			assetsEmpty: undefined,
 			assetRows: tokens.map((t) => liveAssetRow(t, currency, m, view.hidden, true, false)),
 			activityMode: 'rows' as const,
+			activityNote: undefined as string | undefined,
 			activityGroups: feed ? liveActivityGroups(feed.home_rows, m, feed.hidden) : [],
 			activityEmpty: { title: m.activity.emptyTitle, caption: m.activity.emptyCaption }
 		};
@@ -1446,6 +1481,7 @@ function liveSections(inputs: WalletLiveInputs) {
 	const historyMode =
 		feed && feed.rows.length === 0 && history?.stand === 'reading' ? ('loading' as const) : null;
 	const historyUnread = activitySaysHistory(inputs);
+	const unread = activityUnreadLine(feed, m);
 	return {
 		balance: liveBalance(view, currency, m, inputs.refresh, inputs.noValue),
 		// The filter's own case, not the core's empty wallet (`empty_key` is
@@ -1460,7 +1496,9 @@ function liveSections(inputs: WalletLiveInputs) {
 		assetRows: tokens.map((t) =>
 			liveAssetRow(t, currency, m, view.hidden, inputs.noValue !== undefined, quiet.has(t.chain_id))
 		),
-		activityMode: historyMode ?? activityMode(view, feed),
+		activityMode: historyMode ?? activityMode(view, feed, unread),
+		// Round 16 leftover 5: over rows, the networks the scan could not read.
+		activityNote: feed && feed.rows.length > 0 ? unread : undefined,
 		// The home's Activity is the newest three (issue 469): the core's
 		// `home_rows`, never `rows` — a long history pushed Assets off the
 		// screen. "All" opens History, which draws every row.
@@ -1478,13 +1516,15 @@ function liveSections(inputs: WalletLiveInputs) {
 						caption: '',
 						...(history.retry ? { action: history.retry } : {})
 					}
-				: {
-						title:
-							feed?.home_empty_key === 'home.emptyNoActivityNetwork'
-								? m.activity.emptyTitleNetwork
-								: m.activity.emptyTitle,
-						caption: m.activity.emptyCaption
-					}
+				: unread !== undefined
+					? { title: unread, caption: '' }
+					: {
+							title:
+								feed?.home_empty_key === 'home.emptyNoActivityNetwork'
+									? m.activity.emptyTitleNetwork
+									: m.activity.emptyTitle,
+							caption: m.activity.emptyCaption
+						}
 	};
 }
 
@@ -1503,7 +1543,8 @@ export function withLiveWallet(model: WalletHomeModel, inputs: WalletLiveInputs)
 		activitySection: {
 			...model.activitySection,
 			mode: live.activityMode,
-			empty: live.activityEmpty
+			empty: live.activityEmpty,
+			...(live.activityNote === undefined ? {} : { note: live.activityNote })
 		},
 		activityGroups: live.activityGroups
 	};
@@ -1536,7 +1577,8 @@ export function withLiveWalletDesktop(
 		activitySection: {
 			...model.activitySection,
 			mode: live.activityMode,
-			empty: live.activityEmpty
+			empty: live.activityEmpty,
+			...(live.activityNote === undefined ? {} : { note: live.activityNote })
 		},
 		activityGroups: live.activityGroups,
 		// The third column is the model's to open on a live page: a tapped row

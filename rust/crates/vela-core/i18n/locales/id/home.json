@@ -242,7 +242,6 @@
         "setupExecutor": "mengaktifkan akun {{name}}, yang membayar biaya",
         "cantPayOther": "{{name}} tidak bisa membayar biaya jaringan — {{other}} bisa menjalankannya.",
         "pickerCantPay": "tidak bisa membayar biaya",
-        "approvedNotExecuted": "Persetujuan Anda sudah masuk. Eksekusi tidak dapat berjalan: {{reason}}",
         "notNeeded": "Tidak diperlukan",
         "sendLink": "Kirim tautan",
         "approvesInVela": "Menyetujui di Vela dari perangkatnya sendiri: {{names}}. Kirimkan tautan ini kepada mereka.",

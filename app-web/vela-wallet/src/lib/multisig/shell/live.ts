@@ -40,7 +40,7 @@ import type { MultisigOperation } from '../generated/MultisigOperation';
 import { passkeyRequest, type MultisigShellDeps, type PeerTransport } from './handler';
 import { shellFailure, type ShellFailure } from './failure';
 
-export { readShellFailure, failureText, shellFailure, type ShellFailure } from './failure';
+export { readShellFailure, failureWords, shellFailure, type ShellFailure } from './failure';
 
 type Op<T extends MultisigOperation['type']> = Extract<MultisigOperation, { type: T }>;
 
