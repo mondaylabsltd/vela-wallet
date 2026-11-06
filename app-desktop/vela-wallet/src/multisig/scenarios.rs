@@ -582,6 +582,7 @@ fn proposed_approved_executed_and_recorded() {
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         executor,
+        shown_fee: None,
     });
     assert_eq!(sim.world().sent.len(), 1, "one user operation");
     assert!(
@@ -699,6 +700,7 @@ fn one_short_is_looked_at_and_approved_and_executed_in_one_press() {
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         executor: second,
+        shown_fee: None,
     });
     assert_eq!(sim.world().sent.len(), 1, "one user operation");
     // Its approval is the execution's own sender (`msg.sender`): no
@@ -861,6 +863,47 @@ fn a_proposal_link_opens_its_transaction() {
     assert!(sim.machines.proposals_view.linked.is_some());
 }
 
+/// r15-2: an invite opened with a multisig in front is said as an invite,
+/// at once — the same stand a Vela account in front gets.
+#[test]
+fn an_invite_opened_with_a_multisig_in_front_is_said_at_once() {
+    let mut sim = booted(&[0, 1]);
+    let shown = created(&mut sim);
+    assert!(
+        sim.machines
+            .accounts_view
+            .active
+            .as_deref()
+            .is_some_and(|a| a.eq_ignore_ascii_case(&shown)),
+        "the multisig is in front"
+    );
+    let url = vela_core::multisig_link::add_link(
+        vela_core::multisig_link::SITE_ORIGIN,
+        "en",
+        B,
+        &[100],
+        &[],
+    )
+    .unwrap_or_default();
+    let hash = url
+        .split_once('#')
+        .map(|(_, h)| format!("#{h}"))
+        .unwrap_or_default();
+    sim.accounts(AccountsEvent::OpenLink {
+        hash,
+        take_kept: false,
+    });
+    assert!(
+        matches!(
+            &sim.machines.accounts_view.link,
+            Some(vela_core::app::multisig_accounts::link::LinkStand::Invite { link })
+                if link.multisig.eq_ignore_ascii_case(B)
+        ),
+        "{:?}",
+        sim.machines.accounts_view.link
+    );
+}
+
 /// The facts as they move: a network added is told to the machines that
 /// read networks, once; nothing else is said again.
 #[test]
@@ -915,6 +958,7 @@ fn notifications_follow_the_views_and_skip_the_persons_own_moves() {
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         executor: fixture(0).address,
+        shown_fee: None,
     });
     sim.proposals(ProposalsEvent::Refresh { fresh: true });
     let got = look(&sim, &mut n);
@@ -1339,6 +1383,7 @@ fn a_sites_transaction_from_a_multisig_is_proposed_held_and_answered() {
             chain_id: 100,
             safe_tx_hash: hash.to_owned(),
             executor: fixture(0).address,
+            shown_fee: None,
         });
         tx
     };

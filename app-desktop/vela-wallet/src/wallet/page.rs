@@ -4658,7 +4658,8 @@ impl WalletPage {
         if assets.is_empty()
             && !elsewhere
             && strip_view
-                .is_some_and(|view| wallet_live::assets_strip_empty(&view, self.chain_filter))
+                .as_ref()
+                .is_some_and(|view| wallet_live::assets_strip_empty(view, self.chain_filter))
         {
             assets_col = assets_col.child(empty_state(
                 theme,
@@ -4666,6 +4667,23 @@ impl WalletPage {
                 Icon::WalletOutline,
                 self.strings.empty_assets_title.clone(),
                 self.strings.empty_assets_caption.clone(),
+            ));
+        } else if assets.is_empty()
+            && !elsewhere
+            && let Some((title, caption)) = strip_view
+                .as_ref()
+                .and_then(|view| wallet_live::assets_unread(view, &self.strings))
+        {
+            // r15-4 (the web's `unreadAssets`): nothing listed because a
+            // network could not be read — said as the hero says it, with
+            // nothing lost; never "Deposit your first asset", never a
+            // blank strip under the outage.
+            assets_col = assets_col.child(empty_state(
+                theme,
+                &mut self.icons,
+                Icon::WalletOutline,
+                title,
+                caption,
             ));
         }
 

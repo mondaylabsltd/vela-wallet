@@ -642,6 +642,8 @@ const EVENTS: &[(&str, Place)] = &[
         "ms_accounts::Event::ResolveEns",
         Machine("an ENS name read on Ethereum"),
     ),
+    // r15-2: Try again on a link's lookup that did not come back.
+    ("ms_accounts::Event::RetryLink", Later(MULTISIG)),
 ];
 
 /// Which account the wallet shows, among a person's multisigs.

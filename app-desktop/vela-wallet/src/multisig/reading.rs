@@ -762,4 +762,19 @@ mod tests {
         let deep = case("four deep");
         assert!(all(&deep).contains("can't be read"), "{}", all(&deep));
     }
+
+    /// r15-10: an address row (the deep4 sheet's "To", a spender) holds a
+    /// full address, and the sheet draws it in the one rule's two halves —
+    /// 22 | 20, never its last character alone on a line.
+    #[test]
+    fn an_address_rows_value_is_drawn_in_its_two_halves() {
+        let row = Row::address(
+            "To".to_owned(),
+            "0x777e989c821a7f1b031696f044a2ff114261875a",
+        );
+        assert!(row.mono);
+        let (head, tail) = crate::ui::address_halves(&row.value).expect("split in two");
+        assert_eq!((head.len(), tail.len()), (22, 20));
+        assert_eq!(format!("{head}{tail}"), row.value);
+    }
 }

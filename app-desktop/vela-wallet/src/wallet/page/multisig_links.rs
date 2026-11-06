@@ -39,12 +39,14 @@ pub(crate) struct NetworkWait {
 pub(crate) enum LinkTake {
     /// A link's sheet.
     Sheet(LinkSheet),
-    /// The add sheet: its text, the invite, what is said at once.
+    /// The add sheet: its text, the invite, what is said at once — and
+    /// (r15-2) whether its Try again is the core's `retry_link`.
     Add {
         text: String,
         link: Option<vela_core::multisig_link::AddLink>,
         outcome: Option<AddOutcome>,
         fault: Option<&'static str>,
+        retry_link: bool,
     },
     /// The multisig of a read-only transaction (`preview`).
     Preview(String),
@@ -68,6 +70,7 @@ pub(crate) fn take_stand(stand: &LinkStand) -> (LinkTake, bool) {
                     Some(AddLinkFault::Checksum) => "add.badChecksum",
                     _ => "add.badInvite",
                 }),
+                retry_link: false,
             },
             true,
         ),
@@ -84,6 +87,7 @@ pub(crate) fn take_stand(stand: &LinkStand) -> (LinkTake, bool) {
                 link: Some(link.clone()),
                 outcome: None,
                 fault: None,
+                retry_link: false,
             },
             true,
         ),
@@ -103,15 +107,23 @@ pub(crate) fn take_stand(stand: &LinkStand) -> (LinkTake, bool) {
         LinkStand::Preview { link, .. } => (LinkTake::Preview(link.multisig.clone()), true),
         // §18 (c): a lookup that did not come back is retryable by the
         // core's rule (`LinkStand::Failed.retry`, `AddOutcome::offers_retry`):
-        // the add sheet's Add says Try again for it.
-        LinkStand::Failed { link, reason, .. } => (
+        // the add sheet's Add says Try again for it. r15-2: that Try again is
+        // the core's `retry_link` — the same link, opened again — so the
+        // stand is kept until the sheet is done with it (`retry` finds it
+        // there); one that answered is let go at once.
+        LinkStand::Failed {
+            link,
+            reason,
+            retry,
+        } => (
             LinkTake::Add {
                 text: link.multisig.clone(),
                 link: None,
                 outcome: Some(reason.clone()),
                 fault: None,
+                retry_link: *retry,
             },
-            true,
+            !*retry,
         ),
         LinkStand::Member { .. } | LinkStand::Kept => (LinkTake::Nothing, true),
     }
@@ -204,8 +216,21 @@ impl WalletPage {
         ) {
             self.multisig.link_sheet = None;
         }
+        // r15-2: a link pasted into the add sheet is read there — the
+        // sheet's Add spins while the core reads it ("Opening…" is that
+        // spinner, not a sheet over it), and the sheet goes once the link
+        // opens its transaction or asks for its network.
+        let reading = self
+            .multisig
+            .add_form
+            .as_ref()
+            .is_some_and(|form| form.reading);
         match take {
+            LinkTake::Sheet(LinkSheet::Notice { opening: true, .. }) if reading => {}
             LinkTake::Sheet(sheet) => {
+                if reading {
+                    self.close_multisig_add(cx);
+                }
                 self.multisig.link_sheet = Some(sheet);
                 self.multisig.scroll = crate::ui::SmoothScroll::new();
             }
@@ -214,23 +239,49 @@ impl WalletPage {
                 link,
                 outcome,
                 fault,
+                retry_link,
             } => {
                 let loc = self.ms_loc();
                 let said = fault
                     .map(|key| AddSaid::Line(words::t(&loc, key)))
                     .or_else(|| outcome.as_ref().and_then(|o| outcome_said(&loc, o)));
-                // The add sheet is the one in front; a draft being created is kept.
-                self.multisig.create = false;
-                self.multisig.create_form = None;
-                self.ms_add_opened(Some(text), link, said, cx);
-                if let Some(form) = self.multisig.add_form.as_mut() {
-                    form.choosing = matches!(outcome, Some(AddOutcome::ChooseNetwork));
-                    // r14-5: a lookup that did not come back offers Try again.
-                    form.retry = outcome.as_ref().is_some_and(AddOutcome::offers_retry);
+                // r15-2: the invite the sheet already drew from the pasted
+                // link is this one: the sheet stays as the person has it.
+                let drawn = self
+                    .multisig
+                    .add_form
+                    .as_ref()
+                    .is_some_and(|form| link.is_some() && form.link == link && !form.reading)
+                    && self
+                        .multisig
+                        .add
+                        .as_deref()
+                        .is_some_and(|typed| same(typed, &text));
+                if !drawn {
+                    // The add sheet is the one in front; a draft being created is kept.
+                    self.multisig.create = false;
+                    self.multisig.create_form = None;
+                    self.ms_add_opened(Some(text), link, said, cx);
+                    if let Some(form) = self.multisig.add_form.as_mut() {
+                        form.choosing = matches!(outcome, Some(AddOutcome::ChooseNetwork));
+                        // r14-5: a lookup that did not come back offers Try again.
+                        form.retry = outcome.as_ref().is_some_and(AddOutcome::offers_retry);
+                        // r15-2: and that Try again opens the link again.
+                        form.retry_link = retry_link;
+                    }
                 }
             }
-            LinkTake::Preview(address) => self.multisig.preview_of = Some(address),
-            LinkTake::Nothing => {}
+            LinkTake::Preview(address) => {
+                if reading {
+                    self.close_multisig_add(cx);
+                }
+                self.multisig.preview_of = Some(address);
+            }
+            LinkTake::Nothing => {
+                if reading {
+                    self.close_multisig_add(cx);
+                }
+            }
         }
         if close {
             cx.defer(move |cx| {
@@ -501,7 +552,8 @@ mod tests {
                 text: SAFE.into(),
                 link: Some(invite),
                 outcome: None,
-                fault: None
+                fault: None,
+                retry_link: false,
             }
         );
 
@@ -530,6 +582,7 @@ mod tests {
             take,
             LinkTake::Add {
                 outcome: Some(AddOutcome::NotFound),
+                retry_link: false,
                 ..
             }
         ));

@@ -380,6 +380,10 @@ pub enum TechnicalLine {
 pub struct AssetsEmpty {
     pub title: SharedString,
     pub caption: SharedString,
+    /// r15-4: not an empty wallet — a network the first read could not
+    /// reach (the web's `unreadAssets`): said, with no invitation to
+    /// deposit or add a token under it.
+    pub unread: bool,
     pub cta: SharedString,
     pub hint_title: SharedString,
     pub hint_body: SharedString,
@@ -1339,6 +1343,7 @@ fn assets_panel(s: &FlowStrings, empty: bool) -> AssetsPanel {
         empty: empty.then(|| AssetsEmpty {
             title: s.assets_empty_title.clone(),
             caption: s.assets_empty_caption.clone(),
+            unread: false,
             cta: s.add_token_title.clone(),
             hint_title: s.not_showing_title.clone(),
             hint_body: s.not_showing_body.clone(),

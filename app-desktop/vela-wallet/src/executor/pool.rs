@@ -325,6 +325,55 @@ pub fn rate_limited_chains() -> Vec<u32> {
     answer.recv().unwrap_or_default()
 }
 
+/// r15-15: how long the balance settle waits on the pool thread for its
+/// verdicts ([`rate_limited_chains_within`], [`own_node_chains_within`]).
+/// They are answered from the pool's view — instantly, unless the pool
+/// thread is held up: past [`MAX_WORKERS`] busy workers a post (or a
+/// backoff's sleep) runs on the pool thread itself, and every question
+/// queued behind it waits. Under a refused or rate-limiting network that
+/// held the round's settle — and the hero's "Checking…" — far past the
+/// round's own 18 s, while every other section had named the outage.
+pub const SETTLE_ASK_MS: u64 = 1_500;
+
+/// The answer on `answer` within `budget`, or `None` — the pool thread
+/// held up past it, or gone.
+fn answer_within<T>(answer: &std::sync::mpsc::Receiver<T>, budget: Duration) -> Option<T> {
+    answer.recv_timeout(budget).ok()
+}
+
+/// [`rate_limited_chains`], answered within `budget` or not at all
+/// (`None`: the pool thread is held up; the caller says what it read
+/// without the pool's word).
+#[must_use]
+pub fn rate_limited_chains_within(budget: Duration) -> Option<Vec<u32>> {
+    let (reply, answer) = channel();
+    let sent = sender().lock().ok().is_some_and(|tx| {
+        tx.send(Message::Ask(Request::RateLimited { reply }))
+            .is_ok()
+    });
+    if !sent {
+        return Some(Vec::new());
+    }
+    answer_within(&answer, budget)
+}
+
+/// The web's `getFallbackChains` / `getOwnNodeUnreachedChains`, from the
+/// in-process pool's view — no core accessor is needed: this shell holds the
+/// machine. Answered from the view, never from the network — within
+/// `budget`, or not at all (r15-15: `None`, the pool thread is held up).
+#[must_use]
+pub fn own_node_chains_within(budget: Duration) -> Option<OwnNodeChains> {
+    let (reply, answer) = channel();
+    let sent = sender()
+        .lock()
+        .ok()
+        .is_some_and(|tx| tx.send(Message::Ask(Request::OwnNode { reply })).is_ok());
+    if !sent {
+        return Some(OwnNodeChains::default());
+    }
+    answer_within(&answer, budget)
+}
+
 /// What the balance machine hears of the pool (`pool_unreached {chain_ids,
 /// silent}`): its chains out of reach (r12-3, `RpcPoolView.
 /// out_of_reach_chains`, the core's one set: failed or unreached, never only
@@ -436,7 +485,7 @@ pub fn unreached_chains() -> Vec<u32> {
     answer.recv().unwrap_or_default()
 }
 
-/// The pool's own-node lists, as one answer ([`own_node_chains`]) — read
+/// The pool's own-node lists, as one answer ([`own_node_chains_within`]) — read
 /// only through the core's one reading of them
 /// ([`rpc_pool::node_standing`](vela_core::app::rpc_pool::node_standing)),
 /// so no list is ordered or combined here.
@@ -505,22 +554,6 @@ impl OwnNodeChains {
             vela_core::app::rpc_pool::NodeStanding::FallingBack,
         )
     }
-}
-
-/// The web's `getFallbackChains` / `getOwnNodeUnreachedChains`, from the
-/// in-process pool's view — no core accessor is needed: this shell holds the
-/// machine. **Blocks** on the pool thread, briefly: answered from the view,
-/// never from the network.
-pub fn own_node_chains() -> OwnNodeChains {
-    let (reply, answer) = channel();
-    let sent = sender()
-        .lock()
-        .ok()
-        .is_some_and(|tx| tx.send(Message::Ask(Request::OwnNode { reply })).is_ok());
-    if !sent {
-        return OwnNodeChains::default();
-    }
-    answer.recv().unwrap_or_default()
 }
 
 /// Forget an endpoint's measured state — after the settings screen edits it.
@@ -1870,6 +1903,30 @@ fn stored_array(key: &str, chain_id: u32, field: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// r15-15: a question the balance settle asks the pool thread is
+    /// answered within its budget or not at all — a pool thread held up
+    /// (every worker busy, a backoff slept inline) never holds the round's
+    /// settle, and with it "Checking…", for as long as the backlog lasts.
+    #[test]
+    fn a_settles_question_to_a_held_pool_ends_at_its_budget() {
+        let (reply, answer) = channel::<Vec<u32>>();
+        let started = Instant::now();
+        assert_eq!(answer_within(&answer, Duration::from_millis(150)), None);
+        let waited = started.elapsed();
+        assert!(waited >= Duration::from_millis(150), "{waited:?}");
+        assert!(waited < Duration::from_secs(2), "bounded: {waited:?}");
+        // An answer in time is the pool's answer.
+        assert!(reply.send(vec![5_042_002]).is_ok());
+        assert_eq!(
+            answer_within(&answer, Duration::from_millis(150)),
+            Some(vec![5_042_002])
+        );
+        // A pool thread gone answers nothing, at once.
+        drop(reply);
+        assert_eq!(answer_within(&answer, Duration::from_secs(5)), None);
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
 
     /// r13-4 (§17): the pool hands the balance machine its silent networks
     /// beside the out-of-reach ones — said again when a network already out

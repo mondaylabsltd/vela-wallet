@@ -121,6 +121,95 @@ pub fn breaks_a_short_form(text: &str, at: usize) -> bool {
         .any(|span| span.start < at && at < span.end)
 }
 
+/// The seam [`with_address_breaks`] puts between a full address's halves:
+/// a zero-width space, the one place a wrapper may break it (gpui breaks
+/// before any character that is not part of a Latin word, and nowhere
+/// inside one but where a word overflows the line — which is how a sheet's
+/// address lost its last digit to a line of its own, r15-10).
+pub const SEAM: char = '\u{200B}';
+
+/// The length of a full address's first half (`0x` + 20): [`address_halves`]'
+/// split of a 42-character address.
+const FULL_HEAD: usize = 22;
+
+/// Where the full addresses in `text` lie (byte ranges, in order): `0x` and
+/// exactly 40 hex digits, not glued to a word on either side — with the
+/// [`SEAM`] between its halves inside the range when one was put there. A
+/// hash (64 digits), calldata and a short form are not full addresses.
+#[must_use]
+pub fn full_address_spans(text: &str) -> Vec<std::ops::Range<usize>> {
+    let bytes = text.as_bytes();
+    let hex_run = |from: usize| {
+        bytes
+            .get(from..)
+            .unwrap_or_default()
+            .iter()
+            .take_while(|b| b.is_ascii_hexdigit())
+            .count()
+    };
+    let glued = |at: usize| bytes.get(at).is_some_and(u8::is_ascii_alphanumeric);
+    let seam = SEAM.len_utf8();
+    let mut spans = Vec::new();
+    let mut at = 0;
+    while at < text.len() {
+        let starts = text.is_char_boundary(at)
+            && (text[at..].starts_with("0x") || text[at..].starts_with("0X"))
+            && !(at > 0 && glued(at - 1));
+        if starts {
+            let head = hex_run(at + 2);
+            let end = if head == 40 {
+                Some(at + 42)
+            } else if head == 20
+                && text[at + FULL_HEAD..].starts_with(SEAM)
+                && hex_run(at + FULL_HEAD + seam) == 20
+            {
+                Some(at + 42 + seam)
+            } else {
+                None
+            };
+            if let Some(end) = end.filter(|end| !glued(*end)) {
+                spans.push(at..end);
+                at = end;
+                continue;
+            }
+        }
+        at += text[at..].chars().next().map_or(1, char::len_utf8);
+    }
+    spans
+}
+
+/// Whether a line starting at byte `at` would cut a full address anywhere
+/// but between its halves (r15-10) — before the [`SEAM`] or after it, when
+/// it carries one.
+#[must_use]
+pub fn breaks_a_full_address(text: &str, at: usize) -> bool {
+    full_address_spans(text).iter().any(|span| {
+        let seam = span.start + FULL_HEAD;
+        let seamed = span.len() > 42;
+        span.start < at && at < span.end && at != seam && !(seamed && at == seam + SEAM.len_utf8())
+    })
+}
+
+/// `text` with the [`SEAM`] between the halves of every full address in it
+/// that has none yet — so a wrapper that breaks a long word wherever it
+/// overflows finds the one place it may break the address instead.
+#[must_use]
+pub fn with_address_breaks(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 3);
+    let mut from = 0;
+    for span in full_address_spans(text) {
+        if span.len() > 42 {
+            continue;
+        }
+        let seam = span.start + FULL_HEAD;
+        out.push_str(&text[from..seam]);
+        out.push(SEAM);
+        from = seam;
+    }
+    out.push_str(&text[from..]);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::address_halves;
@@ -179,5 +268,44 @@ mod tests {
         // A whole address, and text with no address, hold none.
         assert!(short_form_spans("0x777E989C821a7F1b031696f044a2fF114261875a").is_empty());
         assert!(short_form_spans("Nothing here… 2 of 3").is_empty());
+    }
+
+    /// r15-10: a full address inside a line of other words (a look-alike
+    /// note, a member named whole) breaks only between its two halves —
+    /// the 22 | 20 [`address_halves`] draws — never one digit alone.
+    #[test]
+    fn a_full_address_inside_a_line_breaks_only_between_its_halves() {
+        use super::{breaks_a_full_address, full_address_spans, with_address_breaks};
+        let full = "0x777E989C821a7F1b031696f044a2fF114261875a";
+        let line = format!("该地址与 {full} 只差几个字符。");
+        let at = line.find("0x").unwrap_or_default();
+        assert_eq!(full_address_spans(&line), vec![at..at + 42]);
+        // Inside it: never — the last digit alone least of all.
+        for cut in [at + 1, at + 2, at + 10, at + 21, at + 23, at + 41] {
+            assert!(breaks_a_full_address(&line, cut), "at {}", cut - at);
+        }
+        // Between its halves, and around it: as text does.
+        assert!(!breaks_a_full_address(&line, at + 22));
+        assert!(!breaks_a_full_address(&line, at));
+        assert!(!breaks_a_full_address(&line, at + 42));
+        // The halves' seam is offered to the wrapper (a zero-width space),
+        // and with it the address still breaks only there.
+        let seamed = with_address_breaks(&line);
+        assert_eq!(seamed.replace('\u{200b}', ""), line);
+        let seam = seamed.find('\u{200b}').unwrap_or_default();
+        assert_eq!(&seamed[at..seam], &full[..22]);
+        assert_eq!(full_address_spans(&seamed), vec![at..at + 42 + 3]);
+        assert!(!breaks_a_full_address(&seamed, seam));
+        assert!(!breaks_a_full_address(&seamed, seam + 3));
+        assert!(breaks_a_full_address(&seamed, seam + 4));
+        assert!(breaks_a_full_address(&seamed, at + 21));
+        // Seamed once: a second pass changes nothing.
+        assert_eq!(with_address_breaks(&seamed), seamed);
+        // A hash, calldata and a short form are not full addresses.
+        let hash = format!("0x{}", "ab".repeat(32));
+        assert!(full_address_spans(&hash).is_empty());
+        assert!(full_address_spans("0x777E98…61875a").is_empty());
+        assert!(full_address_spans(&format!("x{full}")).is_empty());
+        assert_eq!(with_address_breaks("Nothing here"), "Nothing here");
     }
 }

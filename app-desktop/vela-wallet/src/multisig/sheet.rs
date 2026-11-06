@@ -106,6 +106,17 @@ impl Look {
         })
     }
 
+    /// r15 (fee moved): the fee this look draws (base units, decimal) — what
+    /// a press under it carries (`shown_fee`), so the core signs exactly the
+    /// figure the person pressed on, or stops with `fee_moved`.
+    #[must_use]
+    pub fn shown_fee(&self) -> Option<String> {
+        match self {
+            Self::Priced { fee, .. } if !fee.is_empty() => Some(fee.clone()),
+            _ => None,
+        }
+    }
+
     /// It cannot run by this executor: it would fail, it is refused, its
     /// number is used, or the executor cannot pay the fee.
     #[must_use]

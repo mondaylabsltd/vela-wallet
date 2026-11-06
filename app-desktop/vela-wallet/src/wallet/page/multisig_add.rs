@@ -19,7 +19,7 @@ use vela_core::app::multisig_accounts::{
 use vela_core::app::multisig_members::{MemberProblem, member_problem};
 use vela_core::app::multisig_shell::AccountUpdate;
 use vela_core::multisig::ExportedSafe;
-use vela_core::multisig_link::{self as link, AddLink};
+use vela_core::multisig_link::{self as link, AddLink, AddLinkFault, BrokenLink, ProposalLink};
 
 use super::multisig::{Tone as MsTone, ms_label, ms_note, network, same};
 use super::multisig_create::{ens_answer, ens_words, last_used, likely_networks};
@@ -55,6 +55,106 @@ pub(crate) fn read_field(text: &str) -> AddField {
     AddField::Address(value.to_owned())
 }
 
+/// r15-2: a link in the add field, read the moment Add is pressed by the
+/// core's own parsers (`multisig_link`, the rules its link flow reads it
+/// by) — never left as raw text while the core's stand is awaited.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum LinkRead {
+    /// Damaged: what it held, and the corpus key saying what is wrong.
+    Broken { text: String, key: &'static str },
+    /// An invite: its multisig and what it says, drawn at once.
+    Invite(AddLink),
+    /// A proposal link: its multisig, looked up by the core (Add spins).
+    Proposal(ProposalLink),
+}
+
+/// Read `hash` (`#msa=…` / `#ms=…`) as the core's link flow reads it
+/// (`link::open`: a damaged link first, then an invite, then a proposal).
+/// `None` for one that is neither (the core says nothing for it either).
+pub(crate) fn read_link(hash: &str) -> Option<LinkRead> {
+    if let Some(broken) = link::broken_link(hash) {
+        let key = match broken {
+            BrokenLink::Add => match link::add_link_fault(hash) {
+                Some(AddLinkFault::Checksum) => "add.badChecksum",
+                _ => "add.badInvite",
+            },
+            BrokenLink::Proposal => "proposal.badLink",
+        };
+        return Some(LinkRead::Broken {
+            text: link::broken_link_text(hash),
+            key,
+        });
+    }
+    if let Some(invite) = link::parse_add_link(hash) {
+        return Some(LinkRead::Invite(invite));
+    }
+    link::parse_proposal_link(hash).map(LinkRead::Proposal)
+}
+
+/// What Add does with a link in the field (r15-2): the field's new text,
+/// the invite drawn, the line said, whether the core is now reading it, and
+/// the event the core is sent — all at once, in the press.
+#[derive(Clone, Debug)]
+pub(crate) struct LinkPress {
+    pub text: String,
+    pub link: Option<AddLink>,
+    pub said: Option<AddSaid>,
+    pub reading: bool,
+    pub event: Option<ms_accounts::Event>,
+}
+
+/// [`LinkPress`] for `hash`. A damaged link is said and nothing is sent; an
+/// invite is drawn and handed to the core (which keeps it: its networks,
+/// its members, on Add); a proposal link is handed to the core, which
+/// looks its multisig up — Add spins until it says where it stands.
+pub(crate) fn press_link(loc: &Loc, hash: &str) -> LinkPress {
+    let open = || ms_accounts::Event::OpenLink {
+        hash: hash.to_owned(),
+        take_kept: false,
+    };
+    match read_link(hash) {
+        Some(LinkRead::Broken { text, key }) => LinkPress {
+            text,
+            link: None,
+            said: Some(AddSaid::Line(words::t(loc, key))),
+            reading: false,
+            event: None,
+        },
+        Some(LinkRead::Invite(invite)) => LinkPress {
+            text: invite.multisig.clone(),
+            link: Some(invite),
+            said: None,
+            reading: false,
+            event: Some(open()),
+        },
+        Some(LinkRead::Proposal(proposal)) => LinkPress {
+            text: proposal.multisig,
+            link: None,
+            said: None,
+            reading: true,
+            event: Some(open()),
+        },
+        None => LinkPress {
+            text: hash.to_owned(),
+            link: None,
+            said: Some(AddSaid::Line(words::t(loc, "add.badInvite"))),
+            reading: false,
+            event: None,
+        },
+    }
+}
+
+/// r15-2: what Add's Try again sends when what is said came from a link's
+/// lookup (`retry_link`): the core's `retry_link` — the same link, opened
+/// again — never a plain `add` beside it. `None`: Add is Add.
+pub(crate) fn link_try_again(
+    retry_link: bool,
+    retry: bool,
+    said: Option<&AddSaid>,
+) -> Option<ms_accounts::Event> {
+    (retry_link && add_says_try_again(retry, said)).then_some(ms_accounts::Event::RetryLink)
+}
+
 /// What an add came to, said on the sheet.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum AddSaid {
@@ -74,6 +174,11 @@ pub(crate) struct AddForm {
     /// r14-5: what is said is a read that did not come back
     /// (`AddOutcome::offers_retry`, the core's rule): Add says Try again.
     pub retry: bool,
+    /// r15-2: what is said is a link's lookup that did not come back: its
+    /// Try again is the core's `retry_link` (the stand is kept for it).
+    pub retry_link: bool,
+    /// r15-2: a link pasted here is being read by the core: Add spins.
+    pub reading: bool,
     /// The address an `add` was sent for: its outcome is awaited.
     pub asked: Option<String>,
     /// Nothing says which network: the person picks one, then Add.
@@ -107,6 +212,8 @@ impl AddForm {
             link: None,
             said: None,
             retry: false,
+            retry_link: false,
+            reading: false,
             asked: None,
             choosing: false,
             chosen: None,
@@ -313,9 +420,35 @@ impl WalletPage {
 
     pub(crate) fn close_multisig_add(&mut self, cx: &mut Context<Self>) {
         super::multisig_links::Carry::take_add(cx);
+        // r15-2: a failed link's stand was kept for its Try again: let go.
+        if self
+            .multisig
+            .add_form
+            .as_ref()
+            .is_some_and(|f| f.retry_link)
+        {
+            self.ms_let_failed_link_go(cx);
+        }
         self.multisig.add = None;
         self.multisig.add_form = None;
         cx.notify();
+    }
+
+    /// r15-2: the failed link's stand, kept for its Try again, is let go —
+    /// the sheet closed, or the person typed something else.
+    fn ms_let_failed_link_go(&mut self, cx: &mut Context<Self>) {
+        let host = self.ms_host(cx);
+        cx.defer(move |cx| {
+            host.update(cx, |host, cx| {
+                let failed = matches!(
+                    host.machines().accounts_view.link,
+                    Some(ms_accounts::link::LinkStand::Failed { .. })
+                );
+                if failed {
+                    host.accounts(ms_accounts::Event::CloseLink, cx);
+                }
+            });
+        });
     }
 
     /// Add, as the field reads: a link to the machine's link flow, a name
@@ -325,29 +458,55 @@ impl WalletPage {
         let loc = self.ms_loc();
         let text = self.multisig.add.clone().unwrap_or_default();
         let networks = self.ms_device_networks(cx);
+        let host = self.ms_host(cx);
         let Some(form) = self.multisig.add_form.as_mut() else {
             return;
         };
+        if form.reading {
+            return;
+        }
+        // r15-2: Try again on a link's lookup that did not come back is the
+        // core's `retry_link` — the same link opened again; Add spins until
+        // it says where it stands (the next stand is drawn, whatever it is).
+        if let Some(event) = link_try_again(form.retry_link, form.retry, form.said.as_ref()) {
+            form.retry = false;
+            form.retry_link = false;
+            form.said = None;
+            form.reading = true;
+            self.multisig.link_seen = None;
+            host.update(cx, |host, cx| host.accounts(event, cx));
+            cx.notify();
+            return;
+        }
         form.retry = false;
         let address = match read_field(&text) {
             AddField::Empty => return,
             AddField::Link(hash) => {
-                let host = self.ms_host(cx);
-                host.update(cx, |host, cx| {
-                    host.accounts(
-                        ms_accounts::Event::OpenLink {
-                            hash,
-                            take_kept: false,
-                        },
-                        cx,
-                    );
-                });
+                // r15-2: read at once — the field takes the link's multisig,
+                // an invite is drawn, a damaged link is said — and the core
+                // is handed the link to keep (an invite) or read (a
+                // proposal's multisig, Add spinning meanwhile). It used to be
+                // handed over and nothing else: the raw link stayed in the
+                // field, with no spinner and no words, until a stand came.
+                let press = press_link(&loc, &hash);
+                form.link = press.link;
+                form.said = press.said;
+                form.reading = press.reading;
+                form.retry_link = false;
+                form.choosing = false;
+                form.chosen = None;
+                form.ens = None;
+                self.multisig.add = Some(press.text);
+                if let Some(event) = press.event {
+                    self.multisig.link_seen = None;
+                    host.update(cx, |host, cx| host.accounts(event, cx));
+                }
+                cx.notify();
                 return;
             }
             AddField::Ens(name) => {
                 form.ens = Some(name.clone());
                 form.said = None;
-                let host = self.ms_host(cx);
                 host.update(cx, |host, cx| {
                     host.accounts(ms_accounts::Event::ResolveEns { name }, cx)
                 });
@@ -395,7 +554,6 @@ impl WalletPage {
         // Added, it is the multisig shown: the page is built again for it,
         // and what is awaited is carried over (`Carry`).
         super::multisig_links::Carry::set_add(address.clone(), form.link.clone(), cx);
-        let host = self.ms_host(cx);
         host.update(cx, |host, cx| {
             host.accounts(
                 ms_accounts::Event::Add {
@@ -576,6 +734,7 @@ impl WalletPage {
         let said = form.said.clone();
         let retry = add_says_try_again(form.retry, said.as_ref());
         let asked = form.asked.is_some();
+        let reading = form.reading;
         let choosing = form.choosing;
         let chosen = form.chosen;
         let all = form.all_networks;
@@ -635,17 +794,32 @@ impl WalletPage {
                     move |text: String, _: &mut Window, cx: &mut gpui::App| {
                         page.update(cx, |this: &mut Self, cx| {
                             this.multisig.add = Some(text);
+                            let mut let_go = false;
                             if let Some(form) = this.multisig.add_form.as_mut() {
                                 form.said = None;
                                 form.choosing = false;
                                 form.chosen = None;
                                 form.ens = None;
+                                // r15-2: another text is no longer the failed
+                                // link's: Add is Add again.
+                                let_go = std::mem::take(&mut form.retry_link);
+                            }
+                            if let_go {
+                                this.ms_let_failed_link_go(cx);
                             }
                             cx.notify();
                         });
                     },
                 )),
         );
+        // r15-2: the core is reading the pasted link: said, never a blank wait.
+        if reading {
+            body = body.child(ms_note(
+                theme,
+                &words::t(&loc, "proposal.opening"),
+                MsTone::Neutral,
+            ));
+        }
         match &said {
             Some(AddSaid::Line(line)) => body = body.child(ms_note(theme, line, MsTone::Danger)),
             Some(AddSaid::Refused(found)) => {
@@ -880,7 +1054,7 @@ impl WalletPage {
         }
         if !matches!(said, Some(AddSaid::HighRisk(_))) {
             let refused = matches!(said, Some(AddSaid::Refused(_)));
-            let state = if asked || ens_busy {
+            let state = if asked || ens_busy || reading {
                 crate::ui::ButtonState::Busy
             } else {
                 crate::ui::ButtonState::from_enabled(
@@ -1561,6 +1735,112 @@ mod tests {
             read_field("https://example.com/#top"),
             AddField::Address("https://example.com/#top".to_owned())
         );
+    }
+
+    /// r15-2: a link pasted into the field is read at once by the core's
+    /// own parsers — whatever account is in front, nothing waits on a stand
+    /// for the field to change: an invite fills the multisig's address and
+    /// draws the invite; a proposal link fills its multisig and reads (Add
+    /// spins); a damaged one is said, and nothing is sent.
+    #[test]
+    fn a_pasted_link_is_read_at_once() {
+        let loc = Loc::for_tag("en");
+        let hash = link::add_link(link::SITE_ORIGIN, "en", SAFE, &[100], &[])
+            .ok()
+            .and_then(|url| url.split_once('#').map(|(_, h)| format!("#{h}")))
+            .expect("an invite");
+        let AddField::Link(read) = read_field(&format!("https://wallet.getvela.app/en{hash}"))
+        else {
+            panic!("a link");
+        };
+        let press = press_link(&loc, &read);
+        assert!(same(&press.text, SAFE), "the field holds the address");
+        assert!(
+            press
+                .link
+                .as_ref()
+                .is_some_and(|l| l.chain_ids == vec![100]),
+            "the invite is drawn: {:?}",
+            press.link
+        );
+        assert_eq!(press.said, None);
+        assert!(!press.reading, "an invite reads nothing");
+        assert!(
+            matches!(&press.event, Some(ms_accounts::Event::OpenLink { hash: h, take_kept: false }) if *h == read),
+            "the core keeps the invite"
+        );
+
+        let proposal = link::proposal_hash(&ProposalLink {
+            multisig: SAFE.into(),
+            chain_id: 100,
+            safe_tx_hash: format!("0x{}", "ab".repeat(32)),
+        });
+        let press = press_link(&loc, &proposal);
+        assert!(same(&press.text, SAFE));
+        assert!(press.reading, "Add spins while the core reads it");
+        assert!(matches!(
+            press.event,
+            Some(ms_accounts::Event::OpenLink { .. })
+        ));
+
+        let press = press_link(&loc, "#msa=100:0x88cc");
+        assert!(!press.reading);
+        assert!(press.event.is_none(), "nothing to read");
+        let Some(AddSaid::Line(line)) = &press.said else {
+            panic!("said at once: {:?}", press.said);
+        };
+        assert_eq!(*line, words::t(&loc, "add.badInvite"));
+        assert!(matches!(
+            read_link("#ms=100:0x88cc"),
+            Some(LinkRead::Broken {
+                key: "proposal.badLink",
+                ..
+            })
+        ));
+    }
+
+    /// r15-2: a link's lookup that did not come back offers Try again, and
+    /// that Try again is the core's `retry_link`; any other Try again (an
+    /// add's own) is not, and a lookup that answered offers none.
+    #[test]
+    fn a_failed_links_try_again_retries_the_link() {
+        let loc = Loc::for_tag("en");
+        let unchecked = AddOutcome::Unchecked;
+        let said = outcome_said(&loc, &unchecked);
+        assert!(unchecked.offers_retry());
+        assert!(matches!(
+            link_try_again(true, unchecked.offers_retry(), said.as_ref()),
+            Some(ms_accounts::Event::RetryLink)
+        ));
+        assert!(link_try_again(false, true, said.as_ref()).is_none());
+        let not_found = AddOutcome::NotFound;
+        assert!(
+            link_try_again(
+                true,
+                not_found.offers_retry(),
+                outcome_said(&loc, &not_found).as_ref()
+            )
+            .is_none()
+        );
+        // The stand that said it is kept for that Try again.
+        let (take, close) =
+            super::super::multisig_links::take_stand(&ms_accounts::link::LinkStand::Failed {
+                link: ProposalLink {
+                    multisig: SAFE.into(),
+                    chain_id: 100,
+                    safe_tx_hash: "0xab".into(),
+                },
+                reason: unchecked,
+                retry: true,
+            });
+        assert!(!close, "kept: `retry_link` reads it");
+        assert!(matches!(
+            take,
+            super::super::multisig_links::LinkTake::Add {
+                retry_link: true,
+                ..
+            }
+        ));
     }
 
     #[test]

@@ -1216,10 +1216,16 @@ mod tests {
         assert_eq!(down.display_total_usd, None);
         assert!(balance(&down, &s, "en", money).integer.is_empty());
         assert!(!assets_strip_empty(&down, None));
-        // One chain answered with nothing: a real zero, and the empty strip.
+        // One chain answered with nothing, the other could not be read: a
+        // known zero — but no empty wallet while a network is unread (the
+        // core's rule, r15-4): the strip says the network instead.
         let zero = run_cached(None, &settled(vec![1], Vec::new()));
         assert!(!zero.unreachable);
-        assert!(assets_strip_empty(&zero, None));
+        assert!(!assets_strip_empty(&zero, None));
+        assert_eq!(
+            assets_unread(&zero, &s).map(|(title, _)| title),
+            Some(SharedString::from(ethereum.clone()))
+        );
 
         // The gallery's DSR7 is the same state through the same core.
         let gallery = balance(&crate::wallet::fixtures::internal_view(), &s, "en", money);
@@ -2850,6 +2856,77 @@ mod tests {
         assert!(assets_strip_empty(&held, Some(56)));
     }
 
+    /// r15-4 (the web's `unreadAssets`): the first read ended, nothing is
+    /// listed and the core gave no empty state, because a network it asked
+    /// could not be read — the list says the hero line's sentence and that
+    /// nothing is lost. Never "Deposit your first asset", never a blank.
+    #[test]
+    fn an_unread_network_is_said_on_the_list_never_an_empty_wallet() {
+        use vela_core::app::balance_dashboard::{BalanceOperation, BalanceShellResult as Res};
+        const ARC: u32 = 5_042_002;
+        let s = strings();
+        let settle_with = |failed: Vec<u32>, internal: Vec<u32>| {
+            let mut host = CoreHost::<BalanceDashboard>::new();
+            let mut pending = host.dispatch(BalanceEvent::AccountChanged {
+                address: "0xd400".to_owned(),
+            });
+            while let Some(effect) = pending.pop() {
+                let result = match &effect.operation {
+                    BalanceOperation::ReadBalanceCache { address } => Res::CachedTotalLoaded {
+                        address: address.clone(),
+                        usd: Some(0.0),
+                    },
+                    BalanceOperation::FetchTokens { pull, .. } => Res::FetchSettled {
+                        address: "0xd400".to_owned(),
+                        pull: *pull,
+                        tokens: Vec::new(),
+                        failed_chain_ids: failed.clone(),
+                        rate_limited_chain_ids: Vec::new(),
+                        read_chain_ids: vec![1, ARC],
+                        internal_chain_ids: internal.clone(),
+                        registry_chain_ids: Vec::new(),
+                        own_node_chain_ids: vec![],
+                        fallback_chain_ids: vec![],
+                        read_at_ms: None,
+                        now_ms: 0.0,
+                    },
+                    _ => continue,
+                };
+                pending.extend(host.resolve(effect.id, result));
+            }
+            host.view()
+        };
+
+        // Arc refused: Ethereum answered with nothing, Arc said nothing.
+        let down = settle_with(vec![ARC], Vec::new());
+        assert!(down.tokens.is_empty() && down.checking_key.is_none());
+        assert_eq!(down.empty_key, None, "the core claims no empty wallet");
+        assert!(!assets_strip_empty(&down, None));
+        let Some((title, caption)) = assets_unread(&down, &s) else {
+            panic!("the list says why it has nothing: {down:?}");
+        };
+        assert_eq!(Some(title), unreachable_line(&down, &s));
+        assert_eq!(caption, s.unreachable_body);
+
+        // A fault inside Vela: its own sentence, never "can't reach".
+        let ours = settle_with(vec![ARC], vec![ARC]);
+        assert_eq!(
+            assets_unread(&ours, &s).map(|(title, _)| title),
+            Some(s.balance_internal.clone())
+        );
+
+        // Every network answered with nothing: the core's empty wallet, and
+        // nothing unread to say.
+        let empty = settle_with(Vec::new(), Vec::new());
+        assert!(assets_strip_empty(&empty, None));
+        assert_eq!(assets_unread(&empty, &s), None);
+
+        // The first read still out: "Checking…" is the hero's; nothing yet.
+        let checking = view(Some(0.0));
+        assert!(checking.checking_key.is_some());
+        assert_eq!(assets_unread(&checking, &s), None);
+    }
+
     /// The last-known total paints first — with the refreshing line, so it
     /// never reads as today's figure — and live replaces it (the web's
     /// `liveBalance`). A skeleton only when there is nothing known at all.
@@ -4305,6 +4382,33 @@ pub fn assets_strip_empty(view: &BalanceView, filter: Option<u32>) -> bool {
         return view.empty_key.is_some();
     }
     filter.is_some() && visible_token_indices(view, filter).is_empty()
+}
+
+/// r15-4 (the web's `unreadAssets` / `unreadAssetsEmpty`, home-3 / vis-3):
+/// the list has no rows, the core gave no empty state, and the first read
+/// has ENDED saying why it could not list them — a network out of reach, a
+/// fault inside Vela, or nothing read at all. The words: the hero line's
+/// sentence (Vela's own fault first, never "can't reach" for it — PR 2
+/// note 11), and that nothing is lost. `None` when the list has rows, the
+/// core said the wallet is empty, or the first read is still out.
+#[must_use]
+pub fn assets_unread(
+    view: &BalanceView,
+    s: &WalletStrings,
+) -> Option<(SharedString, SharedString)> {
+    let unread = view.tokens.is_empty()
+        && view.empty_key.is_none()
+        && view.checking_key.is_none()
+        && (view.unreachable
+            || !view.unreachable_networks.is_empty()
+            || view.internal_key.is_some());
+    if !unread {
+        return None;
+    }
+    let title = internal_line(view, s)
+        .or_else(|| unreachable_line(view, s))
+        .unwrap_or_else(|| s.balance_unreachable.clone());
+    Some((title, s.unreachable_body.clone()))
 }
 
 /// Which holdings the network filter leaves on screen, as indices into the
