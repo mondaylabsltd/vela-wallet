@@ -3239,7 +3239,10 @@ fn a_silent_network_during_the_first_read_is_named_never_checking() {
         silent: vec![ARC_TESTNET],
     });
     let view = sut.view();
-    assert_eq!(view.checking_key, None, "the outage is named, not Checking…");
+    assert_eq!(
+        view.checking_key, None,
+        "the outage is named, not Checking…"
+    );
     assert_eq!(
         view.unreachable_networks
             .iter()
@@ -3257,7 +3260,11 @@ fn a_silent_network_during_the_first_read_is_named_never_checking() {
     ));
     let view = sut.view();
     assert_eq!(view.checking_key, None);
-    assert!(view.unreachable_networks.is_empty(), "{:?}", view.unreachable_networks);
+    assert!(
+        view.unreachable_networks.is_empty(),
+        "{:?}",
+        view.unreachable_networks
+    );
 }
 
 /// A view written before the empty fact reads without it.
