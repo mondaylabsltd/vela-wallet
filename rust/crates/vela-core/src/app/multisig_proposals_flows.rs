@@ -1207,6 +1207,7 @@ pub async fn on_proposed(
 /// another) the members' cancellation; a link's read-only proposal is read
 /// again.
 pub async fn after_refresh(io: &Io<Event>, st: &Shared<State>) {
+    super::reviews_after_refresh(io, st).await;
     follow_held(io, st).await;
     let preview = lock(st)
         .more

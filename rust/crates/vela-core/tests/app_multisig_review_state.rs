@@ -1009,6 +1009,59 @@ fn checks_that_stay_silent_land_unchecked_only_at_the_reasks_own_limit() {
     );
 }
 
+/// Round 16 (r16-19): a sheet opened at launch, on a proposal posted before
+/// launch, asked its review before the multisig's list was read — the core
+/// found no such transaction and landed `failed {gone}` ("This transaction
+/// is no longer in the list"), which only Try again read again. A review
+/// asked before the list is read is not a verdict on the list: it stays
+/// Reading (nothing signable) and is read once the list lands.
+#[test]
+fn a_review_asked_before_the_list_is_read_waits_for_it_never_gone() {
+    let (mut world, mut sut, account, hash) = {
+        let (mut world, mut sut, account) = setup(&[0]);
+        run(&mut sut, &mut world, transfer());
+        run(
+            &mut sut,
+            &mut world,
+            Event::ConfirmDraft { as_member: None },
+        );
+        let ActionState::Done { safe_tx_hash, .. } = sut.view().actions["propose"].clone() else {
+            panic!("proposed");
+        };
+        world.locals = vec![fixture(1)];
+        world.passkeys.clear();
+        (world, Sut::new(), account, safe_tx_hash)
+    };
+    // A fresh launch: started and following, nothing answered yet.
+    sut.dispatch(Event::Start {
+        service_url: SERVICE.to_owned(),
+        accounts: world.locals.clone(),
+        networks: vec![100, 8453],
+        known: Vec::new(),
+    });
+    sut.dispatch(Event::Follow {
+        account: Some(account.clone()),
+    });
+    // The sheet asks its review at once, before any read has landed.
+    sut.dispatch(review(&hash));
+    let key = format!("100:{}", hash.to_ascii_lowercase());
+    let state = |sut: &Sut| {
+        let view = sut.view();
+        view.review_states
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case(&key))
+            .map(|(_, v)| v.clone())
+    };
+    assert_eq!(state(&sut), Some(ReviewState::Loading));
+    let answered = settle_reads_first(&mut sut, &mut world, 20_000);
+    assert!(answered < 20_000);
+    assert_eq!(
+        state(&sut),
+        Some(ReviewState::Ready),
+        "read once the list landed, never gone"
+    );
+}
+
 /// r14-13, a HUNG network (no answer at all, on any shell): every read —
 /// and a simulation the shell never ends — is ended by the core at
 /// `REVIEW_ASK_MS`, so the review lands `failed {chainUnread}` well before

@@ -917,7 +917,7 @@ fn a_fee_moved_stop_is_withdrawn_when_the_look_has_no_figure() {
     let look = sut.view().previews[&look_key(&hash, &fixture(0).address)].clone();
     assert_ne!(look["kind"], "priced", "{look}");
     assert!(
-        sut.view().actions.get(&key).is_none(),
+        !sut.view().actions.contains_key(&key),
         "no stop names a figure no press would sign: {:?}",
         sut.view().actions.get(&key)
     );
