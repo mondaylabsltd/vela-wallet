@@ -647,6 +647,8 @@ export interface MultisigMessages {
 		customNote: string;
 		/** Activity's waiting group while the service is away, over the last list. */
 		unreachableNote: string;
+		/** r16-16: Activity's waiting group while the service rate-limits its reads. */
+		busyNote: string;
 		retry: string;
 		/** r4b-15: the device is offline. */
 		offline: string;
@@ -1470,6 +1472,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 	service: {
 		customNote: '',
 		unreachableNote: '',
+		busyNote: '',
 		retry: '',
 		offline: '',
 		offlineSince: '',

@@ -2,8 +2,9 @@
 
 /**
  * What the waiting group says of the list it shows, first match wins
- * (`group`'s note): offline, the service away, a network that did not
+ * (`group`'s note): offline, the service away, the service busy (its rate
+ * limit), a network that did not
  * answer, the list kept from an earlier page, stale, the history unread,
  * still reading.
  */
-export type MultisigWaitingNote = { "kind": "offline", since: number | null, } | { "kind": "unreachable" } | { "kind": "chainUnreachable", chain_ids: number[], } | { "kind": "lastKnown", at: number, } | { "kind": "stale" } | { "kind": "historyUnreadable", chain_ids: number[], } | { "kind": "checking" };
+export type MultisigWaitingNote = { "kind": "offline", since: number | null, } | { "kind": "unreachable" } | { "kind": "busy" } | { "kind": "chainUnreachable", chain_ids: number[], } | { "kind": "lastKnown", at: number, } | { "kind": "stale" } | { "kind": "historyUnreadable", chain_ids: number[], } | { "kind": "checking" };

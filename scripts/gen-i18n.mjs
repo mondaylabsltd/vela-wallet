@@ -1510,7 +1510,10 @@ if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.siz
   // 692 (round 14, r14-5, 2026-11-06): + `home.multisig.add.busy` (adding
   //   a multisig while its network rate-limits says so, with Try again —
   //   never a silent return to "Add"). 691 + 1 = 692.
-  const pins = { multisig: 692 };
+  // 693 (round 16, r16-16, 2026-11-06): + `home.multisig.service.busyNote`
+  //   (a multisig service answering its rate limit is said as busy, with
+  //   Retry — never silence over the kept list). 692 + 1 = 693.
+  const pins = { multisig: 693 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

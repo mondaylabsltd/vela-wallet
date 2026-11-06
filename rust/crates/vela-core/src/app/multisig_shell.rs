@@ -994,9 +994,36 @@ pub struct Outage {
     failures: usize,
     retry_at: f64,
     busy_until: f64,
+    /// r16-16: the service's last answer to a read was its rate limit
+    /// (`429`) — said as busy, never as silence.
+    pub rate_limited: bool,
+    limits: usize,
 }
 
+/// r16-16: how long background reads wait after a `429` that named no wait
+/// — a step that grows with each one in a row (a wait the service names is
+/// taken as named, up to [`BUSY_WAIT_CAP_MS`]).
+pub const BUSY_STEPS_MS: [f64; 4] = [10_000.0, 20_000.0, 40_000.0, 60_000.0];
+/// r16-16: the longest wait a `429` may hold background reads for.
+pub const BUSY_WAIT_CAP_MS: f64 = 300_000.0;
+
 impl Outage {
+    /// r16-16: a read answered `429`: busy for the wait it named, else the
+    /// next step of [`BUSY_STEPS_MS`] — background reads ask nothing until
+    /// then; the person's Retry asks at once.
+    pub fn limited(&mut self, now: f64, wait: Option<f64>) {
+        self.limits += 1;
+        self.rate_limited = true;
+        let step = BUSY_STEPS_MS[self.limits.min(BUSY_STEPS_MS.len()) - 1];
+        self.busy(now + wait.map_or(step, |w| w.clamp(0.0, BUSY_WAIT_CAP_MS)));
+    }
+
+    /// r16-16: a read answered with anything but its rate limit.
+    pub fn unlimited(&mut self) {
+        self.rate_limited = false;
+        self.limits = 0;
+    }
+
     /// Away and its next step has not come — or busy: background reads ask nothing.
     pub fn blocked(&self, now: f64) -> bool {
         (self.down && now < self.retry_at) || now < self.busy_until
@@ -1351,7 +1378,9 @@ impl Service {
                     return Err(ServiceFail::Busy(wait));
                 }
                 let now = io.now().await;
-                lock(&self.outage).busy(now + wait.unwrap_or(RETRY_AFTER_MAX_MS));
+                lock(&self.outage).limited(now, wait);
+            } else {
+                lock(&self.outage).unlimited();
             }
             if let Some(ms) = wait {
                 if ms <= RETRY_AFTER_MAX_MS && attempt < ATTEMPTS - 1 {

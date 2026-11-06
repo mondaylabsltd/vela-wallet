@@ -444,11 +444,15 @@ pub fn view_more(s: &mut State) -> MoreView {
             )
         })
         .collect();
-    let down = lock(&s.service.outage).down;
+    let (down, limited) = {
+        let outage = lock(&s.service.outage);
+        (outage.down, outage.rate_limited)
+    };
     let note = waiting_note(&ListFacts {
         offline: s.offline,
         read_at: s.read_at,
         unreachable: service_unreachable(s, down),
+        busy: service_unreachable(s, limited),
         unreadable: s.unreadable.clone(),
         cached_at: s.cached_at,
         stale: s.stale,

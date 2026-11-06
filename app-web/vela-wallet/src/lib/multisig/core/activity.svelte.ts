@@ -401,6 +401,8 @@ function noteText(m: MultisigMessages, note: MultisigWaitingNote): string {
 				: m.service.offline;
 		case 'unreachable':
 			return m.service.unreachableNote;
+		case 'busy':
+			return m.service.busyNote;
 		case 'chainUnreachable':
 			return fillTemplate(m.service.chainUnreachable, {
 				network: listOf(note.chain_ids.map((id) => chainName(id)))
@@ -422,6 +424,7 @@ function noteText(m: MultisigMessages, note: MultisigWaitingNote): string {
 function noteRetries(note: MultisigWaitingNote): boolean {
 	return (
 		note.kind === 'unreachable' ||
+		note.kind === 'busy' ||
 		note.kind === 'chainUnreachable' ||
 		note.kind === 'historyUnreadable'
 	);

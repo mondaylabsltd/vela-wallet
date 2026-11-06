@@ -565,6 +565,7 @@
    "service": {
     "customNote": "In uso un servizio multisig personalizzato ({{host}})",
     "unreachableNote": "Servizio multisig non raggiungibile: impossibile caricare le transazioni in attesa; nuovo tentativo in arrivo.",
+    "busyNote": "Servizio multisig occupato: le transazioni in attesa verranno caricate a breve; nuovo tentativo in arrivo.",
     "retry": "Riprova",
     "offline": "È mostrato ciò che era stato caricato prima.",
     "offlineSince": "È mostrato ciò che era stato caricato alle {{time}}.",
