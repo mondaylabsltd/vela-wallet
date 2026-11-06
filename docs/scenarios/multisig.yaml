@@ -450,6 +450,9 @@ scenarios:
         - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: a_proposal_review_is_bounded_kept_once_read_and_gone_when_unlisted, ci: required, note: 'one read at a time (the bound never pushed back); a quiet re-read that fails keeps a read review; an unlisted hash is failed {gone}' }
         - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: a_proposed_draft_keeps_its_ready_review, ci: required }
         - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: the_door_vectors_hold_through_the_link_door, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: a_review_whose_trace_is_refused_waits_for_its_silent_checks_before_unchecked, ci: required, note: 'r16-3: back from an outage, failed → Reading → ready; the door never signable on the way' }
+        - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: checks_that_stay_silent_land_unchecked_only_at_the_reasks_own_limit, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: a_review_asked_before_the_list_is_read_waits_for_it_never_gone, ci: required, note: 'r16-19' }
         - { file: rust/crates/vela-core/tests/app_multisig_outside.rs, test: a_request_whose_review_failed_is_never_handed_to_the_wallet_until_read_again, ci: required }
         - { file: rust/crates/vela-core/tests/app_multisig_outside.rs, test: a_link_review_that_times_out_offers_nothing_to_sign, ci: required }
       web-unit:
@@ -458,7 +461,9 @@ scenarios:
         - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'a proposal: Approve shut while its review is read, blocked when it failed, open after Try again', ci: required }
         - { file: 'app-web/vela-wallet/src/routes/[locale]/connect/page.svelte.test.ts', test: '§12: a request whose review is read is signed only then — shut while read, blocked when it failed, Try again', ci: required }
         - { file: app-web/vela-wallet/src/lib/multisig/core/review-door.test.ts, test: 'a state the core cannot read is a shut door, never an open one', ci: required }
-      web-e2e: { gap: 'the multisig e2e worlds answer every review read; no spec holds one back (the unit and core tests do)' }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/multisig-review-recovery.e2e.ts, test: 'back from a refused network: failed → Reading → Approve, never an enabled "… anyway"', ci: required, note: 'r16-3: a DOM watcher on every mutation and frame' }
+        - { file: app-web/vela-wallet/e2e/multisig-review-recovery.e2e.ts, test: 'back from a hung network: failed → Reading → Approve, never an enabled "… anyway"', ci: required }
       android-jvm:
         - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, test: a_drafts_propose_is_shut_while_its_review_is_read, ci: required }
         - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, test: a_drafts_failed_review_blocks_and_offers_try_again, ci: required }
