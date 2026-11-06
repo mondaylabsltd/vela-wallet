@@ -662,15 +662,6 @@
 				{m.create.solo}
 			</p>{/if}
 		{#if owners.length >= 1 && local.length === 0}<p class="error">{m.create.needLocal}</p>{/if}
-
-		<div class="nav">
-			<Button
-				variant="primary"
-				shape="rounded"
-				disabled={owners.length === 0 || local.length === 0}
-				onclick={toThreshold}>{m.create.next}</Button
-			>
-		</div>
 	{:else if step === 'threshold'}
 		<h3>{m.create.threshold}</h3>
 		<div class="stepper" role="group" aria-label={m.create.threshold}>
@@ -695,14 +686,6 @@
 				{fillTemplate(m.members.recovery, { m: threshold, n: owners.length })}
 			</p>
 		{/if}
-		<div class="nav two">
-			<Button variant="secondary" shape="rounded" onclick={() => (step = 'members')}
-				>{m.create.back}</Button
-			>
-			<Button variant="primary" shape="rounded" onclick={() => (step = 'review')}
-				>{m.create.next}</Button
-			>
-		</div>
 	{:else if step === 'review'}
 		{#if draft}
 			<div class="hero">
@@ -792,24 +775,6 @@
 				/>
 			</div>
 		{/if}
-		{#if failure}<p class="error" role="alert">
-				{fillTemplate(m.proposal.failed, { reason: failure })}
-			</p>{/if}
-		<div class="nav two">
-			<Button
-				variant="secondary"
-				shape="rounded"
-				disabled={busy}
-				onclick={() => (step = 'threshold')}>{m.create.back}</Button
-			>
-			<Button
-				variant="primary"
-				shape="rounded"
-				loading={busy}
-				disabled={busy || !creator || !draft || networks.length === 0 || chainId === null}
-				onclick={create}>{m.create.create}</Button
-			>
-		</div>
 	{:else if created}
 		<div class="hero">
 			<span class="done"><Icon icon={UTILITY_ICONS.check} size="lg" /></span>
@@ -834,19 +799,63 @@
 				{solo ? m.create.createdBodySolo : m.create.createdBody}
 			</p>
 		</div>
-		<div class="nav two">
-			<Button variant="secondary" shape="rounded" onclick={copy}>
-				<span class="label"
-					><Icon icon={copied ? UTILITY_ICONS.check : UTILITY_ICONS.copy} size="sm" />{copied
-						? m.proposal.copied
-						: m.create.copyInvite}</span
-				>
-			</Button>
-			<Button variant="primary" shape="rounded" onclick={() => oncreated(created ?? '')}
-				>{m.create.done}</Button
-			>
-		</div>
 	{/if}
+	<!-- r15-3: each step's action row is the sheet's foot, outside the scroll:
+	     whatever the body holds and whatever the window shows (Safari 26's
+	     wallet tab, an iPhone SE), Next / Create is in sight at open. -->
+	{#snippet footer()}
+		{#if step === 'members'}
+			<div class="nav">
+				<Button
+					variant="primary"
+					shape="rounded"
+					disabled={owners.length === 0 || local.length === 0}
+					onclick={toThreshold}>{m.create.next}</Button
+				>
+			</div>
+		{:else if step === 'threshold'}
+			<div class="nav two">
+				<Button variant="secondary" shape="rounded" onclick={() => (step = 'members')}
+					>{m.create.back}</Button
+				>
+				<Button variant="primary" shape="rounded" onclick={() => (step = 'review')}
+					>{m.create.next}</Button
+				>
+			</div>
+		{:else if step === 'review'}
+			{#if failure}<p class="error" role="alert">
+					{fillTemplate(m.proposal.failed, { reason: failure })}
+				</p>{/if}
+			<div class="nav two">
+				<Button
+					variant="secondary"
+					shape="rounded"
+					disabled={busy}
+					onclick={() => (step = 'threshold')}>{m.create.back}</Button
+				>
+				<Button
+					variant="primary"
+					shape="rounded"
+					loading={busy}
+					disabled={busy || !creator || !draft || networks.length === 0 || chainId === null}
+					onclick={create}>{m.create.create}</Button
+				>
+			</div>
+		{:else if created}
+			<div class="nav two">
+				<Button variant="secondary" shape="rounded" onclick={copy}>
+					<span class="label"
+						><Icon icon={copied ? UTILITY_ICONS.check : UTILITY_ICONS.copy} size="sm" />{copied
+							? m.proposal.copied
+							: m.create.copyInvite}</span
+					>
+				</Button>
+				<Button variant="primary" shape="rounded" onclick={() => oncreated(created ?? '')}
+					>{m.create.done}</Button
+				>
+			</div>
+		{/if}
+	{/snippet}
 </Sheet>
 
 <style>

@@ -377,6 +377,8 @@ pub struct World {
     pub receipts: BTreeMap<String, Value>,
     pub balances: BTreeMap<(u64, String), u128>,
     pub sim_reply: Option<String>,
+    /// Answered before `sim_reply`, one per simulation, in order.
+    pub sim_replies: std::collections::VecDeque<Option<String>>,
     // The outside owner's side.
     pub peer: PeerSim,
     pub wallet: Option<WalletSim>,
@@ -435,6 +437,7 @@ impl Default for World {
             receipts: BTreeMap::new(),
             balances: BTreeMap::new(),
             sim_reply: None,
+            sim_replies: std::collections::VecDeque::new(),
             peer: PeerSim::default(),
             wallet: None,
             passkey_fails: None,
@@ -942,7 +945,10 @@ impl World {
                 quote: json!({"kind": "quoted", "fee": {"token": null, "amount": "0x1"}, "totalGas": "0x1", "executorDeployed": true}),
             }),
             Op::Simulate { .. } => Res::Simulated {
-                reply: self.sim_reply.clone(),
+                reply: self
+                    .sim_replies
+                    .pop_front()
+                    .unwrap_or_else(|| self.sim_reply.clone()),
             },
             Op::RecipientRisk { address, .. } => {
                 let (is_contract, first_time) = self

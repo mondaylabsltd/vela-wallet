@@ -694,6 +694,7 @@ fn an_execution_never_signs_a_fee_other_than_the_one_shown() {
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         executor: fixture(0).address,
+        shown_fee: None,
     };
     run(&mut sut, &mut world, execute.clone());
     let ActionState::Failed { detail } = sut.view().actions[&format!("execute:{hash}")].clone()
@@ -711,6 +712,85 @@ fn an_execution_never_signs_a_fee_other_than_the_one_shown() {
     assert_ne!(now["fee"], shown["fee"], "{now}");
     run(&mut sut, &mut world, execute);
     assert_eq!(world.sent.len(), 1, "signed at the fee now shown");
+}
+
+/// Round 15 (desktop, not concluded in R15): a sheet re-asks its look every
+/// few seconds, so a fresh look (inside `PREVIEW_FRESH_MS`) can replace the
+/// fee between the paint and the press — the press signed the look's new
+/// figure, not the one the person saw. The press now carries the figure
+/// drawn under it (`shown_fee`): any look whose fee is another — fresh or
+/// re-quoted — stops with `fee_moved`, nothing signed; a press on the new
+/// figure signs exactly it.
+#[test]
+fn a_press_signs_only_the_fee_it_carries_even_on_a_fresh_look() {
+    let (mut world, mut sut, _) = setup(&[0, 1]);
+    let hash = hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
+    run(
+        &mut sut,
+        &mut world,
+        Event::Approve {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            owner: fixture(1).address,
+        },
+    );
+    let preview = Event::Preview {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: fixture(0).address,
+    };
+    // No clock runs between the look and the presses: every press is
+    // inside the look's window (no re-quote of its own).
+    let no_clock = |sut: &mut Sut, world: &mut World, event: Event| {
+        sut.dispatch(event);
+        for _ in 0..20_000 {
+            let Some(op) = sut.outstanding().into_iter().find(|op| {
+                !matches!(
+                    op,
+                    vela_core::app::multisig_shell::MultisigOperation::Wait { .. }
+                )
+            }) else {
+                return;
+            };
+            let res = world.answer(&op);
+            sut.resolve_matching(|o| *o == op, res);
+        }
+        panic!("the machine never settled");
+    };
+    world.now += 60_000.0;
+    no_clock(&mut sut, &mut world, preview);
+    let look = sut.view().previews[&look_key(&hash, &fixture(0).address)].clone();
+    assert_eq!(look["kind"], "priced", "{look}");
+    let fee = |v: &Value| {
+        vela_core::app::multisig_shell::quantity(v["fee"]["amount"].as_str().unwrap())
+            .unwrap()
+            .to_string()
+    };
+    // The person saw another figure (the look was replaced after the paint).
+    let press = |shown: String| Event::Execute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: fixture(0).address,
+        shown_fee: Some(shown),
+    };
+    let passkeys = world.passkeys.len();
+    no_clock(&mut sut, &mut world, press("999".to_owned()));
+    let ActionState::Failed { detail } = sut.view().actions[&format!("execute:{hash}")].clone()
+    else {
+        panic!("{:?}", sut.view().actions);
+    };
+    let detail: Value = serde_json::from_str(&detail).expect("a failure the shells read");
+    assert_eq!(detail["kind"], "fee_moved");
+    assert_eq!(
+        detail["amount"],
+        fee(&look),
+        "the figure it would have signed"
+    );
+    assert!(world.sent.is_empty(), "nothing signed or sent");
+    assert_eq!(world.passkeys.len(), passkeys);
+    // Pressed on the figure now shown: signed at exactly it.
+    no_clock(&mut sut, &mut world, press(fee(&look)));
+    assert_eq!(world.sent.len(), 1, "signed at the fee shown");
 }
 
 /// Round 14 (r14-4): with the network refusing, the desktop said "Vela won't
@@ -825,6 +905,7 @@ fn executed_and_followed_until_it_landed() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             executor: fixture(0).address,
+            shown_fee: None,
         },
     );
     assert_eq!(world.sent.len(), 1, "one user operation");
@@ -898,6 +979,7 @@ fn a_page_executor_signs_one_operation_and_its_page_is_told_what_runs() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             executor: fixture(0).address,
+            shown_fee: None,
         },
     );
     assert_eq!(
@@ -987,6 +1069,7 @@ fn an_unread_balance_is_unchecked_never_zero() {
                 chain_id: 100,
                 safe_tx_hash: hash.clone(),
                 executor: fixture(0).address,
+                shown_fee: None,
             },
         );
         let state = sut.view().actions[&format!("execute:{hash}")].clone();
@@ -1025,6 +1108,7 @@ fn an_execution_that_would_fail_stops_before_the_passkey() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             executor: fixture(0).address,
+            shown_fee: None,
         },
     );
     let ActionState::Stopped { preview } = sut.view().actions[&format!("execute:{hash}")].clone()
@@ -1420,6 +1504,7 @@ fn execute_landed(
             chain_id: 100,
             safe_tx_hash: hash.to_owned(),
             executor: executor.to_owned(),
+            shown_fee: None,
         },
     );
 }
@@ -2054,6 +2139,7 @@ fn approve_and_execute_stopped_before_signing_still_approves() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             executor: b,
+            shown_fee: None,
         },
     );
     let lower = hash.to_ascii_lowercase();
@@ -2102,6 +2188,7 @@ fn approve_execute_landed(
             chain_id: 100,
             safe_tx_hash: hash.to_owned(),
             executor: executor.to_owned(),
+            shown_fee: None,
         },
     );
 }

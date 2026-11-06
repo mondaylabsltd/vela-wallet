@@ -367,9 +367,14 @@
 		ask();
 		// Its hashes and fields are read once for a finished one; nothing is re-checked.
 		if (untrack(() => item?.status === 'done')) return;
-		const fresh = setInterval(ask, REVIEW_FRESH_MS);
+		// r15-13 (§12): a failed review waits for the person's Try again —
+		// the timers never ask it again (the core leaves it failed, too).
+		const failed = () => untrack(() => reviewState?.kind === 'failed');
+		const fresh = setInterval(() => {
+			if (!failed()) ask();
+		}, REVIEW_FRESH_MS);
 		const retry = setInterval(() => {
-			if (untrack(() => machineUnread)) ask();
+			if (!failed() && untrack(() => machineUnread)) ask();
 		}, REVIEW_RETRY_MS);
 		return () => {
 			clearInterval(fresh);
@@ -752,12 +757,12 @@
 		}
 		// r14-9: the fee moved since the press — nothing signed; said with the
 		// new figure (its fee line's own words), so the next press is on it.
+		// A reason, like every other: the failed line adds "That didn't go
+		// through:" once where it is drawn (r15-6 — it was said twice).
 		if (error instanceof ExecutionFeeMovedError) {
-			return fillTemplate(m.proposal.failed, {
-				reason: fillTemplate(m.proposal.feeLine, {
-					fee: feeCoin(error.amount, nativeSymbol(chainId)),
-					name: names.label(error.executor)
-				})
+			return fillTemplate(m.proposal.feeLine, {
+				fee: feeCoin(error.amount, nativeSymbol(chainId)),
+				name: names.label(error.executor)
 			});
 		}
 		if (error instanceof ExecutionUnpricedError) return m.proposal.unpricedReason;
@@ -887,9 +892,11 @@
 		key: string,
 		event: Parameters<typeof proposalsHost.send>[0]
 	): Promise<{ error: unknown; state: MultisigActionState | null }> {
+		// Read before the wait: a sheet closed meanwhile has no props to read.
+		const chain = chainId;
 		proposalsHost.send(event);
 		const state = await proposalsHost.settled(key);
-		return { error: state ? actionError(state, chainId) : null, state };
+		return { error: state ? actionError(state, chain) : null, state };
 	}
 
 	/** The person confirmed the transaction: propose it, approved by this device's member. */
@@ -985,11 +992,15 @@
 		const lower = hash.toLowerCase();
 		// The machine looks again before the passkey unless its look is fresh,
 		// signs that look's calls and fee, and follows the operation to its end.
+		// r15: the press carries the fee drawn under it — a look that holds
+		// another figure (replaced after the paint) stops with `fee_moved`.
+		const drawn = previewOf(actor);
 		const { error } = await act(`execute:${lower}`, {
 			type: oneTap ? 'approve_execute' : 'execute',
 			chain_id: chainId,
 			safe_tx_hash: hash,
-			executor: by
+			executor: by,
+			...(drawn?.kind === 'priced' ? { shown_fee: drawn.fee.amount.toString() } : {})
 		});
 		if (!error) return;
 		// r5reg-21: its number was used meanwhile — what ran is said, not a failure.
@@ -1473,8 +1484,16 @@
 		return owner && !approved ? item.approved + 1 : item.approved;
 	});
 
+	/**
+	 * r15-11: the list is not this multisig's yet — nothing followed (a cold
+	 * load) or another multisig still followed (a link just opened): it is
+	 * being read, never "isn't shown here" nor the other one's unread words.
+	 */
+	const listLoading = $derived(
+		store.loading || (!preview && !sameAddress(proposals.followed, account.address))
+	);
 	/** r4b-3: the network did not answer the last read (or the device is offline). */
-	const chainDown = $derived(store.unreadable.includes(chainId));
+	const chainDown = $derived(!listLoading && store.unreadable.includes(chainId));
 	/**
 	 * §18 (b), round 14: a sheet opened without a link whose transaction is
 	 * not in the list — the core's rule (`review.missing`): a multisig service
@@ -1482,7 +1501,7 @@
 	 * been shared with the members yet".
 	 */
 	const missing = $derived(
-		missingSaid(store.loading, chainDown, store.chain(chainId)?.mailbox ?? null)
+		missingSaid(listLoading, chainDown, store.chain(chainId)?.mailbox ?? null)
 	);
 	let retrying = $state(false);
 	/** Withdraw the person's own proposal on its review (§3.6), or decline a site's request. */
@@ -1495,7 +1514,9 @@
 	async function retryRead() {
 		retrying = true;
 		try {
-			await store.refresh(account, account.chainIds);
+			// r15-12: the person's Try again is a read begun now (the machine's
+			// `retry`), never one joined to a read still out from the outage.
+			await (preview ? store.refresh(account, account.chainIds) : proposals.retry());
 		} finally {
 			retrying = false;
 		}
@@ -1529,7 +1550,7 @@
 				onclick={retryLink}
 				testid="proposal-open-retry">{m.review.state.tryAgain}</Button
 			>
-		{:else if !store.loading && (chainDown || offline())}
+		{:else if !listLoading && (chainDown || offline())}
 			<!-- r4b-3: the network (or this device) is not answering: said as
 			     that, with Retry — never "it hasn't been shared". -->
 			<p class="warn" role="alert" data-testid="proposal-chain-down">
@@ -1554,7 +1575,7 @@
 			>
 		{:else}
 			<!-- Being read, or read from the mailbox and still not there (ms-22). -->
-			<p class="quiet" aria-busy={store.loading}>
+			<p class="quiet" aria-busy={listLoading}>
 				{missingWords(m.proposal, missing.key, chainName(chainId))}
 			</p>
 		{/if}
@@ -2031,7 +2052,9 @@
 		{#if drafting}
 			<!-- The review of what the site asks: nothing is signed before this. -->
 			{#if phase.kind === 'failed'}
-				<p class="warn" role="alert" data-testid="proposal-failed">{phase.reason}</p>
+				<p class="warn" role="alert" data-testid="proposal-failed">
+					{fillTemplate(m.proposal.failed, { reason: phase.reason })}
+				</p>
 			{/if}
 			{#if candidates.length > 1 && item.review.action !== null && !readOnly && !signBlocked}
 				{@render actorChoice()}

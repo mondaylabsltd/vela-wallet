@@ -58,6 +58,7 @@ import {
 	liveActivityRow,
 	liveAssetRow,
 	moneyText,
+	feedFor,
 	narrowedFeed,
 	tokenAmountText,
 	tokenExplorerURL,
@@ -200,23 +201,26 @@ function liveAssets(model: AssetsModel, inputs: FlowsLiveInputs): AssetsModel {
 function liveHistory(model: HistoryModel, inputs: FlowsLiveInputs): HistoryModel {
 	const { balance: view, m } = inputs;
 	const header = livePill(model, inputs);
-	if (!inputs.feed) return { ...model, header, mode: 'loading', groups: [] };
+	// r15-1 (§23): only the shown account's rows (the core's `account`).
+	const mine = feedFor(inputs.feed, view.address);
+	if (!mine) return { ...model, header, mode: 'loading', groups: [] };
 	// The same narrowing the home applies (`narrowedFeed`), so the pushed
 	// list and the page's row index walk one feed.
-	const feed = narrowedFeed(inputs.feed, inputs.chainFilter ?? null);
+	const feed = narrowedFeed(mine, inputs.chainFilter ?? null);
 	// The feed's own flag (`FeedView.hidden`), as every feed surface reads it.
 	// Every row (`rows`), never the home's cut of three (`home_rows`).
 	const groups = liveActivityGroups(feed.rows, m, feed.hidden);
 	return {
 		...model,
 		header,
-		mode: groups.length > 0 ? 'rows' : view.balance_unknown ? 'loading' : 'empty',
+		// r15-1: "no transactions yet" only once the core has looked (`settled`).
+		mode: groups.length > 0 ? 'rows' : view.balance_unknown || !feed.settled ? 'loading' : 'empty',
 		// Spec 082 RG5 (L-D7): "no transactions yet" with every network shown,
 		// "none on this network" under a filter — the core's choice of key.
 		emptyText:
 			inputs.fm === undefined
 				? model.emptyText
-				: inputs.feed.history_empty_key === 'history.emptyFilter'
+				: feed.history_empty_key === 'history.emptyFilter'
 					? inputs.fm['history.emptyFilter']
 					: inputs.fm['history.emptyTitle'],
 		groups

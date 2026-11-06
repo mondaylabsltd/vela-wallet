@@ -2429,6 +2429,8 @@ impl WalletPage {
                     let (chain_id, hash, one_tap) =
                         (item.chain_id, item.safe_tx_hash.clone(), *one_tap);
                     let executor = actor.clone();
+                    // r15: the press carries the fee drawn under it.
+                    let shown_fee = look.as_ref().and_then(rule::Look::shown_fee);
                     presses = presses.child(div().flex_1().min_w(px(0.)).child(
                         crate::ui::vela_button_state(
                             "ms-execute",
@@ -2439,6 +2441,7 @@ impl WalletPage {
                             cx.listener(move |this, _, _, cx| {
                                 let host = this.ms_host(cx);
                                 let (hash, executor) = (hash.clone(), executor.clone());
+                                let shown_fee = shown_fee.clone();
                                 // "Approve and execute" is the machine's one press:
                                 // stopped before its signature, the approval is
                                 // still given and kept (r4-11).
@@ -2447,12 +2450,14 @@ impl WalletPage {
                                         chain_id,
                                         safe_tx_hash: hash,
                                         executor,
+                                        shown_fee,
                                     }
                                 } else {
                                     ms_proposals::Event::Execute {
                                         chain_id,
                                         safe_tx_hash: hash,
                                         executor,
+                                        shown_fee,
                                     }
                                 };
                                 host.update(cx, |host, cx| host.proposals(event, cx));
@@ -3316,7 +3321,7 @@ impl WalletPage {
                                 .text_color(theme.fg_subtle)
                                 .child(r.label.clone()),
                         )
-                        .child(value.min_w(px(0.)).text_right().child(r.value.clone()))
+                        .child(reading_value(value, r))
                 }))
         };
         match block {
@@ -4581,6 +4586,20 @@ pub(crate) fn value_variant(sign: SignRule) -> crate::ui::ButtonVariant {
         crate::ui::ButtonVariant::Danger
     } else {
         crate::ui::ButtonVariant::Value
+    }
+}
+
+/// A reading row's value, right-aligned (r15-10): a full address through
+/// the one address rule — two unbreakable halves, 22 | 20, the second under
+/// the first when the column is narrow, never its last character alone
+/// (`ui::address_text`); anything else as prose, whose rule keeps a full
+/// address inside a sentence whole the same way.
+fn reading_value(value: Div, row: &crate::multisig::reading::Row) -> Div {
+    let value = value.min_w(px(0.)).text_right();
+    if crate::ui::address_halves(&row.value).is_some() {
+        value.child(crate::ui::address_text(row.value.clone()).justify_end())
+    } else {
+        value.child(crate::ui::prose(row.value.clone()))
     }
 }
 

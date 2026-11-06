@@ -8,7 +8,7 @@
 #
 #   UDID=<a simulator YOU created> DD=<derived data> SHOTS=<dir> \
 #   FORK_PORT=… UNREAD_PORT=… GENESIS_PORT=… RELAY_PORT=… PEERCONNECT_PORT=… \
-#   PAGE_PORT=… INDEX_PORT=… DAPP_PORT=… [LOC=en] [NOBUILD=1] \
+#   PAGE_PORT=… INDEX_PORT=… DAPP_PORT=… [LOC=en] [MS_NAME=…] [NOBUILD=1] \
 #     app-ios/scripts/safari-route-e2e.sh test01_enableExtension test02_createOnThePage \
 #       test03_connect test07_createMultisigFromTheHeader test08_createMultisigFromSettings
 #
@@ -40,16 +40,24 @@ stop="$LOGS/.faceid.stop"; rm -f "$stop"
   done ) &
 loop=$!
 
+# An optional name rides as an argument to `env`: a word that only an
+# expansion produced is never an assignment, so bash would run it as the
+# command (r15-16, exit 127). bash 3.2 + set -u: an empty array is spelled
+# ${a[@]+"${a[@]}"}.
+extra=()
+[ -n "${MS_NAME:-}" ] && extra+=("TEST_RUNNER_VELA_MS_NAME=$MS_NAME")
+
 failed=0
 for t in "$@"; do
   echo "[$(date +%T)] $t"
+  env ${extra[@]+"${extra[@]}"} \
   TEST_RUNNER_VELA_SAFARI_ROUTE_E2E=1 \
   TEST_RUNNER_VELA_HARNESS_FORK="$FORK_PORT" TEST_RUNNER_VELA_HARNESS_UNREAD="$UNREAD_PORT" \
   TEST_RUNNER_VELA_HARNESS_GENESIS="$GENESIS_PORT" TEST_RUNNER_VELA_HARNESS_RELAY="$RELAY_PORT" \
   TEST_RUNNER_VELA_HARNESS_PEER="$PEERCONNECT_PORT" \
   TEST_RUNNER_VELA_SIGNER_PAGE="http://localhost:$PAGE_PORT/" TEST_RUNNER_VELA_INDEX="http://127.0.0.1:$INDEX_PORT" \
   TEST_RUNNER_VELA_DAPP_PORT="$DAPP_PORT" TEST_RUNNER_VELA_SAFARI_LOCALE="${LOC:-en}" \
-  TEST_RUNNER_VELA_SAFARI_SHOTS="$SHOTS" ${MS_NAME:+TEST_RUNNER_VELA_MS_NAME="$MS_NAME"} \
+  TEST_RUNNER_VELA_SAFARI_SHOTS="$SHOTS" \
   xcodebuild test-without-building -project VelaWallet.xcodeproj -scheme VelaWallet \
     -destination "id=$UDID" -derivedDataPath "$DD" \
     -only-testing:"VelaWalletUITests/SafariRouteDeviceTests/$t" >"$LOGS/$t.log" 2>&1

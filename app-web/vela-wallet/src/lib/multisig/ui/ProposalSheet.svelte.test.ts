@@ -1301,6 +1301,38 @@ describe('an execution the relay refused (ms-3)', () => {
 	});
 });
 
+describe('a fee that moved before the press (r14-9, r15-6)', () => {
+	it('says "failed" once: the core’s new figure inside the one prefix', async () => {
+		fake.chain.items = [
+			item({
+				approved: 1,
+				canApprove: [],
+				canExecute: [local],
+				approvals: [{ owner: OTHER, counts: true, approval: {}, createdMs: 1 }]
+			})
+		];
+		fake.executeThrows = new Error(
+			JSON.stringify({
+				kind: 'fee_moved',
+				amount: '186000000000000000',
+				chainId: 100,
+				executor: ME
+			})
+		);
+		const m = words();
+		m.proposal.failed = 'Failed: {{reason}}';
+		m.proposal.feeLine = 'Fee {{fee}} by {{name}}';
+		const screen = show({ m });
+		await settle();
+		press('proposal.approveAndExecute');
+		await settle();
+		const said = document.querySelector('[data-testid="proposal-failed"]')?.textContent?.trim();
+		expect(said).toMatch(/^Failed: Fee 0\.186 xDAI by /);
+		expect(said?.match(/Failed:/g)).toHaveLength(1);
+		await screen.unmount();
+	});
+});
+
 describe('a batch of calls (owner, 2026-10-28)', () => {
 	it('reads every call, and says first, in red, a call that changes the multisig', async () => {
 		const batch = {
@@ -1541,6 +1573,8 @@ describe('a link whose read did not come back (§18 item 1)', () => {
 	}
 
 	it('notInMailbox: an answer — said as that, and no Try again', async () => {
+		// The multisig's own list, read (r15-11: never said of another's).
+		fake.followed = SAFE;
 		fake.chain = { chainId: 100, members, items: [], mailbox: true };
 		fake.machineLinked = linkedAs('notInMailbox', null, false);
 		const screen = show();
@@ -2050,12 +2084,35 @@ describe('the network cannot be read (r4b-3)', () => {
 	it('says it cannot reach the network, with Retry — never "hasn’t been shared"', async () => {
 		fake.chain = null;
 		fake.unreadable = [100];
+		fake.followed = SAFE;
 		const screen = show();
 		await settle();
 		const text = document.body.textContent ?? '';
 		expect(text).toContain('proposal.cantCheck');
 		expect(text).not.toContain('proposal.notFound');
 		expect(buttons()).toContain('service.retry');
+		await screen.unmount();
+	});
+});
+
+describe('a sheet on a multisig whose list is not read yet (r15-11)', () => {
+	it.each([
+		['nothing followed yet (a cold load)', null],
+		[
+			'another multisig still followed (a link just opened)',
+			'0x0000000000000000000000000000000000000cc1'
+		]
+	])('%s: "Opening…", never "isn’t shown here" nor an unread read’s words', async (_, followed) => {
+		fake.chain = null;
+		fake.unreadable = [100];
+		fake.followed = followed;
+		const screen = show();
+		await settle();
+		const text = document.body.textContent ?? '';
+		expect(text).toContain('proposal.opening');
+		expect(text).not.toContain('proposal.notHere');
+		expect(text).not.toContain('proposal.cantCheck');
+		expect(text).not.toContain('proposal.unread');
 		await screen.unmount();
 	});
 });
@@ -2310,6 +2367,10 @@ describe('an execution looked at before its passkey (r4-5, r4-7)', () => {
 		await settle();
 		expect(fake.calls).toEqual(['execute']);
 		expect(fake.executedWith).toEqual([look]);
+		// r15: the press carries the figure drawn under it.
+		expect(machineSent('approve_execute').map((e) => e.shown_fee)).toEqual([
+			String(35n * 10n ** 15n)
+		]);
 		await screen.unmount();
 	});
 

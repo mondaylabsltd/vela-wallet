@@ -191,13 +191,29 @@ pub fn assets(
         no_match: s.no_matching_tokens.clone(),
         rows: rows.clone(),
         add_by_address: s.add_by_address.clone(),
-        empty: empty.then(|| AssetsEmpty {
-            title: s.assets_empty_title.clone(),
-            caption: s.assets_empty_caption.clone(),
-            cta: s.add_token_title.clone(),
-            hint_title: s.not_showing_title.clone(),
-            hint_body: s.not_showing_body.clone(),
-        }),
+        empty: if empty {
+            Some(AssetsEmpty {
+                title: s.assets_empty_title.clone(),
+                caption: s.assets_empty_caption.clone(),
+                unread: false,
+                cta: s.add_token_title.clone(),
+                hint_title: s.not_showing_title.clone(),
+                hint_body: s.not_showing_body.clone(),
+            })
+        } else if rows.is_empty() {
+            // r15-4: nothing listed because a network could not be read —
+            // said as the home's strip says it, never a blank panel.
+            crate::wallet::live::assets_unread(view, wallet).map(|(title, caption)| AssetsEmpty {
+                title,
+                caption,
+                unread: true,
+                cta: s.add_token_title.clone(),
+                hint_title: s.not_showing_title.clone(),
+                hint_body: s.not_showing_body.clone(),
+            })
+        } else {
+            None
+        },
     }
 }
 
@@ -6751,6 +6767,16 @@ mod tests {
         let mut older = settled.clone();
         older.empty_key = None;
         assert!(empty(&older).is_none());
+
+        // r15-4: the read ended with a network out of reach and nothing
+        // listed — said (the web's `unreadAssets`), never the empty wallet
+        // and never a blank panel.
+        let mut down = older.clone();
+        down.unreachable = true;
+        let said = empty(&down).expect("the outage is said");
+        assert!(said.unread, "no deposit invitation under it");
+        assert_ne!(said.title, strings().assets_empty_title);
+        assert_eq!(said.caption, wallet_strings().unreachable_body);
 
         // Narrowed to a chain that holds nothing while others hold something:
         // the web's `filteredEmpty` — the empty body, never a blank column.

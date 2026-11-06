@@ -3121,12 +3121,20 @@ fn the_empty_state_needs_a_chain_to_have_answered() {
     });
     assert_eq!(threw.view().empty_key, None);
 
-    // One network of three is down, the others answered holding nothing: a
-    // new wallet is not kept at a skeleton by it.
+    // One network of three is down, the others answered holding nothing:
+    // r15-4 — what it holds is unread, so nothing claims the wallet empty;
+    // the list says the network it could not read (the hero's line).
     let partial = cached_zero(settled_read(vec![], vec![56], vec![1, 56, 100]));
     let view = partial.view();
     assert!(view.unreachable_key.is_some());
-    assert_eq!(view.empty_key.as_deref(), Some(ASSETS_EMPTY));
+    assert_eq!(view.empty_key, None, "an unread network is no empty wallet");
+    assert_eq!(
+        view.unreachable_networks
+            .iter()
+            .map(|n| n.chain_id)
+            .collect::<Vec<_>>(),
+        vec![56]
+    );
 
     // Once chains have answered, a later read that throws takes nothing
     // back: what they found stands.
@@ -3150,6 +3158,113 @@ fn the_empty_state_needs_a_chain_to_have_answered() {
     });
     back.resolve(settled_read(vec![], vec![], vec![1, 56, 100]));
     assert_eq!(back.view().empty_key.as_deref(), Some(ASSETS_EMPTY));
+}
+
+/// Round 15 (r15-4): Dana held 10.53 USDC on Arc Testnet; with Arc unread
+/// (refused, or answering only "slow down") and its last-known rows lost,
+/// the other networks' empty answers made the Assets list say "Deposit your
+/// first asset". An unread network never yields an empty-state claim:
+/// refused, it is said as unread (the list's words are the hero's); rate
+/// limited, the list stays loading while the pool waits it out.
+#[test]
+fn an_unread_network_never_yields_an_empty_claim() {
+    let first = |result: Res| {
+        let mut sut = boot(ADDR_A);
+        sut.resolve(Res::CachedTotalLoaded {
+            address: ADDR_A.to_owned(),
+            usd: None,
+        });
+        sut.resolve(result);
+        sut
+    };
+    // Arc refused; every other network answered holding nothing.
+    let refused = first(settled_read(
+        vec![],
+        vec![ARC_TESTNET],
+        vec![1, 56, ARC_TESTNET],
+    ));
+    let view = refused.view();
+    assert_eq!(view.checking_key, None, "the first read has ended");
+    assert_eq!(view.empty_key, None, "Arc is unread: not an empty wallet");
+    assert!(view
+        .unreachable_networks
+        .iter()
+        .any(|n| n.chain_id == ARC_TESTNET));
+
+    // Arc answering only "slow down".
+    let limited = first(Res::FetchSettled {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        tokens: vec![],
+        failed_chain_ids: vec![ARC_TESTNET],
+        rate_limited_chain_ids: vec![ARC_TESTNET],
+        read_chain_ids: vec![1, 56, ARC_TESTNET],
+        internal_chain_ids: vec![],
+        registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
+        read_at_ms: None,
+        now_ms: NOW,
+    });
+    assert_eq!(
+        limited.view().empty_key,
+        None,
+        "a rate-limited network is unread too"
+    );
+}
+
+/// Round 15 (r15-15): under a refused Arc the desktop's balance line said
+/// "Checking…" at 50 s while the other sections had named the outage. The
+/// pool's word that a network is SILENT is the core's outage naming: during
+/// the first read it is said at once — "Checking…" gives way to "Can't
+/// reach Arc Testnet" — and the round, when it settles, has the last word.
+#[test]
+fn a_silent_network_during_the_first_read_is_named_never_checking() {
+    use vela_core::app::balance_dashboard::CHECKING;
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(10.53),
+    });
+    assert_eq!(sut.view().checking_key.as_deref(), Some(CHECKING));
+    // A loss that is not silent only waits for the round.
+    sut.dispatch(Event::PoolUnreached {
+        chain_ids: vec![ARC_TESTNET],
+        silent: vec![],
+    });
+    assert_eq!(sut.view().checking_key.as_deref(), Some(CHECKING));
+    // Silent: named now, while the first round is still out.
+    sut.dispatch(Event::PoolUnreached {
+        chain_ids: vec![ARC_TESTNET],
+        silent: vec![ARC_TESTNET],
+    });
+    let view = sut.view();
+    assert_eq!(
+        view.checking_key, None,
+        "the outage is named, not Checking…"
+    );
+    assert_eq!(
+        view.unreachable_networks
+            .iter()
+            .map(|n| n.chain_id)
+            .collect::<Vec<_>>(),
+        vec![ARC_TESTNET]
+    );
+    assert!(view.unreachable_key.is_some());
+    assert_eq!(view.empty_key, None);
+    // The round settles: its word stands (Arc came back meanwhile).
+    sut.resolve(settled_read(
+        vec![token(ARC_TESTNET, "USDC", "10.53", Some(1.0))],
+        vec![],
+        vec![1, ARC_TESTNET],
+    ));
+    let view = sut.view();
+    assert_eq!(view.checking_key, None);
+    assert!(
+        view.unreachable_networks.is_empty(),
+        "{:?}",
+        view.unreachable_networks
+    );
 }
 
 /// A view written before the empty fact reads without it.

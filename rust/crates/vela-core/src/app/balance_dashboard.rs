@@ -1340,9 +1340,10 @@ pub struct BalanceView {
     /// held nothing last session opens with a cached total of 0, and each
     /// shell took "no tokens, a known total" for an empty wallet — so it
     /// invited a first deposit under "Checking…", and again under "Can't
-    /// reach 24 networks", before anything had been read. A round that
-    /// misses SOME networks still says it for the ones that answered: a new
-    /// wallet is not held at a skeleton by one network that is down. A shell
+    /// reach 24 networks", before anything had been read. r15-4: nor while a
+    /// network said for the account is unread (refused, silent, rate
+    /// limited) — what it holds is not known; the list says that network
+    /// instead (`unreachable_networks`, the hero's words). A shell
     /// draws the empty state exactly when this is `Some`, and with no tokens
     /// and no key it draws what it draws while loading.
     #[serde(default)]
@@ -1587,7 +1588,10 @@ impl App for BalanceDashboard {
             internal_chain_ids: model.internal_chain_ids.clone(),
             internal_key: (model.errored_internally || !model.internal_chain_ids.is_empty())
                 .then(|| super::fee_policy::REASON_INTERNAL_KEY.to_owned()),
-            checking_key: (!first_read_ended).then(|| CHECKING.to_owned()),
+            // r15-15: never "Checking…" under an outage the core already
+            // names (a network the pool found silent during the first read).
+            checking_key: (!first_read_ended && model.pool_said.is_empty())
+                .then(|| CHECKING.to_owned()),
             live_key: (model.last_round_answered
                 && !model.hidden
                 && !unknown
@@ -1598,6 +1602,7 @@ impl App for BalanceDashboard {
                 .then(|| LIVE_ZERO.to_owned()),
             empty_key: (first_read_ended
                 && some_chain_answered(model)
+                && !unread_said(model)
                 && model.tokens.is_empty()
                 && !holdings_loading
                 && !unknown
@@ -1769,7 +1774,23 @@ fn pool_unreached(
     fresh.extend(fresh_silent.iter().copied());
     model.pool_unreached = now;
     model.pool_silent = silent;
-    if model.address.is_none() || !model.bootstrapped || model.read_deferred {
+    if model.address.is_none() || model.read_deferred {
+        return Command::done();
+    }
+    if !model.bootstrapped {
+        // r15-15: the account's first round is still out, and the pool finds
+        // a network SILENT — the outage every other section already names.
+        // Said now (the hero leaves "Checking…" for "Can't reach …"); the
+        // round still out is the read, and its settle has the last word.
+        let home = said_home(model);
+        for id in fresh_silent {
+            if home.as_ref().is_none_or(|home| home.contains(&id))
+                && !model.failed_chain_ids.contains(&id)
+            {
+                model.failed_chain_ids.push(id);
+                model.pool_said.insert(id);
+            }
+        }
         return Command::done();
     }
     let unsaid: Vec<u32> = fresh
@@ -2523,6 +2544,20 @@ fn said_home(model: &Model) -> Option<BTreeSet<u32>> {
             .is_some_and(|chains| !chains.is_empty())
             .then(|| home_chains(model, address, &[]))
     })
+}
+
+/// r15-4: whether a network whose failure is said for the account shown
+/// ([`said_home`]) is unread — refused, silent, rate limited or failed
+/// inside the app. While one is, nobody knows what it holds: the Assets list
+/// never says "Deposit your first asset" (Dana's 10.53 USDC on an unread
+/// Arc Testnet was claimed empty by the other networks' answers).
+fn unread_said(model: &Model) -> bool {
+    let home = said_home(model);
+    model
+        .failed_chain_ids
+        .iter()
+        .chain(model.rate_limited_chain_ids.iter())
+        .any(|id| home.as_ref().is_none_or(|home| home.contains(id)))
 }
 
 /// r11: [`coverage_partial`] as the home SAYS it ("Some balances are still

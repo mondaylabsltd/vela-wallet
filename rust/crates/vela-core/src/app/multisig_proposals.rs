@@ -612,6 +612,15 @@ pub enum Event {
         chain_id: u64,
         safe_tx_hash: String,
         executor: String,
+        /// r15 (fee moved): the fee the sheet drew under the press, in base
+        /// units (decimal) — the figure the person pressed on. When set, the
+        /// execution signs only that fee: a look that holds any other (a
+        /// re-quote landed between the paint and the press, or the press's
+        /// own re-quote) stops with `fee_moved`, nothing signed. Missing: the
+        /// executor's look on screen is taken as shown (older shells).
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        shown_fee: Option<String>,
     },
     /// core-ms-2: "Approve and execute", one press, offered where
     /// [`ProposalsView::approve_execute`] names `executor`: its execution —
@@ -627,6 +636,15 @@ pub enum Event {
         chain_id: u64,
         safe_tx_hash: String,
         executor: String,
+        /// r15 (fee moved): the fee the sheet drew under the press, in base
+        /// units (decimal) — the figure the person pressed on. When set, the
+        /// execution signs only that fee: a look that holds any other (a
+        /// re-quote landed between the paint and the press, or the press's
+        /// own re-quote) stops with `fee_moved`, nothing signed. Missing: the
+        /// executor's look on screen is taken as shown (older shells).
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        shown_fee: Option<String>,
     },
     /// core-ms-2: [`Event::ConfirmDraft`], then — when the proposer's own
     /// approval makes it ready ([`DraftView::execute_now`]: a site's
@@ -1110,6 +1128,15 @@ pub struct State {
     ticks: u64,
     inflight: bool,
     queued: bool,
+    /// r15-11 / r15-12: the read that owns the list now. A newly followed
+    /// multisig, or the person's Try again, starts a read at once rather
+    /// than wait out (or be dropped behind) one already out — maybe hung for
+    /// the old multisig, or started during an outage; the older read's
+    /// answer is dropped when it lands.
+    read_gen: u64,
+    /// The multisig the read out now is of (lowercase): a Follow supersedes
+    /// a read only when that read is another multisig's.
+    reading: Option<String>,
     held: u32,
     outbox: BTreeMap<String, Submission>,
     outbox_entries: BTreeMap<String, OutboxEntry>,
@@ -1411,7 +1438,7 @@ impl App for MultisigProposals {
                 })
             }
             Event::Follow { account } => {
-                {
+                let same = {
                     let mut s = lock(&model.state);
                     let same = match (&s.account, &account) {
                         (Some(a), Some(b)) => same_address(&a.address, &b.address),
@@ -1419,6 +1446,10 @@ impl App for MultisigProposals {
                         _ => false,
                     };
                     if !same {
+                        // r15-11: nothing is said of the multisig now followed
+                        // ("not here", "couldn't reach the service") until a
+                        // read of it lands — its kept list included.
+                        s.loading = account.is_some();
                         s.chains.clear();
                         s.missing.clear();
                         s.lists.clear();
@@ -1439,16 +1470,29 @@ impl App for MultisigProposals {
                     if account.is_some() && s.chains.is_empty() {
                         seed(&mut s);
                     }
-                }
+                    if account.is_none() {
+                        s.loading = false;
+                    }
+                    same
+                };
                 if account.is_none() {
                     return render();
                 }
-                flow(model, |io, st| async move {
+                flow(model, move |io, st| async move {
                     // r4b-7: what this device sent for it before a reload is
                     // watched again, once its list is read.
                     let now = io.now().await;
                     let flights = flights_to_resume(&mut lock(&st), now);
-                    refresh(&io, &st, false, false).await;
+                    // r15-11: another multisig's read still out never holds
+                    // this one's back (nor drops it): it starts now. A read
+                    // of this very multisig still out (followed again after
+                    // a moment of none) is its read: it is waited for.
+                    let other = {
+                        let s = lock(&st);
+                        let now = s.account.as_ref().map(|a| a.address.to_ascii_lowercase());
+                        s.inflight && s.reading != now
+                    };
+                    refresh_as(&io, &st, false, false, !same && other).await;
                     resume_flights(&io, &st, flights);
                 })
             }
@@ -1494,7 +1538,13 @@ impl App for MultisigProposals {
                     s.history.retain(|_, stand| *stand != HistoryStand::Unread);
                 }
                 if !flows::retry_linked(&io, &st).await {
-                    refresh(&io, &st, false, false).await;
+                    // r15-12: the person's Try again is a read begun now —
+                    // never one started during the outage and still hung —
+                    // and the list is `loading` until it lands, so the words
+                    // of the read that failed are not said again meanwhile.
+                    lock(&st).loading = true;
+                    io.emit(Event::Changed);
+                    refresh_as(&io, &st, false, false, true).await;
                 }
             }),
             Event::Online { online } => {
@@ -1535,12 +1585,17 @@ impl App for MultisigProposals {
             } => {
                 // §12: `loading` at once (a review already read stays drawn
                 // while it is read again); one read at a time per review, so
-                // a shell asking again never pushes its bound back.
+                // a shell asking again never pushes its bound back. r15-13: a
+                // review that FAILED is read again only on the person's Try
+                // again (`review_again`) — a shell's open, refresh or timer
+                // asking `review` never retries it behind their back.
                 let run = {
                     let mut s = lock(&model.state);
                     let key = review_key_of(&s, chain_id, &safe_tx_hash);
                     s.review_blind.insert(key.clone(), blind);
-                    if s.reviewing.contains_key(&key) {
+                    let failed =
+                        matches!(s.review_states.get(&key), Some(ReviewState::Failed { .. }));
+                    if failed || s.reviewing.contains_key(&key) {
                         None
                     } else {
                         if !s.review_states.get(&key).is_some_and(ReviewState::is_ready) {
@@ -1648,6 +1703,7 @@ impl App for MultisigProposals {
                 chain_id,
                 safe_tx_hash,
                 executor,
+                shown_fee,
             } => {
                 {
                     let mut s = lock(&model.state);
@@ -1657,7 +1713,8 @@ impl App for MultisigProposals {
                     s.actions.remove(&format!("approve:{hash}"));
                 }
                 flow(model, move |io, st| async move {
-                    approve_execute(&io, &st, chain_id, &safe_tx_hash, &executor).await;
+                    let shown = shown_fee.as_deref().and_then(shell::quantity);
+                    approve_execute(&io, &st, chain_id, &safe_tx_hash, &executor, shown).await;
                 })
             }
             Event::Withdraw => {
@@ -1701,6 +1758,7 @@ impl App for MultisigProposals {
                 chain_id,
                 safe_tx_hash,
                 executor,
+                shown_fee,
             } => {
                 let key = format!("execute:{}", safe_tx_hash.to_ascii_lowercase());
                 lock(&model.state)
@@ -1708,7 +1766,9 @@ impl App for MultisigProposals {
                     .insert(key.clone(), ActionState::Working);
                 flow(model, move |io, st| async move {
                     let input = execution_input(&st, chain_id, &safe_tx_hash, &executor);
-                    let outcome = execute(&io, &st, chain_id, &safe_tx_hash, &executor).await;
+                    let shown = shown_fee.as_deref().and_then(shell::quantity);
+                    let outcome =
+                        execute(&io, &st, chain_id, &safe_tx_hash, &executor, shown).await;
                     flows::remember_execution(&io, &st, input.as_ref(), &outcome).await;
                     if matches!(outcome, ActionState::Done { .. }) {
                         note_actor(&io, &st, chain_id, &executor).await;
@@ -2243,18 +2303,33 @@ fn has_open(list: &[Proposal], nonce: u128) -> bool {
 /// Re-read every chain the multisig is used on (`refresh`). One at a time:
 /// a read asked for during another runs once it ends when `fresh`.
 async fn refresh(io: &Io<Event>, st: &Shared<State>, tick: bool, fresh: bool) {
-    {
+    refresh_as(io, st, tick, fresh, false).await;
+}
+
+/// [`refresh`]; `supersede` (r15-11, r15-12): a read that starts NOW even
+/// with one out — a newly followed multisig while another's read is out, the
+/// person's Try again. The read out is no longer waited for: its answer is
+/// dropped when it lands (`read_gen`), and this one owns the list.
+async fn refresh_as(io: &Io<Event>, st: &Shared<State>, tick: bool, fresh: bool, supersede: bool) {
+    let gen = {
         let mut s = lock(st);
-        if s.inflight {
+        if s.inflight && !supersede {
             if fresh {
                 s.queued = true;
             }
             return;
         }
         s.inflight = true;
-    }
+        s.queued = false;
+        s.read_gen += 1;
+        s.reading = s.account.as_ref().map(|a| a.address.to_ascii_lowercase());
+        s.read_gen
+    };
     loop {
-        refresh_once(io, st, tick).await;
+        if !refresh_once(io, st, tick, gen).await {
+            // Superseded: the newer read owns `inflight` and `queued`.
+            return;
+        }
         let again = {
             let mut s = lock(st);
             let again = s.queued;
@@ -2271,11 +2346,14 @@ async fn refresh(io: &Io<Event>, st: &Shared<State>, tick: bool, fresh: bool) {
     flows::after_refresh(io, st).await;
 }
 
-async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool) {
+/// One read of every chain; `false`: a newer read (`read_gen`) took over
+/// while it was out, and nothing it read was kept.
+async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool, gen: u64) -> bool {
     let (account, service, round, networks) = {
         let mut s = lock(st);
         let Some(account) = s.account.clone() else {
-            return;
+            s.loading = false;
+            return true;
         };
         let round = if tick {
             s.ticks += 1;
@@ -2292,7 +2370,9 @@ async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool) {
             }
             s.source = Some(source);
         }
-        s.loading = s.chains.is_empty();
+        // Loading while nothing is drawn — and, from a Follow or a Try
+        // again, until this read lands (r15-11).
+        s.loading = s.loading || s.chains.is_empty();
         (account, s.service.clone(), round, s.networks.clone())
     };
     let started = io.now().await;
@@ -2327,7 +2407,7 @@ async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool) {
             }
         }
         let mut s = lock(st);
-        if s.followed(&account.address) {
+        if s.read_gen == gen && s.followed(&account.address) {
             s.missing.clone_from(missing);
         }
     }
@@ -2385,6 +2465,11 @@ async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool) {
     let mut next = Vec::new();
     {
         let mut s = lock(st);
+        if s.read_gen != gen {
+            // r15-11 / r15-12: a newer read took over (another multisig
+            // followed, a Try again): this one's answer is not the list's.
+            return false;
+        }
         let followed = s.followed(&account.address);
         for (chain_id, read, previous) in results {
             match read {
@@ -2489,6 +2574,7 @@ async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool) {
     }
     drop(s);
     io.emit(Event::Changed);
+    true
 }
 
 /// r8-7: tell the accounts machine who the members are now — once every
@@ -4293,7 +4379,7 @@ fn propose_draft(model: &Model, as_member: Option<String>, then_execute: bool) -
             .then(|| i.proposer.clone())
         });
         match proposer {
-            Some(proposer) => approve_execute(&io, &st, chain_id, &hash, &proposer).await,
+            Some(proposer) => approve_execute(&io, &st, chain_id, &hash, &proposer, None).await,
             None => {
                 lock(&st)
                     .actions
@@ -4337,6 +4423,7 @@ async fn approve_execute(
     chain_id: u64,
     hash: &str,
     executor: &str,
+    shown_fee: Option<u128>,
 ) {
     let lower = hash.to_ascii_lowercase();
     let input = execution_input(st, chain_id, hash, executor);
@@ -4344,7 +4431,7 @@ async fn approve_execute(
         i.item.approved < i.item.threshold
             && i.item.can_approve.iter().any(|o| same_address(o, executor))
     });
-    let outcome = execute(io, st, chain_id, hash, executor).await;
+    let outcome = execute(io, st, chain_id, hash, executor, shown_fee).await;
     flows::remember_execution(io, st, input.as_ref(), &outcome).await;
     if matches!(outcome, ActionState::Done { .. }) {
         note_actor(io, st, chain_id, executor).await;
@@ -4424,6 +4511,7 @@ async fn execute(
     chain_id: u64,
     hash: &str,
     executor: &str,
+    shown_fee: Option<u128>,
 ) -> ActionState {
     let Some(input) = execution_input(st, chain_id, hash, executor) else {
         return ActionState::Failed {
@@ -4464,10 +4552,13 @@ async fn execute(
                 })
                 .map(|(_, p)| p.clone()),
             // r14-9: the fee the sheet says now (its executor's look), whatever
-            // its age — what the person pressed on.
-            plan.and_then(|(_, p)| match p {
-                Preview::Priced { fee, .. } => fee_amount(fee),
-                _ => None,
+            // its age — what the person pressed on; r15: the figure the press
+            // itself carries, when the shell sends it.
+            shown_fee.or_else(|| {
+                plan.and_then(|(_, p)| match p {
+                    Preview::Priced { fee, .. } => fee_amount(fee),
+                    _ => None,
+                })
             }),
         )
     };
@@ -4480,7 +4571,11 @@ async fn execute(
     // whose fee is not the one on screen signs nothing: the execution fails
     // with the new figure (`fee_moved`), the new look is the sheet's now, and
     // the next press — inside the window — signs exactly it.
-    if let (true, Some(was), Preview::Priced { fee, .. }) = (requoted, said_fee, &preview) {
+    // r15: with the pressed figure carried, ANY look whose fee is another
+    // stops — also a fresh one that replaced the figure after it was drawn.
+    if let (true, Some(was), Preview::Priced { fee, .. }) =
+        (requoted || shown_fee.is_some(), said_fee, &preview)
+    {
         if let Some(now) = fee_amount(fee).filter(|now| *now != was) {
             return ActionState::Failed {
                 detail: fee_moved_detail(chain_id, &input.executor.address, now),

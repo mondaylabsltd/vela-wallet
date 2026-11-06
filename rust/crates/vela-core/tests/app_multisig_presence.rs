@@ -763,6 +763,7 @@ fn the_followed_ones_presence_standing_and_timeline() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             executor: fixture(0).address,
+            shown_fee: None,
         },
     );
     assert!(world.store.contains_key("vela.multisig.executed"));

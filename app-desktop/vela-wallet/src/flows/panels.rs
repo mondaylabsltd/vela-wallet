@@ -1281,6 +1281,17 @@ fn assets(
         window,
     ));
 
+    if let Some(empty) = model.empty.as_ref().filter(|empty| empty.unread) {
+        // r15-4: a network out of reach, not an empty wallet: no deposit
+        // and no token to add under it.
+        return col.child(empty_state(
+            theme,
+            icons,
+            Icon::WalletOutline,
+            empty.title.clone(),
+            empty.caption.clone(),
+        ));
+    }
     if let Some(empty) = &model.empty {
         return col
             .child(clickable(

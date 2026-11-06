@@ -40,7 +40,8 @@ export type MultisigSheet =
 	 * changed on the way (r5reg-22).
 	 */
 	| { kind: 'add'; link?: AddLink; broken?: string; fault?: 'checksum' | 'damaged' }
-	| { kind: 'proposal'; chainId: number; safeTxHash: string }
+	/** `address`: the multisig it is of (a link's), drawn before it is the one in front. */
+	| { kind: 'proposal'; chainId: number; safeTxHash: string; address?: string }
 	/**
 	 * ms-21: a link's transaction on a device with none of its multisig's
 	 * members (`account`, kept nowhere) — read by the proposals machine

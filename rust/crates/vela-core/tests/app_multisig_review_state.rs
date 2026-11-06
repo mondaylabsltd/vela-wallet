@@ -569,6 +569,7 @@ fn a_review_neither_check_read_is_ready_but_every_press_signs_only_anyway() {
             chain_id: 100,
             safe_tx_hash: safe_tx_hash.clone(),
             executor: fixture(1).address,
+            shown_fee: None,
         },
     );
     assert!(matches!(
@@ -757,6 +758,111 @@ fn a_review_its_network_answered_nothing_of_fails_never_anyway() {
     assert_eq!(other.view().review_states[&key], ReviewState::Ready);
     let door = door_at(&other, &key);
     assert!(door.enabled && !door.anyway && door.reason_key.is_none());
+}
+
+/// Round 15 (r15-13): a failed review read itself again — "Reading" at
+/// 35 s, failed at 45 s — because a shell's timer asked `review` every 30 s
+/// and the core turned any review not ready back to loading. §12: a failed
+/// review is said, with Try again, and never retried behind the person's
+/// back: `review` leaves it failed (no read is made); `review_again` — the
+/// person's Try again — reads it.
+#[test]
+fn a_failed_review_is_read_again_only_on_the_persons_try_again() {
+    let (mut world, mut other, key, hash) = proposed_on_another_device();
+    world.silent.insert(100);
+    world.sim_reply = Some(r#"{"unreachable":true}"#.to_owned());
+    run(&mut other, &mut world, review(&hash));
+    let failed = ReviewState::failed(review_state::REASON_CHAIN_UNREAD);
+    assert_eq!(other.view().review_states[&key], failed);
+    // The network is back; the shell's timer (or a reopened sheet) asks.
+    world.silent.clear();
+    world.sim_reply = Some(r#"{"result":[{"calls":[{"status":"0x1","logs":[]}]}]}"#.to_owned());
+    let asked = world.rpc_log.len();
+    other.dispatch(review(&hash));
+    assert_eq!(
+        other.view().review_states[&key],
+        failed,
+        "never back to Reading on its own"
+    );
+    run(&mut other, &mut world, review(&hash));
+    assert_eq!(other.view().review_states[&key], failed);
+    assert_eq!(world.rpc_log.len(), asked, "nothing was read again");
+    // The person's Try again reads it.
+    run(
+        &mut other,
+        &mut world,
+        Event::ReviewAgain {
+            chain_id: Some(100),
+            safe_tx_hash: Some(hash.clone()),
+        },
+    );
+    assert_eq!(other.view().review_states[&key], ReviewState::Ready);
+}
+
+/// Round 15 (r15-12): right after an outage lifted, a review's Try again
+/// landed for ~2 s as D1 — drawn, enabled, "… anyway" — before it was read
+/// in full: the network's first answer (the multisig's own state, through
+/// the pool's outage probe) came back while the checks asked beside it were
+/// still turned away. A review never passes through a signable "anyway" on
+/// its way from failed to read: checks that all came back as silence while
+/// the network answered are asked once more within the same run.
+#[test]
+fn a_review_coming_back_from_an_outage_never_lands_anyway_on_the_way() {
+    let (mut world, mut other, key, hash) = proposed_on_another_device();
+    world.silent.insert(100);
+    world.sim_reply = Some(r#"{"unreachable":true}"#.to_owned());
+    run(&mut other, &mut world, review(&hash));
+    assert!(matches!(
+        other.view().review_states[&key],
+        ReviewState::Failed { .. }
+    ));
+    // The outage lifts: the network answers, but the first trace and probe
+    // (and the first simulation) are still turned away as silent.
+    world.silent.clear();
+    let probe = format!(
+        "0x{}",
+        alloy_primitives::hex::encode(
+            &alloy_primitives::keccak256(b"simulateAndRevert(address,bytes)")[..4]
+        )
+    );
+    let turned_away = std::sync::Arc::new(std::sync::Mutex::new(0_u32));
+    let count = turned_away.clone();
+    world.rpc_hooks.push(Box::new(move |_, method, params| {
+        let probing = method == "eth_call"
+            && params[0]["data"]
+                .as_str()
+                .is_some_and(|d| d.to_ascii_lowercase().starts_with(&probe));
+        let mut n = count.lock().unwrap();
+        ((method == "debug_traceCall" || probing) && *n < 2).then(|| {
+            *n += 1;
+            vela_core::app::multisig_shell::MultisigShellResult::RpcUnanswered {
+                detail: "timed out".to_owned(),
+            }
+        })
+    }));
+    world
+        .sim_replies
+        .push_back(Some(r#"{"unreachable":true}"#.to_owned()));
+    world.sim_reply = Some(r#"{"result":[{"calls":[{"status":"0x1","logs":[]}]}]}"#.to_owned());
+    run(
+        &mut other,
+        &mut world,
+        Event::ReviewAgain {
+            chain_id: Some(100),
+            safe_tx_hash: Some(hash.clone()),
+        },
+    );
+    assert_eq!(
+        *turned_away.lock().unwrap(),
+        2,
+        "both checks were turned away once"
+    );
+    assert_eq!(other.view().review_states[&key], ReviewState::Ready);
+    let door = door_at(&other, &key);
+    assert!(
+        door.enabled && !door.anyway && door.reason_key.is_none(),
+        "read in full, never anyway: {door:?}"
+    );
 }
 
 /// r14-13, a HUNG network (no answer at all, on any shell): every read —

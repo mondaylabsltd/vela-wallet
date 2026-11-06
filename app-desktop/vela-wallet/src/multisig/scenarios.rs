@@ -582,6 +582,7 @@ fn proposed_approved_executed_and_recorded() {
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         executor,
+        shown_fee: None,
     });
     assert_eq!(sim.world().sent.len(), 1, "one user operation");
     assert!(
@@ -612,6 +613,88 @@ fn proposed_approved_executed_and_recorded() {
 /// (the sheet's asks, `sheet::looked`) — the look is priced through this
 /// shell's executor, the machine offers the one press, and "Approve and
 /// execute" runs it in one user operation.
+/// Round 15 (desktop, fee moved — not concluded in R15): the sheet re-asks
+/// its look every few seconds, so the fee could be replaced between what
+/// was drawn and the press. The press carries the fee the sheet drew
+/// (`Look::shown_fee`): a look holding another stops with `fee_moved` —
+/// nothing signed, nothing sent — and the line names the new figure and the
+/// executor; the next press, on the figure now drawn, signs exactly it.
+#[test]
+fn a_fee_that_moved_after_it_was_drawn_stops_the_press_and_names_its_executor() {
+    let mut sim = booted(&[0, 1]);
+    created(&mut sim);
+    let hash = propose(&mut sim, transfer("1"));
+    sim.proposals(ProposalsEvent::Approve {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        owner: fixture(1).address,
+    });
+    let executor = fixture(0).address;
+    let look = |sim: &Sim| {
+        crate::multisig::sheet::look_of(
+            &sim.machines.proposals_view.previews,
+            100,
+            &hash,
+            &executor,
+        )
+    };
+    sim.proposals(ProposalsEvent::Preview {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: executor.clone(),
+    });
+    // What the sheet drew.
+    let drawn = look(&sim)
+        .and_then(|l| l.shown_fee())
+        .expect("a priced look drawn");
+    // The relay's fee moves; a later look replaces the one drawn before the
+    // sheet is painted again.
+    sim.world().now += 20_000.0;
+    sim.world().quote_answer = Some(Res::Quoted {
+        quote: serde_json::json!({"kind": "quoted", "fee": {"token": null, "amount": "0x2a"}, "totalGas": "0x1", "executorDeployed": true}),
+    });
+    sim.proposals(ProposalsEvent::Preview {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: executor.clone(),
+    });
+    let now = look(&sim)
+        .and_then(|l| l.shown_fee())
+        .expect("the new look");
+    assert_ne!(now, drawn, "the fee moved");
+    // The press, on what was drawn.
+    sim.proposals(ProposalsEvent::Execute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: executor.clone(),
+        shown_fee: Some(drawn),
+    });
+    assert!(sim.world().sent.is_empty(), "nothing signed or sent");
+    let state = sim.machines.proposals_view.actions
+        [&format!("execute:{}", hash.to_ascii_lowercase())]
+        .clone();
+    let ActionState::Failed { detail } = state else {
+        panic!("{state:?}");
+    };
+    let loc = crate::loc::Loc::for_tag("en");
+    let line =
+        crate::wallet::page::multisig::failure_words(&loc, &detail, 100, &|_| "Ana".to_owned());
+    assert!(
+        line.starts_with("That didn't go through: Network fee"),
+        "{line}"
+    );
+    assert!(line.contains("paid by Ana"), "{line}");
+    assert_eq!(line.matches("That didn't go through").count(), 1, "{line}");
+    // Pressed on the figure now drawn: signed at exactly it.
+    sim.proposals(ProposalsEvent::Execute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor,
+        shown_fee: Some(now),
+    });
+    assert_eq!(sim.world().sent.len(), 1, "signed at the fee drawn");
+}
+
 #[test]
 fn one_short_is_looked_at_and_approved_and_executed_in_one_press() {
     let mut sim = booted(&[0, 1]);
@@ -699,6 +782,7 @@ fn one_short_is_looked_at_and_approved_and_executed_in_one_press() {
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         executor: second,
+        shown_fee: None,
     });
     assert_eq!(sim.world().sent.len(), 1, "one user operation");
     // Its approval is the execution's own sender (`msg.sender`): no
@@ -861,6 +945,47 @@ fn a_proposal_link_opens_its_transaction() {
     assert!(sim.machines.proposals_view.linked.is_some());
 }
 
+/// r15-2: an invite opened with a multisig in front is said as an invite,
+/// at once — the same stand a Vela account in front gets.
+#[test]
+fn an_invite_opened_with_a_multisig_in_front_is_said_at_once() {
+    let mut sim = booted(&[0, 1]);
+    let shown = created(&mut sim);
+    assert!(
+        sim.machines
+            .accounts_view
+            .active
+            .as_deref()
+            .is_some_and(|a| a.eq_ignore_ascii_case(&shown)),
+        "the multisig is in front"
+    );
+    let url = vela_core::multisig_link::add_link(
+        vela_core::multisig_link::SITE_ORIGIN,
+        "en",
+        B,
+        &[100],
+        &[],
+    )
+    .unwrap_or_default();
+    let hash = url
+        .split_once('#')
+        .map(|(_, h)| format!("#{h}"))
+        .unwrap_or_default();
+    sim.accounts(AccountsEvent::OpenLink {
+        hash,
+        take_kept: false,
+    });
+    assert!(
+        matches!(
+            &sim.machines.accounts_view.link,
+            Some(vela_core::app::multisig_accounts::link::LinkStand::Invite { link })
+                if link.multisig.eq_ignore_ascii_case(B)
+        ),
+        "{:?}",
+        sim.machines.accounts_view.link
+    );
+}
+
 /// The facts as they move: a network added is told to the machines that
 /// read networks, once; nothing else is said again.
 #[test]
@@ -915,6 +1040,7 @@ fn notifications_follow_the_views_and_skip_the_persons_own_moves() {
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         executor: fixture(0).address,
+        shown_fee: None,
     });
     sim.proposals(ProposalsEvent::Refresh { fresh: true });
     let got = look(&sim, &mut n);
@@ -1339,6 +1465,7 @@ fn a_sites_transaction_from_a_multisig_is_proposed_held_and_answered() {
             chain_id: 100,
             safe_tx_hash: hash.to_owned(),
             executor: fixture(0).address,
+            shown_fee: None,
         });
         tx
     };

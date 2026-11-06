@@ -242,19 +242,36 @@ pub fn settled(address: &str) -> Option<Settled> {
 }
 
 /// Settle one round against the last one for this address, and remember it.
+///
+/// r15-4: the first round of a run has no round of this run to fall back
+/// to, and `LAST_SETTLED` lives in memory only — so a chain that failed
+/// then lost its rows from the settle, and from the holdings cache saved
+/// from it: a refused Arc on the first round after a launch wrote Dana's
+/// 10.53 USDC out of `vela.holdingsCache`, and the next launch claimed an
+/// empty wallet. `kept` is what the disk last kept for this account (the
+/// rows the core was told at boot, `HoldingsRestored`), asked only when no
+/// round of this run settled — the same rule the core's own settle keeps
+/// for a failed chain's restored rows.
 fn settle_with_carry_over(
     address: &str,
     fresh: Vec<BalanceToken>,
     failed_chain_ids: &[u32],
+    kept: impl FnOnce() -> Vec<BalanceToken>,
 ) -> Vec<BalanceToken> {
     let key = address.to_lowercase();
     let mut guard = LAST_SETTLED
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let snapshots = guard.get_or_insert_with(HashMap::new);
-    let previous = snapshots
-        .get(&key)
-        .map_or(&[][..], |round| round.tokens.as_slice());
+    let from_disk;
+    let previous = match snapshots.get(&key) {
+        Some(round) => round.tokens.as_slice(),
+        None if failed_chain_ids.is_empty() => &[][..],
+        None => {
+            from_disk = kept();
+            from_disk.as_slice()
+        }
+    };
     let tokens = carry_over_unanswered(previous, fresh, failed_chain_ids);
     snapshots.insert(
         key,
@@ -286,7 +303,10 @@ fn settled_result(
     } = fetched;
     // A chain that did not answer keeps what the last round knew it held;
     // it is still reported as failed below.
-    let tokens = settle_with_carry_over(address, tokens, &failed);
+    let space = crate::network_space::current();
+    let tokens = settle_with_carry_over(address, tokens, &failed, || {
+        load_holdings(address, space.as_str(), crate::executor::now_ms())
+    });
     // The rows this round leaves on the home, kept for the next visit
     // (home-1, home-3): what the space in front holds, more than nothing.
     let shown: Vec<BalanceToken> = tokens
@@ -295,18 +315,27 @@ fn settled_result(
         .filter(|token| token.balance.bytes().any(|b| (b'1'..=b'9').contains(&b)))
         .cloned()
         .collect();
-    save_holdings(
-        address,
-        crate::network_space::current().as_str(),
-        &shown,
-        crate::executor::now_ms(),
-    );
+    save_holdings(address, space.as_str(), &shown, crate::executor::now_ms());
+    // r15-15: the pool's verdicts are asked within a budget. A pool thread
+    // held up (every worker busy under a refused or rate-limiting network,
+    // a backoff slept inline) used to hold this settle — and the hero's
+    // "Checking…" — for as long as its backlog lasted, long past the
+    // round's own deadline. Unanswered, a failed chain is said as failed
+    // (not "busy"), and the pool's word lands with the next round.
+    let budget = Duration::from_millis(pool::SETTLE_ASK_MS);
     let limited = if failed.iter().all(|chain| internal.contains(chain)) {
         // Nothing left the app: the pool has no verdict to give, and asking
         // it would be one more call into what just failed.
         Vec::new()
     } else {
-        pool::rate_limited_chains()
+        pool::rate_limited_chains_within(budget).unwrap_or_else(|| {
+            crate::diag::vlog!(
+                "balances",
+                "the pool did not say which networks are rate-limited within {} ms; settling without it",
+                pool::SETTLE_ASK_MS
+            );
+            Vec::new()
+        })
     };
     // Owner decision 2026-10-28 (WIRE-AUDIT A8): the failed chains read
     // through the person's own node alone, and the chains public nodes served
@@ -314,7 +343,9 @@ fn settled_result(
     // `getOwnNodeUnreachedChains` / `getFallbackChains`.
     // Each chain's standing is the core's one reading of the pool's lists
     // (`rpc_pool::node_standing`).
-    let own = pool::own_node_chains();
+    // Unanswered within the budget: no chain is said to be read through the
+    // person's own node or public nodes this round (the next round says it).
+    let own = pool::own_node_chains_within(budget).unwrap_or_default();
     let own_node_chain_ids = failed_own_node(&failed, &own);
     BalanceShellResult::FetchSettled {
         address: address.to_owned(),
@@ -1255,18 +1286,54 @@ mod tests {
         assert!(carry_over_unanswered(&[], Vec::new(), &[100]).is_empty());
     }
 
+    /// r15-4: the first round after a launch has no round of this run to
+    /// fall back to — the rows kept on disk (`vela.holdingsCache`) stand in.
+    /// Arc did not answer: its 10.53 USDC stays in what is settled (and so
+    /// in what is saved for the next launch), never dropped by a round
+    /// that could not read it. A chain that answered is still believed.
+    #[test]
+    fn the_first_round_keeps_a_failed_chains_rows_from_the_disk() {
+        let address = "0xFirstRoundKeepsArc";
+        let mut arc = held(
+            5_042_002,
+            "USDC",
+            Some("0x3600000000000000000000000000000000000000"),
+        );
+        arc.balance = "10.53".to_owned();
+        let kept = vec![arc.clone(), held(8453, "ETH", None)];
+        let settled =
+            settle_with_carry_over(address, vec![held(100, "xDAI", None)], &[5_042_002], || {
+                kept.clone()
+            });
+        let seen: Vec<(u32, &str)> = settled
+            .iter()
+            .map(|t| (t.chain_id, t.symbol.as_str()))
+            .collect();
+        assert_eq!(
+            seen,
+            vec![(100, "xDAI"), (5_042_002, "USDC")],
+            "Arc kept from the disk; Base answered (nothing) and is believed"
+        );
+        assert_eq!(settled[1].balance, "10.53");
+        // Once a round of this run settled, it is the authority, not the disk.
+        let again = settle_with_carry_over(address, Vec::new(), &[5_042_002], || {
+            unreachable!("the round of this run stands in")
+        });
+        assert_eq!(again.len(), 1);
+    }
+
     /// The snapshot a failing round falls back to is the last SETTLED one for
     /// that address — including what an earlier failing round carried.
     #[test]
     fn a_second_failing_round_still_has_the_first_rounds_tokens() {
         let address = "0xCarryOverTest";
-        let first = settle_with_carry_over(address, vec![held(100, "xDAI", None)], &[]);
+        let first = settle_with_carry_over(address, vec![held(100, "xDAI", None)], &[], Vec::new);
         assert_eq!(first.len(), 1);
-        let second = settle_with_carry_over(address, Vec::new(), &[100]);
+        let second = settle_with_carry_over(address, Vec::new(), &[100], Vec::new);
         assert_eq!(second.len(), 1, "Gnosis failed: its xDAI stays");
-        let third = settle_with_carry_over(&address.to_lowercase(), Vec::new(), &[100]);
+        let third = settle_with_carry_over(&address.to_lowercase(), Vec::new(), &[100], Vec::new);
         assert_eq!(third.len(), 1, "the same account, however it is cased");
-        let answered = settle_with_carry_over(address, Vec::new(), &[]);
+        let answered = settle_with_carry_over(address, Vec::new(), &[], Vec::new);
         assert!(answered.is_empty(), "Gnosis answered with nothing: spent");
     }
 
@@ -1277,7 +1344,7 @@ mod tests {
     fn a_fetch_starts_from_what_the_account_last_held() {
         let address = "0xSwitchBackTest";
         assert!(last_settled(address).is_empty(), "never fetched");
-        let _ = settle_with_carry_over(address, vec![held(100, "xDAI", None)], &[]);
+        let _ = settle_with_carry_over(address, vec![held(100, "xDAI", None)], &[], Vec::new);
         assert_eq!(last_settled(address).len(), 1);
         assert_eq!(last_settled(&address.to_uppercase()).len(), 1);
         assert!(last_settled("0xSomebodyElse").is_empty());
@@ -1298,14 +1365,19 @@ mod tests {
             Some("0x2a22f9c3b484c3629090feed35f17ff8f88f76f0"),
         );
         empty.balance = "0".to_owned();
-        let _ = settle_with_carry_over(address, vec![held(100, "xDAI", None), empty], &[8453]);
+        let _ = settle_with_carry_over(
+            address,
+            vec![held(100, "xDAI", None), empty],
+            &[8453],
+            Vec::new,
+        );
         let Some(first) = settled(&address.to_uppercase()) else {
             unreachable!("just settled");
         };
         assert_eq!(first.tokens.len(), 2, "the zero-balance row is kept");
         assert_eq!(first.failed_chain_ids, vec![8453]);
 
-        let _ = settle_with_carry_over(address, vec![held(100, "xDAI", None)], &[]);
+        let _ = settle_with_carry_over(address, vec![held(100, "xDAI", None)], &[], Vec::new);
         let Some(second) = settled(address) else {
             unreachable!("just settled");
         };

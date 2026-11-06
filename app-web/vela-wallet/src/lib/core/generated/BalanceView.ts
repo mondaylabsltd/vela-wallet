@@ -139,9 +139,10 @@ live_key: string | null,
  * held nothing last session opens with a cached total of 0, and each
  * shell took "no tokens, a known total" for an empty wallet — so it
  * invited a first deposit under "Checking…", and again under "Can't
- * reach 24 networks", before anything had been read. A round that
- * misses SOME networks still says it for the ones that answered: a new
- * wallet is not held at a skeleton by one network that is down. A shell
+ * reach 24 networks", before anything had been read. r15-4: nor while a
+ * network said for the account is unread (refused, silent, rate
+ * limited) — what it holds is not known; the list says that network
+ * instead (`unreachable_networks`, the hero's words). A shell
  * draws the empty state exactly when this is `Some`, and with no tokens
  * and no key it draws what it draws while loading.
  */

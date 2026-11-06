@@ -57,7 +57,10 @@ const EMPTY_FEED = {
 	rows: [],
 	home_rows: [],
 	hidden: false,
-	home_empty_key: 'home.emptyNoActivity'
+	home_empty_key: 'home.emptyNoActivity',
+	// r15-1: the shown multisig's rows, its feed settled.
+	account: MS.toLowerCase(),
+	settled: true
 } as unknown as FeedView;
 
 function home(extra: object) {
