@@ -191,7 +191,12 @@ fn passkey_result(failure: &PasskeyFailure) -> Res {
     }
     Res::PasskeyFailed {
         detail: ShellFailure::Passkey {
-            failure: format!("{:?}", failure.kind).to_lowercase(),
+            // The wire's own name (`not_supported`, `not_discoverable`, …),
+            // as the web writes it and the core's `failure_said` reads it.
+            failure: serde_json::to_value(failure.kind)
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_owned))
+                .unwrap_or_else(|| "other".to_owned()),
             timed_out: false,
             message: failure.message.clone(),
         }
@@ -994,24 +999,137 @@ mod tests {
             ),
             Res::CallsCancelled
         ));
-        // The core's own diagnostics are never said as they are either.
-        for detail in ["nothing to execute", "unexpected answer Foo { bar: 1 }"] {
-            let line =
-                crate::wallet::page::multisig::failure_words(&loc, detail, 5_042_002, &|a| {
-                    a.to_owned()
-                });
-            assert_eq!(
-                line,
-                "Something went wrong, so nothing was sent. Try again."
+        // The core's own diagnostics are never said as they are either —
+        // and plain text is never read for what it says (round 16 leftover
+        // 4): the core serves it as `{"kind":"unknown"}`.
+        let words = |detail: &str| {
+            crate::wallet::page::multisig::failure_words(&loc, detail, 5_042_002, &|a| a.to_owned())
+        };
+        let unknown = "Something went wrong, so nothing was sent. Try again.";
+        for detail in [
+            "nothing to execute",
+            "unexpected answer Foo { bar: 1 }",
+            "the passkey's signature did not check out: bad s",
+            r#"{"kind":"unknown"}"#,
+        ] {
+            assert_eq!(words(detail), unknown, "{detail}");
+        }
+        assert_eq!(
+            words(&vela_core::app::multisig_failure::core_reason(
+                "nothing_to_execute"
+            )),
+            unknown
+        );
+        // The core's own kind for a signature that does not check out.
+        let check = words(&vela_core::app::multisig_failure::passkey_check());
+        assert!(check.contains("didn't check out"), "{check}");
+    }
+
+    /// Round 16 leftover 4: a failure is said by its stable KIND
+    /// (`multisig_failure::failure_said`), never by matching its English —
+    /// each kind in the catalog's words the core names; the kinds worded
+    /// from the detail's facts (the fee that moved, what the executor has,
+    /// the venue's block) from those facts.
+    #[test]
+    fn a_failure_is_said_by_its_kind_never_its_english() {
+        use vela_core::app::multisig_failure::{FailureKind as Kind, failure_said};
+        let loc = crate::loc::Loc::for_tag("en");
+        let words = |detail: &str| {
+            crate::wallet::page::multisig::failure_words(&loc, detail, 5_042_002, &|a| a.to_owned())
+        };
+        let keyed = |detail: &str| {
+            let said = failure_said(detail);
+            let key = said.key.expect("a keyed kind");
+            (said.kind, loc.t(&key).to_string())
+        };
+        // Every keyed kind: the core's key, in the catalog's words.
+        for (detail, kind) in [
+            (
+                r#"{"kind":"passkey","failure":"other","timedOut":true}"#,
+                Kind::PasskeyTimedOut,
+            ),
+            (
+                r#"{"kind":"passkey","failure":"cancelled","timedOut":false}"#,
+                Kind::PasskeyClosed,
+            ),
+            (
+                r#"{"kind":"passkey","failure":"not_discoverable","timedOut":false}"#,
+                Kind::PasskeyMissing,
+            ),
+            (
+                r#"{"kind":"passkey","failure":"other","timedOut":false}"#,
+                Kind::PasskeyFailed,
+            ),
+            (r#"{"kind":"passkey_check"}"#, Kind::PasskeyCheck),
+            (r#"{"kind":"page_declined"}"#, Kind::PageDeclined),
+            (
+                r#"{"kind":"page_sign_failed","page":"unanswered"}"#,
+                Kind::PageUnanswered,
+            ),
+            (
+                r#"{"kind":"page_approval","failure":"mismatch"}"#,
+                Kind::PageMismatch,
+            ),
+            (
+                r#"{"kind":"page_sign_failed","page":"not_opened"}"#,
+                Kind::PageNotOpened,
+            ),
+            (
+                r#"{"kind":"page_sign_failed","page":"refused"}"#,
+                Kind::PageRefused,
+            ),
+            (r#"{"kind":"not_sent"}"#, Kind::NotSent),
+            (r#"{"kind":"unknown","message":"x"}"#, Kind::Unknown),
+        ] {
+            let (said_kind, text) = keyed(detail);
+            assert_eq!(said_kind, kind, "{detail}");
+            assert_eq!(words(detail), text, "{detail}");
+            assert!(
+                !text.starts_with("home.") && !text.starts_with("componentsUi."),
+                "the key echoed: {text}"
             );
         }
-        let line = crate::wallet::page::multisig::failure_words(
-            &loc,
-            "the passkey's signature did not check out: bad s",
-            5_042_002,
-            &|a| a.to_owned(),
+        // The page's words are the page's, not "Something went wrong".
+        let unknown = words(r#"{"kind":"unknown"}"#);
+        for detail in [
+            r#"{"kind":"page_declined"}"#,
+            r#"{"kind":"page_sign_failed","page":"unanswered"}"#,
+            r#"{"kind":"passkey","failure":"other","timedOut":false}"#,
+        ] {
+            assert_ne!(words(detail), unknown, "{detail}");
+        }
+        // A passkey with none on this device is "missing", any other
+        // failure is "failed" — not every failure "missing".
+        assert_ne!(
+            words(r#"{"kind":"passkey","failure":"not_supported","timedOut":false}"#),
+            words(r#"{"kind":"passkey","failure":"other","timedOut":false}"#)
         );
-        assert!(line.contains("didn't check out"), "{line}");
+        // The venue's block: its own sentence, never "Something went wrong".
+        let block = vela_core::signing_venue::VenueBlock::NotOnWeb;
+        let detail = ShellFailure::VenueBlocked {
+            block: serde_json::to_value(&block).unwrap(),
+        }
+        .detail();
+        assert_eq!(failure_said(&detail).kind, Kind::VenueBlocked);
+        assert_eq!(
+            words(&detail),
+            crate::signing::trusted_signer::block_words(&loc, &block).to_string()
+        );
+        // The facts' kinds: from their facts.
+        let short = ShellFailure::CannotPay {
+            need: "2000000000000000000".to_owned(),
+            have: "1000000000000000000".to_owned(),
+        }
+        .detail();
+        assert_eq!(failure_said(&short).kind, Kind::CannotPay);
+        let line = words(&short);
+        assert!(line.contains('2') && line.contains('1'), "{line}");
+        let away = ShellFailure::ChainUnreachable {
+            chain_id: 5_042_002,
+        }
+        .detail();
+        assert_eq!(failure_said(&away).kind, Kind::ChainUnreachable);
+        assert!(words(&away).starts_with("Can't reach "), "{}", words(&away));
     }
 
     /// r14-5: the pool's rate-limited verdict reaches the core as one.
@@ -1125,10 +1243,12 @@ mod tests {
         }) else {
             panic!("a failure");
         };
+        // The wire's own name (snake_case, as the web writes it and the
+        // core's `failure_said` reads it), never the enum's debug text.
         assert_eq!(
             read_failure(&detail),
             Some(ShellFailure::Passkey {
-                failure: "notsupported".to_owned(),
+                failure: "not_supported".to_owned(),
                 timed_out: false,
                 message: Some("no authenticator".to_owned())
             })

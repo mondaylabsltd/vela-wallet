@@ -49,6 +49,25 @@ data class MsSignDoor(
     }
 }
 
+/** `review.missing`'s answer: a full corpus key (`{{network}}`) and whether Try again is offered. */
+data class MsMissingSaid(val key: String, val retry: Boolean) {
+    companion object {
+        const val OPENING_KEY = "home.multisig.proposal.opening"
+    }
+}
+
+/**
+ * `review.failure`'s answer (round 16 leftover 4): the failure's stable
+ * [kind] (`passkey_timed_out`, …, `fee_moved`, `chain_unreachable`,
+ * `unknown`) and its full catalog [key] — `null` for the kinds worded from
+ * the detail's own facts (`fee_moved`, `cannot_pay`, `venue_blocked`).
+ */
+data class MsFailureSaid(val kind: String, val key: String?) {
+    companion object {
+        val Unknown = MsFailureSaid("unknown", "home.multisig.proposal.reason.unknown")
+    }
+}
+
 /**
  * The multisig's pure rules, asked one at a time — through the link door
  * (`multisigLinkCall`, the web's `multisigLinkCall`: the link codec, row
@@ -180,6 +199,39 @@ object MsRules {
      */
     fun reviewDoor(state: JsonElement?, review: JsonElement?): MsSignDoor =
         MsSignDoor.of(call("review.door", mapOf("state" to state, "review" to review)))
+
+    /**
+     * §18 (b), round 14 + round 16 leftover 3: what a proposal sheet opened
+     * WITHOUT a link says while its transaction is not in the list
+     * (`review.missing {loading, unreadable, mailbox, busy}`) — the full
+     * corpus key (`{{network}}`: the sheet's network) and whether to offer
+     * Try again. A service that did not answer is said as that, one that
+     * answered with its rate limit as busy (`home.multisig.service.busyNote`),
+     * never "it hasn't been shared yet". A core that could not be asked:
+     * still opening, nothing to press (iOS's `MsRules.missingSaid`).
+     */
+    fun missingSaid(loading: Boolean, unreadable: Boolean, mailbox: Boolean?, busy: Boolean): MsMissingSaid {
+        val answer = call(
+            "review.missing",
+            mapOf("loading" to loading, "unreadable" to unreadable, "mailbox" to mailbox, "busy" to busy),
+        )
+        return MsMissingSaid(
+            key = answer["key"].str ?: MsMissingSaid.OPENING_KEY,
+            retry = answer["retry"].bool == true,
+        )
+    }
+
+    /**
+     * Round 16 leftover 4: a failed action's `detail` as the core reads it
+     * (`review.failure {detail}`): a stable kind, and — when its words need
+     * nothing but the network's name — the full catalog key that says them.
+     * No shell reads a detail's text. A core that could not be asked: unknown.
+     */
+    fun failureSaid(detail: String?): MsFailureSaid {
+        val answer = call("review.failure", mapOf("detail" to (detail ?: "")))
+        val kind = answer["kind"].str ?: return MsFailureSaid.Unknown
+        return MsFailureSaid(kind = kind, key = answer["key"].str)
+    }
 
     // -- names and networks (`multisig_rules`) --------------------------------
 

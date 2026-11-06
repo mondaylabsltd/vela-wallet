@@ -24,6 +24,7 @@ const LOOKED: BalanceView = {
 	hidden: false,
 	refreshing: false,
 	last_refreshed_at_ms: 1,
+	updated_at_ms: 1,
 	tokens: [
 		{
 			chain_id: 1,

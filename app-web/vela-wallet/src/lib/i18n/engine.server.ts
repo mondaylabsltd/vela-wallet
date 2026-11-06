@@ -281,6 +281,8 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			// 087 F04: the corpus's bare "Unknown", for a record nothing settles.
 			unknown: k('componentsUi.signing.intentUnknown'),
 			emptyTitleNetwork: k('home.emptyNoActivityNetwork'),
+			unreadOne: k('home.activityUnreadOne'),
+			unreadMany: k('home.activityUnreadMany'),
 			tokenUnverified: k('home.multisig.token.unverified'),
 			tokenLookalike: k('home.multisig.token.lookalike')
 		},

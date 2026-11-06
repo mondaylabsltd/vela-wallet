@@ -361,6 +361,13 @@ object I18nKeys {
         const val SECTION_ACTIVITY = "home.tabActivity"
         const val EMPTY_NO_ACTIVITY = "home.emptyNoActivity"
         const val EMPTY_ACTIVITY_SUBTITLE = "home.emptySubtitle"
+        /**
+         * Round 16 leftover 5: Activity on networks the scan could not read —
+         * the core's `FeedView.unread_key`: one (`{{network}}`, its name) or
+         * several (`{{n}}`). Over the rows, or in the empty state's place.
+         */
+        const val ACTIVITY_UNREAD_ONE = "home.activityUnreadOne"
+        const val ACTIVITY_UNREAD_MANY = "home.activityUnreadMany"
         const val SECTION_ASSETS = "assets.sectionTitle"
         const val ASSETS_ADD = "assets.addToken"
         const val ASSETS_EMPTY_TITLE = "assets.emptyTitle"

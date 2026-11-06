@@ -2316,6 +2316,8 @@
   "liveIndicator": "ライブ · 入金を待機中",
   "emptyNoActivityNetwork": "このネットワークにアクティビティはありません",
   "emptyNoActivity": "まだアクティビティはありません",
+  "activityUnreadOne": "{{network}} のアクティビティを現在読み込めません。",
+  "activityUnreadMany": "{{n}} 個のネットワークのアクティビティを現在読み込めません。",
   "emptySubtitle": "送金はここに表示されます。受け取ったお金は残高に反映されます。",
   "invalidQrTitle": "無効な QR コード",
   "invalidQrBody": "有効な Ethereum アドレスまたは接続 URI をスキャンしてください。",

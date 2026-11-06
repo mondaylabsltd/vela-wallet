@@ -210,9 +210,11 @@ struct HeroLineTests {
         never.refresh?.updated = nil
         #expect(BalanceDisplay.linePlace(never) == .empty)
         #expect(BalanceRefreshControl.spoken(try #require(never.refresh)) == "Refresh balance")
-        // A status outranks the words, and the control still names when.
+        // A status outranks the words. Round 16 leftover 6: a network not
+        // read withholds the core's `updated_at_ms`, so the control is named
+        // for what it does — never "Updated" over a network that was not read.
         let failing = try hero("failed", loc: en)
-        #expect(BalanceRefreshControl.spoken(try #require(failing.refresh)).hasPrefix("Updated"))
+        #expect(BalanceRefreshControl.spoken(try #require(failing.refresh)) == "Refresh balance")
         // A drawn board with no control keeps the line's room, empty.
         var bare = try hero("updated", loc: en)
         bare.refresh = nil

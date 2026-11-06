@@ -176,7 +176,8 @@ class MultisigViewsTest {
         assertEquals(w.t("proposal.reason.passkeyClosed"), w.failureText(MultisigShellFailure.Passkey("cancelled").detail))
         assertEquals(w.t("proposal.reason.passkeyTimedOut"), w.failureText(MultisigShellFailure.Passkey("cancelled", timedOut = true).detail))
         assertEquals(w.t("proposal.notSent"), w.failureText(MultisigShellFailure.NotSent.detail))
-        assertEquals(w.t("proposal.failed", "reason" to "boom"), w.failureText("boom"))
+        // Round 16 leftover 4: plain text is never words — a kind the core says is.
+        assertEquals(w.t("proposal.reason.unknown"), w.failureText("boom"))
         assertEquals(w.raw("componentsUi.signing.trustedSignerMismatch"), w.failureText(MultisigShellFailure.PageSignFailed("mismatch").detail))
         assertNull(w.actionFailure(json("""{"kind":"working"}"""), 100))
         assertEquals(w.t("proposal.mailboxDown"), w.actionFailure(json("""{"kind":"mailboxUnreadable"}"""), 100))

@@ -131,20 +131,48 @@ enum MsRules {
         return MsSignDoor(answer: answer)
     }
 
+    /// What `review.missing` says while the list is still being read.
+    static let missingOpening = "home.multisig.proposal.opening"
+
     /// §18 (b), round 14: what a proposal sheet opened WITHOUT a link says
     /// while its transaction is not in the list (`review.missing`): the
-    /// corpus key under `home.multisig.` and whether to offer Try again — a
-    /// multisig service that did not answer is said as that, never as "it
-    /// hasn't been shared yet". A core that cannot be asked: still opening.
-    static func missingSaid(loading: Bool, unreadable: Bool, mailbox: Bool?) -> (key: String, retry: Bool) {
+    /// FULL catalog key (round 16 leftover 3: `home.multisig.service.busyNote`
+    /// is not under `proposal.`) and whether to offer Try again — a multisig
+    /// service that did not answer is said as that, never as "it hasn't been
+    /// shared yet"; one that answered with its rate limit (`busy`) is said
+    /// busy, never "Couldn't reach the multisig service". A core that cannot
+    /// be asked: still opening.
+    static func missingSaid(loading: Bool, unreadable: Bool, mailbox: Bool?, busy: Bool = false) -> (key: String, retry: Bool) {
         let answer = call("review.missing", [
             "loading": loading,
             "unreadable": unreadable,
             "mailbox": mailbox.map { $0 as Any } ?? NSNull(),
+            "busy": busy,
         ]) as? [String: Any]
-        let key = (answer?["key"] as? String) ?? "home.multisig.proposal.opening"
-        let leaf = key.hasPrefix("home.multisig.") ? String(key.dropFirst("home.multisig.".count)) : key
-        return (leaf, answer?["retry"] as? Bool ?? false)
+        return ((answer?["key"] as? String) ?? missingOpening, answer?["retry"] as? Bool ?? false)
+    }
+
+    /// `missingSaid` from the proposals view's facts for `chainId` — the
+    /// one question every proposal sheet asks.
+    static func missingSaid(view: MsProposalsView, chainId: Int) -> (key: String, retry: Bool) {
+        missingSaid(
+            loading: view.loading,
+            unreadable: view.unreadable.contains(chainId),
+            mailbox: view.chains.first(where: { $0.chainId == chainId })?.mailbox,
+            busy: view.busy
+        )
+    }
+
+    /// Round 16 leftover 4: a failure's stable KIND and the full catalog key
+    /// that says it (`review.failure {detail}`) — `key` `nil` for the kinds
+    /// worded from the detail's own facts (`fee_moved`, `cannot_pay`,
+    /// `venue_blocked`). No shell reads a detail's text; a core that cannot
+    /// be asked says nothing more precise than `unknown`.
+    static func failure(_ detail: String?) -> (kind: String, key: String?) {
+        guard let answer = call("review.failure", ["detail": detail ?? ""]) as? [String: Any],
+              let kind = answer["kind"] as? String
+        else { return ("unknown", "home.multisig.proposal.reason.unknown") }
+        return (kind, answer["key"] as? String)
     }
 
     // MARK: - Names and networks (`multisig_rules`)

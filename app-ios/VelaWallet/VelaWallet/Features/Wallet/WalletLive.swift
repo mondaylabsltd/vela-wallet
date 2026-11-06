@@ -219,6 +219,19 @@ enum WalletLive {
             copy.activitySection = section(copy.activityGroups, read: looked,
                                            fallback: model.activitySection,
                                            empty: homeEmpty(feed, fallback: model.activitySection, loc: loc))
+            // Round 16 leftover 5: a network the scan could not read is said
+            // — over the rows, or in the empty state's place (never the
+            // skeleton, never "No activity yet").
+            if isShown, let unread = activityUnreadLine(feed, loc: loc, networks: networks) {
+                if copy.activityGroups.isEmpty {
+                    copy.activitySection = SectionModel(
+                        title: model.activitySection.title, action: model.activitySection.action,
+                        mode: .empty, empty: SectionEmptyModel(title: unread, caption: "")
+                    )
+                } else {
+                    copy.activitySection.note = unread
+                }
+            }
         }
         return copy
     }
@@ -347,6 +360,22 @@ enum WalletLive {
         copy.activitySection = SectionModel(title: model.activitySection.title, action: model.activitySection.action,
                                             mode: .rows, empty: nil)
         return copy
+    }
+
+    /// Round 16 leftover 5: Activity's line while the incoming scan could
+    /// not read a network (`FeedView.unread_key`) — "Activity can't be read
+    /// on Gnosis right now." (`{{network}}`, named from the wallet's list as
+    /// every network line is) or "… on 2 networks …" (`{{n}}`). `nil` when
+    /// every network was read.
+    static func activityUnreadLine(
+        _ feed: FeedViewWire, loc: Loc, networks: WalletNetworks = .builtin
+    ) -> String? {
+        guard let key = feed.unreadKey, !key.isEmpty else { return nil }
+        let name = feed.unreadChains.first.map { chainId in
+            networks.meta(chainId)?.displayName
+                ?? loc.t(I18nKeys.SettingsUi.chainId, vars: ["chainId": String(chainId)])
+        } ?? ""
+        return loc.t(key, vars: ["network": name, "n": String(feed.unreadChains.count)])
     }
 
     /// The home Activity's empty line, as the core chose it (spec 082 RG5):
@@ -544,14 +573,16 @@ enum WalletLive {
     }
 
     /// The hero's refresh control (issue 462): when the figure was last read —
-    /// "Updated 2m", the core's `last_refreshed_at_ms` in the core's relative
-    /// words — and whether a refresh the person asked for is out. The home
+    /// "Updated 2m", the core's `updated_at_ms` (round 16 leftover 6) in the
+    /// core's relative words — and whether a refresh the person asked for is out. The home
     /// re-reads the clock at least every 30 s, so the label ages on screen.
     static func refresh(
         _ view: BalanceViewWire, loc: Loc, now: Date = Date(), spinning: Bool? = nil
     ) -> BalanceRefreshModel {
         BalanceRefreshModel(
-            updated: view.lastRefreshedAtMs.map { at in
+            // Round 16 leftover 6: "Updated" is the core's ONE answer
+            // (`updated_at_ms`) — never over a network that was not read.
+            updated: view.updatedAtMs.map { at in
                 loc.t("home.lastUpdated", vars: ["ago": loc.relativeTime(atMs: at, now: now)])
             },
             updating: loc.t("home.updating"),

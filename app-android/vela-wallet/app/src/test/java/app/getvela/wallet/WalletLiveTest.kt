@@ -546,14 +546,14 @@ class WalletLiveTest {
     @Test
     fun `a refresh the person asked for adds no status line, the control says so`() {
         val now = 1_800_000_000_000L
-        val idle = home(BalanceView(display_total_usd = 4.5, last_refreshed_at_ms = (now - 125_000L).toDouble()), now = now).balance
+        val idle = home(BalanceView(display_total_usd = 4.5, last_refreshed_at_ms = (now - 125_000L).toDouble(), updated_at_ms = (now - 125_000L).toDouble()), now = now).balance
         assertNull(idle.status)
         assertEquals("Updated 2m", idle.refresh?.updated)
         assertEquals("Updating…", idle.refresh?.updating)
         assertFalse(idle.refresh!!.refreshing)
 
         val pulling = home(
-            BalanceView(display_total_usd = 4.5, refreshing = true, last_refreshed_at_ms = (now - 125_000L).toDouble()),
+            BalanceView(display_total_usd = 4.5, refreshing = true, last_refreshed_at_ms = (now - 125_000L).toDouble(), updated_at_ms = (now - 125_000L).toDouble()),
             now = now,
         ).balance
         assertNull("the refresh draws no line above the control", pulling.status)
@@ -573,7 +573,7 @@ class WalletLiveTest {
         assertNotEquals(first.refresh?.updating, first.refresh?.idleLabel)
 
         // Hidden figures keep the control: it reads, it shows no number.
-        val hidden = home(BalanceView(display_total_usd = 4.5, hidden = true, last_refreshed_at_ms = now.toDouble()), now = now).balance
+        val hidden = home(BalanceView(display_total_usd = 4.5, hidden = true, last_refreshed_at_ms = now.toDouble(), updated_at_ms = now.toDouble()), now = now).balance
         assertEquals(BalanceStateKind.Hidden, hidden.state)
         assertEquals("Updated now", hidden.refresh?.updated)
     }
@@ -586,7 +586,7 @@ class WalletLiveTest {
     fun `the updated label ages in the cores relative words`() {
         // A Friday, 08:00 UTC.
         val now = 1_800_000_000_000L
-        fun label(agoMs: Long) = WalletLive.refresh(BalanceView(last_refreshed_at_ms = (now - agoMs).toDouble()), strings, now).updated
+        fun label(agoMs: Long) = WalletLive.refresh(BalanceView(last_refreshed_at_ms = (now - agoMs).toDouble(), updated_at_ms = (now - agoMs).toDouble()), strings, now).updated
         assertEquals("Updated now", label(0))
         assertEquals("Updated now", label(44_000))
         assertEquals("Updated 1m", label(45_000))

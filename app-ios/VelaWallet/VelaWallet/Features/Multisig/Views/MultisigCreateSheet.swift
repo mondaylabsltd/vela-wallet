@@ -457,8 +457,10 @@ struct MultisigCreateSheet: View {
                 MsRow(label: words.t("create.address"), value: address, mono: true, copyable: true)
                     .accessibilityIdentifier("multisig.create.draftAddress")
                 MsNote(text: words.t("create.sameEverywhere"))
-            } else if let error = sheet.draftError {
-                MsNote(text: error, tone: .danger)
+            } else if sheet.draftError != nil {
+                // Round 16 leftover 4: `draft_error` is the core's English —
+                // said in the catalog's words, never drawn.
+                MsNote(text: words.createDraftFailed, tone: .danger)
             } else {
                 ProgressView()
             }
@@ -557,7 +559,9 @@ struct MultisigCreateSheet: View {
         let solo = owners.count == 1
         let shared: String = {
             if row?.shared == true { return words.t(solo ? "create.sharedSolo" : "create.shared") }
-            if let refused = sheet.refused { return words.t("create.refused", ["reason": refused]) }
+            // Round 16 leftover 4: `refused` is the core's English — never
+            // drawn; Settings offers "Share it again".
+            if sheet.refused != nil { return words.createRefused }
             return sheet.phase == .working ? words.t("create.savedSharing") : words.t("create.savedLater")
         }()
         return VStack(alignment: .leading, spacing: Tokens.Space.s16) {

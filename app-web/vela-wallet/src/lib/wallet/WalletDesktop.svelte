@@ -167,6 +167,12 @@
 							onaction={ongroupaction}
 						/>
 					{:else}
+						{#if model.activitySection.note}
+							<!-- Round 16 leftover 5: the networks the scan could not read. -->
+							<div data-testid="activity-unread">
+								<GroupNote group={{ label: '', rows: [], note: model.activitySection.note }} />
+							</div>
+						{/if}
 						{#each model.activityGroups as group (group.label)}
 							<p class="day">{group.label}</p>
 							<GroupNote {group} onaction={ongroupaction} />

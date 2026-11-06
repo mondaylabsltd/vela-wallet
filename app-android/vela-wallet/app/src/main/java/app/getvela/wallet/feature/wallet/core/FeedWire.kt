@@ -607,7 +607,15 @@ sealed class FeedShellResult {
 
     @Serializable
     @SerialName("sync_completed")
-    data class SyncCompleted(val new_count: Int) : FeedShellResult()
+    data class SyncCompleted(
+        val new_count: Int,
+        /**
+         * Round 16 leftover 5: the networks the scan could not read (the trust
+         * machine's `TrustView.unread_chains` after the poll settled) — Activity
+         * says it cannot be read there rather than that nothing happened.
+         */
+        val unread_chains: List<Int> = emptyList(),
+    ) : FeedShellResult()
 
     @Serializable
     @SerialName("delete_committed")
@@ -781,9 +789,20 @@ data class FeedView(
     /**
      * r15-1: "No activity yet" may be said of [account]: its store was read
      * and its first incoming scan came back. Before that an empty Activity
-     * is still being read.
+     * is still being read. Round 16 leftover 5: nor while a network is
+     * unread — [unread_key] is said instead.
      */
     val settled: Boolean = false,
+    /** Round 16 leftover 5: the networks the last scan of [account] could not read (within the chain filter), ascending. */
+    val unread_chains: List<Int> = emptyList(),
+    /**
+     * The line Activity (the home's and History) draws while any is —
+     * `home.activityUnreadOne` (`{{network}}`: the one network's name) or
+     * `home.activityUnreadMany` (`{{n}}`): over the rows when there are rows,
+     * in the empty state's place when there are none. `null` when every
+     * network was read.
+     */
+    val unread_key: String? = null,
 )
 
 object FeedItemList : app.getvela.wallet.core.crux.FailSoftListSerializer<FeedItem>(FeedItem.serializer())

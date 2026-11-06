@@ -121,6 +121,8 @@ class IncomingScanTest {
         decimals: Int? = 6,
         /** What `eth_getBlockByNumber` answers: the block's header, or `JSONObject.NULL` when the endpoint has none to give. */
         header: () -> Any = { JSONObject().put("timestamp", BLOCK_TIME_HEX) },
+        /** Whether the chain's head answers (`eth_blockNumber`); a head that does not is a network the scan could not read. */
+        headAnswers: () -> Boolean = { true },
     ): Harness {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         scopes += scope
@@ -128,7 +130,8 @@ class IncomingScanTest {
 
         val transport = FakeRpcTransport { _, method, params ->
             when (method) {
-                "eth_blockNumber" -> FakeRpcTransport.body("0x3e8") // block 1000
+                // block 1000
+                "eth_blockNumber" -> if (headAnswers()) FakeRpcTransport.body("0x3e8") else FakeRpcTransport.httpError(503)
                 // A real endpoint honours the `address` filter it was handed.
                 // The core builds that filter from its own allowlist, and it
                 // does NOT re-check the contract when the logs come back — so a
@@ -317,7 +320,7 @@ class IncomingScanTest {
         val harness = harness(logs)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         scopes += scope
-        harness.feed.scan = { address -> harness.scan.runOnce(address) }
+        harness.feed.scan = { address -> FeedExecutor.ScanAnswer(harness.scan.runOnce(address)) }
         val feedHost = CoreHost(
             bridge = ActivityFeedCore().asBridge(),
             scope = scope,
@@ -479,6 +482,67 @@ class IncomingScanTest {
 
         assertEquals(0, harness.scan.runOnce(""))
         assertEquals(null, harness.store.read(KeyValueStore.Keys.TRANSACTIONS))
+    }
+
+    // -- round 16 leftover 5: the networks it could not read -----------------
+
+    /**
+     * The scan answers the feed with the networks it could not read (the
+     * trust machine's `unread_chains` after the poll settled), and a network
+     * read again leaves them.
+     */
+    @Test
+    fun `a network whose head does not answer is said unread, and read again it is not`() = runBlocking {
+        val answers = java.util.concurrent.atomic.AtomicBoolean(false)
+        val harness = harness(listOf(transferLog(usdc)), headAnswers = { answers.get() })
+
+        val unread = harness.scan.read(wallet)
+        assertEquals(0, unread.newCount)
+        assertEquals(listOf(137), unread.unreadChains)
+
+        answers.set(true)
+        val read = harness.scan.read(wallet)
+        assertEquals(1, read.newCount)
+        assertEquals(emptyList<Int>(), read.unreadChains)
+    }
+
+    /**
+     * End to end on the real `activity_feed`: the scan's unread network
+     * reaches the feed's view as the line to say (`unread_key`), and the
+     * feed is not settled while it stands — never "No activity yet".
+     */
+    @Test
+    fun `the feed says the network its scan could not read`() = runBlocking<Unit> {
+        val answers = java.util.concurrent.atomic.AtomicBoolean(false)
+        val harness = harness(emptyList(), headAnswers = { answers.get() })
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        scopes += scope
+        harness.feed.scan = { address -> harness.scan.read(address).let { FeedExecutor.ScanAnswer(it.newCount, it.unreadChains) } }
+        val feedHost = CoreHost(
+            bridge = ActivityFeedCore().asBridge(),
+            scope = scope,
+            initial = FeedView(),
+            serializer = FeedView.serializer(),
+            perform = JsonShell.perform(FeedOperation.serializer(), FeedShellResult.serializer(), harness.feed::perform),
+            escapedFailure = JsonShell.escapedFailure(
+                FeedOperation.serializer(),
+                FeedShellResult.serializer(),
+                fallback = FeedShellResult.HapticPlayed,
+                answer = harness.feed::neutralAnswer,
+            ),
+            onFault = { error -> throw AssertionError("shell fault: $error", error) },
+        )
+        feedHost.dispatch(FeedEvent.AccountSwitched(wallet), FeedEvent.serializer())
+        feedHost.dispatch(FeedEvent.LiveTick, FeedEvent.serializer())
+        val said = withTimeout(30_000) { feedHost.view.first { it.unread_key != null } }
+        assertEquals("home.activityUnreadOne", said.unread_key)
+        assertEquals(listOf(137), said.unread_chains)
+        assertEquals("not settled while a network is unread", false, said.settled)
+
+        answers.set(true)
+        feedHost.dispatch(FeedEvent.LiveTick, FeedEvent.serializer())
+        val read = withTimeout(30_000) { feedHost.view.first { it.unread_key == null && it.settled } }
+        assertEquals(emptyList<Int>(), read.unread_chains)
     }
 
     private companion object {

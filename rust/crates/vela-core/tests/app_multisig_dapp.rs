@@ -141,6 +141,28 @@ fn execute(sut: &mut Sut, world: &mut World, account: &MultisigAccount, hash: &s
         tx_hash: tx_hash.clone(),
         user_op_hash: format!("0x{}", "ab".repeat(32)),
     });
+    // The sheet's look first, its figure carried on the press (§24; round
+    // 16 leftover 1: a press over no figure signs nothing).
+    run_short(
+        sut,
+        world,
+        Event::Preview {
+            chain_id: 100,
+            safe_tx_hash: hash.to_owned(),
+            executor: fixture(0).address,
+        },
+    );
+    let key = format!(
+        "100:{}:{}",
+        hash.to_ascii_lowercase(),
+        fixture(0).address.to_ascii_lowercase()
+    );
+    let shown_fee = sut.view().previews.get(&key).and_then(|look| {
+        look["fee"]["amount"]
+            .as_str()
+            .and_then(vela_core::app::multisig_shell::quantity)
+            .map(|fee| fee.to_string())
+    });
     run_short(
         sut,
         world,
@@ -148,7 +170,7 @@ fn execute(sut: &mut Sut, world: &mut World, account: &MultisigAccount, hash: &s
             chain_id: 100,
             safe_tx_hash: hash.to_owned(),
             executor: fixture(0).address,
-            shown_fee: None,
+            shown_fee,
         },
     );
     tx_hash

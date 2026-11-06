@@ -547,6 +547,15 @@ struct FeedViewWire: Decodable, Equatable {
     /// r15-1: "No activity yet" may be said of `account`: its store was read
     /// and its first incoming scan came back since it was switched to.
     var settled = false
+    /// Round 16 leftover 5: the networks the last scan of `account` could not
+    /// read (within the chain filter), ascending.
+    var unreadChains: [Int] = []
+    /// The line Activity (the home's and History) draws while any is:
+    /// `home.activityUnreadOne` ("Activity can't be read on {{network}}
+    /// right now.") or `home.activityUnreadMany` (`{{n}}`) — over the rows
+    /// when there are rows, in the empty state's place when there are none.
+    /// `nil` when every network was read.
+    var unreadKey: String? = nil
 
     /// r15-1: these rows are `address`'s (addresses compare without case).
     func isFor(_ address: String) -> Bool {
@@ -555,7 +564,7 @@ struct FeedViewWire: Decodable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case rows, homeRows, transactions, newItemId, toast, historyEmptyKey, homeEmptyKey, contactRows, hidden, nextScan
-        case account, settled
+        case account, settled, unreadChains, unreadKey
     }
 }
 
@@ -582,7 +591,9 @@ extension FeedViewWire {
             hidden: try c.decodeIfPresent(Bool.self, forKey: .hidden) ?? false,
             nextScan: try c.decodeIfPresent(FeedNextScanWire.self, forKey: .nextScan),
             account: try c.decodeIfPresent(String.self, forKey: .account) ?? "",
-            settled: try c.decodeIfPresent(Bool.self, forKey: .settled) ?? false
+            settled: try c.decodeIfPresent(Bool.self, forKey: .settled) ?? false,
+            unreadChains: try c.decodeIfPresent([Int].self, forKey: .unreadChains) ?? [],
+            unreadKey: try c.decodeIfPresent(String.self, forKey: .unreadKey)
         )
     }
 }

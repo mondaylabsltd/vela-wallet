@@ -59,7 +59,7 @@
 	import { memberProblem } from '../core/members';
 	import { names } from '../core/names.svelte';
 	import { multisig, type MemberInfo } from '../core/store.svelte';
-	import { failureText } from '../shell/failure';
+	import { failureWords } from '../shell/failure';
 	import { localAccounts } from '../shell/local-accounts';
 	import CustomServiceNote from './CustomServiceNote.svelte';
 	import MemberKindChoice from './MemberKindChoice.svelte';
@@ -426,7 +426,7 @@
 			return;
 		}
 		// The person closed the passkey: nothing to say.
-		if (first.phase === 'failed') failure = failureText(first.error);
+		if (first.phase === 'failed') failure = failureWords(first.error, m.proposal);
 	}
 
 	/** The created multisig as the machine holds it now (its sharing moves on its own). */
@@ -442,7 +442,9 @@
 					? m.create.sharedSolo
 					: m.create.shared
 				: refused
-					? fillTemplate(m.create.refused, { reason: refused })
+					? // Round 16 leftover 4: the service's refusal is its own text — never
+						// drawn; what is true and what to do (iOS's words).
+						m.settings.shareAgainNote
 					: sharing
 						? m.create.savedSharing
 						: m.create.savedLater

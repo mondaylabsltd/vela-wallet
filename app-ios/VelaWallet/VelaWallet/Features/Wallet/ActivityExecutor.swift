@@ -146,9 +146,8 @@ final class ActivityExecutor {
 
         case "scan_incoming_transfers":
             let address = operation["address"] as? String ?? ""
-            return CoreJSON.string([
-                "type": "sync_completed", "new_count": await scan(address: address),
-            ])
+            let scanned = await scan(address: address)
+            return CoreJSON.string(Self.syncCompleted(newCount: scanned.newCount, unreadChains: scanned.unreadChains))
 
         case "delete_tx_record":
             let id = operation["id"] as? String ?? ""
@@ -235,8 +234,12 @@ final class ActivityExecutor {
     }
 
     /// Discover and persist new receipts. Answers how many landed.
-    private func scan(address: String) async -> Int {
-        guard !address.isEmpty, !scanning.contains(address.lowercased()) else { return 0 }
+    private func scan(address: String) async -> (newCount: Int, unreadChains: [Int]) {
+        // A scan of this account already out: nothing new from this one, and
+        // what is unread is what the trust machine says now.
+        guard !address.isEmpty, !scanning.contains(address.lowercased()) else {
+            return (0, trust.unreadChains(address: address))
+        }
         scanning.insert(address.lowercased())
         defer { scanning.remove(address.lowercased()) }
         let knowsItsNetworks = held.recorded(address: address)
@@ -246,8 +249,8 @@ final class ActivityExecutor {
         let facts = Self.scanFacts(
             held: held.chainIds(address: address), accountNetworks: accountNetworks(address), space: spaceChains()
         )
-        let incoming = await trust.scan(address: address, facts: facts)
-        return ingest(incoming, address: address)
+        let scanned = await trust.scanned(address: address, facts: facts)
+        return (ingest(scanned.incoming, address: address), scanned.unreadChains)
     }
 
     /// The judged feed, stored: each transfer as a `receive` record, merged.
@@ -256,6 +259,15 @@ final class ActivityExecutor {
         let records = incoming.compactMap { record($0, address: address) }
         guard !records.isEmpty else { return 0 }
         return TxRecords.merge(records, store: store)
+    }
+
+    /// The scan's answer (`FeedShellResult::SyncCompleted`): how many new
+    /// receipts were kept, and — round 16 leftover 5 — the networks the
+    /// poll could not read (the trust machine's `unread_chains` after it
+    /// settled), so Activity says it cannot be read there rather than that
+    /// nothing happened.
+    static func syncCompleted(newCount: Int, unreadChains: [Int]) -> [String: Any] {
+        ["type": "sync_completed", "new_count": newCount, "unread_chains": unreadChains]
     }
 
     // MARK: - A receipt's block time

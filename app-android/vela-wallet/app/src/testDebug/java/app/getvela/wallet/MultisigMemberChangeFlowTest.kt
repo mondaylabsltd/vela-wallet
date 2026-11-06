@@ -180,7 +180,15 @@ class MultisigMemberChangeFlowTest {
             chain = 100, safe = s.safe, after = MultisigWorld.Safe(s.owners.take(2), 2, nonce = 1),
             safeTxHash = hash!!, txHash = "0x" + "cd".repeat(32), userOpHash = "0x" + "ab".repeat(32),
         )
-        s.hub.sendProposal(ev("execute", "chain_id" to 100, "safe_tx_hash" to hash, "executor" to s.owners[0]))
+        // Round 16 leftover 1: as the sheet does — its look drawn first, and
+        // Execute carries the figure drawn (a press over no figure signs nothing).
+        s.hub.sendProposal(ev("preview", "chain_id" to 100, "safe_tx_hash" to hash, "executor" to s.owners[0]))
+        val look = poll(60_000, "the execution's look priced") {
+            s.hub.proposalsView.value.let { v -> v.item(100, hash)?.let { v.preview(it, s.owners[0]) } }?.takeIf { it.kind == "priced" }
+        }
+        s.hub.sendProposal(
+            ev("execute", "chain_id" to 100, "safe_tx_hash" to hash, "executor" to s.owners[0], "shown_fee" to look["fee"]["amount"].str),
+        )
         val verdict = poll(60_000, "executed") {
             s.hub.proposalsView.value.let { v -> v.lookup(v.executions, 100, hash)?.takeIf { it.kind != "working" } }
         }

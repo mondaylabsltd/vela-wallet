@@ -549,6 +549,8 @@ object WalletFixtures {
             address = ADDRESS_FULL,
             hidden = true,
             last_refreshed_at_ms = now - 120_000.0,
+            // Every network read: the core's one "Updated" answer (round 16 leftover 6).
+            updated_at_ms = now - 120_000.0,
             tokens = listOf(
                 app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = 100, symbol = "xDAI", name = "xDAI", balance = "418.25", decimals = 18, price_usd = 1.0),
                 app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = 1, symbol = "USDC", name = "USDC", balance = "376.54321", decimals = 6, token_address = usdc, price_usd = 1.0),
@@ -575,6 +577,8 @@ object WalletFixtures {
             address = ADDRESS_FULL,
             display_total_usd = 794.79,
             last_refreshed_at_ms = now - 120_000.0,
+            // Every network read: the core's one "Updated" answer (round 16 leftover 6).
+            updated_at_ms = now - 120_000.0,
             tokens = listOf(
                 app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = 100, symbol = "xDAI", name = "xDAI", balance = "418.25", decimals = 18, price_usd = 1.0),
                 app.getvela.wallet.feature.wallet.core.BalanceToken(

@@ -929,11 +929,25 @@ fn history(
             }
         }
     };
-    match windowed {
+    // Round 16 leftover 5: a network the scan could not read, named above
+    // the rows (the feed's own line) — what is listed may not be all.
+    let unread = model.unread.clone().map(|line| {
+        div()
+            .pt(px(8.))
+            .pb(px(4.))
+            .text_size(theme::text_label())
+            .text_color(theme.fg_muted)
+            .child(crate::ui::prose(line))
+    });
+    match (windowed, unread) {
         // Phase 4: only the rows near the view are built, laid out and
-        // painted — a 200-row History scrolled at 80 fps drawn whole.
-        Some((window, scroll)) => window.column(&scroll, &keys, item),
-        None => col.children((0..keys.len()).map(&mut item)),
+        // painted — a 200-row History scrolled at 80 fps drawn whole. (The
+        // column measures its own top, so the line above it is allowed.)
+        (Some((window, scroll)), None) => window.column(&scroll, &keys, item),
+        (Some((window, scroll)), Some(line)) => {
+            col.child(line).child(window.column(&scroll, &keys, item))
+        }
+        (None, line) => col.children(line).children((0..keys.len()).map(&mut item)),
     }
 }
 

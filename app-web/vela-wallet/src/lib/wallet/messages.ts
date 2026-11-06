@@ -119,6 +119,14 @@ export interface WalletMessages {
 		/** Spec 082 RG5: the home's empty line under a chain filter (`home_empty_key`). */
 		emptyTitleNetwork: string;
 		/**
+		 * Round 16 leftover 5: the networks the scan could not read
+		 * (`FeedView.unread_key`) — "Activity can't be read on {{network}}
+		 * right now." / "… on {{n}} networks …". Absent (a drawn fixture):
+		 * nothing said.
+		 */
+		unreadOne?: string;
+		unreadMany?: string;
+		/**
 		 * Round 5: a transfer of a token nobody vouches for says so on its row
 		 * — "Unverified token", or "Not the real {{symbol}} — …" — the
 		 * multisig's words (`home.multisig.token`), one set for every surface.
@@ -298,6 +306,9 @@ export const WALLET_KEYS = [
 	'history.fromName',
 	'home.emptyNoActivity',
 	'home.emptyNoActivityNetwork',
+	// Round 16 leftover 5: Activity names the networks its scan could not read.
+	'home.activityUnreadOne',
+	'home.activityUnreadMany',
 	'home.emptySubtitle',
 	'componentsTx.detail.statusPending',
 	'componentsTx.detail.statusFailed',

@@ -51,6 +51,7 @@ use serde_json::{json, Value};
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
 
+use super::multisig_failure as failure;
 use super::multisig_gather;
 use super::multisig_outside::reading::TokenFacts;
 use super::multisig_review_state::{self as review_state, ReviewState};
@@ -956,6 +957,12 @@ pub struct ProposalsView {
     pub stale: bool,
     /// Stale because the service is away (said with a Retry).
     pub unreachable: bool,
+    /// Round 16 leftover 3 (§25 r16-16): the service's last read answer was
+    /// its rate limit — a proposal sheet whose transaction is not in the
+    /// unread list says busy (`review.missing {busy}`), never "Couldn't
+    /// reach the multisig service".
+    #[serde(default)]
+    pub busy: bool,
     /// The poll's pace now.
     pub pace_ms: u32,
     pub outbox: BTreeMap<String, OutboxEntry>,
@@ -1822,7 +1829,10 @@ impl App for MultisigProposals {
             .iter()
             .filter(|i| i.status != ProposalStatus::Done)
             .collect();
-        let down = lock(&s.service.outage).down;
+        let (down, limited) = {
+            let outage = lock(&s.service.outage);
+            (outage.down, outage.rate_limited)
+        };
         // core-ms-2: the waiting line's parts per multisig, and the followed
         // one's banner.
         let presence_parts: BTreeMap<String, Vec<super::multisig_presence::WaitingPart>> = more
@@ -1859,6 +1869,7 @@ impl App for MultisigProposals {
             loading: s.loading,
             stale: s.stale,
             unreachable: service_unreachable(&s, down),
+            busy: service_unreachable(&s, limited),
             pace_ms: if s.held > 0 || flows::watching(&s) {
                 OPEN_POLL_MS
             } else {
@@ -1885,7 +1896,7 @@ impl App for MultisigProposals {
                     default_member,
                 }
             }),
-            actions: stops_follow_looks(&s.actions, &s.previews),
+            actions: served_failures(stops_follow_looks(&s.actions, &s.previews)),
             reviews: one_note_per_failure(&s.reviews, &s.previews, &s.actions),
             review_states: s.review_states.clone(),
             previews: s.previews.clone(),
@@ -2884,12 +2895,12 @@ async fn sign_approval(
 ) -> Result<Approval, Stop> {
     if owner.route == ApprovalRoute::Blocked {
         return Err(Stop::State(ActionState::Failed {
-            detail: "the signing venue blocks this member".to_owned(),
+            detail: failure::core_reason("venue_blocks_member"),
         }));
     }
-    let challenge = multisig::approval_challenge(chain_id, &owner.address, hash).map_err(|e| {
+    let challenge = multisig::approval_challenge(chain_id, &owner.address, hash).map_err(|_| {
         Stop::State(ActionState::Failed {
-            detail: e.to_string(),
+            detail: failure::core_reason("challenge"),
         })
     })?;
     let answer = io
@@ -2926,25 +2937,27 @@ async fn sign_approval(
             &signature,
         )
         .map(|a| Approval::Passkey(Box::new(a)))
-        .map_err(|e| {
+        .map_err(|_| {
             Stop::State(ActionState::Failed {
-                detail: format!("the passkey's signature did not check out: {e}"),
+                detail: failure::passkey_check(),
             })
         })?,
         MultisigShellResult::PageApproved { approval } => {
-            serde_json::from_value::<Approval>(approval).map_err(|e| {
+            serde_json::from_value::<Approval>(approval).map_err(|_| {
                 Stop::State(ActionState::Failed {
-                    detail: e.to_string(),
+                    detail: failure::passkey_check(),
                 })
             })?
         }
         MultisigShellResult::PasskeyCancelled => return Err(Stop::State(ActionState::Cancelled)),
         MultisigShellResult::PasskeyFailed { detail } => {
-            return Err(Stop::State(ActionState::Failed { detail }))
-        }
-        other => {
             return Err(Stop::State(ActionState::Failed {
-                detail: format!("unexpected answer {other:?}"),
+                detail: failure::served(&detail),
+            }))
+        }
+        _ => {
+            return Err(Stop::State(ActionState::Failed {
+                detail: failure::core_reason("unexpected_answer"),
             }))
         }
     };
@@ -2955,7 +2968,7 @@ async fn sign_approval(
     };
     if !same_address(approval.owner(), &owner.address) || !verified {
         return Err(Stop::State(ActionState::Failed {
-            detail: "the approval does not check out as this member's".to_owned(),
+            detail: failure::passkey_check(),
         }));
     }
     Ok(approval)
@@ -3310,7 +3323,7 @@ async fn draft(io: &Io<Event>, st: &Shared<State>, chain_id: u64, kind: Proposal
         return set(
             st,
             ActionState::Failed {
-                detail: "no multisig shown".to_owned(),
+                detail: failure::core_reason("no_multisig_shown"),
             },
         );
     };
@@ -3384,7 +3397,7 @@ async fn draft(io: &Io<Event>, st: &Shared<State>, chain_id: u64, kind: Proposal
         return set(
             st,
             ActionState::Failed {
-                detail: "the transaction does not hash as itself".to_owned(),
+                detail: failure::core_reason("not_itself"),
             },
         );
     };
@@ -3598,7 +3611,7 @@ async fn confirm_draft(
         let s = lock(st);
         let Some(d) = s.draft.as_ref() else {
             return ActionState::Failed {
-                detail: "no draft".to_owned(),
+                detail: failure::core_reason("no_draft"),
             };
         };
         // §12: never proposed (nor signed) on a review the person was not
@@ -3608,7 +3621,7 @@ async fn confirm_draft(
         }
         let Some(account) = s.account.clone() else {
             return ActionState::Failed {
-                detail: "no multisig shown".to_owned(),
+                detail: failure::core_reason("no_multisig_shown"),
             };
         };
         let last = s
@@ -3696,7 +3709,7 @@ async fn approve(
     };
     let (Some((item, members)), Some(account), Some(owner)) = (found, account, owner) else {
         return ActionState::Failed {
-            detail: "nothing to approve".to_owned(),
+            detail: failure::core_reason("nothing_to_approve"),
         };
     };
     // §12: never signed on a review the person was not shown.
@@ -4118,6 +4131,24 @@ async fn balance_of(
 /// a look with no figure withdraws it (the fee line says why nothing can
 /// run). Chosen over freezing the re-quotes: a frozen look ages past
 /// `PREVIEW_FRESH_MS`, and the next press would re-quote and stop again.
+/// Round 16 leftover 4: every failure a shell is handed is a kind — a
+/// detail written as plain text (a shell's English, an error's) is served as
+/// `{"kind":"unknown"}`, its text dropped ([`super::multisig_failure::served`]).
+fn served_failures(actions: BTreeMap<String, ActionState>) -> BTreeMap<String, ActionState> {
+    actions
+        .into_iter()
+        .map(|(key, action)| match action {
+            ActionState::Failed { detail } => (
+                key,
+                ActionState::Failed {
+                    detail: super::multisig_failure::served(&detail),
+                },
+            ),
+            other => (key, other),
+        })
+        .collect()
+}
+
 pub fn stops_follow_looks(
     actions: &BTreeMap<String, ActionState>,
     previews: &BTreeMap<String, Value>,
@@ -4535,7 +4566,7 @@ async fn approve_execute(
 /// these approvals says they can pay. Round 5 (S2): a look that could not
 /// price or check it in time (`unpriced`, `unchecked`) does not say they
 /// cannot — the press is offered, and the execution looks again before any
-/// signature (stopped then, the approval is still given). A look still out,
+/// signature (stopped then, nothing is approved either — r16-4). A look still out,
 /// or one that says it would fail, cannot be paid, is refused or its number
 /// is used, offers nothing.
 fn approve_executors(s: &State, item: &ProposalItem) -> Vec<String> {
@@ -4566,6 +4597,8 @@ fn approve_executors(s: &State, item: &ProposalItem) -> Vec<String> {
         .collect()
 }
 
+/// The person's Execute — a press on the sheet, so a figure priced only at
+/// the press is said first, never signed unseen (round 16 leftover 1).
 async fn execute(
     io: &Io<Event>,
     st: &Shared<State>,
@@ -4574,12 +4607,14 @@ async fn execute(
     executor: &str,
     shown_fee: Option<u128>,
 ) -> ActionState {
-    execute_as(io, st, chain_id, hash, executor, shown_fee, false).await
+    execute_as(io, st, chain_id, hash, executor, shown_fee, true).await
 }
 
-/// [`execute`]; `one_press`: the person's "Approve and execute" (r16-4) —
-/// a figure priced only at the press, over a look that showed none, is
-/// said first (`fee_moved`), never signed unseen.
+/// [`execute`]; `pressed`: the person pressed Execute or "Approve and
+/// execute" on the sheet (r16-4; round 16 leftover 1: every such press) — a
+/// figure priced only at the press, over a look that showed none, is said
+/// first (`fee_moved`), never signed unseen. Not pressed: the proposer's own
+/// one press (`propose_execute`), whose draft said its fee.
 async fn execute_as(
     io: &Io<Event>,
     st: &Shared<State>,
@@ -4587,11 +4622,11 @@ async fn execute_as(
     hash: &str,
     executor: &str,
     shown_fee: Option<u128>,
-    one_press: bool,
+    pressed: bool,
 ) -> ActionState {
     let Some(input) = execution_input(st, chain_id, hash, executor) else {
         return ActionState::Failed {
-            detail: "nothing to execute".to_owned(),
+            detail: failure::core_reason("nothing_to_execute"),
         };
     };
     // §12: never signed on a review the person was not shown.
@@ -4605,7 +4640,7 @@ async fn execute_as(
         .all(|e| !same_address(e, executor))
     {
         return ActionState::Failed {
-            detail: "this account cannot execute it now".to_owned(),
+            detail: failure::core_reason("cannot_execute_now"),
         };
     }
     // A look that says it stops, stops before the gate asks anything. This
@@ -4658,9 +4693,10 @@ async fn execute_as(
             };
         }
     }
-    // r16-4: the one press over no figure at all (its look could not price
-    // it): the figure priced now is said, never signed unseen.
-    if let (true, None, Preview::Priced { fee, .. }) = (one_press && requoted, said_fee, &preview) {
+    // r16-4: a press over no figure at all (its look could not price it) —
+    // the one press, and (round 16 leftover 1) a plain Execute: the figure
+    // priced now is said, never signed unseen.
+    if let (true, None, Preview::Priced { fee, .. }) = (pressed && requoted, said_fee, &preview) {
         if let Some(now) = fee_amount(fee) {
             return ActionState::Failed {
                 detail: fee_moved_detail(chain_id, &input.executor.address, now),
@@ -4737,11 +4773,15 @@ async fn execute_as(
             maybe_sent: true,
             detail,
         } => (detail, true, None),
-        MultisigShellResult::CallsFailed { detail, .. } => return ActionState::Failed { detail },
-        MultisigShellResult::CallsCancelled => return ActionState::Cancelled,
-        other => {
+        MultisigShellResult::CallsFailed { detail, .. } => {
             return ActionState::Failed {
-                detail: format!("unexpected answer {other:?}"),
+                detail: failure::served(&detail),
+            }
+        }
+        MultisigShellResult::CallsCancelled => return ActionState::Cancelled,
+        _ => {
+            return ActionState::Failed {
+                detail: failure::core_reason("unexpected_answer"),
             }
         }
     };

@@ -215,9 +215,11 @@ fun MultisigProposalSheet(
     MsSheet(words.t("proposal.title"), words.raw("common.done"), onClose = close, dismissible = !approving && !executingNow, tag = "multisig.proposal") {
         siteNote?.let { MsNote(it, tag = "multisig.proposal.site") }
         if (item == null) {
+            val missing = LinkedStands.missing(view, chainId, words)
             LinkedState(
                 view.linked?.stand, view.linked?.preview == true, words, LinkedStands.failure(view.linked, words),
-                onTryAgain = if (LinkedStands.offersTryAgain(view.linked)) ({ hub.sendProposal(ev("retry")) }) else null,
+                onTryAgain = if (LinkedStands.offersTryAgain(view.linked) || missing?.retry == true) ({ hub.sendProposal(ev("retry")) }) else null,
+                missing = missing,
             )
             // ms-21: no member here — the person may follow it on this device (kept, not shown).
             val linked = view.linked
@@ -639,6 +641,32 @@ object LinkedStands {
         val key = linked?.reasonKey ?: return null
         return if (offersTryAgain(linked)) words.unreadText(key, linked.chainId) else null
     }
+
+    /** What a sheet opened without a link says while its transaction is not in the list. */
+    data class Missing(val text: String, val retry: Boolean)
+
+    /**
+     * §18 (b), round 14 + round 16 leftover 3: a sheet opened WITHOUT a link
+     * whose transaction is not in the list says why, in the core's words
+     * (`review.missing`, iOS's `missingSaid`): its network not read, the
+     * multisig service not read — or busy (its rate limit: the home's busy
+     * words, never "Couldn't reach the multisig service") — each with Try
+     * again; read and not there; not a network the multisig is read on.
+     * `null` while it is still being looked for ("Opening…"), and for a sheet
+     * opened from a link (its stand says it). Pure.
+     */
+    fun missing(view: app.getvela.wallet.feature.multisig.core.MsProposalsView, chainId: Int, words: MultisigWords): Missing? {
+        if (view.linked != null) return null
+        val said = app.getvela.wallet.feature.multisig.core.MsRules.missingSaid(
+            // The list of no multisig shown is not read yet: still opening.
+            loading = view.loading || view.followed == null,
+            unreadable = chainId in view.unreadable,
+            mailbox = view.chain(chainId)?.mailbox,
+            busy = view.busy,
+        )
+        if (said.key == app.getvela.wallet.feature.multisig.core.MsMissingSaid.OPENING_KEY) return null
+        return Missing(words.unreadText(said.key, chainId), said.retry)
+    }
 }
 
 /** Where a linked transaction stands before its item reads. */
@@ -649,6 +677,7 @@ private fun LinkedState(
     words: MultisigWords,
     failure: String? = null,
     onTryAgain: (() -> Unit)? = null,
+    missing: LinkedStands.Missing? = null,
 ) {
     when {
         // r13-3 / §18 item 1: a read that failed (`failed`, `unreadable`,
@@ -661,6 +690,15 @@ private fun LinkedState(
             }
         }
         stand == "notInMailbox" -> MsNote(words.t("proposal.notInMailbox"), tone = MsTone.Warning, tag = "multisig.proposal.notInMailbox")
+        // §18 (b) + round 16 leftover 3: opened without a link and not in the
+        // list — the core's words for why (a busy service said busy), with
+        // Try again when its read did not come back.
+        missing != null -> {
+            MsNote(missing.text, tone = MsTone.Warning, tag = "multisig.proposal.missing")
+            if (missing.retry && onTryAgain != null) {
+                VelaSecondaryButton(words.t("review.state.tryAgain"), onTryAgain, Modifier.fillMaxWidth().testTag("multisig.proposal.missingRetry"))
+            }
+        }
         else -> Row(Modifier.testTag("multisig.proposal.opening"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
             CircularProgressIndicator(color = VelaTheme.colors.fgMuted, strokeWidth = VelaSpacing.xs)
             MsText(words.t("proposal.opening"), MsType.Body, color = VelaTheme.colors.fgMuted)

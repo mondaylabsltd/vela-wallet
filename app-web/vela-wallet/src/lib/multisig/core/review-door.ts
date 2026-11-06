@@ -72,6 +72,12 @@ export function reasonWords(m: ReviewStateMessages, key: string | null, network 
 
 const UNREAD = 'home.multisig.proposal.unread.';
 const SERVICE_KEY = 'home.multisig.proposal.mailboxDown';
+/**
+ * Round 16 leftover 3 (§25 r16-16): the multisig service answered with its
+ * rate limit — the core says it busy (`review.missing {busy}`, a link's
+ * `reason_key`) in the home's words, never "Couldn't reach the service".
+ */
+export const BUSY_KEY = 'home.multisig.service.busyNote';
 
 /**
  * r13-3: the step before a review — a draft not built, a link's transaction
@@ -83,9 +89,11 @@ const SERVICE_KEY = 'home.multisig.proposal.mailboxDown';
 export function unreadWords(
 	proposal: { mailboxDown: string; unread: Record<string, string> },
 	key: string | null | undefined,
-	network: string
+	network: string,
+	busy = ''
 ): string {
 	if (key === SERVICE_KEY) return proposal.mailboxDown;
+	if (key === BUSY_KEY && busy) return busy;
 	const leaf = key?.startsWith(UNREAD) ? key.slice(UNREAD.length) : '';
 	const text = proposal.unread[leaf] || proposal.unread.chain;
 	return text.replaceAll('{{network}}', network);
@@ -107,11 +115,15 @@ export interface MissingSaid {
 export function missingSaid(
 	loading: boolean,
 	unreadable: boolean,
-	mailbox: boolean | null
+	mailbox: boolean | null,
+	busy = false
 ): MissingSaid {
 	try {
 		return JSON.parse(
-			wasm.multisigLinkCall('review.missing', JSON.stringify({ loading, unreadable, mailbox }))
+			wasm.multisigLinkCall(
+				'review.missing',
+				JSON.stringify({ loading, unreadable, mailbox, busy })
+			)
 		) as MissingSaid;
 	} catch {
 		return { key: 'home.multisig.proposal.opening', retry: false };
@@ -130,8 +142,10 @@ export function missingWords(
 		unread: Record<string, string>;
 	},
 	key: string,
-	network: string
+	network: string,
+	busy = ''
 ): string {
+	if (key === BUSY_KEY && busy) return busy;
 	const leaf = key.startsWith(PROPOSAL) ? key.slice(PROPOSAL.length) : '';
 	const text =
 		leaf === 'cantCheck'
@@ -144,4 +158,27 @@ export function missingWords(
 						? proposal.unread[leaf.slice('unread.'.length)] || proposal.opening
 						: proposal.opening;
 	return text.replaceAll('{{network}}', network);
+}
+
+/**
+ * Round 16 leftover 4: what a failed action's detail IS — the core's stable
+ * kind, and the catalog key that says it when its words need nothing but the
+ * network's name (`null`: worded from the detail's own facts — the fee that
+ * moved, what the executor has and needs, the signing venue's block). The
+ * web words a failure from these, never from its text (`review.failure`). A
+ * core that could not be asked says "Something went wrong".
+ */
+export interface FailureSaid {
+	kind: string;
+	key: string | null;
+}
+
+export function failureSaid(detail: string | null | undefined): FailureSaid {
+	try {
+		return JSON.parse(
+			wasm.multisigLinkCall('review.failure', JSON.stringify({ detail: detail ?? '' }))
+		) as FailureSaid;
+	} catch {
+		return { kind: 'unknown', key: 'home.multisig.proposal.reason.unknown' };
+	}
 }

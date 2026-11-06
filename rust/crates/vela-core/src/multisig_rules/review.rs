@@ -106,6 +106,12 @@ pub fn call(method: &str, args: &Value) -> Result<String, CoreError> {
         "missing" => to_json(
             &crate::app::multisig_review_state::missing_json(args).map_err(CoreError::Multisig)?,
         ),
+        // Round 16 leftover 4: a failure's stable kind and the catalog key
+        // that says it — `{detail}` → `{kind, key}` (`key` null: worded from
+        // the detail's own facts). No shell reads a detail's text.
+        "failure" => {
+            to_json(&crate::app::multisig_failure::failure_json(args).map_err(CoreError::Multisig)?)
+        }
         other => Err(CoreError::Multisig(format!("review.{other}: no such rule"))),
     }
 }

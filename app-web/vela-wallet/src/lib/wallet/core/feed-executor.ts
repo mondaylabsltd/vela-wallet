@@ -43,6 +43,7 @@
  */
 
 import { dayStartMs, syncReceivedTransfers } from '$lib/services/activity';
+import { scanUnreadChains } from './token-trust-resident';
 import { hapticSuccess } from '$lib/services/platform';
 import { forgetTransaction, loadTransactions, rewriteReceiveTime } from '$lib/services/records';
 import { poolRpcCall } from '$lib/services/rpc-pool';
@@ -414,11 +415,19 @@ export function createFeedExecutor(ownAccounts: () => FeedOwnAccount[], records:
 					read_id: operation.read_id
 				};
 			}
-			case 'scan_incoming_transfers':
+			case 'scan_incoming_transfers': {
 				// `syncReceivedTransfers` runs the whole discovery + persist pipeline
 				// (token admission via the `token_trust` core on web, through
 				// `incoming-transfers.web.ts`) and already answers 0 on any failure.
-				return { type: 'sync_completed', new_count: asCount(await scanOnce(operation.address)) };
+				const count = asCount(await scanOnce(operation.address));
+				// Round 16 leftover 5: and the networks its poll could not read
+				// (the trust machine's `unread_chains`), so Activity says so.
+				return {
+					type: 'sync_completed',
+					new_count: count,
+					unread_chains: scanUnreadChains(operation.address)
+				};
+			}
 			case 'delete_tx_record':
 				await forgetTransaction(operation.id);
 				return { type: 'delete_committed', id: operation.id };
@@ -475,7 +484,7 @@ export function createFeedExecutor(ownAccounts: () => FeedOwnAccount[], records:
 			case 'scan_incoming_transfers':
 				// The TS `catch { return 0 }`: a failed scan is a scan that found
 				// nothing, so the feed never flickers behind it.
-				return { type: 'sync_completed', new_count: 0 };
+				return { type: 'sync_completed', new_count: 0, unread_chains: [] };
 			case 'delete_tx_record':
 				// The `.catch(warn).finally(drop the tombstone)` port — the row comes
 				// back on the next reload, because it really is still in storage.

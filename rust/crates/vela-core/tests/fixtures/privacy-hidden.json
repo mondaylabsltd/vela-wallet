@@ -100,7 +100,8 @@
           "rpc_fixable": true,
           "status_key": "home.balanceDetailStatusFailed"
         }
-      ]
+      ],
+      "updated_at_ms": null
     },
     "feed": {
       "account": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -976,7 +977,9 @@
           "user_op_hash": "",
           "value": "0"
         }
-      ]
+      ],
+      "unread_chains": [],
+      "unread_key": null
     }
   },
   "holdings_masked": [
@@ -1102,7 +1105,8 @@
           "rpc_fixable": true,
           "status_key": "home.balanceDetailStatusFailed"
         }
-      ]
+      ],
+      "updated_at_ms": null
     },
     "feed": {
       "account": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -1983,7 +1987,9 @@
           "user_op_hash": "",
           "value": "0"
         }
-      ]
+      ],
+      "unread_chains": [],
+      "unread_key": null
     }
   },
   "suite": "privacy-hidden",

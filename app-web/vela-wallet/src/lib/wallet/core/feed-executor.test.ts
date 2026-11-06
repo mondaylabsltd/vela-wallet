@@ -19,6 +19,12 @@ vi.mock('$lib/services/activity', async (importOriginal) => {
 	return { ...original, syncReceivedTransfers: vi.fn(async () => 2) };
 });
 
+/** Round 16 leftover 5: the networks the trust machine's last poll could not read. */
+const unreadAfterScan = vi.fn((address: string): number[] => (address ? [5042002] : []));
+vi.mock('./token-trust-resident', () => ({
+	scanUnreadChains: (address: string) => unreadAfterScan(address)
+}));
+
 const waterfall = vi.fn(async (addr: string) =>
 	addr === '0x' + 'b1'.repeat(20) ? { name: 'vitalik.eth', source: 'ENS' } : null
 );
@@ -135,14 +141,15 @@ describe('the store and the scan', () => {
 		if (result.type === 'store_loaded') expect(result.records[0].id).toBe('1-0xabc-0');
 	});
 
-	it('scan_incoming_transfers answers the sync count', async () => {
+	it('scan_incoming_transfers answers the sync count, and the networks it could not read', async () => {
 		const executor = createFeedExecutor(() => [], { storeLoaded: () => {} });
 		expect(
 			await executor.execute(
 				effect({ type: 'scan_incoming_transfers', address: ME }),
 				new AbortController().signal
 			)
-		).toEqual({ type: 'sync_completed', new_count: 2 });
+		).toEqual({ type: 'sync_completed', new_count: 2, unread_chains: [5042002] });
+		expect(unreadAfterScan).toHaveBeenCalledWith(ME);
 	});
 
 	it('delete_tx_record removes the row from the store', async () => {
@@ -189,7 +196,7 @@ describe('the failure twin', () => {
 		).toMatchObject({ type: 'store_loaded', records: [], read_id: 3 });
 		expect(
 			executor.toFailure(effect({ type: 'scan_incoming_transfers', address: ME }), new Error('net'))
-		).toEqual({ type: 'sync_completed', new_count: 0 });
+		).toEqual({ type: 'sync_completed', new_count: 0, unread_chains: [] });
 		expect(
 			executor.toFailure(effect({ type: 'timer', ms: 1, generation: 4 }), new Error('x'))
 		).toEqual({ type: 'toast_expired', generation: 4 });

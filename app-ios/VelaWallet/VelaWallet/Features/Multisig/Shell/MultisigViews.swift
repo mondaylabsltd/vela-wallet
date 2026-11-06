@@ -659,6 +659,11 @@ struct MsProposalsView: Decodable, Equatable {
     var loading = false
     var stale = false
     var unreachable = false
+    /// Round 16 leftover 3 (§25 r16-16): the service's last read answer was
+    /// its rate limit — a sheet whose transaction is not in the unread list
+    /// says busy (`review.missing {busy}`), never "Couldn't reach the
+    /// multisig service".
+    var busy = false
     var paceMs = 12_000
     var outbox: [String: MsJSON] = [:]
     var draft: MsDraft?
@@ -713,6 +718,7 @@ struct MsProposalsView: Decodable, Equatable {
         loading = c.soft(MsKey("loading"), false)
         stale = c.soft(MsKey("stale"), false)
         unreachable = c.soft(MsKey("unreachable"), false)
+        busy = c.soft(MsKey("busy"), false)
         paceMs = c.soft(MsKey("pace_ms"), 12_000)
         outbox = c.soft(MsKey("outbox"), [:])
         draft = c.soft(MsKey("draft"))

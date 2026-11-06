@@ -68,6 +68,7 @@ const PRISTINE: BalanceView = {
 	hidden: false,
 	refreshing: false,
 	last_refreshed_at_ms: null,
+	updated_at_ms: null,
 	tokens: [],
 	unpriced_tokens: [],
 	failed_chain_ids: [],
@@ -568,9 +569,19 @@ describe('the hero refresh control (issue 462)', () => {
 		unpriced_only: false,
 		display_total_usd: 4500,
 		tokens: [ETH],
-		last_refreshed_at_ms: NOW - 120_000
+		last_refreshed_at_ms: NOW - 120_000,
+		updated_at_ms: NOW - 120_000
 	};
 	const at = (ms: number) => agoText(NOW - ms, NOW, m.balance.ago, 'en');
+
+	it('claims "Updated" only on the core’s one answer — never over an unread network (r16 leftover 6)', () => {
+		// The round settled (its stamp moved), but Arc was not read: the core
+		// withholds `updated_at_ms`, and the control is named for what it does.
+		const unread = { ...read, failed_chain_ids: [5042002], updated_at_ms: null };
+		const said = liveBalance(unread, USD, m, { now: NOW, held: false, language: 'en' });
+		expect(said.refresh?.updated).toBeUndefined();
+		expect(said.refresh?.a11yIdle).toBe(m.balance.refreshBalance);
+	});
 
 	it('ages in the core’s compact words, on the core’s thresholds', () => {
 		expect(at(0)).toBe('now');
@@ -803,6 +814,8 @@ describe('empty activity, chosen by the core', () => {
 		home_empty_key: 'home.emptyNoActivity',
 		account: '0xabc',
 		settled: true,
+		unread_chains: [],
+		unread_key: null,
 		hidden: false,
 		contact_rows: []
 	};

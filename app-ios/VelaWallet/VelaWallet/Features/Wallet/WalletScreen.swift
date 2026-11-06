@@ -221,6 +221,15 @@ struct WalletScreen: View {
             switch section.mode {
             case .rows:
                 if isActivity {
+                    // Round 16 leftover 5: a network the scan could not read.
+                    if let note = section.note {
+                        Text(verbatim: note)
+                            .typeRole(Typography.rowSub.scaled(model.textScale))
+                            .foregroundStyle(theme.fgMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, Tokens.Space.s8)
+                            .accessibilityIdentifier("home.activity.unread")
+                    }
                     activityRows
                 } else {
                     assetRows

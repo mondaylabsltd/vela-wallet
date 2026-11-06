@@ -42,7 +42,7 @@
 		SigningUncheckedError
 	} from '../core/gate.svelte';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
-	import { failureText } from '../shell/failure';
+	import { failureWords } from '../shell/failure';
 	import { localAccounts } from '../shell/local-accounts';
 	import { machines } from '../shell/machines.svelte';
 	import type { MultisigMemberRow } from '../generated/MultisigMemberRow';
@@ -233,7 +233,7 @@
 		shareFailure =
 			passkey === undefined
 				? m.add.unavailable
-				: fillTemplate(m.proposal.failed, { reason: failureText(passkey) });
+				: fillTemplate(m.proposal.failed, { reason: failureWords(passkey, m.proposal) });
 	}
 
 	function save() {

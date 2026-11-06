@@ -340,6 +340,8 @@ const FEED: FeedView = {
 	home_empty_key: 'home.emptyNoActivity',
 	account: '',
 	settled: false,
+	unread_chains: [],
+	unread_key: null,
 	hidden: false,
 	contact_rows: [
 		item({ id: 't1' }),

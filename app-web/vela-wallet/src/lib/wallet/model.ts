@@ -216,6 +216,11 @@ export interface SectionModel {
 		 */
 		action?: { id: string; label: string };
 	};
+	/**
+	 * Round 16 leftover 5: a line over the rows about what could not be read
+	 * (the networks the scan could not read: "Activity can't be read on …").
+	 */
+	note?: string;
 }
 
 export interface ChainRowModel {

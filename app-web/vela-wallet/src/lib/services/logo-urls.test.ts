@@ -51,6 +51,7 @@ describe('logo URLs', () => {
 				hidden: false,
 				refreshing: false,
 				last_refreshed_at_ms: null,
+				updated_at_ms: null,
 				tokens: [
 					{
 						chain_id: 137,

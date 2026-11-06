@@ -2159,6 +2159,12 @@ impl App for MultisigAccounts {
                     .unwrap_or_default(),
                 kept: s.kept_draft.clone(),
                 threshold: s.threshold(),
+                // Round 16 leftover 4: a failure is a kind, never text.
+                error: s
+                    .create
+                    .error
+                    .as_deref()
+                    .map(super::multisig_failure::served),
                 ..s.create.clone()
             },
             invite: link::invite_view(&s),
@@ -2179,7 +2185,11 @@ impl App for MultisigAccounts {
             import: s.import.clone(),
             backup: s.backup.clone(),
             share_again: s.share_again.clone(),
-            share_again_failure: s.share_again_failure.clone(),
+            share_again_failure: s
+                .share_again_failure
+                .iter()
+                .map(|(k, v)| (k.clone(), super::multisig_failure::served(v)))
+                .collect(),
             rename: s.rename.clone(),
             service_down,
             link: s.link.stand.clone(),

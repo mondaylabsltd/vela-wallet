@@ -141,6 +141,14 @@ data class BalanceView(
     val hidden: Boolean = false,
     val refreshing: Boolean = false,
     val last_refreshed_at_ms: Double? = null,
+    /**
+     * Round 16 leftover 6: whether "Updated <ago>" may be said — ONE answer
+     * for every shell: [last_refreshed_at_ms] only once the first read of
+     * this account has ended and every network said for it was read. `null`
+     * otherwise: the control is named for what it does ("Refresh balance").
+     * The hero draws "Updated" from this alone.
+     */
+    val updated_at_ms: Double? = null,
     val tokens: List<BalanceToken> = emptyList(),
     /** Held, but with no price — shown, never counted. */
     val unpriced_tokens: List<BalanceToken> = emptyList(),

@@ -52,6 +52,7 @@ const BALANCE: BalanceView = {
 	hidden: false,
 	refreshing: false,
 	last_refreshed_at_ms: null,
+	updated_at_ms: null,
 	tokens: [USDC_BNB],
 	unpriced_tokens: [],
 	failed_chain_ids: [],

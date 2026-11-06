@@ -425,6 +425,12 @@ data class TrustView(
     /** Newest first: block descending, then log index. */
     val incoming: List<TrustIncomingView> = emptyList(),
     val sim: TrustSimView? = null,
+    /**
+     * Round 16 leftover 5: the networks of this account the scan could not
+     * read on its last look at each. Handed to the Activity feed with the
+     * scan's answer (`SyncCompleted.unread_chains`).
+     */
+    val unread_chains: List<Int> = emptyList(),
 )
 
 /** r9-17 (core §9.4): what this device knows when it scans an account — facts, no choice. */

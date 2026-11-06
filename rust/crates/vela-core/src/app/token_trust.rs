@@ -1061,6 +1061,9 @@ pub struct Model {
     /// The read span an endpoint has shown it serves, per network — a fact
     /// about the endpoint, not the account: it survives a switch.
     chunk_cap: BTreeMap<u32, u64>,
+    /// Round 16 leftover 5: the active account's networks whose last read
+    /// failed ([`TrustView::unread_chains`]).
+    unread: BTreeSet<u32>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1148,6 +1151,14 @@ pub struct TrustView {
     /// shell not moved yet sees the view it always did).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cursors: Vec<TrustScanCursor>,
+    /// Round 16 leftover 5: the networks of this account the scan could not
+    /// read on its last look at each — a head that did not answer, transfer
+    /// logs refused (or capped twice). A network read again leaves it; an
+    /// account switch empties it. The shell hands it to the Activity feed
+    /// with the scan's answer (`SyncCompleted.unread_chains`), so Activity
+    /// says it cannot be read there rather than that nothing happened.
+    #[serde(default)]
+    pub unread_chains: Vec<u32>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1276,6 +1287,7 @@ impl App for TokenTrust {
             } else {
                 Vec::new()
             },
+            unread_chains: model.unread.iter().copied().collect(),
         }
     }
 }
@@ -1303,6 +1315,7 @@ fn adopt_address(model: &mut Model, lc: &str) {
     model.planned = false;
     model.deploy_blocks.clear();
     model.covered.clear();
+    model.unread.clear();
     model.attempt += 1;
 }
 
@@ -1531,6 +1544,8 @@ fn on_poll_customs(
     };
     let attempt = model.attempt;
     let mut commands = Vec::new();
+    // A network this poll does not read is not said unread by it.
+    model.unread.retain(|chain| chains.contains(chain));
     for chain_id in chains {
         let stables = model
             .registry
@@ -1576,6 +1591,7 @@ fn on_block_number(
         .filter(|l| *l > 0);
     let Some(latest) = latest else {
         model.scan.remove(&chain_id);
+        model.unread.insert(chain_id);
         return render();
     };
     // Ported quirk: `from = latest - lookback` spans lookback+1 blocks
@@ -1652,6 +1668,10 @@ fn on_logs(
             ChainPhase::Probe { .. } | ChainPhase::Retry { .. } | ChainPhase::Backfill { .. },
             TrustLogsOutcome::Ok { logs },
         ) => {
+            // Round 16 leftover 5: its transfers were read on this look.
+            if !matches!(entry.phase, ChainPhase::Backfill { .. }) {
+                model.unread.remove(&chain_id);
+            }
             // Issue #443: the same span, for the wallet's own `SafeReceived`.
             let (from, latest) = match entry.phase {
                 ChainPhase::Probe { latest } => (latest.saturating_sub(LIVE_SCAN_BLOCKS), latest),
@@ -1714,6 +1734,7 @@ fn on_logs(
         (ChainPhase::Retry { .. }, TrustLogsOutcome::RangeCapped { .. })
         | (ChainPhase::Probe { .. } | ChainPhase::Retry { .. }, TrustLogsOutcome::Failed) => {
             model.scan.remove(&chain_id);
+            model.unread.insert(chain_id);
             render()
         }
         _ => Command::done(),

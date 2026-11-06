@@ -100,6 +100,7 @@ describe('the live picker before the book is read', () => {
 		hidden: false,
 		refreshing: false,
 		last_refreshed_at_ms: null,
+		updated_at_ms: null,
 		tokens: [],
 		unpriced_tokens: [],
 		failed_chain_ids: [],

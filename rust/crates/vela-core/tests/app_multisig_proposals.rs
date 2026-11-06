@@ -1101,6 +1101,7 @@ fn a_page_executor_signs_one_operation_and_its_page_is_told_what_runs() {
         tx_hash: format!("0x{}", "cd".repeat(32)),
         user_op_hash: format!("0x{}", "ab".repeat(32)),
     });
+    let shown_fee = shown_fee_of(&mut sut, &mut world, &hash, &fixture(0).address);
     let passkeys = world.passkeys.len();
     run(
         &mut sut,
@@ -1109,7 +1110,7 @@ fn a_page_executor_signs_one_operation_and_its_page_is_told_what_runs() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             executor: fixture(0).address,
-            shown_fee: None,
+            shown_fee,
         },
     );
     assert_eq!(
@@ -1608,7 +1609,19 @@ fn after_first(world: &mut World, account: &MultisigAccount) {
     world.deploy(100, &account.address, after);
 }
 
-/// Execute `hash` as `executor`, its user operation landing at once.
+/// The figure a sheet draws for `executor`'s execution of `hash` — its look's
+/// fee, as every shell carries it on the press (§24; round 16 leftover 1: a
+/// press over no figure signs nothing).
+fn shown_fee_of(sut: &mut Sut, world: &mut World, hash: &str, executor: &str) -> Option<String> {
+    let look = preview_of(sut, world, hash, executor);
+    look["fee"]["amount"]
+        .as_str()
+        .and_then(vela_core::app::multisig_shell::quantity)
+        .map(|fee| fee.to_string())
+}
+
+/// Execute `hash` as `executor` on the figure its sheet drew, its user
+/// operation landing at once.
 fn execute_landed(
     world: &mut World,
     sut: &mut Sut,
@@ -1616,6 +1629,7 @@ fn execute_landed(
     hash: &str,
     executor: &str,
 ) {
+    let shown_fee = shown_fee_of(sut, world, hash, executor);
     let owners = owners_of_setup();
     let mut after = DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2);
     after.nonce = 1;
@@ -1634,7 +1648,7 @@ fn execute_landed(
             chain_id: 100,
             safe_tx_hash: hash.to_owned(),
             executor: executor.to_owned(),
-            shown_fee: None,
+            shown_fee,
         },
     );
 }
@@ -2430,6 +2444,185 @@ fn a_one_press_over_no_figure_signs_nothing_until_a_figure_is_shown() {
         sut.view().actions[&format!("execute:{lower}")],
         ActionState::Done { .. }
     ));
+}
+
+/// Round 16 leftover 1 (§26 left open): a plain Execute over a look that
+/// priced nothing (the sheet drew no figure) never signs a figure priced only
+/// at the press — the one press's rule (`execute_as`), now every press's:
+/// `fee_moved` with that figure, nothing signed; the next press on the figure
+/// now shown executes.
+#[test]
+fn a_plain_execute_over_no_figure_signs_nothing_until_a_figure_is_shown() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let hash = hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
+    let lower = hash.to_ascii_lowercase();
+    let (a, b) = (fixture(0).address, fixture(1).address);
+    run(
+        &mut sut,
+        &mut world,
+        Event::Approve {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            owner: b.clone(),
+        },
+    );
+    world.quote_answer = Some(
+        vela_core::app::multisig_shell::MultisigShellResult::Quoted {
+            quote: json!({"kind": "failed"}),
+        },
+    );
+    assert_eq!(
+        preview_of(&mut sut, &mut world, &hash, &a)["kind"],
+        "unpriced"
+    );
+    world.quote_answer = None;
+    world.now += 20_000.0;
+    let passkeys = world.passkeys.len();
+    let press = |shown: Option<String>| Event::Execute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: a.clone(),
+        shown_fee: shown,
+    };
+    run(&mut sut, &mut world, press(None));
+    let ActionState::Failed { detail } = sut.view().actions[&format!("execute:{lower}")].clone()
+    else {
+        panic!("{:?}", sut.view().actions);
+    };
+    let detail: Value = serde_json::from_str(&detail).expect("a failure the shells read");
+    assert_eq!(detail["kind"], "fee_moved");
+    assert_eq!(world.passkeys.len(), passkeys, "nothing signed");
+    assert!(world.sent.is_empty(), "nothing sent");
+    // Pressed on the figure now shown: executed.
+    let owners = owners_of_setup();
+    let mut after = DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2);
+    after.nonce = 1;
+    world.on_send = Some(Landing {
+        chain: 100,
+        safe: account.address.clone(),
+        after,
+        safe_tx_hash: hash.clone(),
+        tx_hash: format!("0x{}", "cd".repeat(32)),
+        user_op_hash: format!("0x{}", "ab".repeat(32)),
+    });
+    run(
+        &mut sut,
+        &mut world,
+        press(detail["amount"].as_str().map(str::to_owned)),
+    );
+    assert_eq!(world.sent.len(), 1, "signed at the figure shown");
+    assert!(matches!(
+        sut.view().actions[&format!("execute:{lower}")],
+        ActionState::Done { .. }
+    ));
+}
+
+/// Round 16 leftover 4: a failure is a stable kind the shells word from the
+/// catalog — never English diagnostics. The core's own refusals carry a kind
+/// (`unknown` with a stable `reason`), and a shell's send failure written as
+/// plain text is served as `unknown` with no text at all.
+#[test]
+fn failures_are_stable_kinds_never_english_text() {
+    use vela_core::app::multisig_failure::{failure_said, FailureKind};
+    let (mut world, mut sut, _account) = setup(&[0, 1]);
+    let hash = hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
+    let lower = hash.to_ascii_lowercase();
+    let a = fixture(0).address;
+    // An executor that cannot execute it now (one approval of two).
+    run(
+        &mut sut,
+        &mut world,
+        Event::Execute {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            executor: a.clone(),
+            shown_fee: None,
+        },
+    );
+    let ActionState::Failed { detail } = sut.view().actions[&format!("execute:{lower}")].clone()
+    else {
+        panic!("{:?}", sut.view().actions);
+    };
+    let said: Value = serde_json::from_str(&detail).expect("JSON, never English");
+    assert_eq!(said["kind"], "unknown", "{detail}");
+    assert!(said["reason"].is_string(), "{detail}");
+    assert_eq!(failure_said(&detail).kind, FailureKind::Unknown);
+    assert_eq!(
+        failure_said(&detail).key.as_deref(),
+        Some("home.multisig.proposal.reason.unknown")
+    );
+    // A shell's send failure written as plain text is served without it.
+    let b = fixture(1).address;
+    run(
+        &mut sut,
+        &mut world,
+        Event::Approve {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            owner: b,
+        },
+    );
+    let look = preview_of(&mut sut, &mut world, &hash, &a);
+    assert_eq!(look["kind"], "priced", "{look}");
+    world.send_answer = Some(
+        vela_core::app::multisig_shell::MultisigShellResult::CallsFailed {
+            detail: "Error: relay said 500 Internal Server Error".to_owned(),
+            maybe_sent: false,
+        },
+    );
+    run(
+        &mut sut,
+        &mut world,
+        Event::Execute {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            executor: a.clone(),
+            shown_fee: Some(
+                vela_core::app::multisig_shell::quantity(look["fee"]["amount"].as_str().unwrap())
+                    .unwrap()
+                    .to_string(),
+            ),
+        },
+    );
+    let ActionState::Failed { detail } = sut.view().actions[&format!("execute:{lower}")].clone()
+    else {
+        panic!("{:?}", sut.view().actions);
+    };
+    assert!(!detail.contains("relay said"), "{detail}");
+    let said: Value = serde_json::from_str(&detail).expect("JSON, never English");
+    assert_eq!(said["kind"], "unknown", "{detail}");
+    // Every shell's words for a detail come from its kind.
+    for (detail, kind, key) in [
+        (
+            r#"{"kind":"passkey_check"}"#,
+            FailureKind::PasskeyCheck,
+            Some("home.multisig.proposal.reason.passkeyFailed"),
+        ),
+        (
+            "the passkey's signature did not check out: bad s",
+            FailureKind::Unknown,
+            Some("home.multisig.proposal.reason.unknown"),
+        ),
+        (
+            r#"{"kind":"not_sent"}"#,
+            FailureKind::NotSent,
+            Some("home.multisig.proposal.notSent"),
+        ),
+        (
+            r#"{"kind":"fee_moved","amount":"1","chainId":100,"executor":"0xa"}"#,
+            FailureKind::FeeMoved,
+            None,
+        ),
+        (
+            r#"{"kind":"unknown","message":"TypeError: x is undefined"}"#,
+            FailureKind::Unknown,
+            Some("home.multisig.proposal.reason.unknown"),
+        ),
+    ] {
+        let said = failure_said(detail);
+        assert_eq!(said.kind, kind, "{detail}");
+        assert_eq!(said.key.as_deref(), key, "{detail}");
+    }
 }
 
 /// [`execute_landed`] through `ApproveExecute`.

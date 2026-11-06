@@ -520,9 +520,8 @@ final class MultisigHub {
         switch settled.kind {
         case "done", "working", "cancelled", "riskDeclined", "outsideAsked": return false
         case "failed":
-            let failure = MultisigShellFailure.read(settled["detail"]?.string)
-            return !(failure?["kind"] as? String == "passkey" && failure?["failure"] as? String == "cancelled"
-                && failure?["timedOut"] as? Bool != true)
+            // Round 16 leftover 4: by the detail's kind (the core's door).
+            return MsRules.failure(settled["detail"]?.string).kind != "passkey_closed"
         default: return true
         }
     }
@@ -550,8 +549,8 @@ final class MultisigHub {
         case "unread":
             // r13-3: the network did not answer the reads it is built from.
             return ["type": "propose_failed", "cancelled": false, "reason": "chain_down"]
-        case "failed" where MultisigShellFailure.read(settled?["detail"]?.string)?["kind"] as? String == "passkey"
-            && MultisigShellFailure.read(settled?["detail"]?.string)?["failure"] as? String == "cancelled":
+        case "failed" where MsRules.failure(settled?["detail"]?.string).kind == "passkey_closed"
+            || MsRules.failure(settled?["detail"]?.string).kind == "passkey_timed_out":
             return ["type": "propose_failed", "cancelled": true, "reason": NSNull()]
         default:
             return ["type": "propose_failed", "cancelled": false, "reason": proposalsView.offline ? "offline" : NSNull()]

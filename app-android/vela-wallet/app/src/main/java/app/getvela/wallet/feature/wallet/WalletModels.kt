@@ -267,6 +267,13 @@ data class SectionModel(
     val action: String,
     val mode: SectionMode,
     val empty: EmptyStateModel? = null,
+    /**
+     * Round 16 leftover 5: a line over the rows — Activity on a network the
+     * scan could not read ("Activity can't be read on Polygon right now.").
+     * Drawn only over rows; with none, the line takes the empty state's
+     * place. `null`: nothing to say.
+     */
+    val note: String? = null,
 )
 
 @Immutable

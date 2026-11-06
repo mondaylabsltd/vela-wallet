@@ -166,7 +166,6 @@
     "setupExecutor": "激活支付费用的 {{name}} 的账户",
     "cantPayOther": "{{name}} 付不起网络费 — {{other}} 可以执行。",
     "pickerCantPay": "付不起手续费",
-    "approvedNotExecuted": "你的批准已生效。执行未能进行：{{reason}}",
     "notNeeded": "不需要",
     "sendLink": "发送链接",
     "approvesInVela": "在自己设备上的 Vela 中批准：{{names}}。把这个链接发给他们。",

@@ -33,6 +33,10 @@
 	{:else if model.mode === 'empty'}
 		<p class="empty">{model.emptyText}</p>
 	{:else}
+		{#if model.note}
+			<!-- Round 16 leftover 5: the networks the scan could not read. -->
+			<p class="unread" role="status" data-testid="history-unread">{model.note}</p>
+		{/if}
 		{#each model.groups as group, g (group.label)}
 			<p class="day">{group.label}</p>
 			<ul>
@@ -66,6 +70,13 @@
 	/* A filtered-empty history is a narrowing, not a problem: one quiet line
 	   rather than the illustrated empty state the home screen uses for a
 	   wallet that has genuinely never done anything. */
+	.unread {
+		margin: 0;
+		padding-block: var(--space-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
+	}
+
 	.empty {
 		margin: 0;
 		padding-block: var(--space-4xl);

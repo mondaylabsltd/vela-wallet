@@ -166,7 +166,6 @@
     "setupExecutor": "activating {{name}}’s account, which pays the fee",
     "cantPayOther": "{{name}} can’t pay the network fee — {{other}} can execute it.",
     "pickerCantPay": "can’t pay the fee",
-    "approvedNotExecuted": "Your approval is in. Executing couldn’t run: {{reason}}",
     "notNeeded": "Not needed",
     "sendLink": "Send link",
     "approvesInVela": "Approves in Vela on their own device: {{names}}. Send them this link.",

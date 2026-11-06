@@ -8,7 +8,16 @@ import '$lib/i18n/wasm-init.server';
 import { describe, expect, it } from 'vitest';
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
 import vectors from '../../../../../../rust/crates/vela-core/tests/vectors/multisig/review-state.json';
-import { missingSaid, missingWords, reasonWords, reviewDoor, stateFor } from './review-door';
+import {
+	BUSY_KEY,
+	failureSaid,
+	missingSaid,
+	missingWords,
+	reasonWords,
+	reviewDoor,
+	stateFor,
+	unreadWords
+} from './review-door';
 
 describe('review state door (§12, shared vectors)', () => {
 	for (const c of vectors.door) {
@@ -41,10 +50,41 @@ describe('review state door (§12, shared vectors)', () => {
 	// §18 (b): a sheet opened without a link, its transaction not listed.
 	for (const c of vectors.missing) {
 		it(`missing: ${c.name}`, () => {
-			const a = c.args as { loading: boolean; unreadable: boolean; mailbox: boolean | null };
-			expect(missingSaid(a.loading, a.unreadable, a.mailbox)).toEqual(c.expect);
+			const a = c.args as {
+				loading: boolean;
+				unreadable: boolean;
+				mailbox: boolean | null;
+				busy?: boolean;
+			};
+			expect(missingSaid(a.loading, a.unreadable, a.mailbox, a.busy ?? false)).toEqual(c.expect);
 		});
 	}
+
+	// Round 16 leftover 4: a failure's stable kind and its catalog key —
+	// the web words a failure from these, never from its text.
+	for (const c of vectors.failure) {
+		it(`failure: ${c.name}`, () => {
+			expect(failureSaid(c.args.detail)).toEqual(c.expect);
+		});
+	}
+
+	it('says a rate-limited service as busy on the sheet, in the home words (r16 leftover 3)', () => {
+		const proposal = {
+			opening: 'o',
+			cantCheck: 'c {{network}}',
+			notInMailbox: 'm',
+			notHere: 'h',
+			mailboxDown: 'down',
+			unread: { linkService: 'couldnt reach the service' }
+		};
+		const said = missingSaid(false, false, false, true);
+		expect(said).toEqual({ key: BUSY_KEY, retry: true });
+		expect(missingWords(proposal, said.key, 'Arc Testnet', 'busy, retrying')).toBe(
+			'busy, retrying'
+		);
+		// A link's transaction the busy service could not find: the same words.
+		expect(unreadWords(proposal, BUSY_KEY, 'Arc Testnet', 'busy, retrying')).toBe('busy, retrying');
+	});
 
 	it('says a sheet whose service did not answer as that, never "not shared yet"', () => {
 		const proposal = {

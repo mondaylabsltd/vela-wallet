@@ -403,7 +403,8 @@ fun MultisigCreateSheet(
                         MsRow(words.t("create.address"), sheet.draftAddress, mono = true, copyable = true, tag = "multisig.create.draftAddress")
                         MsNote(words.t("create.sameEverywhere"))
                     }
-                    sheet.draftError != null -> MsNote(sheet.draftError, tone = MsTone.Danger)
+                    // Round 16 leftover 4: `draft_error` is the core's English — never drawn.
+                    sheet.draftError != null -> MsNote(words.createDraftFailed, tone = MsTone.Danger, tag = "multisig.create.draftFailed")
                     else -> CircularProgressIndicator(color = colors.fgMuted, strokeWidth = VelaSpacing.xs)
                 }
                 chainId?.let { MsRow(words.t("create.network"), words.network(it)) }
@@ -448,7 +449,8 @@ fun MultisigCreateSheet(
                 val solo = owners.size == 1
                 val shared = when {
                     row?.shared == true -> words.t(if (solo) "create.sharedSolo" else "create.shared")
-                    sheet.refused != null -> words.t("create.refused", "reason" to sheet.refused)
+                    // Round 16 leftover 4: the service's refusal text is never drawn; Settings offers "Share it again".
+                    sheet.refused != null -> words.createRefused
                     sheet.phase == MsPhase.Working -> words.t("create.savedSharing")
                     else -> words.t("create.savedLater")
                 }

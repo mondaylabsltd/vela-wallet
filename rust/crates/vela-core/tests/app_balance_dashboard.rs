@@ -4210,3 +4210,58 @@ fn the_pool_unreached_vectors_hold() {
         }
     }
 }
+
+/// Round 16 leftover 6: whether "Updated …" may be said is ONE core answer
+/// (`updated_at_ms`), never each shell's: the stamp of the last round only
+/// while nothing is still being read for the first time and every network
+/// the account lives on was read — none refused, silent or rate limited,
+/// nothing failed inside Vela, not "nothing read at all". It never claims
+/// freshness while a network is unread.
+#[test]
+fn updated_is_one_core_answer_never_claimed_over_an_unread_network() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: None,
+    });
+    assert_eq!(sut.view().updated_at_ms, None, "nothing read yet");
+    // Arc refused: the round settled (its stamp moved), but not every
+    // network was read — no "Updated".
+    sut.resolve(settled_read(
+        vec![],
+        vec![ARC_TESTNET],
+        vec![1, 56, ARC_TESTNET],
+    ));
+    let view = sut.view();
+    assert!(view.last_refreshed_at_ms.is_some(), "the round settled");
+    assert_eq!(view.updated_at_ms, None, "Arc is unread");
+    // Rate limited: unread too.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(Res::FetchSettled {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        tokens: vec![],
+        failed_chain_ids: vec![ARC_TESTNET],
+        rate_limited_chain_ids: vec![ARC_TESTNET],
+        read_chain_ids: vec![1, 56, ARC_TESTNET],
+        internal_chain_ids: vec![],
+        registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
+        read_at_ms: None,
+        now_ms: NOW,
+    });
+    assert_eq!(sut.view().updated_at_ms, None, "rate limited is unread");
+    // Every network read: the round's own stamp.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled_read(vec![], vec![], vec![1, 56, ARC_TESTNET]));
+    let view = sut.view();
+    assert!(view.updated_at_ms.is_some());
+    assert_eq!(view.updated_at_ms, view.last_refreshed_at_ms);
+}

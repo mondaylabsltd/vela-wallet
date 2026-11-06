@@ -504,8 +504,9 @@ pub fn presses_drawn(kind: &FootKind, has_actor: bool) -> bool {
         }
 }
 
-/// r16-1: what the last Approve and Execute (or the one press) of `hash`
-/// came to when they did not go, worded by `words` from the view's
+/// r16-1: what the last Approve and Execute (or the one press, kept on
+/// `execute:` alone — §26 r16-4) of `hash` came to when they did not go,
+/// worded by `words` from the view's
 /// `actions` as they are NOW — never words kept from the moment it failed:
 /// the core keeps a stop's figure on the executor's current look. Approve's
 /// first; one failure both carry is said once.
@@ -1048,7 +1049,9 @@ mod tests {
         let lines = press_failure_lines(&actions, HASH, words);
         assert!(lines[0].contains("0.11975"), "{}", lines[0]);
         assert!(!lines[0].contains("0.099144"), "{}", lines[0]);
-        // Approve and execute failed alike (the one press): said once.
+        // Approve (the person's own press) and Execute failed alike: said
+        // once. (The one press never fails both: it writes `execute:` only,
+        // and approves nothing unless it executes — §26 r16-4.)
         let failed = actions[&key("execute")].clone();
         actions.insert(key("approve"), failed);
         assert_eq!(press_failure_lines(&actions, HASH, words).len(), 1);

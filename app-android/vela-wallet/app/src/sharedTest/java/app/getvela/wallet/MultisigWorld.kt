@@ -100,6 +100,8 @@ class MultisigWorld(private val canonicalCode: (String) -> String) : MultisigShe
     // -- the genesis service ------------------------------------------------------
 
     @Volatile var serviceDown = false
+    /** Round 16 leftover 3: the mailbox's reads answer its rate limit (HTTP 429). */
+    @Volatile var serviceBusy = false
     val records = ConcurrentHashMap<String, JsonElement>()
     val imports = CopyOnWriteArrayList<JsonElement>()
     val mailbox = CopyOnWriteArrayList<JsonObject>()
@@ -172,6 +174,7 @@ class MultisigWorld(private val canonicalCode: (String) -> String) : MultisigShe
                 submits += req
                 answer(201, take(req))
             }
+            path.startsWith("/api/proposals/") && serviceBusy -> answer(429, jo("error" to "rate limited"))
             path.startsWith("/api/proposals/") -> {
                 val rest = path.removePrefix("/api/proposals/")
                 val safe = rest.substringBefore('?')

@@ -54,6 +54,7 @@ import { shortenAddress } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
 import { encodeQr, encodeShareQr } from '$lib/wallet/qr';
 import {
+	activityUnreadLine,
 	liveActivityGroups,
 	liveActivityRow,
 	liveAssetRow,
@@ -210,19 +211,34 @@ function liveHistory(model: HistoryModel, inputs: FlowsLiveInputs): HistoryModel
 	// The feed's own flag (`FeedView.hidden`), as every feed surface reads it.
 	// Every row (`rows`), never the home's cut of three (`home_rows`).
 	const groups = liveActivityGroups(feed.rows, m, feed.hidden);
+	// Round 16 leftover 5: the networks the scan could not read, said over
+	// the rows or in the empty line's place — never "no transactions yet".
+	const unread = activityUnreadLine(feed, m);
+	const { note: drawnNote, ...rest } = model;
+	void drawnNote; // a note drawn before is replaced, never kept
 	return {
-		...model,
+		...rest,
 		header,
 		// r15-1: "no transactions yet" only once the core has looked (`settled`).
-		mode: groups.length > 0 ? 'rows' : view.balance_unknown || !feed.settled ? 'loading' : 'empty',
+		mode:
+			groups.length > 0
+				? 'rows'
+				: unread !== undefined
+					? 'empty'
+					: view.balance_unknown || !feed.settled
+						? 'loading'
+						: 'empty',
 		// Spec 082 RG5 (L-D7): "no transactions yet" with every network shown,
 		// "none on this network" under a filter — the core's choice of key.
 		emptyText:
-			inputs.fm === undefined
-				? model.emptyText
-				: feed.history_empty_key === 'history.emptyFilter'
-					? inputs.fm['history.emptyFilter']
-					: inputs.fm['history.emptyTitle'],
+			unread !== undefined
+				? unread
+				: inputs.fm === undefined
+					? model.emptyText
+					: feed.history_empty_key === 'history.emptyFilter'
+						? inputs.fm['history.emptyFilter']
+						: inputs.fm['history.emptyTitle'],
+		...(groups.length > 0 && unread !== undefined ? { note: unread } : {}),
 		groups
 	};
 }

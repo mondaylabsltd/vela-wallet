@@ -49,14 +49,22 @@ class FeedExecutor(
     data class FeedOwnAccount(val address: String, val name: String)
 
     /**
-     * Receipt discovery; answers how many records were genuinely new.
+     * What one incoming scan answers the feed: how many records were
+     * genuinely new, and (round 16 leftover 5) the networks it could not read
+     * — the trust machine's `unread_chains` after the poll settled.
+     */
+    data class ScanAnswer(val newCount: Int, val unreadChains: List<Int> = emptyList())
+
+    /**
+     * Receipt discovery; answers how many records were genuinely new and
+     * which networks could not be read ([ScanAnswer]).
      *
      * Settable for the same reason [BalanceExecutor.stream] is: the cycle is
      * real. The scan drives the `token_trust` machine and writes through this
      * executor's own store, so it cannot be built until this exists. Assigned
      * once, by the controller, immediately after both halves are built.
      */
-    var scan: suspend (String) -> Int = { 0 }
+    var scan: suspend (String) -> ScanAnswer = { ScanAnswer(0) }
 
     /** Writers queue behind one another — the `withTxLock` port. */
     private val writeLock = Mutex()
@@ -76,8 +84,12 @@ class FeedExecutor(
             read_id = operation.read_id,
         )
 
-        is FeedOperation.ScanIncomingTransfers ->
-            FeedShellResult.SyncCompleted(new_count = scan(operation.address).coerceAtLeast(0))
+        is FeedOperation.ScanIncomingTransfers -> scan(operation.address).let { answer ->
+            FeedShellResult.SyncCompleted(
+                new_count = answer.newCount.coerceAtLeast(0),
+                unread_chains = answer.unreadChains,
+            )
+        }
 
         is FeedOperation.DeleteTxRecord -> {
             deleteRecord(operation.id)

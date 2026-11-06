@@ -166,7 +166,6 @@
     "setupExecutor": "ücreti ödeyen {{name}} hesabını etkinleştirme",
     "cantPayOther": "{{name}} ağ ücretini ödeyemiyor — {{other}} yürütebilir.",
     "pickerCantPay": "ücreti ödeyemiyor",
-    "approvedNotExecuted": "Onayınız alındı. Yürütme gerçekleşemedi: {{reason}}",
     "notNeeded": "Gerekmiyor",
     "sendLink": "Bağlantı gönder",
     "approvesInVela": "Kendi cihazındaki Vela’da onaylar: {{names}}. Onlara bu bağlantıyı gönderin.",

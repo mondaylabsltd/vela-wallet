@@ -226,17 +226,22 @@ object FlowLive {
         val feedIsShown = shownAccount == null || feed.account.equals(shownAccount, ignoreCase = true)
         // The feed machine narrows the rows itself (`chain_filter_changed`); the pill says which chain.
         val groups = if (!feedIsShown) emptyList() else prebuilt ?: WalletLive.activity(feed, strings, now, chainNames)
+        // Round 16 leftover 5: the networks the scan could not read, said as the home says them.
+        val unread = if (feedIsShown) WalletLive.unreadLine(feed, strings, chainNames) else null
+        val mode = when (WalletLive.activityMode(groups.isNotEmpty(), feedIsShown, feed.settled, live = shownAccount != null, unread = unread != null)) {
+            app.getvela.wallet.feature.wallet.SectionMode.Rows -> HistoryMode.Rows
+            app.getvela.wallet.feature.wallet.SectionMode.Empty -> HistoryMode.Empty
+            else -> HistoryMode.Loading
+        }
         return fallback.copy(
             header = fallback.header.copy(pill = pill(fallback.header.pill, chainFilter, chainNames)),
-            mode = when (WalletLive.activityMode(groups.isNotEmpty(), feedIsShown, feed.settled, live = shownAccount != null)) {
-                app.getvela.wallet.feature.wallet.SectionMode.Rows -> HistoryMode.Rows
-                app.getvela.wallet.feature.wallet.SectionMode.Empty -> HistoryMode.Empty
-                else -> HistoryMode.Loading
-            },
+            mode = mode,
             // Spec 082 RG5: the empty line is the core's key, chosen by the
             // chain filter — never the drawn state's "none on this network".
-            emptyText = strings.t(feed.history_empty_key),
+            // A network not read is said in its place, never "No activity".
+            emptyText = unread ?: strings.t(feed.history_empty_key),
             groups = groups,
+            note = unread?.takeIf { mode == HistoryMode.Rows },
         )
     }
 

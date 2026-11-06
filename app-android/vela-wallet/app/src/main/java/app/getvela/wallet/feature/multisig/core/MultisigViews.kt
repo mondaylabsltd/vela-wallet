@@ -560,6 +560,12 @@ data class MsProposalsView(
     val loading: Boolean = false,
     val stale: Boolean = false,
     val unreachable: Boolean = false,
+    /**
+     * Round 16 leftover 3: the service's last read answer was its rate
+     * limit — a sheet whose transaction is not in the unread list says busy
+     * (`review.missing {busy}`), never "Couldn't reach the multisig service".
+     */
+    val busy: Boolean = false,
     val paceMs: Long = 12_000,
     val outbox: Map<String, JsonElement> = emptyMap(),
     val draft: MsDraft? = null,
@@ -647,6 +653,7 @@ data class MsProposalsView(
             loading = e["loading"].bool ?: false,
             stale = e["stale"].bool ?: false,
             unreachable = e["unreachable"].bool ?: false,
+            busy = e["busy"].bool ?: false,
             paceMs = e["pace_ms"].long ?: 12_000,
             outbox = e["outbox"].obj,
             draft = e["draft"]?.let(MsDraft::of),

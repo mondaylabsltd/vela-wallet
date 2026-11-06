@@ -311,9 +311,14 @@ fn linked_view(s: &State) -> Option<LinkedView> {
     } else {
         LinkedStand::NotFound
     };
+    // Round 16 leftover 3: a service that answered with its rate limit is
+    // said busy (the home's words), never "Couldn't reach the multisig
+    // service".
+    let busy = lock(&s.service.outage).rate_limited;
     let reason_key = match stand {
         LinkedStand::Failed => l.failed.clone(),
         LinkedStand::Unreadable => Some(review_state::UnreadRead::Chain.link_key().to_owned()),
+        LinkedStand::NotFound if busy => Some(review_state::MISSING_BUSY_KEY.to_owned()),
         LinkedStand::NotFound => Some(review_state::UnreadRead::Service.link_key().to_owned()),
         _ => None,
     };
@@ -1584,12 +1589,12 @@ async fn approve_outside(
 ) -> ActionState {
     let Some((item, chain, account)) = find_item(&lock(st), chain_id, hash) else {
         return ActionState::Failed {
-            detail: "nothing to approve".to_owned(),
+            detail: crate::app::multisig_failure::core_reason("nothing_to_approve"),
         };
     };
     if item.status == ProposalStatus::Done || item.review.action.is_none() {
         return ActionState::Failed {
-            detail: "nothing to approve".to_owned(),
+            detail: crate::app::multisig_failure::core_reason("nothing_to_approve"),
         };
     }
     let owners: Vec<String> = plain_owners(
@@ -1628,7 +1633,7 @@ async fn outside_answered(
     let state = match outcome {
         SessionOutcome::Cancelled => ActionState::Cancelled,
         SessionOutcome::Sent { .. } => ActionState::Failed {
-            detail: "the wallet sent a transaction instead of signing".to_owned(),
+            detail: crate::app::multisig_failure::core_reason("wallet_sent_transaction"),
         },
         SessionOutcome::Approved { approval } => {
             let verified = multisig::verify_ecdsa_approval(hash, &approval)
@@ -1639,7 +1644,7 @@ async fn outside_answered(
                 });
             match verified {
                 None => ActionState::Failed {
-                    detail: "the approval does not check out as a member's".to_owned(),
+                    detail: crate::app::multisig_failure::passkey_check(),
                 },
                 Some(_) if p.round.is_some_and(|r| lock(st).draft_round != r) => {
                     // Withdrawn while the wallet was asked: what it signed goes nowhere.

@@ -59,6 +59,7 @@ export const INITIAL_VIEW: BalanceView = {
 	hidden: false,
 	refreshing: false,
 	last_refreshed_at_ms: null,
+	updated_at_ms: null,
 	tokens: [],
 	unpriced_tokens: [],
 	failed_chain_ids: [],

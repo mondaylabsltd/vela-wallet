@@ -8,8 +8,10 @@
  *
  * Nothing is decided here: the machine decided; the shell's own failures
  * come as its `ShellFailure` detail JSON (`live.ts`), read with
- * {@link readShellFailure}. A detail the shell did not write is the core's
- * own reason — said as "something went wrong", never raw.
+ * {@link readShellFailure}. Round 16 leftover 4: every detail is a kind —
+ * the core's own too (`passkey_check`, `unknown`) — read by its kind alone
+ * (`review.failure`), never by matching its text; anything else is
+ * "something went wrong", never raw.
  */
 import { PasskeyError } from '$lib/onboarding/core/passkey';
 import type { FailureKind } from '$lib/onboarding/generated/FailureKind';
@@ -45,6 +47,7 @@ import {
 } from '../core/proposal-errors';
 import type { MultisigActionState } from '../generated/MultisigActionState';
 import { readShellFailure } from './failure';
+import { ChainUnavailableError } from '../core/chain';
 import type { MultisigAmount } from '../generated/MultisigAmount';
 
 const big = (v: unknown): bigint => {
@@ -161,14 +164,17 @@ const PAGE_FAILURE: Record<string, string> = {
 	refused: 'declined'
 };
 
-/** A `failed` action's detail: the shell's own failure, else the core's reason. */
+/** A failure no kind says more of: worded "Something went wrong" (`reasonText`'s fall-back). */
+function unknownFailure(): Error {
+	return Object.assign(new Error('unknown failure'), { name: 'UnknownFailure' });
+}
+
+/** A `failed` action's detail, by its kind: the typed error the sheets word. */
 export function detailError(detail: string): Error {
 	const shell = readShellFailure(detail);
-	if (!shell) {
-		// The core's own words for a passkey whose signature did not check out.
-		if (/did not check out|does not check out/.test(detail)) return new PasskeyCheckError(detail);
-		return new Error(detail);
-	}
+	// Plain text is no kind: unknown, its words never drawn. A kind this build
+	// does not know is unknown too (the switch's default).
+	if (!shell) return unknownFailure();
 	switch (shell.kind) {
 		case 'venue_blocked':
 			return new VenueBlockedError(shell.block as never);
@@ -185,7 +191,9 @@ export function detailError(detail: string): Error {
 		case 'passkey':
 			return new PasskeyError(shell.failure as FailureKind, shell.failure, shell.timedOut);
 		case 'passkey_check':
-			return new PasskeyCheckError(shell.detail);
+			return new PasskeyCheckError(shell.detail ?? '');
+		case 'chain_unreachable':
+			return new ChainUnavailableError(shell.chain_id ?? 0, 'unreachable');
 		case 'not_sent':
 			// The relay provably never took it (the send pipeline's `UserOpNotSentError`).
 			return Object.assign(new Error('the relay never took it'), { name: 'UserOpNotSentError' });
@@ -193,8 +201,8 @@ export function detailError(detail: string): Error {
 			return new ExecutorCannotPayError(big(shell.need), big(shell.have));
 		case 'fee_moved':
 			return new ExecutionFeeMovedError(big(shell.amount), shell.executor);
-		case 'unknown':
-			return new Error(shell.message);
+		default:
+			return unknownFailure();
 	}
 }
 

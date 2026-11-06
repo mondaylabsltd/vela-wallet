@@ -166,7 +166,6 @@
     "setupExecutor": "啟用支付費用的 {{name}} 的帳戶",
     "cantPayOther": "{{name}} 付不起網路費 — {{other}} 可以執行。",
     "pickerCantPay": "付不起手續費",
-    "approvedNotExecuted": "你的批准已生效。執行未能進行：{{reason}}",
     "notNeeded": "不需要",
     "sendLink": "傳送連結",
     "approvesInVela": "在自己裝置上的 Vela 中批准：{{names}}。把這個連結傳給他們。",

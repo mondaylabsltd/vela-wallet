@@ -2330,6 +2330,8 @@
   "liveIndicator": "实时 · 监听收款中",
   "emptyNoActivityNetwork": "该网络暂无交易记录",
   "emptyNoActivity": "暂无交易记录",
+  "activityUnreadOne": "暂时无法读取 {{network}} 上的交易记录。",
+  "activityUnreadMany": "暂时无法读取 {{n}} 个网络上的交易记录。",
   "emptySubtitle": "你发出的交易会显示在这里，收到的钱会计入余额。",
   "invalidQrTitle": "无效二维码",
   "invalidQrBody": "请扫描有效的以太坊地址或连接 URI。",

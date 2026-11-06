@@ -88,6 +88,7 @@ function view(at: number | null, address: string | null = ADDRESS): BalanceView 
 		...(resident.state.view as BalanceView | null),
 		address,
 		last_refreshed_at_ms: at,
+		updated_at_ms: at,
 		tokens: []
 	} as BalanceView;
 }

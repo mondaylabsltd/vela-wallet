@@ -316,6 +316,9 @@ struct HistoryModel {
     let mode: HistoryMode
     let emptyText: String
     let groups: [ActivityGroupModel]
+    /// Round 16 leftover 5: a line over the rows (Activity on a network the
+    /// scan could not read) — `nil`: none.
+    var note: String? = nil
 }
 
 /// A2 / A3 — one transaction, opened from a history row.

@@ -168,7 +168,6 @@
     "setupExecutor": "activar la cuenta de {{name}}, que paga la comisión",
     "cantPayOther": "{{name}} no puede pagar la comisión de red — {{other}} puede ejecutarla.",
     "pickerCantPay": "no puede pagar la comisión",
-    "approvedNotExecuted": "Tu aprobación quedó registrada. La ejecución no pudo realizarse: {{reason}}",
     "notNeeded": "No hace falta",
     "sendLink": "Enviar enlace",
     "approvesInVela": "Aprueba en Vela desde su propio dispositivo: {{names}}. Envíales este enlace.",

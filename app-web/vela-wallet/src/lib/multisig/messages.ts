@@ -282,8 +282,6 @@ export interface MultisigMessages {
 		cantPayOther: string;
 		/** r4-10: the picker's mark on an account that cannot pay. */
 		pickerCantPay: string;
-		/** r4-11: approved; only executing could not run (`{{reason}}`). */
-		approvedNotExecuted: string;
 		/** r4D-6: a member's approval once enough have approved. */
 		notNeeded: string;
 		sendLink: string;
@@ -1177,7 +1175,6 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		setupExecutor: '',
 		cantPayOther: '',
 		pickerCantPay: '',
-		approvedNotExecuted: '',
 		notNeeded: '',
 		sendLink: '',
 		approvesInVela: '',

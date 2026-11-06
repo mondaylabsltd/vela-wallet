@@ -269,6 +269,10 @@ private fun WalletHomeContent(
                         onAction = { onFlow(WalletFlowEntry.Activity, null) },
                         actionTag = "home-activity-all",
                     )
+                    // Round 16 leftover 5: a network the scan could not read, over the rows.
+                    model.activitySection.note?.takeIf { model.activitySection.mode == SectionMode.Rows }?.let { note ->
+                        app.getvela.wallet.feature.wallet.components.ActivityUnreadLine(note, Modifier.testTag("home.activity.unread"))
+                    }
                     when (model.activitySection.mode) {
                         SectionMode.Rows -> model.activityGroups.forEach { group ->
                             DayLabel(label = group.label)
@@ -281,7 +285,7 @@ private fun WalletHomeContent(
                         SectionMode.Empty -> model.activitySection.empty?.let { empty ->
                             val retry = empty.retry?.takeIf { onActivityRetry != null }
                             if (retry == null) {
-                                EmptyState(icon = VelaIcons.Inbox, model = empty)
+                                EmptyState(icon = VelaIcons.Inbox, model = empty, modifier = Modifier.testTag("home.activity.empty"))
                             } else {
                                 // r13-7: a history not read is said as that, with Try again.
                                 EmptyState(icon = VelaIcons.Inbox, model = empty) {
