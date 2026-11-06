@@ -399,6 +399,10 @@ impl WalletPage {
                     &account.address,
                     SWITCHER_IDENTICON,
                 ))
+                // r16-20: the name and the rule chip share a line that wraps
+                // — beside a sheet the chip goes under the name — and the
+                // full address below has the column's whole width (it was
+                // squeezed between the name's column and the chip).
                 .child(
                     div()
                         .flex_1()
@@ -406,7 +410,21 @@ impl WalletPage {
                         .flex()
                         .flex_col()
                         .gap(px(2.))
-                        .child(heading(theme, name))
+                        .child(
+                            name_and_rule_line().child(heading(theme, name)).child(
+                                div()
+                                    .id("ms-set-rule")
+                                    .a11y_item(title.clone())
+                                    .flex_none()
+                                    .px(px(10.))
+                                    .py(px(4.))
+                                    .rounded(px(999.))
+                                    .bg(theme.bg_sunken)
+                                    .text_size(theme::text_label())
+                                    .text_color(theme.fg_muted)
+                                    .child(chip),
+                            ),
+                        )
                         .child(
                             div()
                                 .font_family(theme::font_mono())
@@ -416,18 +434,6 @@ impl WalletPage {
                                     &account.address,
                                 ))),
                         ),
-                )
-                .child(
-                    div()
-                        .id("ms-set-rule")
-                        .a11y_item(title.clone())
-                        .px(px(10.))
-                        .py(px(4.))
-                        .rounded(px(999.))
-                        .bg(theme.bg_sunken)
-                        .text_size(theme::text_label())
-                        .text_color(theme.fg_muted)
-                        .child(chip),
                 )
                 .child(
                     div()
@@ -2206,4 +2212,17 @@ fn member_contacts(cx: &mut App) -> Vec<ms_members::MemberContact> {
             ),
         })
         .collect()
+}
+
+/// r16-20: the line a multisig's name and its rule chip share in Settings —
+/// wrapping, so beside a sheet the chip goes under the name rather than
+/// squeezing the address.
+pub(crate) fn name_and_rule_line() -> Div {
+    div()
+        .flex()
+        .flex_wrap()
+        .items_center()
+        .gap_x(px(8.))
+        .gap_y(px(4.))
+        .min_w(px(0.))
 }

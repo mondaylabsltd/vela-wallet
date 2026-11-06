@@ -12153,12 +12153,7 @@ impl WalletPage {
         } else {
             (create, sign_in)
         };
-        div()
-            .flex()
-            .gap(px(12.))
-            .pt(px(24.))
-            .child(create)
-            .child(sign_in)
+        account_button_row().child(create).child(sign_in)
     }
 
     /// Sign out and erase, shared by the live and mock account panels.
@@ -22966,9 +22961,18 @@ impl WalletPage {
     }
 }
 
+/// r16-20: the row "Create New Account" and "Sign In with Existing" stand
+/// in — side by side where they fit, the second under the first where they
+/// do not (Settings beside a sheet at the smallest window): each keeps its
+/// label's width, never both shrunk into labels cut at both ends.
+fn account_button_row() -> Div {
+    div().flex().flex_wrap().gap(px(12.)).pt(px(24.))
+}
+
 /// What History's rows are built from: the core's feed (the same view, by
 /// identity — the core hands over a new one whenever anything in it moves),
-/// the hero's ruling, the language and the day "Today" is.
+/// whose account it is, the Activity's ruling over no rows, the language and
+/// the day "Today" is.
 struct HistoryKey {
     feed: std::rc::Rc<vela_core::app::activity_feed::FeedView>,
     ours: bool,
@@ -23603,6 +23607,44 @@ fn signing_clock(chain_id: u32) -> crate::signing::status::Clock {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// r16-20: Settings → Account with a sheet open, at the smallest window
+    /// the app allows. The content column is what the sidebar, the settings
+    /// nav, the third column and the panel's sides leave; "Create New
+    /// Account" and "Sign In with Existing" do not fit side by side there
+    /// (both shrank, centred labels cut at both ends: "reate New Accoun").
+    /// The row wraps, each button at its label's width; and each alone fits
+    /// the column — its label at a full 0.62 em per character (wider than
+    /// the bundled face's average advance) plus its 32 px sides.
+    #[test]
+    fn the_account_buttons_wrap_and_each_fits_beside_a_sheet() {
+        let column = theme::WINDOW_W
+            - SIDEBAR_W
+            - theme::SETTINGS_NAV_W
+            - theme::THIRD_PANEL_W
+            - 2. * SETTINGS_PANEL_PAD_X;
+        let loc = crate::loc::Loc::for_tag("en");
+        let strings = crate::settings::SettingsStrings::resolve(&loc);
+        let size = 17.;
+        #[allow(clippy::cast_precision_loss, reason = "short labels")]
+        let width = |label: &str| label.chars().count() as f32 * 0.62 * size + 64.;
+        let (create, sign_in) = (
+            width(&strings.account_create),
+            width(&strings.account_sign_in),
+        );
+        assert!(create <= column, "{create} > {column}");
+        assert!(sign_in <= column, "{sign_in} > {column}");
+        assert!(
+            create + 12. + sign_in > column,
+            "side by side they do not fit"
+        );
+        let mut row = account_button_row();
+        assert_eq!(
+            row.style().flex_wrap,
+            Some(gpui::FlexWrap::Wrap),
+            "the second goes under the first"
+        );
+    }
 
     /// Issue 465: "Manage groups" is the start page's two sections and
     /// nothing else — Favorites with its count, Recent dApps with no second

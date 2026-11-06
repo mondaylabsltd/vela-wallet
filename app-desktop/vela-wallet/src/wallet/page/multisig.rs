@@ -5401,6 +5401,18 @@ mod tests {
         assert_eq!(card_note(None, true), None);
     }
 
+    /// r16-20: a multisig's heading in Settings — its name and the rule chip
+    /// share a line that wraps (the chip goes under the name, never beside
+    /// a squeezed address); the full address below has the text column's
+    /// whole width.
+    #[test]
+    fn the_multisig_heading_wraps_its_chip_never_squeezing_the_address() {
+        let mut line = super::settings::name_and_rule_line();
+        let style = line.style();
+        assert_eq!(style.flex_wrap, Some(gpui::FlexWrap::Wrap));
+        assert_eq!(style.min_size.width, Some(px(0.).into()));
+    }
+
     /// r16-16 (core `WaitingNote::Busy`): a multisig service that answers
     /// only "slow down" is said as busy, with Retry as an unreachable one —
     /// never left silent over the kept list, never "unreachable".
