@@ -216,6 +216,17 @@ class MultisigFlowDeviceTest {
 
     private fun node(tag: String): SemanticsNodeInteraction = compose.onAllNodesWithTag(tag)[0]
 
+    /**
+     * r16-4 (§26): the approval alone. Beside a one press (offered over a fee
+     * it could not work out, which now approves nothing) it is its own
+     * button; with no one press, the main one.
+     */
+    private fun approveAlone() {
+        val alone = "multisig.proposal.approveOnly"
+        runCatching { compose.waitUntil(20_000) { compose.onAllNodesWithTag(alone, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() } }
+        tap(if (compose.onAllNodesWithTag(alone, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) alone else "multisig.proposal.approve", 60_000)
+    }
+
     private fun tap(tag: String, timeoutMs: Long = 30_000) {
         waitFor(tag, timeoutMs)
         // Enabled: the machine said it may be pressed.
@@ -379,7 +390,7 @@ class MultisigFlowDeviceTest {
         hub.sheet.value = MultisigSheet.Proposal(100, hash)
         waitFor("multisig.proposal.title")
         // The second member here approves: one passkey, two of two.
-        tap("multisig.proposal.approve", 60_000)
+        approveAlone()
         eventually("approved") { world.mailbox.single()["approvals"].arr.size.takeIf { it == 2 } }
         assertEquals(owners[1].lowercase(), world.passkeys[1].first.lowercase())
 
@@ -551,7 +562,7 @@ class MultisigFlowDeviceTest {
         val hash = eventually("proposed", 60_000) { world.mailbox.singleOrNull()?.get("safeTxHash")?.str }
         hub.sheet.value = MultisigSheet.Proposal(100, hash)
         waitFor("multisig.proposal.title")
-        tap("multisig.proposal.approve", 60_000)
+        approveAlone()
         eventually("approved") { world.mailbox.single()["approvals"].arr.size.takeIf { it == 2 } }
         world.onSend = MultisigWorld.Landing(
             chain = 100, safe = safe, after = MultisigWorld.Safe(owners.take(2), 2, nonce = 1),

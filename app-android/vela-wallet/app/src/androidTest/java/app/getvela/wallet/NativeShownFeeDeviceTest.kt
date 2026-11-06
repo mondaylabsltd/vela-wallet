@@ -138,6 +138,17 @@ class NativeShownFeeDeviceTest {
             .mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } }
             .joinToString(" ")
 
+    /**
+     * r16-4 (§26): the approval alone. Beside a one press (offered over a fee
+     * it could not work out, which now approves nothing) it is its own
+     * button; with no one press, the main one.
+     */
+    private fun approveAlone() {
+        val alone = "multisig.proposal.approveOnly"
+        runCatching { compose.waitUntil(20_000) { compose.onAllNodesWithTag(alone, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() } }
+        tap(if (compose.onAllNodesWithTag(alone, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) alone else "multisig.proposal.approve", 60_000)
+    }
+
     private fun tap(tag: String, timeoutMs: Long = 30_000) {
         waitFor(tag, timeoutMs)
         compose.waitUntil(timeoutMs) { enabled(tag) == true }
@@ -200,7 +211,7 @@ class NativeShownFeeDeviceTest {
         show(hub, world)
         val hash = propose(hub, safe, "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141")
         hub.sheet.value = MultisigSheet.Proposal(100, hash)
-        tap("multisig.proposal.approve", 60_000)
+        approveAlone()
         eventually("approved") { world.mailbox.single()["approvals"].arr.size.takeIf { it == 2 } }
         // Ready; Execute's look priced at 0x1 is on screen.
         waitFor("multisig.proposal.fee", 60_000)
