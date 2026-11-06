@@ -308,14 +308,37 @@ test('the refresh under the total reads again, says so, and moves nothing (issue
 		if (method === 'eth_call') reads++;
 		return chainHolding(2_000_000_000_000_000_000n)(method, params, url);
 	});
+	// Round 16 leftover 6: the read is held open until this test has looked
+	// at the control. A stubbed read answers at once, so "Updating…" stood
+	// only for the press's minimum hold (650 ms) — an assertion that came
+	// after it (a loaded run, firefox, webkit) met the control at rest again
+	// and read "Updated now". The read is out as long as the test says.
+	let releaseRead: () => void = () => {};
+	const readHeld = new Promise<void>((resolve) => (releaseRead = resolve));
+	await page.route(/stub-rpc\.test\/rpc\/(\d+)/, async (route) => {
+		await readHeld;
+		return route.fallback();
+	});
 	await control.click();
-	await expect(control).toHaveAttribute('aria-busy', 'true');
-	await expect(control.locator('.shown')).toHaveText(en('home.updating'));
+	// Busy and its words are one state, read together: never "Updated" while busy.
+	await expect
+		.poll(() =>
+			control.evaluate((button) => ({
+				busy: button.getAttribute('aria-busy'),
+				shown: button.querySelector('.shown')?.textContent?.trim() ?? null
+			}))
+		)
+		.toEqual({ busy: 'true', shown: en('home.updating') });
 	expect(await control.boundingBox()).toEqual(before);
 	await expect(page.getByText(en('home.balanceStale'))).toHaveCount(0);
 	await page.screenshot({ path: testInfo.outputPath('462-updating.png') });
+	// Still busy past the press's own hold, while the read is out.
+	await page.waitForTimeout(1_000);
+	await expect(control).toHaveAttribute('aria-busy', 'true');
+	await expect(control.locator('.shown')).toHaveText(en('home.updating'));
 
 	// The read lands: the new figure, and the control at rest again.
+	releaseRead();
 	await expect(page.getByText('$6,000', { exact: true })).toBeVisible({ timeout: 20_000 });
 	expect(reads).toBeGreaterThan(0);
 	await expect(control).toHaveAttribute('aria-busy', 'false');
