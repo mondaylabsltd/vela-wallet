@@ -1195,8 +1195,11 @@ pub struct Model {
     /// switched to (kept through the same account said again).
     store_read: bool,
     /// r15-1: an incoming scan of THIS account has come back since it was
-    /// switched to.
+    /// switched to — as drawn (a view moves only with a render).
     scanned: bool,
+    /// r15-1: the first scan came back on a step that draws nothing; the
+    /// next render (the re-read, the armed timer) shows it.
+    scan_pending: bool,
     /// The next `StoreLoaded` commit is a post-sync re-read that may
     /// celebrate its newest incoming item.
     celebrate_read_id: Option<u32>,
@@ -1381,6 +1384,7 @@ impl App for ActivityFeed {
                     model.records.clear();
                     model.store_read = false;
                     model.scanned = false;
+                    model.scan_pending = false;
                 }
                 model.address = address;
                 model.initialized = false;
@@ -1659,6 +1663,7 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
                 .collect();
             // r15-1: this account's store is read — its rows are its own.
             model.store_read = true;
+            settle_scan(model);
             // The raw account-scoped list (`loadActivityTransactions`).
             let lc = model.address.to_lowercase();
             model.records = records
@@ -1818,10 +1823,8 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
         FeedShellResult::SyncCompleted { new_count } => {
             model.scan_in_flight = false;
             // r15-1: the first scan of this account back settles whether
-            // "No activity yet" may be said — drawn once, when it flips (a
-            // quiet scan after it still never redraws, invariant ②).
-            let settles = !model.scanned && model.store_read;
-            model.scanned = true;
+            // "No activity yet" may be said ([`settle_scan`]).
+            let first_scan = !model.scanned;
             // `initializedRef.current = true` runs whether or not anything
             // landed — the first pass is spent either way (invariant ③).
             let first_pass = !model.initialized;
@@ -1841,8 +1844,23 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
             }
             let (after_scan, renders) = scan_settled(model, new_count);
             commands.extend(after_scan);
-            if settles && !renders {
-                commands.push(render());
+            if first_scan {
+                if renders || model.cadence.is_none() {
+                    // Drawn now: by the cadence's own render, or — a shell
+                    // not following the cadence — by one render of its own
+                    // when the store is read already (else its read draws it).
+                    model.scanned = true;
+                    if !renders && model.store_read {
+                        commands.push(render());
+                    }
+                } else if new_count > 0 || model.cadence.is_some_and(|c| c.pending_arm.is_some()) {
+                    // The next render draws it (the re-read, or the timer
+                    // armed once the person stops) — never a redraw of its
+                    // own, never a view moved without one.
+                    model.scan_pending = true;
+                }
+                // Otherwise another scan of this account went out at once
+                // (asked for while this one was out): its answer settles it.
             }
             Command::all(commands)
         }
@@ -3442,7 +3460,15 @@ fn start_scan(model: &mut Model, again_if_out: bool) -> Option<Command<FeedEffec
 
 /// r9-17: arm the next scan `after_ms` from now — a new `seq`, so the
 /// shell's timer for the old one is dropped. The caller renders.
+/// r15-1: a first scan that came back is drawn by the render this one is in.
+fn settle_scan(model: &mut Model) {
+    if std::mem::take(&mut model.scan_pending) {
+        model.scanned = true;
+    }
+}
+
 fn arm_scan(model: &mut Model, after_ms: u32) {
+    settle_scan(model);
     if let Some(cadence) = model.cadence.as_mut() {
         cadence.armed = true;
         cadence.seq = cadence.seq.wrapping_add(1);

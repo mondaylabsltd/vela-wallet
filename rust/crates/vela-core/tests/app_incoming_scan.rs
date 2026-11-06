@@ -741,3 +741,53 @@ fn a_new_account_starts_the_back_off_again() {
     sut.resolve_matching(is_scan, FeedRes::SyncCompleted { new_count: 0 });
     assert_eq!(sut.view().next_scan.map(|n| n.after_ms), Some(15_000));
 }
+
+/// r15-1: under the cadence, "No activity yet" may be said (`settled`) once
+/// the account's first scan is back — drawn by a render the cadence makes
+/// anyway (a scan asked for again while one was out runs once more, and ITS
+/// answer settles it), never a redraw of its own and never a view moved
+/// without a render.
+#[test]
+fn the_first_scan_back_settles_the_empty_claim_on_a_render_the_cadence_makes() {
+    let mut sut = feed();
+    sut.dispatch(FeedEvent::PresenceChanged {
+        presence: presence(true, 0.0, T0),
+        change: FeedPresenceChange::Started,
+    });
+    let read_id = sut
+        .outstanding()
+        .iter()
+        .find_map(|op| match op {
+            FeedOp::ReadTxStore { read_id, .. } => Some(*read_id),
+            _ => None,
+        })
+        .expect("a read");
+    sut.resolve_matching(
+        |op| matches!(op, FeedOp::ReadTxStore { .. }),
+        FeedRes::StoreLoaded {
+            records: Vec::new(),
+            now_ms: T0,
+            read_id,
+        },
+    );
+    assert!(!sut.view().settled, "read, not scanned yet");
+    // A send while the first scan is out: one more scan when it lands.
+    sut.dispatch(FeedEvent::PresenceChanged {
+        presence: presence(true, 0.0, T0 + 2_000.0),
+        change: FeedPresenceChange::Sent,
+    });
+    let renders = sut.renders();
+    sut.resolve_matching(is_scan, FeedRes::SyncCompleted { new_count: 0 });
+    assert_eq!(
+        sut.renders(),
+        renders,
+        "the scan that starts another draws nothing"
+    );
+    assert!(
+        !sut.view().settled,
+        "and the view has not moved without a render"
+    );
+    sut.resolve_matching(is_scan, FeedRes::SyncCompleted { new_count: 0 });
+    assert!(sut.view().settled, "the second answer settles it");
+    assert_eq!(sut.rendered_view(), Some(&sut.view()), "drawn");
+}
