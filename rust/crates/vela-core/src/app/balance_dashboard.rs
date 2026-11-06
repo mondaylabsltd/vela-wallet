@@ -1340,9 +1340,10 @@ pub struct BalanceView {
     /// held nothing last session opens with a cached total of 0, and each
     /// shell took "no tokens, a known total" for an empty wallet — so it
     /// invited a first deposit under "Checking…", and again under "Can't
-    /// reach 24 networks", before anything had been read. A round that
-    /// misses SOME networks still says it for the ones that answered: a new
-    /// wallet is not held at a skeleton by one network that is down. A shell
+    /// reach 24 networks", before anything had been read. r15-4: nor while a
+    /// network said for the account is unread (refused, silent, rate
+    /// limited) — what it holds is not known; the list says that network
+    /// instead (`unreachable_networks`, the hero's words). A shell
     /// draws the empty state exactly when this is `Some`, and with no tokens
     /// and no key it draws what it draws while loading.
     #[serde(default)]
@@ -1598,6 +1599,7 @@ impl App for BalanceDashboard {
                 .then(|| LIVE_ZERO.to_owned()),
             empty_key: (first_read_ended
                 && some_chain_answered(model)
+                && !unread_said(model)
                 && model.tokens.is_empty()
                 && !holdings_loading
                 && !unknown
@@ -2523,6 +2525,20 @@ fn said_home(model: &Model) -> Option<BTreeSet<u32>> {
             .is_some_and(|chains| !chains.is_empty())
             .then(|| home_chains(model, address, &[]))
     })
+}
+
+/// r15-4: whether a network whose failure is said for the account shown
+/// ([`said_home`]) is unread — refused, silent, rate limited or failed
+/// inside the app. While one is, nobody knows what it holds: the Assets list
+/// never says "Deposit your first asset" (Dana's 10.53 USDC on an unread
+/// Arc Testnet was claimed empty by the other networks' answers).
+fn unread_said(model: &Model) -> bool {
+    let home = said_home(model);
+    model
+        .failed_chain_ids
+        .iter()
+        .chain(model.rate_limited_chain_ids.iter())
+        .any(|id| home.as_ref().is_none_or(|home| home.contains(id)))
 }
 
 /// r11: [`coverage_partial`] as the home SAYS it ("Some balances are still
