@@ -1793,6 +1793,16 @@ impl WalletPage {
                     )
                 })),
         );
+        // r16-1: a press's failure is said beside the press, in the pinned
+        // foot (`ms_actions`); a sheet with no foot (done) says it here, at
+        // its head — never in both places.
+        if crate::multisig::sheet::failure_place(item.status)
+            == crate::multisig::sheet::FailurePlace::Head
+        {
+            for text in self.ms_press_failures(&view, &item, cx) {
+                body = body.child(ms_note(theme, &text, Tone::Caution));
+            }
+        }
 
         if let Some(note) = self.ms_dapp_sheet_note(theme, &item, cx) {
             body = body.child(note);
@@ -1873,19 +1883,9 @@ impl WalletPage {
             cx,
         ));
 
-        // What happened to the last press, said.
-        for action in [
-            format!("approve:{}", item.safe_tx_hash.to_ascii_lowercase()),
-            format!("execute:{}", item.safe_tx_hash.to_ascii_lowercase()),
-        ] {
-            if let Some(text) = view
-                .actions
-                .get(&action)
-                .and_then(|state| self.ms_action_words(state, chain_id, cx))
-            {
-                body = body.child(ms_note(theme, &text, Tone::Caution));
-            }
-        }
+        // r16-1: what happened to the last press is said beside the press,
+        // in the pinned foot (`ms_actions`) — never down here in the
+        // scrolling body, off screen at the press.
         if let Some(text) = view
             .executions
             .get(&key)
@@ -2335,6 +2335,19 @@ impl WalletPage {
             },
             picked.as_deref(),
         );
+        // r16-1 (iOS `pressFailures(at:)`): the last press's failure is
+        // said right under the presses — or, none drawn, at the foot's top —
+        // so it is on screen where the person pressed, whatever the scroll.
+        let failures: Vec<Div> = self
+            .ms_press_failures(view, item, cx)
+            .iter()
+            .map(|text| ms_note(theme, text, Tone::Caution))
+            .collect();
+        let beside_presses = rule::presses_drawn(&plan.kind, plan.actor.is_some());
+        let mut failures = Some(failures);
+        if !beside_presses {
+            foot = foot.children(failures.take().unwrap_or_default());
+        }
         if plan.candidates.len() > 1
             && let Some(actor) = &plan.actor
         {
@@ -2359,6 +2372,7 @@ impl WalletPage {
                     approving,
                     cx,
                 ));
+                foot = foot.children(failures.take().unwrap_or_default());
             }
             (
                 FootKind::Execute {
@@ -2466,9 +2480,11 @@ impl WalletPage {
                     ));
                 }
                 foot = foot.child(presses);
+                // r16-1: said beside the presses pressed.
+                foot = foot.children(failures.take().unwrap_or_default());
                 // r11 one-press: a press the look stopped says why in its own
-                // line (`ActionState::Stopped`), which replaces the fee line —
-                // never the two side by side.
+                // line (`ActionState::Stopped`, drawn just above), which
+                // replaces the fee line — never the two side by side.
                 let stopped = matches!(
                     view.actions.get(&format!(
                         "execute:{}",
@@ -2762,6 +2778,19 @@ impl WalletPage {
                 });
             }),
         )
+    }
+
+    /// r16-1: what the last Approve / Execute of `item` came to when it did
+    /// not go, worded now from the view (`sheet::press_failure_lines`).
+    fn ms_press_failures(
+        &self,
+        view: &ms_proposals::ProposalsView,
+        item: &ProposalItem,
+        cx: &App,
+    ) -> Vec<String> {
+        crate::multisig::sheet::press_failure_lines(&view.actions, &item.safe_tx_hash, |state| {
+            self.ms_action_words(state, item.chain_id, cx)
+        })
     }
 
     /// What the last press came to, when it did not go (`ActionState`).
@@ -4873,11 +4902,24 @@ pub(crate) fn failure_words(
         Some(ShellFailure::FeeMoved {
             amount, executor, ..
         }) => fee_moved_words(loc, &amount, &name(&executor), chain_id),
-        Some(ShellFailure::Unknown { message }) => {
-            words::tv(loc, "proposal.failed", &[("reason", &message)])
-        }
+        // r16-18: a read before the passkey on a network that is failing.
+        Some(ShellFailure::ChainUnreachable { chain_id }) => words::tv(
+            loc,
+            "proposal.reason.chainUnreachable",
+            &[(
+                "network",
+                &crate::flows::live::chain_name(u32::try_from(chain_id).unwrap_or(u32::MAX)),
+            )],
+        ),
+        // r16-18: never a shell's or the core's diagnostic text as it is
+        // (`Other("…")` was said) — the web's `reasonText` rule: the core's
+        // "Something went wrong", a passkey whose signature did not check
+        // out said as that.
         Some(_) => reason("unknown"),
-        None => words::tv(loc, "proposal.failed", &[("reason", detail)]),
+        None if detail.contains("did not check out") || detail.contains("does not check out") => {
+            reason("passkeyFailed")
+        }
+        None => reason("unknown"),
     }
 }
 

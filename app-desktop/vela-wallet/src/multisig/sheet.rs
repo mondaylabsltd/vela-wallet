@@ -444,6 +444,71 @@ pub fn get_ready_shown(first_run: Option<bool>, followed: bool, set_up: bool) ->
     first_run.unwrap_or(false) && !(followed && set_up)
 }
 
+/// r16-1 (iOS `pressFailures(at:)`, §23 r15-5): where the last Approve /
+/// Execute is said when it did not go.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FailurePlace {
+    /// In the sheet's pinned foot: right under the presses, or at the foot's
+    /// top when none is drawn — on screen at the press, whatever the scroll.
+    Foot,
+    /// At the sheet's head: it has no foot (done).
+    Head,
+}
+
+/// [`FailurePlace`] for a transaction in `status`: the foot, unless the
+/// sheet draws none (done).
+#[must_use]
+pub fn failure_place(status: ProposalStatus) -> FailurePlace {
+    if status == ProposalStatus::Done {
+        FailurePlace::Head
+    } else {
+        FailurePlace::Foot
+    }
+}
+
+/// Whether the foot draws a press for `kind` (its failure is then said
+/// right under it): Approve, Execute or the one press — and, where the look
+/// blocks the execution, Approve alone when the actor can still approve.
+#[must_use]
+pub fn presses_drawn(kind: &FootKind, has_actor: bool) -> bool {
+    has_actor
+        && match kind {
+            FootKind::Nothing => false,
+            FootKind::Approve => true,
+            FootKind::Execute {
+                look,
+                approve_first,
+                can_approve_only,
+                ..
+            } => {
+                !look.as_ref().is_some_and(Look::blocks)
+                    || (*approve_first && *can_approve_only && look != &Some(Look::Spent))
+            }
+        }
+}
+
+/// r16-1: what the last Approve and Execute (or the one press) of `hash`
+/// came to when they did not go, worded by `words` from the view's
+/// `actions` as they are NOW — never words kept from the moment it failed:
+/// the core keeps a stop's figure on the executor's current look. Approve's
+/// first; one failure both carry is said once.
+pub fn press_failure_lines(
+    actions: &std::collections::BTreeMap<String, ms_proposals::ActionState>,
+    hash: &str,
+    words: impl Fn(&ms_proposals::ActionState) -> Option<String>,
+) -> Vec<String> {
+    let hash = hash.to_ascii_lowercase();
+    let mut lines: Vec<String> = Vec::new();
+    for press in ["approve", "execute"] {
+        if let Some(line) = actions.get(&format!("{press}:{hash}")).and_then(&words)
+            && !lines.contains(&line)
+        {
+            lines.push(line);
+        }
+    }
+    lines
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -876,5 +941,103 @@ mod tests {
         );
         assert_eq!(approvals_shown(true, None, 1, 2), (1, 2));
         assert_eq!(approvals_shown(false, None, 3, 2), (2, 2));
+    }
+
+    /// r16-1: a press's failure is said in the sheet's pinned foot, right
+    /// under the presses — never in the scrolling body, where the fee-moved
+    /// stop sat under Approvals, off screen at the press. Only a sheet with
+    /// no foot (done) says it at its head.
+    #[test]
+    fn a_press_failure_is_said_in_the_foot_beside_the_presses() {
+        assert_eq!(failure_place(ProposalStatus::Pending), FailurePlace::Foot);
+        assert_eq!(failure_place(ProposalStatus::Ready), FailurePlace::Foot);
+        assert_eq!(failure_place(ProposalStatus::Queued), FailurePlace::Foot);
+        assert_eq!(failure_place(ProposalStatus::Done), FailurePlace::Head);
+        // Beside the presses when one is drawn; else at the foot's top.
+        let priced = Some(Look::Priced {
+            fee: "1".into(),
+            can_pay: true,
+            balance: None,
+        });
+        let execute = |look: Option<Look>, approve_first, can_approve_only| FootKind::Execute {
+            look,
+            approve_first,
+            can_approve_only,
+            one_tap: approve_first,
+        };
+        assert!(presses_drawn(&FootKind::Approve, true));
+        assert!(
+            !presses_drawn(&FootKind::Approve, false),
+            "no actor, no press"
+        );
+        assert!(presses_drawn(&execute(priced, true, true), true));
+        assert!(
+            presses_drawn(&execute(None, false, false), true),
+            "still checking: Execute, shut"
+        );
+        // Blocked: Approve alone stands, when it can — never over a spent number.
+        assert!(!presses_drawn(
+            &execute(Some(Look::Spent), true, true),
+            true
+        ));
+        assert!(presses_drawn(
+            &execute(Some(Look::Fails(Value::Null)), true, true),
+            true
+        ));
+        assert!(!presses_drawn(
+            &execute(Some(Look::Fails(Value::Null)), false, false),
+            true
+        ));
+        assert!(!presses_drawn(&FootKind::Nothing, true));
+    }
+
+    /// r16-1: the words are read from the view at every render — the stop's
+    /// figure is whatever the core's `fee_moved` detail says now (the core
+    /// keeps it on the executor's current look), never the figure of the
+    /// moment it failed — and one failure both presses carry is said once.
+    #[test]
+    fn a_press_failure_is_worded_from_the_view_at_each_render() {
+        use vela_core::app::multisig_proposals::{ActionState, fee_moved_detail};
+        let loc = crate::loc::Loc::for_tag("en");
+        let words = |state: &ActionState| match state {
+            ActionState::Failed { detail } => Some(crate::wallet::page::multisig::failure_words(
+                &loc,
+                detail,
+                100,
+                &|_| "Parallel One".to_owned(),
+            )),
+            _ => None,
+        };
+        let key = |press: &str| format!("{press}:{}", HASH.to_ascii_lowercase());
+        let mut actions = BTreeMap::new();
+        actions.insert(
+            key("execute"),
+            ActionState::Failed {
+                detail: fee_moved_detail(100, DANA, 99_144_000_000_000_000),
+            },
+        );
+        let lines = press_failure_lines(&actions, HASH, words);
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(lines[0].contains("0.099144"), "{}", lines[0]);
+        assert_eq!(lines[0].matches("That didn't go through").count(), 1);
+        // The core moved the stop's figure with the look: the next render
+        // says the new one, never the old.
+        actions.insert(
+            key("execute"),
+            ActionState::Failed {
+                detail: fee_moved_detail(100, DANA, 119_750_000_000_000_000),
+            },
+        );
+        let lines = press_failure_lines(&actions, HASH, words);
+        assert!(lines[0].contains("0.11975"), "{}", lines[0]);
+        assert!(!lines[0].contains("0.099144"), "{}", lines[0]);
+        // Approve and execute failed alike (the one press): said once.
+        let failed = actions[&key("execute")].clone();
+        actions.insert(key("approve"), failed);
+        assert_eq!(press_failure_lines(&actions, HASH, words).len(), 1);
+        // Working: nothing.
+        actions.clear();
+        actions.insert(key("execute"), ActionState::Working);
+        assert!(press_failure_lines(&actions, HASH, words).is_empty());
     }
 }

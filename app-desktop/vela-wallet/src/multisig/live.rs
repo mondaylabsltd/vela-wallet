@@ -66,6 +66,15 @@ pub enum ShellFailure {
         chain_id: u64,
         executor: String,
     },
+    /// r16-18: a read before the passkey (the nonce, the deployment, the
+    /// gas price) failed on a network the pool finds failing: nothing was
+    /// signed or sent, and it is said as that network out of reach.
+    ChainUnreachable {
+        #[serde(rename = "chainId")]
+        chain_id: u64,
+    },
+    /// Diagnostics only (`message` goes to the log): said as the core's
+    /// "Something went wrong, so nothing was sent" — never as it is.
     Unknown {
         message: String,
     },
@@ -481,27 +490,48 @@ impl Live {
                 user_op_hash: submitted.user_op_hash,
                 tx_hash: None,
             },
-            Err(user_op::SubmitFailure::PasskeyCancelled) => Res::CallsCancelled,
-            Err(user_op::SubmitFailure::PasskeyTimedOut) => Res::CallsFailed {
-                detail: ShellFailure::Passkey {
-                    failure: "cancelled".to_owned(),
-                    timed_out: true,
-                    message: None,
-                }
-                .detail(),
-                maybe_sent: false,
-            },
-            Err(user_op::SubmitFailure::NotSent) => Res::CallsFailed {
-                detail: ShellFailure::NotSent.detail(),
-                maybe_sent: false,
-            },
-            Err(failure) => Res::CallsFailed {
-                detail: ShellFailure::Unknown {
-                    message: format!("{failure:?}"),
-                }
-                .detail(),
-                maybe_sent: false,
-            },
+            Err(failure) => {
+                let failing = pool::failed_chains().contains(&chain)
+                    || pool::unreached_chains().contains(&chain);
+                execute_failure(failure, asked_passkey, chain_id, failing)
+            }
+        }
+    }
+}
+
+/// r16-18: an execution that did not go, as the core is told it — in a
+/// shape the sheet words in the core's sentences, never the submit's own
+/// debug text. `asked_passkey`: the passkey was asked (a read after it is
+/// not the network's alone); `failing`: the pool finds the network failing
+/// or unreached (the send column's `prepare_bound::classify` rule).
+fn execute_failure(
+    failure: user_op::SubmitFailure,
+    asked_passkey: bool,
+    chain_id: u64,
+    failing: bool,
+) -> Res {
+    let failed = |failure: ShellFailure| Res::CallsFailed {
+        detail: failure.detail(),
+        maybe_sent: false,
+    };
+    match failure {
+        user_op::SubmitFailure::PasskeyCancelled => Res::CallsCancelled,
+        user_op::SubmitFailure::PasskeyTimedOut => failed(ShellFailure::Passkey {
+            failure: "cancelled".to_owned(),
+            timed_out: true,
+            message: None,
+        }),
+        user_op::SubmitFailure::NotSent | user_op::SubmitFailure::RelayerUnavailable => {
+            failed(ShellFailure::NotSent)
+        }
+        user_op::SubmitFailure::Other(_) if !asked_passkey && failing => {
+            failed(ShellFailure::ChainUnreachable { chain_id })
+        }
+        failure => {
+            crate::diag::vlog!("multisig", "execute failed chain={chain_id}: {failure:?}");
+            failed(ShellFailure::Unknown {
+                message: format!("{failure:?}"),
+            })
         }
     }
 }
@@ -913,6 +943,76 @@ impl Deps for Live {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    /// r16-18: an execution that failed is said in the core's words, never
+    /// as the shell's debug text (`That didn't go through: Other("Could not
+    /// fetch the account nonce …")`). A read before the passkey on a network
+    /// the pool finds failing is that network out of reach; anything else
+    /// unnamed is the core's "Something went wrong, so nothing was sent".
+    #[test]
+    fn an_execution_that_failed_is_said_in_the_cores_words_never_debug_text() {
+        let loc = crate::loc::Loc::for_tag("en");
+        let said = |res: Res| match res {
+            Res::CallsFailed {
+                detail,
+                maybe_sent: false,
+            } => crate::wallet::page::multisig::failure_words(&loc, &detail, 5_042_002, &|a| {
+                a.to_owned()
+            }),
+            other => panic!("{other:?}"),
+        };
+        let nonce = || {
+            user_op::SubmitFailure::Other(
+                "Could not fetch the account nonce — the network may be unstable. Please try again."
+                    .to_owned(),
+            )
+        };
+        let unreachable = said(execute_failure(nonce(), false, 5_042_002, true));
+        assert!(unreachable.starts_with("Can't reach "), "{unreachable}");
+        assert!(unreachable.contains("nothing was sent"), "{unreachable}");
+        for line in [
+            said(execute_failure(nonce(), false, 5_042_002, false)),
+            said(execute_failure(nonce(), true, 5_042_002, true)),
+            said(execute_failure(
+                user_op::SubmitFailure::Refused("AA23 reverted".to_owned()),
+                true,
+                5_042_002,
+                false,
+            )),
+        ] {
+            assert!(!line.contains("Other("), "{line}");
+            assert!(!line.contains("Could not fetch"), "{line}");
+            assert!(!line.contains("AA23"), "{line}");
+            assert!(line.contains("nothing was sent"), "{line}");
+        }
+        assert!(matches!(
+            execute_failure(
+                user_op::SubmitFailure::PasskeyCancelled,
+                true,
+                5_042_002,
+                false
+            ),
+            Res::CallsCancelled
+        ));
+        // The core's own diagnostics are never said as they are either.
+        for detail in ["nothing to execute", "unexpected answer Foo { bar: 1 }"] {
+            let line =
+                crate::wallet::page::multisig::failure_words(&loc, detail, 5_042_002, &|a| {
+                    a.to_owned()
+                });
+            assert_eq!(
+                line,
+                "Something went wrong, so nothing was sent. Try again."
+            );
+        }
+        let line = crate::wallet::page::multisig::failure_words(
+            &loc,
+            "the passkey's signature did not check out: bad s",
+            5_042_002,
+            &|a| a.to_owned(),
+        );
+        assert!(line.contains("didn't check out"), "{line}");
+    }
 
     /// r14-5: the pool's rate-limited verdict reaches the core as one.
     #[test]
