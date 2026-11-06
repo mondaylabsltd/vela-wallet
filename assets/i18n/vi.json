@@ -2316,6 +2316,8 @@
   "liveIndicator": "Trực tiếp · đang chờ thanh toán",
   "emptyNoActivityNetwork": "Chưa có hoạt động trên mạng này",
   "emptyNoActivity": "Chưa có hoạt động nào",
+  "activityUnreadOne": "Hiện không thể đọc hoạt động trên {{network}}.",
+  "activityUnreadMany": "Hiện không thể đọc hoạt động trên {{n}} mạng.",
   "emptySubtitle": "Giao dịch bạn gửi sẽ hiển thị tại đây. Tiền bạn nhận được sẽ hiển thị trong số dư.",
   "invalidQrTitle": "QR không hợp lệ",
   "invalidQrBody": "Vui lòng quét một địa chỉ Ethereum hoặc URI kết nối hợp lệ.",

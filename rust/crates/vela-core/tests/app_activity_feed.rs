@@ -221,7 +221,10 @@ fn boot(records: Vec<FeedTxRecord>) -> Sut {
         "tick = read + scan"
     );
     sut.resolve(loaded(&sut, records, T0));
-    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
     drain_aliases(&mut sut);
     sut
 }
@@ -893,7 +896,10 @@ fn cached_feed_survives_a_noop_sync() {
     assert_eq!(sut.view(), before, "nothing blanks while requests are out");
 
     sut.resolve(loaded(&sut, vec![s1], T0 + 1_000.0));
-    let ops = sut.resolve(Res::SyncCompleted { new_count: 0 });
+    let ops = sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
     assert!(ops.is_empty(), "newCount = 0 must not re-read (no flicker)");
     assert_eq!(sut.view(), before);
 }
@@ -904,7 +910,10 @@ fn sync_with_new_receipts_rereads_the_store() {
     let mut sut = boot(vec![s1.clone()]);
     sut.dispatch(Event::FocusTick);
     sut.resolve(loaded(&sut, vec![s1], T0 + 1_000.0));
-    let ops = sut.resolve(Res::SyncCompleted { new_count: 2 });
+    let ops = sut.resolve(Res::SyncCompleted {
+        new_count: 2,
+        unread_chains: vec![],
+    });
     assert_eq!(shapes(ops), vec![read_op()], "something landed — read it");
 }
 
@@ -927,7 +936,10 @@ fn first_sync_pass_never_celebrates_but_the_second_does() {
     });
     sut.resolve(loaded(&sut, vec![], T0));
     // First pass discovers a 2-receipt BACKLOG.
-    let ops = sut.resolve(Res::SyncCompleted { new_count: 2 });
+    let ops = sut.resolve(Res::SyncCompleted {
+        new_count: 2,
+        unread_chains: vec![],
+    });
     assert_eq!(shapes(ops), vec![read_op()]);
     let r1 = recv("r1", "0xBob", "5", "USDT", 100_000.0);
     let ops = sut.resolve(loaded(&sut, vec![r1.clone()], T0 + 1_000.0));
@@ -948,7 +960,10 @@ fn first_sync_pass_never_celebrates_but_the_second_does() {
     // Second pass: a genuinely-new in-session receipt.
     sut.dispatch(Event::FocusTick);
     sut.resolve(loaded(&sut, vec![r1.clone()], T0 + 2_000.0));
-    let ops = sut.resolve(Res::SyncCompleted { new_count: 1 });
+    let ops = sut.resolve(Res::SyncCompleted {
+        new_count: 1,
+        unread_chains: vec![],
+    });
     assert_eq!(shapes(ops), vec![read_op()]);
     let newer_send = send("s9", "0xU9", "0xCafe", "1", 300_000.0);
     let r2 = recv("r2", "0xBob", "7", "USDT", 200_000.0);
@@ -1011,7 +1026,10 @@ fn privacy_suppresses_the_toast_but_not_glow_or_haptic() {
 
     sut.dispatch(Event::FocusTick);
     sut.resolve(loaded(&sut, vec![r1.clone()], T0 + 1_000.0));
-    sut.resolve(Res::SyncCompleted { new_count: 1 });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 1,
+        unread_chains: vec![],
+    });
     let r2 = recv("r2", "0xBob", "7", "USDT", 200_000.0);
     let ops = sut.resolve(loaded(&sut, vec![r2, r1], T0 + 2_000.0));
     assert_eq!(
@@ -1046,7 +1064,10 @@ fn celebrated(records_before: Vec<FeedTxRecord>, new_record: FeedTxRecord) -> Su
     let mut sut = boot(records_before.clone());
     sut.dispatch(Event::FocusTick);
     sut.resolve(loaded(&sut, records_before.clone(), T0 + 1_000.0));
-    sut.resolve(Res::SyncCompleted { new_count: 1 });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 1,
+        unread_chains: vec![],
+    });
     let mut all = vec![new_record];
     all.extend(records_before);
     let ops = sut.resolve(loaded(&sut, all, T0 + 2_000.0));
@@ -1122,7 +1143,10 @@ fn deleted_row_is_not_resurrected_by_a_concurrent_reload() {
     // The stale read commits — the tombstone filters the ghost.
     sut.resolve(loaded(&sut, vec![s1], T0 + 1_000.0));
     assert!(items(&sut).is_empty(), "the ghost never repaints");
-    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
 
     // The write settles; post-delete reloads stay clean.
     assert!(sut
@@ -1132,7 +1156,10 @@ fn deleted_row_is_not_resurrected_by_a_concurrent_reload() {
         .is_empty());
     sut.dispatch(Event::FocusTick);
     sut.resolve(loaded(&sut, vec![], T0 + 2_000.0));
-    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
     assert!(items(&sut).is_empty());
 }
 
@@ -1154,7 +1181,10 @@ fn failed_delete_lets_the_next_reload_resurrect_the_row() {
 
     sut.dispatch(Event::FocusTick);
     sut.resolve(loaded(&sut, vec![s1], T0 + 1_000.0));
-    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
     assert_eq!(items(&sut).len(), 1, "the record still exists — show it");
 }
 
@@ -1402,7 +1432,10 @@ fn stored_name_blocks_network_and_attempts_never_repeat() {
         }],
         "one lowercased request; the stored-name row never asks"
     );
-    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
 
     sut.resolve(Res::AliasResolved {
         addr: "0xbeef".to_owned(),
@@ -1429,7 +1462,10 @@ fn stored_name_blocks_network_and_attempts_never_repeat() {
         ops.is_empty(),
         "0xbeef was attempted — never again this session"
     );
-    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
 }
 
 /// The resolved overlay wins over a stored name for display
@@ -1451,7 +1487,10 @@ fn resolved_name_wins_over_stored_for_display() {
             addr: "0xd00d".to_owned()
         }]
     );
-    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
     sut.resolve(Res::AliasResolved {
         addr: "0xd00d".to_owned(),
         name: Some("vitalik.eth".to_owned()),
@@ -1476,7 +1515,10 @@ fn unresolved_alias_never_retries() {
     });
     let ops = sut.resolve(loaded(&sut, vec![r1.clone()], T0));
     assert_eq!(ops.len(), 1);
-    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
     let ops = sut.resolve(Res::AliasResolved {
         addr: "0xghost".to_owned(),
         name: Some(String::new()),
@@ -1490,7 +1532,10 @@ fn unresolved_alias_never_retries() {
     sut.dispatch(Event::FocusTick);
     let ops = sut.resolve(loaded(&sut, vec![r1], T0 + 1_000.0));
     assert!(ops.is_empty(), "no second network attempt");
-    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -1585,7 +1630,10 @@ fn switching_accounts_drops_in_flight_answers() {
     let ops = sut.resolve(loaded(&sut, vec![s1, stale_extra], T0 + 1_000.0));
     assert!(ops.is_empty());
     assert_eq!(sut.view(), before, "a stale commit never paints");
-    let ops = sut.resolve(Res::SyncCompleted { new_count: 5 });
+    let ops = sut.resolve(Res::SyncCompleted {
+        new_count: 5,
+        unread_chains: vec![],
+    });
     assert!(ops.is_empty(), "a stale sync never re-reads");
 
     // The NEW account's read commits its own feed.
@@ -1596,7 +1644,10 @@ fn switching_accounts_drops_in_flight_answers() {
     theirs.to_name = Some("Ann".to_owned());
     theirs.user_op_hash = "0xN".to_owned();
     sut.resolve(loaded(&sut, vec![theirs], T0 + 2_000.0));
-    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
     let ids: Vec<String> = items(&sut).into_iter().map(|i| i.id).collect();
     assert_eq!(ids, vec!["n1"]);
 }
@@ -1650,7 +1701,10 @@ fn a_switched_feed_never_shows_the_previous_accounts_rows_and_says_when_it_has_l
     assert!(view.rows.is_empty());
     assert!(!view.settled, "the chains have not been asked what came in");
     // The scan comes back: now its emptiness is a claim the core makes.
-    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
     assert!(sut.view().settled);
 
     // The same account told again (a shell re-entering its home) keeps what
@@ -1663,7 +1717,10 @@ fn a_switched_feed_never_shows_the_previous_accounts_rows_and_says_when_it_has_l
         "the same account, said again, is not a switch"
     );
     sut.resolve(loaded(&sut, vec![], T0 + 1_500.0));
-    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
 
     // Back to the first account: its rows come back with its own read only.
     sut.dispatch(Event::AccountSwitched {
@@ -1677,6 +1734,80 @@ fn a_switched_feed_never_shows_the_previous_accounts_rows_and_says_when_it_has_l
         !sut.view().settled,
         "rows drawn; the empty claim still waits for the scan"
     );
+}
+
+/// Round 16 leftover 5: the scan says which networks it could not read, and
+/// the feed says so in its own words — "Activity can't be read on {network}"
+/// (`unread_key` over `unread_chains`) — never "No activity yet" while one
+/// is unread (`settled` waits for every network). Read again, the line goes
+/// and the claim may be made.
+#[test]
+fn a_network_the_scan_could_not_read_is_said_and_never_claimed_empty() {
+    use vela_core::app::activity_feed::{ACTIVITY_UNREAD_MANY, ACTIVITY_UNREAD_ONE};
+    let mut sut = Sut::new();
+    sut.dispatch(Event::AccountSwitched {
+        address: ADDR.to_owned(),
+    });
+    sut.resolve(loaded(&sut, vec![], T0));
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![5_042_002],
+    });
+    drain_aliases(&mut sut);
+    let view = sut.view();
+    assert_eq!(view.unread_chains, vec![5_042_002]);
+    assert_eq!(view.unread_key.as_deref(), Some(ACTIVITY_UNREAD_ONE));
+    assert!(
+        !view.settled,
+        "never 'No activity yet' over an unread network"
+    );
+    // Two unread: counted.
+    sut.dispatch(Event::FocusTick);
+    sut.resolve(loaded(&sut, vec![], T0 + 1_000.0));
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![1, 5_042_002],
+    });
+    assert_eq!(sut.view().unread_key.as_deref(), Some(ACTIVITY_UNREAD_MANY));
+    // A chain filter on a network that was read: nothing to say there.
+    sut.dispatch(Event::ChainFilterChanged { chain_id: Some(56) });
+    assert_eq!(sut.view().unread_key, None);
+    assert!(sut.view().settled, "56 was read: its emptiness may be said");
+    sut.dispatch(Event::ChainFilterChanged { chain_id: None });
+    // Every network read: the line goes, the claim is the core's.
+    sut.dispatch(Event::FocusTick);
+    sut.resolve(loaded(&sut, vec![], T0 + 2_000.0));
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
+    let view = sut.view();
+    assert!(view.unread_chains.is_empty());
+    assert_eq!(view.unread_key, None);
+    assert!(view.settled);
+    // Another account: nothing of the last one's is said.
+    sut.dispatch(Event::FocusTick);
+    sut.resolve(loaded(&sut, vec![], T0 + 3_000.0));
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![1],
+    });
+    sut.dispatch(Event::AccountSwitched {
+        address: "0x7F3C000000000000000000000000000000De87".to_owned(),
+    });
+    assert!(sut.view().unread_chains.is_empty());
+    assert_eq!(sut.view().unread_key, None);
+}
+
+#[cfg(feature = "i18n-en")]
+#[test]
+fn the_activity_unread_keys_are_in_the_corpus() {
+    use vela_core::app::activity_feed::{ACTIVITY_UNREAD_MANY, ACTIVITY_UNREAD_ONE};
+    let i18n = vela_core::i18n::I18n::embedded().expect("embedded corpus");
+    let opts = vela_core::i18n::Options::default();
+    for key in [ACTIVITY_UNREAD_ONE, ACTIVITY_UNREAD_MANY] {
+        assert!(i18n.exists(key, &opts), "{key}");
+    }
 }
 
 #[test]
@@ -1738,7 +1869,10 @@ fn a_stale_read_never_eats_the_celebration_the_sync_earned() {
     // asks for a read of its own.
     sut.resolve_matching(
         |op| matches!(op, Op::ScanIncomingTransfers { .. }),
-        Res::SyncCompleted { new_count: 1 },
+        Res::SyncCompleted {
+            new_count: 1,
+            unread_chains: vec![],
+        },
     );
     let fresh_read = sut
         .outstanding()
@@ -3525,7 +3659,10 @@ fn boot_with_repair(records: Vec<FeedTxRecord>) -> (Sut, Vec<Op>) {
         address: ADDR.to_owned(),
     });
     let ops = sut.resolve(loaded(&sut, records, T0));
-    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
     drain_aliases(&mut sut);
     (sut, ops)
 }
@@ -3542,7 +3679,10 @@ fn tick(sut: &mut Sut, records: Vec<FeedTxRecord>) -> Vec<Op> {
     );
     sut.resolve_matching(
         |op| matches!(op, Op::ScanIncomingTransfers { .. }),
-        Res::SyncCompleted { new_count: 0 },
+        Res::SyncCompleted {
+            new_count: 0,
+            unread_chains: vec![],
+        },
     );
     asked
 }
@@ -3855,7 +3995,10 @@ fn every_change_renders() {
     shown_is_current(&sut, "account switched");
     sut.resolve(loaded(&sut, vec![named.clone(), unnamed.clone()], T0));
     shown_is_current(&sut, "store loaded");
-    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
     shown_is_current(&sut, "first sync");
     sut.resolve(Res::AliasResolved {
         addr: "0xbeef".to_owned(),
@@ -3899,7 +4042,10 @@ fn every_change_renders() {
     sut.dispatch(Event::FocusTick);
     sut.resolve(loaded(&sut, vec![unnamed.clone()], T0 + 1_000.0));
     shown_is_current(&sut, "tick read");
-    sut.resolve(Res::SyncCompleted { new_count: 1 });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 1,
+        unread_chains: vec![],
+    });
     shown_is_current(&sut, "sync found one");
     sut.resolve(loaded(&sut, vec![landed, unnamed.clone()], T0 + 2_000.0));
     shown_is_current(&sut, "celebrating read");
@@ -3956,7 +4102,10 @@ fn names_render_in_batches() {
         address: ADDR.to_owned(),
     });
     sut.resolve(loaded(&sut, ten_strangers(), T0));
-    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
 
     let mut rendered_at = Vec::new();
     for answer in 1..=10 {
@@ -3993,7 +4142,10 @@ fn a_batch_closes_on_its_last_answer_and_on_the_next_read() {
         address: ADDR.to_owned(),
     });
     sut.resolve(loaded(&sut, ten_strangers()[..3].to_vec(), T0));
-    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
     let lookups = sut.outstanding();
     assert_eq!(lookups.len(), 3);
     let addr_of = |op: &Op| match op {
@@ -4022,7 +4174,10 @@ fn a_batch_closes_on_its_last_answer_and_on_the_next_read() {
     // A new batch whose last lookup never answers.
     sut.dispatch(Event::FocusTick);
     sut.resolve(loaded(&sut, ten_strangers()[..6].to_vec(), T0 + 1_000.0));
-    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
     let lookups = sut.outstanding();
     assert_eq!(lookups.len(), 3, "only the three never asked");
     sut.resolve(Res::AliasResolved {

@@ -158,6 +158,11 @@ pub const HISTORY_EMPTY_FILTERED: &str = "history.emptyFilter";
 pub const HOME_EMPTY_ALL: &str = "home.emptyNoActivity";
 /// The home Activity with nothing to show on the chosen network.
 pub const HOME_EMPTY_FILTERED: &str = "home.emptyNoActivityNetwork";
+/// Round 16 leftover 5: Activity on one network could not be read by the
+/// last scan (`{{network}}`: its name) — said, never "No activity yet".
+pub const ACTIVITY_UNREAD_ONE: &str = "home.activityUnreadOne";
+/// The same for several networks (`{{n}}`: how many).
+pub const ACTIVITY_UNREAD_MANY: &str = "home.activityUnreadMany";
 
 /// How many items the wallet home's Activity draws (issue 469): the newest
 /// three, so Assets stays in reach under them. "All" opens History, which
@@ -998,8 +1003,13 @@ pub enum FeedShellResult {
         read_id: u32,
     },
     /// The scan finished; `new_count` new receipts were persisted.
+    /// `unread_chains` (round 16 leftover 5): the networks it could not read
+    /// (the trust machine's `TrustView::unread_chains` after the poll) —
+    /// empty from a shell that does not say them.
     SyncCompleted {
         new_count: u32,
+        #[serde(default)]
+        unread_chains: Vec<u32>,
     },
     DeleteCommitted {
         id: String,
@@ -1200,6 +1210,9 @@ pub struct Model {
     /// r15-1: the first scan came back on a step that draws nothing; the
     /// next render (the re-read, the armed timer) shows it.
     scan_pending: bool,
+    /// Round 16 leftover 5: the networks the last scan of THIS account could
+    /// not read.
+    unread: BTreeSet<u32>,
     /// The next `StoreLoaded` commit is a post-sync re-read that may
     /// celebrate its newest incoming item.
     celebrate_read_id: Option<u32>,
@@ -1353,8 +1366,22 @@ pub struct FeedView {
     /// its store was read AND its first incoming scan came back since it was
     /// switched to. Before that an empty Activity is still being read (the
     /// skeleton) — never "No activity yet".
+    ///
+    /// Round 16 leftover 5: nor while a network (of the chain filter's) is
+    /// unread — [`Self::unread_key`] is said instead.
     #[serde(default)]
     pub settled: bool,
+    /// Round 16 leftover 5: the networks the last scan of [`Self::account`]
+    /// could not read (within the chain filter), ascending.
+    #[serde(default)]
+    pub unread_chains: Vec<u32>,
+    /// The line Activity (the home's and History) draws while any is:
+    /// [`ACTIVITY_UNREAD_ONE`] ("Activity can't be read on {{network}}",
+    /// the one network's name) or [`ACTIVITY_UNREAD_MANY`] (`{{n}}`): over
+    /// the rows when there are rows, in the empty state's place when there
+    /// are none. `None` when every network was read.
+    #[serde(default)]
+    pub unread_key: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1385,6 +1412,7 @@ impl App for ActivityFeed {
                     model.store_read = false;
                     model.scanned = false;
                     model.scan_pending = false;
+                    model.unread.clear();
                 }
                 model.address = address;
                 model.initialized = false;
@@ -1553,6 +1581,12 @@ impl App for ActivityFeed {
             })
         };
 
+        let unread_chains: Vec<u32> = model
+            .unread
+            .iter()
+            .copied()
+            .filter(|chain| model.chain_filter.is_none_or(|f| f == *chain))
+            .collect();
         FeedView {
             rows,
             home_rows,
@@ -1562,7 +1596,16 @@ impl App for ActivityFeed {
             history_empty_key: history_empty_key(model.chain_filter).to_owned(),
             home_empty_key: home_empty_key(model.chain_filter).to_owned(),
             account: model.address.to_lowercase(),
-            settled: !model.address.is_empty() && model.store_read && model.scanned,
+            settled: !model.address.is_empty()
+                && model.store_read
+                && model.scanned
+                && unread_chains.is_empty(),
+            unread_key: match unread_chains.len() {
+                0 => None,
+                1 => Some(ACTIVITY_UNREAD_ONE.to_owned()),
+                _ => Some(ACTIVITY_UNREAD_MANY.to_owned()),
+            },
+            unread_chains,
             contact_rows,
             hidden: model.privacy_hidden,
             next_scan: model.cadence.filter(|c| c.armed).map(|c| FeedNextScan {
@@ -1820,8 +1863,16 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
             finish_time_repair_round(model)
         }
 
-        FeedShellResult::SyncCompleted { new_count } => {
+        FeedShellResult::SyncCompleted {
+            new_count,
+            unread_chains,
+        } => {
             model.scan_in_flight = false;
+            // Round 16 leftover 5: what this scan could not read replaces
+            // what the last one could not; a change is drawn.
+            let unread: BTreeSet<u32> = unread_chains.into_iter().collect();
+            let unread_moved = unread != model.unread;
+            model.unread = unread;
             // r15-1: the first scan of this account back settles whether
             // "No activity yet" may be said ([`settle_scan`]).
             let first_scan = !model.scanned;
@@ -1861,6 +1912,9 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
                 }
                 // Otherwise another scan of this account went out at once
                 // (asked for while this one was out): its answer settles it.
+            }
+            if unread_moved && !renders {
+                commands.push(render());
             }
             Command::all(commands)
         }

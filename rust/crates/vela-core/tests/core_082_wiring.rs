@@ -304,7 +304,10 @@ fn feed(records: Vec<FeedTxRecord>) -> DomainDriver<ActivityFeed> {
     reload(&mut feed, records);
     feed.resolve_matching(
         |op| matches!(op, FeedOp::ScanIncomingTransfers { .. }),
-        FeedRes::SyncCompleted { new_count: 0 },
+        FeedRes::SyncCompleted {
+            new_count: 0,
+            unread_chains: vec![],
+        },
     );
     feed
 }

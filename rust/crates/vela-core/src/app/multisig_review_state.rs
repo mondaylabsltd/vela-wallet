@@ -382,14 +382,24 @@ pub const MISSING_SERVICE_KEY: &str = LINK_UNREAD_SERVICE_KEY;
 pub const MISSING_NOT_LISTED_KEY: &str = "home.multisig.proposal.notInMailbox";
 /// The sheet's network is not one the multisig shown is read on.
 pub const MISSING_NOT_HERE_KEY: &str = "home.multisig.proposal.notHere";
+/// Round 16 leftover 3 (§25 r16-16): the multisig service answered with
+/// its rate limit — the home's busy words, with Try again; never "Couldn't
+/// reach the multisig service".
+pub const MISSING_BUSY_KEY: &str = "home.multisig.service.busyNote";
 
 /// [`MissingSaid`] from the facts: `loading` (the list's first read is
 /// out), `unreadable` (the network did not answer), `mailbox` (`None`: the
 /// multisig is not read on this network; `Some(read)`: whether the service's
-/// list was read). Only a read that came back and lacks it is final; every
-/// unread one offers Try again. (This device being offline is the shell's
-/// to say first, as it always has.)
-pub fn missing_said(loading: bool, unreadable: bool, mailbox: Option<bool>) -> MissingSaid {
+/// list was read), `busy` (the service's last answer was its rate limit —
+/// the proposals view's `busy`). Only a read that came back and lacks it is
+/// final; every unread one offers Try again. (This device being offline is
+/// the shell's to say first, as it always has.)
+pub fn missing_said(
+    loading: bool,
+    unreadable: bool,
+    mailbox: Option<bool>,
+    busy: bool,
+) -> MissingSaid {
     let said = |key: &str, retry: bool| MissingSaid {
         key: key.to_owned(),
         retry,
@@ -402,18 +412,24 @@ pub fn missing_said(loading: bool, unreadable: bool, mailbox: Option<bool>) -> M
     }
     match mailbox {
         Some(true) => said(MISSING_NOT_LISTED_KEY, false),
+        Some(false) if busy => said(MISSING_BUSY_KEY, true),
         Some(false) => said(MISSING_SERVICE_KEY, true),
         None => said(MISSING_NOT_HERE_KEY, false),
     }
 }
 
-/// `review.missing {loading, unreadable, mailbox?}` through the link door:
-/// [`missing_said`].
+/// `review.missing {loading, unreadable, mailbox?, busy?}` through the link
+/// door: [`missing_said`].
 pub fn missing_json(args: &Value) -> Result<Value, String> {
     let flag = |k: &str| args.get(k).and_then(Value::as_bool).unwrap_or(false);
     let mailbox = args.get("mailbox").and_then(Value::as_bool);
-    serde_json::to_value(missing_said(flag("loading"), flag("unreadable"), mailbox))
-        .map_err(|e| e.to_string())
+    serde_json::to_value(missing_said(
+        flag("loading"),
+        flag("unreadable"),
+        mailbox,
+        flag("busy"),
+    ))
+    .map_err(|e| e.to_string())
 }
 
 /// `review.settle {review?, answers}` through the link door: the state a

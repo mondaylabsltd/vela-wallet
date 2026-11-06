@@ -1192,7 +1192,18 @@ fn the_door_vectors_hold_through_the_link_door() {
     );
     // §18 (b): a sheet opened without a link, its transaction not listed.
     let missing = vectors["missing"].as_array().unwrap();
-    assert!(missing.len() >= 5);
+    assert!(missing.len() >= 8);
+    // Round 16 leftover 4: a failure's kind and its catalog key, through
+    // the same door — every shell words a failure from these, never from
+    // its text.
+    let failure = vectors["failure"].as_array().unwrap();
+    assert!(failure.len() >= 20);
+    for case in failure {
+        let got = vela_core::multisig_link::call_json("review.failure", &case["args"].to_string())
+            .unwrap_or_else(|e| panic!("{}: {e:?}", case["name"]));
+        let got: Value = serde_json::from_str(&got).unwrap();
+        assert_eq!(got, case["expect"], "{}", case["name"]);
+    }
     for case in missing {
         let got = vela_core::multisig_link::call_json("review.missing", &case["args"].to_string())
             .unwrap_or_else(|e| panic!("{}: {e:?}", case["name"]));

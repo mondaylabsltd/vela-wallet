@@ -21,4 +21,13 @@ incoming: Array<TrustIncomingView>, sim: TrustSimView | null,
  * account's polls are not planned (and then absent on the wire: a
  * shell not moved yet sees the view it always did).
  */
-cursors?: Array<TrustScanCursor>, };
+cursors?: Array<TrustScanCursor>, 
+/**
+ * Round 16 leftover 5: the networks of this account the scan could not
+ * read on its last look at each — a head that did not answer, transfer
+ * logs refused (or capped twice). A network read again leaves it; an
+ * account switch empties it. The shell hands it to the Activity feed
+ * with the scan's answer (`SyncCompleted.unread_chains`), so Activity
+ * says it cannot be read there rather than that nothing happened.
+ */
+unread_chains: Array<number>, };

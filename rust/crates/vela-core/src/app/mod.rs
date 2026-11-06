@@ -75,6 +75,8 @@ pub mod money;
 pub mod multisig_accounts;
 /// A dApp's request from a multisig (docs/multisig-vault-design.md §6).
 pub mod multisig_dapp;
+/// What a failed multisig action says: a stable kind, worded from the catalog (round 16 leftover 4).
+pub mod multisig_failure;
 /// The one review's reads and the one gate, shared by every multisig signer (§3.5, §3.6).
 pub mod multisig_gather;
 pub mod multisig_members;

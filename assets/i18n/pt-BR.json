@@ -2327,6 +2327,8 @@
   "liveIndicator": "Ao vivo · aguardando pagamentos",
   "emptyNoActivityNetwork": "Nenhuma atividade nesta rede",
   "emptyNoActivity": "Nenhuma atividade ainda",
+  "activityUnreadOne": "Não é possível ler a atividade em {{network}} agora.",
+  "activityUnreadMany": "Não é possível ler a atividade em {{n}} redes agora.",
   "emptySubtitle": "O que você envia aparece aqui. O dinheiro que você recebe aparece no seu saldo.",
   "invalidQrTitle": "QR inválido",
   "invalidQrBody": "Escaneie um endereço Ethereum ou um URI de conexão válido.",

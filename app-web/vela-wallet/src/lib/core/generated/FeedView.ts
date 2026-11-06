@@ -81,5 +81,21 @@ account: string,
  * its store was read AND its first incoming scan came back since it was
  * switched to. Before that an empty Activity is still being read (the
  * skeleton) — never "No activity yet".
+ *
+ * Round 16 leftover 5: nor while a network (of the chain filter's) is
+ * unread — [`Self::unread_key`] is said instead.
  */
-settled: boolean, };
+settled: boolean, 
+/**
+ * Round 16 leftover 5: the networks the last scan of [`Self::account`]
+ * could not read (within the chain filter), ascending.
+ */
+unread_chains: Array<number>, 
+/**
+ * The line Activity (the home's and History) draws while any is:
+ * [`ACTIVITY_UNREAD_ONE`] ("Activity can't be read on {{network}}",
+ * the one network's name) or [`ACTIVITY_UNREAD_MANY`] (`{{n}}`): over
+ * the rows when there are rows, in the empty state's place when there
+ * are none. `None` when every network was read.
+ */
+unread_key: string | null, };

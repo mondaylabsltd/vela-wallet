@@ -86,7 +86,7 @@ fn mailbox_read(sut: &Sut) -> Option<bool> {
 fn missing_key(sut: &Sut) -> String {
     let v = sut.view();
     let unreadable = v.unreadable.contains(&100);
-    review_state::missing_said(v.loading, unreadable, mailbox_read(sut)).key
+    review_state::missing_said(v.loading, unreadable, mailbox_read(sut), v.busy).key
 }
 
 /// r15-11: following a multisig again draws its kept list at once, but
@@ -195,4 +195,50 @@ fn a_rate_limited_service_is_said_busy_backs_off_and_retry_asks_now() {
     run(&mut sut, &mut world, Event::Retry);
     assert_eq!(mailbox_read(&sut), Some(true));
     assert_eq!(sut.view().waiting_note, None);
+}
+
+/// Round 16 leftover 3: the proposal sheet says a rate-limited service as
+/// busy too — the home's words (`busyNote`) with Try again — both for a
+/// sheet opened without a link (`missing_said` over `view.busy`) and for a
+/// link's transaction (`linked.reason_key`); never "Couldn't reach the
+/// multisig service".
+#[test]
+fn a_rate_limited_service_is_said_busy_on_the_sheet_too() {
+    let (mut world, mut sut, _, b) = two_multisigs();
+    world.service_rate_limited = true;
+    run(&mut sut, &mut world, Event::Tick);
+    assert_eq!(mailbox_read(&sut), Some(false));
+    assert!(sut.view().busy, "the view says the service is busy");
+    assert_eq!(missing_key(&sut), review_state::MISSING_BUSY_KEY);
+    assert_eq!(
+        review_state::MISSING_BUSY_KEY,
+        "home.multisig.service.busyNote"
+    );
+    run(
+        &mut sut,
+        &mut world,
+        Event::OpenLinked {
+            chain_id: 100,
+            safe_tx_hash: format!("0x{}", "ee".repeat(32)),
+            preview: None,
+        },
+    );
+    let linked = sut.view().linked.expect("the link's sheet");
+    assert_eq!(
+        linked.reason_key.as_deref(),
+        Some(review_state::MISSING_BUSY_KEY),
+        "{:?} (followed {})",
+        linked.stand,
+        b.address
+    );
+    assert!(linked.retry);
+    // The limit lifts; Retry reads at once — the sheet says what is true.
+    world.service_rate_limited = false;
+    run(&mut sut, &mut world, Event::Retry);
+    assert!(!sut.view().busy);
+    assert_eq!(
+        missing_key(&sut),
+        review_state::MISSING_NOT_LISTED_KEY,
+        "read now, and not there"
+    );
 }

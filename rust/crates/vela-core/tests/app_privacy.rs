@@ -329,7 +329,10 @@ fn feed(hidden: bool) -> FeedView {
         now_ms: T0,
         read_id: id,
     });
-    sut.resolve(FeedRes::SyncCompleted { new_count: 0 });
+    sut.resolve(FeedRes::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
     drain(&mut sut);
     sut.dispatch(FeedEvent::FocusTick);
     let id = read_id(&sut);
@@ -338,7 +341,10 @@ fn feed(hidden: bool) -> FeedView {
         now_ms: T0 + 1_000.0,
         read_id: id,
     });
-    sut.resolve(FeedRes::SyncCompleted { new_count: 1 });
+    sut.resolve(FeedRes::SyncCompleted {
+        new_count: 1,
+        unread_chains: vec![],
+    });
     let id = read_id(&sut);
     let mut all = vec![received()];
     all.extend(records());

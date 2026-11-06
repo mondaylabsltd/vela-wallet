@@ -542,12 +542,24 @@ fn one_scan_per_account_at_a_time() {
 
     // The first account's late answer is dropped with its attempt: the new
     // account's scan is still the one out.
-    sut.resolve_matching(is_scan, FeedRes::SyncCompleted { new_count: 0 });
+    sut.resolve_matching(
+        is_scan,
+        FeedRes::SyncCompleted {
+            new_count: 0,
+            unread_chains: vec![],
+        },
+    );
     let ops = sut.dispatch(FeedEvent::LiveTick);
     assert!(!ops.iter().any(is_scan), "{ops:?}");
 
     // Its own answer: the next tick scans again.
-    sut.resolve_matching(is_scan, FeedRes::SyncCompleted { new_count: 0 });
+    sut.resolve_matching(
+        is_scan,
+        FeedRes::SyncCompleted {
+            new_count: 0,
+            unread_chains: vec![],
+        },
+    );
     let ops = sut.dispatch(FeedEvent::LiveTick);
     assert!(ops.iter().any(is_scan), "{ops:?}");
 }
@@ -608,6 +620,7 @@ fn every_cadence_step_vector_holds_through_the_machine() {
                     is_scan,
                     FeedRes::SyncCompleted {
                         new_count: step["new_count"].as_u64().expect("new_count") as u32,
+                        unread_chains: vec![],
                     },
                 ),
                 "store_answer" => {
@@ -726,19 +739,37 @@ fn a_new_account_starts_the_back_off_again() {
         change: FeedPresenceChange::Started,
     });
     for k in 0..4 {
-        sut.resolve_matching(is_scan, FeedRes::SyncCompleted { new_count: 0 });
+        sut.resolve_matching(
+            is_scan,
+            FeedRes::SyncCompleted {
+                new_count: 0,
+                unread_chains: vec![],
+            },
+        );
         let seq = sut.view().next_scan.expect("armed").seq;
         sut.dispatch(FeedEvent::ScanDue {
             seq,
             presence: presence(true, 0.0, T0 + f64::from(k) * 1_000.0),
         });
     }
-    sut.resolve_matching(is_scan, FeedRes::SyncCompleted { new_count: 0 });
+    sut.resolve_matching(
+        is_scan,
+        FeedRes::SyncCompleted {
+            new_count: 0,
+            unread_chains: vec![],
+        },
+    );
     assert_eq!(sut.view().next_scan.map(|n| n.after_ms), Some(120_000));
     sut.dispatch(FeedEvent::AccountSwitched {
         address: "0xB0b".to_owned(),
     });
-    sut.resolve_matching(is_scan, FeedRes::SyncCompleted { new_count: 0 });
+    sut.resolve_matching(
+        is_scan,
+        FeedRes::SyncCompleted {
+            new_count: 0,
+            unread_chains: vec![],
+        },
+    );
     assert_eq!(sut.view().next_scan.map(|n| n.after_ms), Some(15_000));
 }
 
@@ -777,7 +808,13 @@ fn the_first_scan_back_settles_the_empty_claim_on_a_render_the_cadence_makes() {
         change: FeedPresenceChange::Sent,
     });
     let renders = sut.renders();
-    sut.resolve_matching(is_scan, FeedRes::SyncCompleted { new_count: 0 });
+    sut.resolve_matching(
+        is_scan,
+        FeedRes::SyncCompleted {
+            new_count: 0,
+            unread_chains: vec![],
+        },
+    );
     assert_eq!(
         sut.renders(),
         renders,
@@ -787,7 +824,13 @@ fn the_first_scan_back_settles_the_empty_claim_on_a_render_the_cadence_makes() {
         !sut.view().settled,
         "and the view has not moved without a render"
     );
-    sut.resolve_matching(is_scan, FeedRes::SyncCompleted { new_count: 0 });
+    sut.resolve_matching(
+        is_scan,
+        FeedRes::SyncCompleted {
+            new_count: 0,
+            unread_chains: vec![],
+        },
+    );
     assert!(sut.view().settled, "the second answer settles it");
     assert_eq!(sut.rendered_view(), Some(&sut.view()), "drawn");
 }

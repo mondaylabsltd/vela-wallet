@@ -1395,8 +1395,13 @@ for (let i = 1; i < PATHS.length; i++) {
 //   fit any device (the desktop said "this browser's wallet data", DESKTOP-1;
 //   the body names no browser copy to reset). 2285 + 2 = 2287 paths,
 //   2168 leaves, 119 branches.
-if (PATHS.length !== 2287) fail(`expected 2287 paths (2168 leaf + 119 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2168) fail(`expected 2168 leaf paths, got ${leafSet.size}`);
+// 2289 (round 16 leftovers, 2026-11-07): + `home.activityUnread{One,Many}` —
+//   Activity says the networks its scan could not read ("Activity can't be
+//   read on {{network}} right now." / "… on {{n}} networks …",
+//   `FeedView.unread_key`), never "No activity yet" over them. 2287 + 2 =
+//   2289 paths, 2170 leaves, 119 branches.
+if (PATHS.length !== 2289) fail(`expected 2289 paths (2170 leaf + 119 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2170) fail(`expected 2170 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.

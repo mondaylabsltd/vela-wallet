@@ -24,6 +24,8 @@
     "liveIndicator": "Canlı · ödemeler dinleniyor",
     "emptyNoActivityNetwork": "Bu ağda etkinlik yok",
     "emptyNoActivity": "Henüz etkinlik yok",
+    "activityUnreadOne": "{{network}} üzerindeki etkinlik şu anda okunamıyor.",
+    "activityUnreadMany": "{{n}} ağdaki etkinlik şu anda okunamıyor.",
     "emptySubtitle": "Gönderdikleriniz burada görünür. Aldığınız para bakiyenize yansır.",
     "invalidQrTitle": "Geçersiz QR",
     "invalidQrBody": "Lütfen geçerli bir Ethereum adresi veya bağlantı URI'si okutun.",

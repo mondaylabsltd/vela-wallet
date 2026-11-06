@@ -203,6 +203,123 @@
       "name": "not a network the multisig is read on: not here",
       "args": { "loading": false, "unreadable": false, "mailbox": null },
       "expect": { "key": "home.multisig.proposal.notHere", "retry": false }
+    },
+    {
+      "name": "r16 leftover 3: the service answered with its rate limit — said busy in the home's words, with Try again, never 'couldn't reach'",
+      "args": { "loading": false, "unreadable": false, "mailbox": false, "busy": true },
+      "expect": { "key": "home.multisig.service.busyNote", "retry": true }
+    },
+    {
+      "name": "busy, but its list was read and the transaction is not there: not in the mailbox, final",
+      "args": { "loading": false, "unreadable": false, "mailbox": true, "busy": true },
+      "expect": { "key": "home.multisig.proposal.notInMailbox", "retry": false }
+    },
+    {
+      "name": "busy, but the network did not answer: the network is said first",
+      "args": { "loading": false, "unreadable": true, "mailbox": false, "busy": true },
+      "expect": { "key": "home.multisig.proposal.cantCheck", "retry": true }
+    }
+  ],
+  "failure": [
+    {
+      "name": "r16 leftover 4: the core's own refusal is a kind — unknown, never its English",
+      "args": { "detail": "{\"kind\":\"unknown\",\"reason\":\"cannot_execute_now\"}" },
+      "expect": { "kind": "unknown", "key": "home.multisig.proposal.reason.unknown" }
+    },
+    {
+      "name": "plain text (a shell's or an older core's English): unknown, never drawn",
+      "args": { "detail": "the passkey's signature did not check out: bad s" },
+      "expect": { "kind": "unknown", "key": "home.multisig.proposal.reason.unknown" }
+    },
+    {
+      "name": "nothing at all: unknown",
+      "args": { "detail": "" },
+      "expect": { "kind": "unknown", "key": "home.multisig.proposal.reason.unknown" }
+    },
+    {
+      "name": "a shell's unknown with its own message: the message is never words",
+      "args": { "detail": "{\"kind\":\"unknown\",\"message\":\"TypeError: x is undefined\"}" },
+      "expect": { "kind": "unknown", "key": "home.multisig.proposal.reason.unknown" }
+    },
+    {
+      "name": "a kind this core does not know: unknown",
+      "args": { "detail": "{\"kind\":\"something_new\"}" },
+      "expect": { "kind": "unknown", "key": "home.multisig.proposal.reason.unknown" }
+    },
+    {
+      "name": "the passkey's signature did not check out",
+      "args": { "detail": "{\"kind\":\"passkey_check\"}" },
+      "expect": { "kind": "passkey_check", "key": "home.multisig.proposal.reason.passkeyFailed" }
+    },
+    {
+      "name": "the passkey timed out",
+      "args": { "detail": "{\"kind\":\"passkey\",\"failure\":\"cancelled\",\"timedOut\":true}" },
+      "expect": { "kind": "passkey_timed_out", "key": "home.multisig.proposal.reason.passkeyTimedOut" }
+    },
+    {
+      "name": "the passkey prompt was closed",
+      "args": { "detail": "{\"kind\":\"passkey\",\"failure\":\"cancelled\",\"timedOut\":false}" },
+      "expect": { "kind": "passkey_closed", "key": "home.multisig.proposal.reason.passkeyClosed" }
+    },
+    {
+      "name": "no passkey for this member here",
+      "args": { "detail": "{\"kind\":\"passkey\",\"failure\":\"not_discoverable\",\"timedOut\":false}" },
+      "expect": { "kind": "passkey_missing", "key": "home.multisig.proposal.reason.passkeyMissing" }
+    },
+    {
+      "name": "any other passkey failure: its English message is never words",
+      "args": { "detail": "{\"kind\":\"passkey\",\"failure\":\"other\",\"timedOut\":false,\"message\":\"NotAllowedError: blah\"}" },
+      "expect": { "kind": "passkey_failed", "key": "home.multisig.proposal.reason.passkeyFailed" }
+    },
+    {
+      "name": "the relay never took it: nothing was sent",
+      "args": { "detail": "{\"kind\":\"not_sent\"}" },
+      "expect": { "kind": "not_sent", "key": "home.multisig.proposal.notSent" }
+    },
+    {
+      "name": "its network failing before the passkey ({{network}}: the network's name)",
+      "args": { "detail": "{\"kind\":\"chain_unreachable\",\"chain_id\":100}" },
+      "expect": { "kind": "chain_unreachable", "key": "home.multisig.proposal.reason.chainUnreachable" }
+    },
+    {
+      "name": "declined on the signing page",
+      "args": { "detail": "{\"kind\":\"page_declined\"}" },
+      "expect": { "kind": "page_declined", "key": "componentsUi.signing.trustedSignerClosed" }
+    },
+    {
+      "name": "the signing page did not answer",
+      "args": { "detail": "{\"kind\":\"page_sign_failed\",\"page\":\"unanswered\"}" },
+      "expect": { "kind": "page_unanswered", "key": "componentsUi.signing.trustedSignerTimeout" }
+    },
+    {
+      "name": "the signing page's answer did not match",
+      "args": { "detail": "{\"kind\":\"page_approval\",\"failure\":\"mismatch\",\"code\":null,\"line\":null}" },
+      "expect": { "kind": "page_mismatch", "key": "componentsUi.signing.trustedSignerMismatch" }
+    },
+    {
+      "name": "the signing page could not be opened",
+      "args": { "detail": "{\"kind\":\"page_sign_failed\",\"page\":\"not_opened\"}" },
+      "expect": { "kind": "page_not_opened", "key": "componentsUi.signing.signerDown" }
+    },
+    {
+      "name": "the signing page refused",
+      "args": { "detail": "{\"kind\":\"page_sign_failed\",\"page\":\"refused\"}" },
+      "expect": { "kind": "page_refused", "key": "componentsUi.signing.trustedSignerRefused" }
+    },
+    {
+      "name": "the fee moved since the press: worded by the shell from its figure and executor",
+      "args": { "detail": "{\"kind\":\"fee_moved\",\"amount\":\"12\",\"chainId\":100,\"executor\":\"0xab\"}" },
+      "expect": { "kind": "fee_moved", "key": null }
+    },
+    {
+      "name": "the executor cannot pay: worded from its amounts",
+      "args": { "detail": "{\"kind\":\"cannot_pay\",\"need\":\"2\",\"have\":\"1\"}" },
+      "expect": { "kind": "cannot_pay", "key": null }
+    },
+    {
+      "name": "the signing venue blocks it: worded from its block",
+      "args": { "detail": "{\"kind\":\"venue_blocked\",\"block\":{}}" },
+      "expect": { "kind": "venue_blocked", "key": null }
     }
   ],
   "recheck": [

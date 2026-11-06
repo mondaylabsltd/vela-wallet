@@ -48,6 +48,13 @@ history: MultisigHistoryStand, offline: boolean, read_at: number | null, loading
  */
 unreachable: boolean, 
 /**
+ * Round 16 leftover 3 (§25 r16-16): the service's last read answer was
+ * its rate limit — a proposal sheet whose transaction is not in the
+ * unread list says busy (`review.missing {busy}`), never "Couldn't
+ * reach the multisig service".
+ */
+busy: boolean, 
+/**
  * The poll's pace now.
  */
 pace_ms: number, outbox: { [key in string]: MultisigOutboxEntry }, draft: MultisigDraft | null, 

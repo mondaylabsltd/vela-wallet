@@ -24,6 +24,8 @@
     "liveIndicator": "Live · memantau pembayaran",
     "emptyNoActivityNetwork": "Belum ada aktivitas di jaringan ini",
     "emptyNoActivity": "Belum ada aktivitas",
+    "activityUnreadOne": "Aktivitas di {{network}} belum bisa dibaca saat ini.",
+    "activityUnreadMany": "Aktivitas di {{n}} jaringan belum bisa dibaca saat ini.",
     "emptySubtitle": "Yang Anda kirim akan muncul di sini. Uang yang Anda terima tampil di saldo Anda.",
     "invalidQrTitle": "QR Tidak Valid",
     "invalidQrBody": "Pindai alamat Ethereum atau URI koneksi yang valid.",

@@ -38,6 +38,8 @@
     "liveIndicator": "Live · listening for payments",
     "emptyNoActivityNetwork": "No activity on this network",
     "emptyNoActivity": "No activity yet",
+    "activityUnreadOne": "Activity can't be read on {{network}} right now.",
+    "activityUnreadMany": "Activity can't be read on {{n}} networks right now.",
     "emptySubtitle": "What you send shows up here. Money you receive shows in your balance.",
     "invalidQrTitle": "Invalid QR",
     "invalidQrBody": "Please scan a valid Ethereum address or connection URI.",

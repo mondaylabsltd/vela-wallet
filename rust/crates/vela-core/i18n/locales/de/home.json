@@ -24,6 +24,8 @@
     "liveIndicator": "Live · wartet auf Zahlungen",
     "emptyNoActivityNetwork": "Keine Aktivität in diesem Netzwerk",
     "emptyNoActivity": "Noch keine Aktivität",
+    "activityUnreadOne": "Aktivität auf {{network}} kann gerade nicht gelesen werden.",
+    "activityUnreadMany": "Aktivität auf {{n}} Netzwerken kann gerade nicht gelesen werden.",
     "emptySubtitle": "Was Sie senden, erscheint hier. Erhaltenes Geld sehen Sie in Ihrem Guthaben.",
     "invalidQrTitle": "Ungültiger QR-Code",
     "invalidQrBody": "Bitte scannen Sie eine gültige Ethereum-Adresse oder Verbindungs-URI.",

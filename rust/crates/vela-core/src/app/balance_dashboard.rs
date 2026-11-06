@@ -1276,6 +1276,16 @@ pub struct BalanceView {
     /// When the last round SETTLED (an errored round does not move it) — the
     /// `<ago>` of `home.lastUpdated`.
     pub last_refreshed_at_ms: Option<f64>,
+    /// Round 16 leftover 6: whether "Updated <ago>" may be said, as ONE
+    /// answer for every shell — [`Self::last_refreshed_at_ms`] only once the
+    /// first read of this account has ended and every network said for it
+    /// was read (none refused, silent or rate limited; nothing failed inside
+    /// Vela; not "nothing read at all"). `None` otherwise: the control is
+    /// named for what it does ("Refresh balance"), never a freshness claim
+    /// over a network that was not read. A shell draws "Updated" from this
+    /// alone.
+    #[serde(default)]
+    pub updated_at_ms: Option<f64>,
     /// USD-sorted holdings for the Assets tab.
     pub tokens: Vec<BalanceToken>,
     /// The detail sheet's "couldn't be priced" list — held, no price source,
@@ -1582,6 +1592,14 @@ impl App for BalanceDashboard {
             hidden: model.hidden,
             refreshing: model.pending_pulls > 0,
             last_refreshed_at_ms: model.last_refreshed_at_ms,
+            updated_at_ms: model.last_refreshed_at_ms.filter(|_| {
+                first_read_ended
+                    && model.pool_said.is_empty()
+                    && !unread_said(model)
+                    && !model.errored_internally
+                    && model.internal_chain_ids.is_empty()
+                    && !unreachable
+            }),
             tokens: model.tokens.clone(),
             unpriced_tokens,
             failed_chain_ids: model.failed_chain_ids.clone(),

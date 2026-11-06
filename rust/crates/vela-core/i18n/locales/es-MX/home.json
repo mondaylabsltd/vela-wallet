@@ -24,6 +24,8 @@
     "liveIndicator": "En vivo · esperando pagos",
     "emptyNoActivityNetwork": "Sin actividad en esta red",
     "emptyNoActivity": "Aún no hay actividad",
+    "activityUnreadOne": "No se puede leer la actividad en {{network}} por ahora.",
+    "activityUnreadMany": "No se puede leer la actividad en {{n}} redes por ahora.",
     "emptySubtitle": "Lo que envías aparece aquí. El dinero que recibes se ve en tu saldo.",
     "invalidQrTitle": "QR inválido",
     "invalidQrBody": "Escanea una dirección de Ethereum o una URI de conexión válida.",

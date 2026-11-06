@@ -58,6 +58,17 @@ refreshing: boolean,
  */
 last_refreshed_at_ms: number | null, 
 /**
+ * Round 16 leftover 6: whether "Updated <ago>" may be said, as ONE
+ * answer for every shell — [`Self::last_refreshed_at_ms`] only once the
+ * first read of this account has ended and every network said for it
+ * was read (none refused, silent or rate limited; nothing failed inside
+ * Vela; not "nothing read at all"). `None` otherwise: the control is
+ * named for what it does ("Refresh balance"), never a freshness claim
+ * over a network that was not read. A shell draws "Updated" from this
+ * alone.
+ */
+updated_at_ms: number | null, 
+/**
  * USD-sorted holdings for the Assets tab.
  */
 tokens: Array<BalanceToken>, 
