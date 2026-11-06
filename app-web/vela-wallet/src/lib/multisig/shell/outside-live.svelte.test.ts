@@ -112,6 +112,27 @@ function wallet(digest: string) {
 	};
 }
 
+/**
+ * A node as a public one answers the review's state checks: the trace
+ * refused ("method not found"), the multisig's probe reverted — answers, not
+ * silence (r16-3: a check that comes back silent is asked again before the
+ * review may land "unchecked").
+ */
+function nodeRefusingChecks(rpc: ReturnType<typeof membersRpc>): ReturnType<typeof membersRpc> {
+	return async (chainId, method, params) => {
+		if (method === 'debug_traceCall')
+			return { error: { code: -32601, message: 'the method debug_traceCall does not exist' } };
+		try {
+			return await rpc(chainId, method, params);
+		} catch (error) {
+			const [call] = params as [{ to?: string }];
+			if (method === 'eth_call' && call?.to?.toLowerCase() === SAFE.toLowerCase())
+				return { error: { code: 3, message: 'execution reverted' } };
+			throw error;
+		}
+	};
+}
+
 beforeAll(async () => {
 	await loadCore();
 });
@@ -148,7 +169,11 @@ describe('a live session, both sides the core', () => {
 			{
 				...pageDeps({ peer: side('page'), wallet: () => owner, askRisk: async () => false }),
 				...offline,
-				rpc: membersRpc(chain)
+				rpc: nodeRefusingChecks(membersRpc(chain)),
+				// r16-3: a node that refuses the simulation — an answer, so the
+				// review's checks are final at once (a silent one is asked again).
+				simulate: async () =>
+					JSON.stringify({ error: { code: -32601, message: 'eth_simulateV1 does not exist' } })
 			},
 			'connect'
 		);

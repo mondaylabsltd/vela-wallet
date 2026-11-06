@@ -24,7 +24,7 @@ describe('KeyValueRows', () => {
 		it(`breaks a full address only between its halves at ${width}px`, () => {
 			const host = document.createElement('div');
 			host.style.width = `${width}px`;
-			document.body.append(host);
+			document.body.appendChild(host);
 			const screen = render(KeyValueRows, {
 				target: host,
 				props: { rows: [{ label: 'Run by', value: FULL, mono: true }] }
