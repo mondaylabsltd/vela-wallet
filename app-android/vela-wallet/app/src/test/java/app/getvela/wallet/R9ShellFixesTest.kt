@@ -157,9 +157,11 @@ class R9ShellFixesTest {
         assertNotNull(line)
         assertEquals(strings.t("home.multisig.authority.signUnchecked", mapOf("network" to "Gnosis")), line!!.text)
         assertTrue("said once, under the button — not again at the top", m.notes.none { it.id == "approveFailed" })
-        // The core's own reason (a stale "nothing to approve") is still words.
+        // Round 16 leftover 4: a failure is said by its kind — a detail's text
+        // (an older core's "nothing to approve") is never words.
         val failed = model(proposals(actions = """{"approve:$hash":{"kind":"failed","detail":"nothing to approve"}}""")).approveFailure
-        assertTrue(failed!!.text.contains("nothing to approve"))
+        assertEquals(strings.t("home.multisig.proposal.reason.unknown"), failed!!.text)
+        assertFalse(failed.text.contains("nothing to approve"))
         // Working and the person's own cancel say nothing.
         assertNull(model(proposals(actions = """{"approve:$hash":{"kind":"working"}}""")).approveFailure)
         assertNull(model(proposals(actions = """{"approve:$hash":{"kind":"cancelled"}}""")).approveFailure)

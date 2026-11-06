@@ -177,13 +177,21 @@ object WalletLive {
         // newest three); History keeps every row. The cut is the core's — the
         // shared helper below also builds History, so it never caps.
         val groups = if (feedIsShown) activity(feed.copy(rows = feed.home_rows), strings, now, chainNames) else emptyList()
+        // Round 16 leftover 5: the networks the scan could not read, in words.
+        val unread = if (feedIsShown) unreadLine(feed, strings, chainNames) else null
+        val mode = activityMode(groups.isNotEmpty(), feedIsShown, feed.settled, live = shownAccount != null, unread = unread != null)
         return fallback.copy(
             balance = balance(fallback.balance, view, strings, money, chainNames, noValue).copy(refresh = refresh(view, strings, now)),
             activitySection = fallback.activitySection.copy(
-                mode = activityMode(groups.isNotEmpty(), feedIsShown, feed.settled, live = shownAccount != null),
+                mode = mode,
                 // Spec 082 RG5: which empty line — "no activity yet" or "none
                 // on this network" — is the core's, by the chain filter.
-                empty = fallback.activitySection.empty?.copy(title = strings.t(feed.home_empty_key)),
+                // Round 16 leftover 5: a network not read is said in its place,
+                // never "No activity yet" over it.
+                empty = fallback.activitySection.empty?.let { drawn ->
+                    if (unread != null) drawn.copy(title = unread, caption = "", retry = null) else drawn.copy(title = strings.t(feed.home_empty_key))
+                },
+                note = unread?.takeIf { mode == SectionMode.Rows },
             ),
             activityGroups = groups,
             assetsSection = fallback.assetsSection.copy(
@@ -216,12 +224,34 @@ object WalletLive {
      * account (its store read and first scan back, `settled`); otherwise the
      * skeleton — never "No activity yet" over a history not read, never
      * another account's rows. A fixture board ([live] false) draws as given.
+     * Round 16 leftover 5: a network of the shown account the scan could not
+     * read ([unread], the core's `unread_key`) is said in the empty state's
+     * place — never the skeleton for ever, never "No activity yet".
      */
-    fun activityMode(hasRows: Boolean, feedIsShown: Boolean, settled: Boolean, live: Boolean): SectionMode = when {
+    fun activityMode(hasRows: Boolean, feedIsShown: Boolean, settled: Boolean, live: Boolean, unread: Boolean = false): SectionMode = when {
         hasRows -> SectionMode.Rows
         !live -> SectionMode.Empty
-        feedIsShown && settled -> SectionMode.Empty
+        feedIsShown && (settled || unread) -> SectionMode.Empty
         else -> SectionMode.Loading
+    }
+
+    /**
+     * Round 16 leftover 5: the line Activity says while its scan could not
+     * read a network (`FeedView.unread_key`) — "Activity can't be read on
+     * {{network}} right now." with the one network's name (this device's
+     * list, else its id), or "… on {{n}} networks …". `null` when every
+     * network was read.
+     */
+    fun unreadLine(feed: FeedView, strings: VelaStrings, chainNames: Map<Int, String>): String? {
+        val key = feed.unread_key ?: return null
+        val first = feed.unread_chains.firstOrNull()
+        return strings.t(
+            key,
+            mapOf(
+                "network" to (first?.let { chainNames[it] ?: it.toString() } ?: ""),
+                "n" to feed.unread_chains.size.toString(),
+            ),
+        )
     }
 
     /**
@@ -717,18 +747,19 @@ object WalletLive {
 
     /**
      * The hero's refresh control (issue 462): when the figure was last read —
-     * "Updated 2m", the core's `last_refreshed_at_ms` in the core's relative
+     * "Updated 2m", the core's `updated_at_ms` in the core's relative
      * words — and whether a refresh the person asked for is out. [now] is the
      * caller's clock; the screen re-reads it at least every 30 s, so the label
      * ages while it is on screen.
      */
     fun refresh(view: BalanceView, strings: VelaStrings, now: Long = System.currentTimeMillis()): BalanceRefreshModel =
         BalanceRefreshModel(
-            // r10-1: while the core says the first read is out ("Checking…"),
-            // nothing has been read — the control is named for what it does,
-            // never "Updated now" beside "Checking…" (the line's words or
-            // TalkBack's). Otherwise the stamp is the core's, drawn as said.
-            updated = view.last_refreshed_at_ms?.takeIf { view.checking_key == null }?.let { at ->
+            // Round 16 leftover 6: "Updated" is the core's ONE answer
+            // (`updated_at_ms`) — set only once the first read has ended and
+            // every network said for the account was read. Otherwise the
+            // control is named for what it does, never "Updated now" beside
+            // "Checking…" or over a network that was not read.
+            updated = view.updated_at_ms?.let { at ->
                 strings.t(I18nKeys.Wallet.LAST_UPDATED, mapOf("ago" to RelativeTime.ago(at, now, strings)))
             },
             updating = strings.t(I18nKeys.Wallet.UPDATING),

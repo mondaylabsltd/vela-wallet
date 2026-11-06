@@ -317,6 +317,8 @@ data class HistoryModel(
     val mode: HistoryMode,
     val emptyText: String,
     val groups: List<ActivityGroupModel>,
+    /** Round 16 leftover 5: the line over the rows when a network's Activity could not be read (with none, it is [emptyText]). */
+    val note: String? = null,
 )
 
 /** A2 / A3 — one transaction, opened from a history row. */

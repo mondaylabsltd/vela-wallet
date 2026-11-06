@@ -666,7 +666,8 @@ class WalletController(
         executor.stream = { event -> balanceHost.dispatch(event, BalanceEvent.serializer()) }
         // The second knot, the same shape: the scan writes through the feed's
         // own store, so it is built FROM the executor it then serves.
-        feedExecutor.scan = { address -> scanner.runOnce(address) }
+        // Round 16 leftover 5: with the networks it could not read.
+        feedExecutor.scan = { address -> scanner.read(address).let { FeedExecutor.ScanAnswer(it.newCount, it.unreadChains) } }
         // Issue 188: an incoming transfer moves the total too.
         refreshOnArrival(scope, feedHost.view) { refresh(force = true) }
         trackerHost?.let { host ->

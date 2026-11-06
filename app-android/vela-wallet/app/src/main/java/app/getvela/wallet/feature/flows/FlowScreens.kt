@@ -479,6 +479,10 @@ fun HistoryBody(
     onSelect: (Int, Int) -> Unit = { _, _ -> },
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
+        // Round 16 leftover 5: a network the scan could not read, over the rows.
+        model.note?.takeIf { model.mode == HistoryMode.Rows }?.let { note ->
+            app.getvela.wallet.feature.wallet.components.ActivityUnreadLine(note, Modifier.testTag("history.unread"))
+        }
         when (model.mode) {
             HistoryMode.Empty -> HistoryEmptyText(model)
             HistoryMode.Loading, HistoryMode.Rows ->
@@ -509,6 +513,12 @@ fun LazyListScope.historyItems(
     when (model.mode) {
         HistoryMode.Empty -> item(key = "history-empty", contentType = "history-empty") { emptyText() }
         HistoryMode.Loading, HistoryMode.Rows -> {
+            // Round 16 leftover 5: a network the scan could not read, over the rows.
+            model.note?.takeIf { model.mode == HistoryMode.Rows }?.let { note ->
+                item(key = "history-unread", contentType = "history-unread") {
+                    app.getvela.wallet.feature.wallet.components.ActivityUnreadLine(note, Modifier.testTag("history.unread"))
+                }
+            }
             val ids = model.groups.flatMap { group -> group.rows.map { it.id } }
             val keyed = ids.none { it.isEmpty() } && ids.toSet().size == ids.size
             model.groups.forEachIndexed { groupIndex, group ->
@@ -542,7 +552,8 @@ fun HistoryEmptyText(model: HistoryModel) {
         textAlign = TextAlign.Center,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = VelaSpacing.xl5),
+            .padding(vertical = VelaSpacing.xl5)
+            .testTag("history.empty"),
     )
 }
 

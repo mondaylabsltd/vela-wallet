@@ -237,9 +237,11 @@ class R10ShellFixesTest {
 
     @Test
     fun the_refresh_control_is_not_updated_while_the_first_read_is_out() {
-        val checking = WalletLive.refresh(BalanceView(last_refreshed_at_ms = 1_000.0, checking_key = "wallet.checking"), strings, now = 1_000)
+        // Round 16 leftover 6: the stamp is the core's one answer (`updated_at_ms`),
+        // which it withholds while the first read is out.
+        val checking = WalletLive.refresh(BalanceView(last_refreshed_at_ms = 1_000.0, checking_key = "wallet.checking", updated_at_ms = null), strings, now = 1_000)
         assertNull(checking.updated)
-        val read = WalletLive.refresh(BalanceView(last_refreshed_at_ms = 1_000.0), strings, now = 1_000)
+        val read = WalletLive.refresh(BalanceView(last_refreshed_at_ms = 1_000.0, updated_at_ms = 1_000.0), strings, now = 1_000)
         assertTrue(read.updated != null)
     }
 

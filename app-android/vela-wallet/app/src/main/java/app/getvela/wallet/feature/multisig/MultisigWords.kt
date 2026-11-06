@@ -330,9 +330,15 @@ class MultisigWords(
 
     // -- why an action did not go (`MultisigActionState`) ----------------------------
 
-    /** r13-3: a key the core named for a read that failed (`home.multisig.proposal.unread.*`), `{{network}}` its name. */
+    /**
+     * r13-3: a key the core named for a read that failed — the full catalog
+     * key, `{{network}}` its name: `home.multisig.proposal.unread.*`, and
+     * (round 16 leftover 3) any other the core names, such as the service's
+     * busy words (`home.multisig.service.busyNote`). Worded whole, never
+     * prefixed again.
+     */
     fun unreadText(key: String?, chainId: Int): String =
-        t((key ?: "proposal.unread.chain").removePrefix("home.multisig."), "network" to network(chainId))
+        raw(key ?: "home.multisig.proposal.unread.chain", "network" to network(chainId))
 
     /** The action's failure in words; `null` for one that says nothing (working, done, the person's own cancel). */
     fun actionFailure(state: JsonElement?, chainId: Int): String? {
@@ -346,16 +352,79 @@ class MultisigWords(
             "signingRefused" -> t("authority.refusedOn", "network" to network(chainId))
             "signingBlocked" -> t("review.blocked")
             "signingUnchecked" -> t("authority.signUnchecked", "network" to network(chainId))
-            "refused" -> t("proposal.refused", "reason" to (state["reason"].str ?: ""))
+            "refused" -> refusedText(state["reason"].str)
             "mailboxRefused" -> t("proposal.reason.serviceRefused")
             // r11-9: what stopped it is its look's own kind — "would fail" only
             // for a look that says it fails, never for one that could not price
             // or check it ("This would fail…: it couldn't be checked").
             "stopped" -> stoppedLine(state["preview"], chainId)
             "noOutsideSigner" -> t("proposal.failed", "reason" to t("proposal.noOutsideSigner"))
-            "failed" -> failureText(state["detail"].str)
+            "failed" -> failureText(state["detail"].str, chainId)
             else -> t("proposal.reason.unknown")
         }
+    }
+
+    /**
+     * Round 16 leftover 4: a draft the core refused to build (`refused`'s
+     * `reason`). A member change's refusal is the core's JSON
+     * (`MemberRefusal`, `{kind, …}`) and is worded by its kind; anything
+     * else is the core's English — never drawn: "Vela won't sign this
+     * transaction: it isn't a kind Vela signs" (iOS's words).
+     */
+    fun refusedText(reason: String?): String {
+        val refusal = MultisigShellFailure.read(reason)
+        return if (refusal.kind in MEMBER_REFUSALS) memberRefusal(this, refusal) else t("review.refusedWhy.other")
+    }
+
+    /**
+     * Round 16 leftover 4: the create sheet's draft the core could not make
+     * (`create.draft_error` is the core's English, never drawn).
+     */
+    val createDraftFailed: String get() = t("proposal.reason.unknown")
+
+    /**
+     * The created multisig the service did not record (`create.refused` is
+     * the service's text, never drawn): it is kept here, and Settings offers
+     * "Share it again" — the catalog's words for exactly that.
+     */
+    val createRefused: String get() = t("settings.shareAgainNote")
+
+    /**
+     * Round 16 leftover 4: why Vela's side is not on the signing relay
+     * (`RelayStatus.why`), as the reason its line fills in — the relay's
+     * refusal and a pass not got in the catalog's words, the relay unreached
+     * by its HOST (the core's `detail`, only when it is one) — never a
+     * transport error's text. `null`: nothing sayable as a reason (the line
+     * says Vela is reconnecting instead, [relayLine]).
+     */
+    fun relayReason(why: String?, detail: String?): String? = when (why) {
+        "refused" -> t("external.relayRefused")
+        "unreachable" -> detail?.takeIf { it.isNotEmpty() && RELAY_HOST.matches(it) }
+        else -> t("external.relayNoToken")
+    }
+
+    /** The outside sheet's relay line (`retrying` / `failed`), in words; `null` for any other stand. */
+    fun relayLine(relay: JsonElement?): String? {
+        val kind = relay.kind
+        if (kind != "retrying" && kind != "failed") return null
+        val reason = relayReason(relay["why"].str, relay["detail"].str) ?: return t("external.velaOffline")
+        return if (kind == "failed") t("external.relayFailed", "reason" to reason) else t("external.relayUnreachable", "reason" to reason)
+    }
+
+    /**
+     * The outside signing session's failure, in words. A room that could not
+     * be opened (`noRoom`) carries a transport error's text as its `reason`
+     * — round 16 leftover 4: never drawn, "Something went wrong" with the
+     * sheet's Ask again (iOS's `outsideFailure`).
+     */
+    fun outsideFailure(failure: JsonElement, chain: String, wallet: String): String = when (failure.kind) {
+        "connectDeclined" -> t("external.connectDeclined")
+        "walletDeclined" -> t("external.declined")
+        "otherChain" -> t("external.otherChain", "chain" to chain)
+        "badSignature" -> t("external.badSignature")
+        "stoppedWaiting" -> t("external.stoppedWaiting")
+        "noRoom" -> t("proposal.reason.unknown")
+        else -> t("external.stillWaiting", "wallet" to wallet)
     }
 
     /** r11-9: an execution its look stopped, in the look's own words (`MultisigPreview` kind). */
@@ -379,41 +448,42 @@ class MultisigWords(
         return if (words.kind == uniffi.vela_core_uniffi.PasskeyErrorKind.OTHER) null else raw(words.key)
     }
 
-    /** A shell failure ([MultisigShellFailure]'s JSON), or the core's own words, said as the corpus says them. */
-    fun failureText(detail: String?): String {
+    /**
+     * A failed action's `detail` in words — round 16 leftover 4: the core
+     * reads it into a stable KIND (`review.failure`, [MsRules.failureSaid])
+     * and names the catalog key that says it; this maps kinds, never a
+     * detail's or a message's text. Plain text, a kind the core does not
+     * know, the core's own refusal: "Something went wrong, so nothing was
+     * sent." The kinds whose words are their own facts — the fee that moved,
+     * what the executor cannot pay, the signing venue's block — are worded
+     * from those facts. [chainId]: the action's network, for a
+     * `chain_unreachable` that does not name its own.
+     */
+    fun failureText(detail: String?, chainId: Int? = null): String {
+        val said = MsRules.failureSaid(detail)
         val failure = MultisigShellFailure.read(detail)
-            ?: return if (detail.isNullOrEmpty()) t("proposal.reason.unknown") else t("proposal.failed", "reason" to detail)
-        return when (failure.kind) {
-            "passkey" -> when {
-                failure["timedOut"].bool == true -> t("proposal.reason.passkeyTimedOut")
-                failure["failure"].str == "cancelled" -> t("proposal.reason.passkeyClosed")
-                failure["failure"].str in setOf("not_discoverable", "not_supported") -> t("proposal.reason.passkeyMissing")
-                // Real device S3 (core §9.7): the platform's error in the corpus's
-                // words (`passkey_error_words`), never its English.
-                else -> passkeyWords(failure["message"].str) ?: t("proposal.reason.passkeyFailed")
-            }
-            "passkey_check" -> t("proposal.reason.passkeyFailed")
-            "venue_blocked" -> failure["block"]?.let { block ->
+        val unknown = t("proposal.reason.unknown")
+        return when (said.kind) {
+            // Real device S3 (core §9.7): a platform's passkey error refined by
+            // the core's catalog (`passkey_error_words`) — a key, never its English.
+            "passkey_failed" -> passkeyWords(failure?.get("message").str) ?: said.key?.let { raw(it) } ?: unknown
+            "venue_blocked" -> failure?.get("block")?.let { block ->
                 VenueWords.block(org.json.JSONObject(block.toString())) { key, vars -> strings.t(key, vars) }.ifEmpty { null }
-            } ?: t("proposal.reason.unknown")
-            "page_declined" -> raw("componentsUi.signing.trustedSignerClosed")
-            "page_sign_failed", "page_approval" -> when (failure["page"].str ?: failure["failure"].str) {
-                "unanswered" -> raw("componentsUi.signing.trustedSignerTimeout")
-                "mismatch" -> raw("componentsUi.signing.trustedSignerMismatch")
-                "not_opened" -> raw("componentsUi.signing.signerDown")
-                else -> raw("componentsUi.signing.trustedSignerRefused")
-            }
-            "not_sent" -> t("proposal.notSent")
+            } ?: unknown
             "cannot_pay" -> t("proposal.failed", "reason" to t("status.nobodyPays"))
             // r14-9: nothing signed — the fee moved since the press; said with the
             // new figure (its own fee line's words), so the next press is on it.
             "fee_moved" -> {
-                val chain = failure["chainId"].int ?: 0
-                val fee = "${MsRules.formatUnits(failure["amount"].str ?: "0", MsRules.COIN_DECIMALS)} ${symbol(chain)}"
-                t("proposal.failed", "reason" to t("proposal.feeLine", "fee" to fee, "name" to label(failure["executor"].str.orEmpty())))
+                val chain = failure?.get("chainId").int ?: chainId ?: 0
+                val fee = "${MsRules.formatUnits(failure?.get("amount").str ?: "0", MsRules.COIN_DECIMALS)} ${symbol(chain)}"
+                t("proposal.failed", "reason" to t("proposal.feeLine", "fee" to fee, "name" to label(failure?.get("executor").str.orEmpty())))
             }
-            else -> failure["message"].str?.takeIf { it.isNotEmpty() }?.let { t("proposal.failed", "reason" to it) }
-                ?: t("proposal.reason.unknown")
+            "chain_unreachable" -> {
+                val chain = failure?.get("chain_id").int ?: failure?.get("chainId").int ?: chainId
+                val key = said.key ?: return unknown
+                if (chain == null) unknown else raw(key, "network" to network(chain))
+            }
+            else -> said.key?.let { raw(it) } ?: unknown
         }
     }
 
@@ -473,6 +543,15 @@ class MultisigWords(
         fun short(address: String): String =
             // r11-6: THE short form is the core's (`names.short`, 6+6 EIP-55).
             app.getvela.wallet.core.format.ShortAddress.of(address)
+
+        /** The core's member-change refusals (`MemberRefusal`'s kinds) worded by [memberRefusal]. */
+        private val MEMBER_REFUSALS = setOf(
+            "noOne", "theMultisig", "alreadyMember", "notMember", "lastMember", "thresholdTooHigh",
+            "thresholdZero", "belowThreshold", "unchanged", "tooMany", "changeWaiting",
+        )
+
+        /** A relay's host (and port) — the only `detail` of an unreached relay ever drawn. */
+        private val RELAY_HOST = Regex("^[A-Za-z0-9.-]+(:[0-9]+)?$")
 
         /** Keep [Wire] reachable for callers that decode a view part here. */
         internal val json get() = Wire.json

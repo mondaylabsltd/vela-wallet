@@ -227,27 +227,17 @@ fun MultisigOutsideSheet(session: MultisigOutsideSessionModel, words: MultisigWo
                 MsText(it, MsType.Body)
             }
         }
-        view["relay"]?.takeIf { it.kind == "retrying" || it.kind == "failed" }?.let { relay ->
-            val reason = if (relay["why"].str == "refused") words.t("external.relayRefused") else relay["detail"].str.orEmpty()
+        // Round 16 leftover 4: the reason is the catalog's, or the relay's host —
+        // never a transport error's text (iOS's and the web's `relayText`).
+        words.relayLine(view["relay"])?.let { line ->
             Row(verticalAlignment = Alignment.Top) {
-                MsNote(
-                    if (relay.kind == "failed") words.t("external.relayFailed", "reason" to reason) else words.t("external.relayUnreachable", "reason" to reason),
-                    Modifier.weight(1f), tone = MsTone.Warning, tag = "multisig.outside.relay",
-                )
+                MsNote(line, Modifier.weight(1f), tone = MsTone.Warning, tag = "multisig.outside.relay")
                 MsTextButton(words.t("external.retry")) { session.retryRelay() }
             }
         }
         val failure: JsonElement? = view["failure"]
         failure?.let { f ->
-            val text = when (f.kind) {
-                "connectDeclined" -> words.t("external.connectDeclined")
-                "walletDeclined" -> words.t("external.declined")
-                "otherChain" -> words.t("external.otherChain", "chain" to view["chain"].str.orEmpty())
-                "badSignature" -> words.t("external.badSignature")
-                "stoppedWaiting" -> words.t("external.stoppedWaiting")
-                "noRoom" -> words.t("external.relayFailed", "reason" to f["reason"].str.orEmpty())
-                else -> words.t("external.stillWaiting", "wallet" to wallet)
-            }
+            val text = words.outsideFailure(f, chain = view["chain"].str.orEmpty(), wallet = wallet)
             MsNote(text, tone = MsTone.Warning, tag = "multisig.outside.failure")
             VelaPrimaryButton(words.t("external.askAgain"), { session.askAgain() }, Modifier.fillMaxWidth().testTag("multisig.outside.askAgain"))
         }

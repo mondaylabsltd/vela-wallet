@@ -235,13 +235,17 @@ class WalletFixturesTest {
             // Nothing read yet: H3's skeleton, and H15, whose first read is still out.
             // H12: every network failed — a round nobody answered never moves the
             // core's stamp (r9, be3108b00), so no "Updated" is claimed.
-            val unread = setOf(WalletScreenState.H3, WalletScreenState.H15, WalletScreenState.H12)
-            // H14: Tempo — a network it holds on — failed in the second round, so
-            // the core's stamp stays at the first round's, a minute older (r10-1,
-            // core §9.3: the stamp moves only when every network it lives on answered).
+            // Round 16 leftover 6: "Updated" is the core's one answer
+            // (`updated_at_ms`), withheld while a network said for the account
+            // was not read — H11 (Ethereum's read failed inside Vela) and H14
+            // (Tempo's token list not loaded) and H17 (three networks did not
+            // answer) claim no freshness either.
+            val unread = setOf(
+                WalletScreenState.H3, WalletScreenState.H15, WalletScreenState.H12,
+                WalletScreenState.H11, WalletScreenState.H14, WalletScreenState.H17,
+            )
             val expected = when (state) {
                 in unread -> null
-                WalletScreenState.H14 -> "上次更新 · 3分钟前"
                 else -> "上次更新 · 2分钟前"
             }
             assertEquals("$state", expected, refresh?.updated)

@@ -62,20 +62,37 @@ class IncomingScan(
     /** One poll at a time: a second while one runs would re-ask every chain. */
     private val polling = Mutex()
 
-    suspend fun runOnce(address: String): Int {
-        if (address.isBlank()) return 0
-        if (!polling.tryLock()) return 0
+    /** One poll's answer: how many receipts were new, and the networks it could not read. */
+    data class Outcome(val newCount: Int, val unreadChains: List<Int>)
+
+    /** How many receipts one poll found new ([read]'s count). */
+    suspend fun runOnce(address: String): Int = read(address).newCount
+
+    /**
+     * One poll: how many receipts were new, and (round 16 leftover 5) the
+     * networks of [address] it could not read — the trust machine's
+     * `unread_chains` once the poll settled. A poll that did not run (one is
+     * already out, or it threw) says what the machine last knew of this
+     * account, never an empty list it did not read.
+     */
+    suspend fun read(address: String): Outcome {
+        if (address.isBlank()) return Outcome(0, emptyList())
+        if (!polling.tryLock()) return Outcome(0, unreadOf(trust.view.value, address))
         return try {
             scan(address)
         } catch (error: Throwable) {
             VelaLog.failure("feed.scan", "scan failed", error)
-            0
+            Outcome(0, unreadOf(trust.view.value, address))
         } finally {
             polling.unlock()
         }
     }
 
-    private suspend fun scan(address: String): Int = coroutineScope {
+    /** The networks the trust machine could not read for [address] (`unread_chains`), ascending; empty for another account. */
+    private fun unreadOf(view: TrustView, address: String): List<Int> =
+        if (view.address.equals(address, ignoreCase = true)) view.unread_chains.distinct().sorted() else emptyList()
+
+    private suspend fun scan(address: String): Outcome = coroutineScope {
         // The chains this wallet holds something on. **This waits, and the
         // wait is load-bearing**: the feed's scan is issued the moment an
         // account is opened, which is when the balance read starts — asked
@@ -148,6 +165,9 @@ class IncomingScan(
         }
         // What this poll covered, kept for the next (a restart resumes the backfill).
         settled?.takeIf { it.address.equals(address, ignoreCase = true) }?.cursors?.let { writeCursors(address, it) }
+        // Round 16 leftover 5: the networks this poll could not read, as the
+        // machine says once it settled (the deadline: what it says now).
+        val unread = unreadOf(settled ?: trust.view.value, address)
         val incoming = settled?.incoming.orEmpty()
         val records = incoming.mapNotNull { transfer -> record(transfer, address) }
         val stored = if (records.isEmpty()) 0 else feed.mergeRecords(records)
@@ -167,8 +187,9 @@ class IncomingScan(
             "judged" to incoming.size,
             "writable" to records.size,
             "new" to stored,
+            "unread" to unread.size,
         )
-        stored
+        Outcome(stored, unread)
     }
 
     private suspend fun readCursors(address: String): List<TrustScanCursor> {
