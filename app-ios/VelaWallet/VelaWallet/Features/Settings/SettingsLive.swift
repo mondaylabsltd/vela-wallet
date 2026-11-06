@@ -576,7 +576,11 @@ enum SettingsLive {
         on model: SettingsScreenModel,
         loc: Loc,
         /// §18 item 2: stored records this device cannot read (`AccountStore.unreadable`).
-        unreadable: Int = 0
+        unreadable: Int = 0,
+        /// r15-9: a multisig is shown — its row wears the check, so no Vela
+        /// account row does (every switcher: the header's, Settings → Switch
+        /// account, Explore's).
+        multisigShown: Bool = false
     ) -> SettingsScreenModel {
         guard session.hasWallet else { return model }
         let k = I18nKeys.SettingsUi.self
@@ -604,7 +608,7 @@ enum SettingsLive {
                 // the empty cell an unpriced account shows: no dollars first.
                 // The one formatter withholds it (`Display.fiat`).
                 amount: hidden ? WalletFixtures.mask : usd.flatMap(display.fiat) ?? "",
-                selected: index == session.activeIndex
+                selected: !multisigShown && index == session.activeIndex
             )
         }
         // Taking ONE wallet off this device (2026-09-23), resolved here because

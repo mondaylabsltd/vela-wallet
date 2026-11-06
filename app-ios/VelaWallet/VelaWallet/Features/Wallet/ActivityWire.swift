@@ -541,9 +541,21 @@ struct FeedViewWire: Decodable, Equatable {
     /// core's cadence (`presence_changed`): ONE timer for `afterMs` whenever
     /// `seq` changes, answered with `scan_due`. Absent before.
     var nextScan: FeedNextScanWire? = nil
+    /// r15-1: the account these rows are for (lower-cased; empty before any
+    /// was told). Drawn only under that account (`isFor`).
+    var account: String = ""
+    /// r15-1: "No activity yet" may be said of `account`: its store was read
+    /// and its first incoming scan came back since it was switched to.
+    var settled = false
+
+    /// r15-1: these rows are `address`'s (addresses compare without case).
+    func isFor(_ address: String) -> Bool {
+        !account.isEmpty && account.caseInsensitiveCompare(address) == .orderedSame
+    }
 
     private enum CodingKeys: String, CodingKey {
         case rows, homeRows, transactions, newItemId, toast, historyEmptyKey, homeEmptyKey, contactRows, hidden, nextScan
+        case account, settled
     }
 }
 
@@ -568,7 +580,9 @@ extension FeedViewWire {
             homeEmptyKey: try c.decodeIfPresent(String.self, forKey: .homeEmptyKey) ?? "home.emptyNoActivity",
             contactRows: try c.decodeIfPresent([FeedItemWire].self, forKey: .contactRows) ?? [],
             hidden: try c.decodeIfPresent(Bool.self, forKey: .hidden) ?? false,
-            nextScan: try c.decodeIfPresent(FeedNextScanWire.self, forKey: .nextScan)
+            nextScan: try c.decodeIfPresent(FeedNextScanWire.self, forKey: .nextScan),
+            account: try c.decodeIfPresent(String.self, forKey: .account) ?? "",
+            settled: try c.decodeIfPresent(Bool.self, forKey: .settled) ?? false
         )
     }
 }
