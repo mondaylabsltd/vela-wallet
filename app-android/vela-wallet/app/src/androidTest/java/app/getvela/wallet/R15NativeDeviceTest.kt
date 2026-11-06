@@ -2,15 +2,12 @@ package app.getvela.wallet
 
 import android.graphics.Bitmap
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeUiTestFlags
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -52,8 +49,9 @@ import org.junit.runner.RunWith
  * Round 15's Android findings on a device (docs/multisig-machines.md §23),
  * over the REAL sheets and machines in the simulated world [MultisigWorld]:
  *
- * - r15-7: an undeployed multisig's one press says its one-time setup, and
- *   a setup whose Safe contracts could not be read is said where it would be;
+ * - r15-7: an undeployed multisig's one press says its one-time setup (an
+ *   unread setup is the JVM `R15NativeFixesTest`'s: the world cannot leave
+ *   the Safe contracts unread while the balance read answers);
  * - r15-8: a rate-limited import's Try again lands as "Imported", never
  *   "Already added".
  *
@@ -165,7 +163,9 @@ class R15NativeDeviceTest {
     /** The screen as drawn now, kept for the round's before/after record. */
     private fun shot(name: String) {
         val dir = File(instrumentation.targetContext.getExternalFilesDir(null), "r15").apply { mkdirs() }
-        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
+        compose.waitForIdle()
+        // The whole screen: a sheet is a window of its own, not the root's.
+        val bitmap = instrumentation.uiAutomation.takeScreenshot() ?: return
         File(dir, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
@@ -223,29 +223,6 @@ class R15NativeDeviceTest {
         shot("a-r15-7-setup-after")
     }
 
-    @Test
-    fun aSetupWhoseSafeContractsWentUnreadIsSaidWhereTheOnePressWouldBe() {
-        val world = world()
-        world.locals += listOf(0, 1)
-        val (safe, _) = undeployed(world)
-        val hub = hub(world)
-        booted(hub, safe)
-        show(hub, world)
-        val hash = propose(hub, safe, "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141")
-        // Gnosis now answers nothing but "slow down": the Safe contracts the
-        // deployment would use cannot be read.
-        world.rateLimited = setOf(100)
-        hub.sheet.value = MultisigSheet.Proposal(100, hash)
-        hub.sendProposal(ev("refresh", "fresh" to true))
-        val unverified = words(world).t("authority.deployUnverified", "network" to "Gnosis")
-        compose.waitUntil(120_000) { shown(unverified) }
-        waitFor("multisig.proposal.approveOnlyWhy", 30_000)
-        assertTrue("the unread setup is said: couldn't check the Safe contracts", shown("couldn't check the Safe contracts"))
-        runCatching { compose.onAllNodesWithTag("multisig.proposal.approveOnlyWhy")[0].performScrollTo() }
-        compose.waitForIdle()
-        shot("a-r15-7-unverified-after")
-    }
-
     // -- r15-8: Try again lands as "Imported" ---------------------------------------------
 
     @Test
@@ -279,6 +256,7 @@ class R15NativeDeviceTest {
         compose.waitUntil(15_000) { shown(words.t("import.imported")) }
         assertFalse("never 'Already added' for the Safe this import added", shown(words.t("import.already")))
         assertFalse(present("multisig.import.retry"))
+        assertEquals("nothing left to import: no press that imports nothing", false, enabled("multisig.import.go"))
         shot("a-r15-8-imported-after")
     }
 

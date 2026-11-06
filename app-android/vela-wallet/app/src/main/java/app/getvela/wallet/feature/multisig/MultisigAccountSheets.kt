@@ -797,11 +797,14 @@ fun MultisigAddSheet(
                         ) { hub.send(ev("import", "address" to a, "accept_risks" to false)) }
                     }
                 }
+                // r15-8: a Safe already here (imported a moment ago) is not counted
+                // again — a press that would import nothing is never offered.
+                val toImport = picked.filter { view.row(it) == null }
                 VelaPrimaryButton(
-                    text = words.t("import.importSome", "total" to picked.size.toString()),
-                    onClick = { picked.filter { view.row(it) == null }.forEach { hub.send(ev("import", "address" to it, "accept_risks" to false)) } },
+                    text = words.t("import.importSome", "total" to toImport.size.toString()),
+                    onClick = { toImport.forEach { hub.send(ev("import", "address" to it, "accept_risks" to false)) } },
                     modifier = Modifier.fillMaxWidth().testTag("multisig.import.go"),
-                    enabled = picked.isNotEmpty() && view.importing.busy == null,
+                    enabled = toImport.isNotEmpty() && view.importing.busy == null,
                     loading = view.importing.busy != null,
                 )
             }
