@@ -983,6 +983,117 @@ struct MultisigFlowTests {
         #expect(world.sentFees == ["0x2"])
     }
 
+    // MARK: §24 natives carry the fee shown
+
+    /// The sheet painted `executor`'s look priced at 0x1; the relay's price
+    /// then moved and a new look (0x2, fresh) landed before the press —
+    /// never drawn. The model as painted.
+    private static func aQuoteLandsAfterThePaint(
+        _ world: MsSimWorld, _ hub: MultisigHub, hash: String, executor: String, words: MsWords
+    ) async throws -> MsProposalModel {
+        func item() -> MsProposalItem? { hub.proposalsView.items.first { $0.safeTxHash == hash } }
+        func look() -> MsJSON? { item().flatMap { hub.proposalsView.preview($0, executor: executor) } }
+        hub.sendProposal(["type": "preview", "chain_id": 100, "safe_tx_hash": hash, "executor": executor])
+        await Wait.until({ look()?.kind == "priced" }, orIdle: { hub.proposals.isIdle })
+        let painted = MsProposalModel(item: try #require(item()), view: hub.proposalsView, words: words, account: nil)
+        #expect(painted.shownFee(for: executor) == "0x1", "the figure drawn")
+        // The look grows stale, the price moves, and a new look lands — fresh.
+        world.quoteAmount = "0x2"
+        world.skewMs = 20_000
+        hub.sendProposal(["type": "preview", "chain_id": 100, "safe_tx_hash": hash, "executor": executor])
+        await Wait.until({ look()?["fee"]?["amount"]?.string == "0x2" }, orIdle: { hub.proposals.isIdle })
+        #expect(look()?["fee"]?["amount"]?.string == "0x2", "the new look, not drawn")
+        return painted
+    }
+
+    /// §24: the one press "Approve and execute" carries the figure drawn
+    /// under it (`shown_fee`): a quote that landed between the paint and the
+    /// press signs nothing (`fee_moved`), said beside the one press once in
+    /// the core's words; the next press signs the new figure.
+    @Test func theOnePressCarriesTheFeeDrawnSoAQuoteLandedAfterThePaintSignsNothing() async throws {
+        let world = try MsSimWorld()
+        let (hub, _, owners, transfer) = try await Self.rejecting(world, salt: "0x70")
+        defer { hub.proposals.dispose(); hub.accounts.dispose(); hub.members.dispose() }
+        let hash = transfer.safeTxHash
+        let words = MsWords(loc: hub.loc, hub: nil)
+        func item() -> MsProposalItem? { hub.proposalsView.items.first { $0.safeTxHash == hash } }
+        func execute() -> MsTagged? { hub.proposalsView.action("execute:\(hash)") }
+
+        hub.sendProposal(["type": "review", "chain_id": 100, "safe_tx_hash": hash, "blind": false])
+        await Wait.until({
+            ["ready", "unchecked"].contains(hub.proposalsView.lookup(hub.proposalsView.reviewStates, chainId: 100, hash: hash)?.kind ?? "")
+        }, orIdle: { hub.proposals.isIdle })
+        let painted = try await Self.aQuoteLandsAfterThePaint(world, hub, hash: hash, executor: owners[1], words: words)
+        await Wait.until({ item().map { !hub.proposalsView.approveExecute($0).isEmpty } ?? false }, orIdle: { hub.proposals.isIdle })
+        #expect(item().map { hub.proposalsView.approveExecute($0) } == [owners[1]], "the one press is offered")
+
+        let press = painted.executeEvent(executor: owners[1], oneTouch: true)
+        #expect(press["type"] as? String == "approve_execute")
+        #expect(press["shown_fee"] as? String == "0x1")
+        hub.sendProposal(press)
+        await Wait.until({ execute().map { $0.kind != "working" } ?? false }, orIdle: { hub.proposals.isIdle })
+        #expect(execute()?.kind == "failed", "\(String(describing: execute()?.raw))")
+        #expect(world.sentFees.isEmpty, "nothing signed at a fee nobody was shown")
+
+        let now = MsProposalModel(item: try #require(item()), view: hub.proposalsView, words: words, account: nil)
+        let said = now.pressFailures(at: .approve)
+        #expect(said.map(\.id) == ["executeFailed"], "said beside the one press: \(said)")
+        let line = try #require(said.first?.text)
+        let prefix = words.t("proposal.failed", ["reason": ""]).trimmingCharacters(in: .whitespaces)
+        #expect(line.hasPrefix(prefix) && line.components(separatedBy: prefix).count == 2, "\(line)")
+        #expect(!now.notes.contains { $0.id == "executeFailed" }, "not at the head of the sheet too")
+        #expect(now.shownFee(for: owners[1]) == "0x2", "the next press carries the figure now drawn")
+
+        hub.sendProposal(now.executeEvent(executor: owners[1], oneTouch: true))
+        await Wait.until({ !world.sentFees.isEmpty }, orIdle: { hub.proposals.isIdle })
+        #expect(world.sentFees == ["0x2"])
+    }
+
+    /// §24: Execute carries the figure drawn above it, the same way; no
+    /// figure drawn, none carried.
+    @Test func executeCarriesTheFeeDrawnSoAQuoteLandedAfterThePaintSignsNothing() async throws {
+        let world = try MsSimWorld()
+        let (hub, _, owners, transfer) = try await Self.rejecting(world, salt: "0x71")
+        defer { hub.proposals.dispose(); hub.accounts.dispose(); hub.members.dispose() }
+        let hash = transfer.safeTxHash
+        let words = MsWords(loc: hub.loc, hub: nil)
+        func item() -> MsProposalItem? { hub.proposalsView.items.first { $0.safeTxHash == hash } }
+        func execute() -> MsTagged? { hub.proposalsView.action("execute:\(hash)") }
+
+        hub.sendProposal(["type": "review", "chain_id": 100, "safe_tx_hash": hash, "blind": false])
+        await Wait.until({
+            ["ready", "unchecked"].contains(hub.proposalsView.lookup(hub.proposalsView.reviewStates, chainId: 100, hash: hash)?.kind ?? "")
+        }, orIdle: { hub.proposals.isIdle })
+        hub.sendProposal(["type": "approve", "chain_id": 100, "safe_tx_hash": hash, "owner": owners[1]])
+        await Wait.until({ item()?.status == "ready" }, orIdle: { hub.proposals.isIdle })
+        #expect(item()?.status == "ready")
+
+        // Not looked at yet: "Checking the fee…" — no figure drawn, none carried.
+        let unpriced = MsProposalModel(item: try #require(item()), view: hub.proposalsView, words: words, account: nil)
+        let bare = unpriced.executeEvent(executor: "0x0000000000000000000000000000000000000001", oneTouch: false)
+        #expect(bare["shown_fee"] == nil)
+        #expect(Set(bare.keys) == ["type", "chain_id", "safe_tx_hash", "executor"])
+
+        let painted = try await Self.aQuoteLandsAfterThePaint(world, hub, hash: hash, executor: owners[0], words: words)
+        let press = painted.executeEvent(executor: owners[0], oneTouch: false)
+        #expect(press["type"] as? String == "execute")
+        #expect(press["shown_fee"] as? String == "0x1")
+        hub.sendProposal(press)
+        await Wait.until({ execute().map { $0.kind != "working" } ?? false }, orIdle: { hub.proposals.isIdle })
+        #expect(execute()?.kind == "failed", "\(String(describing: execute()?.raw))")
+        #expect(world.sentFees.isEmpty, "nothing signed at a fee nobody was shown")
+
+        let now = MsProposalModel(item: try #require(item()), view: hub.proposalsView, words: words, account: nil)
+        let said = now.pressFailures(at: .execute)
+        #expect(said.map(\.id) == ["executeFailed"], "said beside Execute: \(said)")
+        #expect(now.pressFailures(at: .approve).isEmpty && now.pressFailures(at: .top).isEmpty, "said once")
+        #expect(now.shownFee(for: owners[0]) == "0x2")
+
+        hub.sendProposal(now.executeEvent(executor: owners[0], oneTouch: false))
+        await Wait.until({ !world.sentFees.isEmpty }, orIdle: { hub.proposals.isIdle })
+        #expect(world.sentFees == ["0x2"])
+    }
+
     // MARK: a review swiped away — withdrawn at once
 
     /// The send's own review swiped down (`MultisigHub.sheetDismissed`, the
