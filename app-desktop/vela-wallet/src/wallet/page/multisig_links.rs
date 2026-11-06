@@ -261,8 +261,11 @@ impl WalletPage {
                     // The add sheet is the one in front; a draft being created is kept.
                     self.multisig.create = false;
                     self.multisig.create_form = None;
-                    self.ms_add_opened(Some(text), link, said, cx);
+                    self.ms_add_opened(Some(text.clone()), link, said, cx);
                     if let Some(form) = self.multisig.add_form.as_mut() {
+                        // r16-17: Add on what the damaged link held says it
+                        // again, never "Enter a valid address".
+                        form.broken = fault.map(|key| (text, key));
                         form.choosing = matches!(outcome, Some(AddOutcome::ChooseNetwork));
                         // r14-5: a lookup that did not come back offers Try again.
                         form.retry = outcome.as_ref().is_some_and(AddOutcome::offers_retry);
