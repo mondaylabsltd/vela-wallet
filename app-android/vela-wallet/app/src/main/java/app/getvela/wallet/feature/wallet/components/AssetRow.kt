@@ -220,11 +220,13 @@ fun AssetRow(
         ) {
             Text(
                 text = model.balance,
-                color = colors.fgBase,
+                // r16-13: a figure not read this round, in the quieter ink (the web's `.stale`).
+                color = if (model.stale) colors.fgMuted else colors.fgBase,
                 fontFamily = VelaFontFamily,
                 fontWeight = VelaFontWeight.semibold,
                 fontSize = VelaTextSize.lg,
-                maxLines = 1,
+                // "Last seen 0.827013 USDC" (no worth line) may take a second line, never a clip.
+                maxLines = if (model.stale) 2 else 1,
                 textAlign = TextAlign.End,
             )
             when (val fiat = model.fiat) {

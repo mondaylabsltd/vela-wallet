@@ -60,7 +60,7 @@ struct MultisigCreateSheet: View {
     private var sheet: MsCreateView { hub.accountsView.create }
 
     var body: some View {
-        MsSheet(title: words.t("create.title"), closeLabel: words.loc.t("common.done"), tall: true, onClose: close) {
+        MsSheet(title: words.t("create.title"), closeLabel: words.loc.t("common.done"), tall: true, onClose: close, footer: stepFooter) {
             switch step {
             case .members: membersStep
             case .threshold: thresholdStep
@@ -222,10 +222,6 @@ struct MultisigCreateSheet: View {
             if local.isEmpty {
                 MsNote(text: words.t("create.needLocal"), tone: .warning, identifier: "multisig.create.needLocal")
             }
-            VelaButton(title: words.t("create.next"), kind: .ink, enabled: !owners.isEmpty && !local.isEmpty) {
-                toThreshold()
-            }
-            .accessibilityIdentifier("multisig.create.next")
         }
         .confirmationDialog(words.t("create.fromContacts"), isPresented: $pickingContact) {
             ForEach(contacts.filter { c in !owners.contains { $0.caseInsensitiveCompare(c.address) == .orderedSame } }, id: \.address) { contact in
@@ -397,14 +393,6 @@ struct MultisigCreateSheet: View {
                     MsNote(text: other, identifier: "multisig.create.otherSpace")
                 }
             }
-            HStack(spacing: Tokens.Space.s12) {
-                VelaButton(title: words.t("create.back"), kind: .secondary) { step = .members }
-                VelaButton(title: words.t("create.next"), kind: .ink, enabled: chainId != nil) {
-                    askAddress()
-                    step = .review
-                }
-                .accessibilityIdentifier("multisig.create.toReview")
-            }
         }
     }
 
@@ -489,17 +477,51 @@ struct MultisigCreateSheet: View {
             if sheet.phase == .failed, let error = sheet.error {
                 MsNote(text: words.failureText(error), tone: .danger, identifier: "multisig.create.failed")
             }
-            HStack(spacing: Tokens.Space.s12) {
-                VelaButton(title: words.t("create.back"), kind: .secondary, enabled: sheet.phase != .working) { step = .threshold }
-                VelaButton(
-                    title: words.t("create.create"), kind: .primary,
-                    enabled: sheet.draftAddress != nil && chosenCreator != nil && chainId != nil,
-                    loading: sheet.phase == .working, haptic: .confirm
-                ) {
-                    create(creator: chosenCreator)
+        }
+    }
+
+    /// r16-9: each step's action row is the sheet's FOOT, outside the scroll
+    /// (the web's r15-3 contract): it rides above the keyboard, so Next is
+    /// never under it, and a step that outgrows the sheet scrolls its body,
+    /// never its action.
+    private var stepFooter: AnyView? {
+        switch step {
+        case .members:
+            return AnyView(
+                VelaButton(title: words.t("create.next"), kind: .ink, enabled: !owners.isEmpty && !local.isEmpty) {
+                    MsKeyboard.dismiss()
+                    toThreshold()
                 }
-                .accessibilityIdentifier("multisig.create.create")
-            }
+                .accessibilityIdentifier("multisig.create.next")
+            )
+        case .threshold:
+            return AnyView(
+                HStack(spacing: Tokens.Space.s12) {
+                    VelaButton(title: words.t("create.back"), kind: .secondary) { step = .members }
+                    VelaButton(title: words.t("create.next"), kind: .ink, enabled: chainId != nil) {
+                        askAddress()
+                        step = .review
+                    }
+                    .accessibilityIdentifier("multisig.create.toReview")
+                }
+            )
+        case .review:
+            let chosenCreator = creator.flatMap { c in local.first { $0.caseInsensitiveCompare(c) == .orderedSame } } ?? local.first
+            return AnyView(
+                HStack(spacing: Tokens.Space.s12) {
+                    VelaButton(title: words.t("create.back"), kind: .secondary, enabled: sheet.phase != .working) { step = .threshold }
+                    VelaButton(
+                        title: words.t("create.create"), kind: .primary,
+                        enabled: sheet.draftAddress != nil && chosenCreator != nil && chainId != nil,
+                        loading: sheet.phase == .working, haptic: .confirm
+                    ) {
+                        create(creator: chosenCreator)
+                    }
+                    .accessibilityIdentifier("multisig.create.create")
+                }
+            )
+        case .created:
+            return nil
         }
     }
 

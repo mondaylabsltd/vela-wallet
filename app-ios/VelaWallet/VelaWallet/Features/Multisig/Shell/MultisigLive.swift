@@ -449,6 +449,21 @@ final class MultisigLive: MultisigPorts {
     /// web's `quoteExecutionFee`). Its own fee session, so a quote here never
     /// supersedes the send screen's.
     func quoteCalls(_ op: [String: Any]) async -> [String: Any] {
+        // r16-7: one quote at a time on this fee session. A quote asked while
+        // another was out superseded it, and the superseded one came back
+        // `nil` — said "failed", so the look said "Couldn't work out the
+        // network fee right now." for the ~2 s until the next look (the
+        // press's own re-quote beside the sheet's timer). Now the second
+        // waits its turn, and an identical one shares the answer.
+        await quoteLine.run(key: MsQuoteLine.key(op)) { [weak self] in
+            guard let self else { return MsQuoteLine.Answer(["type": "quoted", "quote": ["kind": "failed"]]) }
+            return MsQuoteLine.Answer(await self.quoteNow(op))
+        }.value
+    }
+
+    private let quoteLine = MsQuoteLine()
+
+    private func quoteNow(_ op: [String: Any]) async -> [String: Any] {
         let from = op["from"] as? String ?? ""
         let chainId = MultisigExecutor.int(op["chain_id"]) ?? 0
         let calls = (op["calls"] as? [[String: Any]] ?? []).map { call -> [String: Any] in

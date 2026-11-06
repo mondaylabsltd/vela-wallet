@@ -84,7 +84,8 @@ final class MultisigHub {
     @ObservationIgnored private let shelf: VelaStore
     @ObservationIgnored private let tokens: TokenMetadata?
     @ObservationIgnored private var booted = false
-    @ObservationIgnored private(set) var loaded = false
+    /// Observed (r16-11): the home holds its first frame until it flips.
+    private(set) var loaded = false
     @ObservationIgnored private var followed: String?
     @ObservationIgnored private var recordTimer: Task<Void, Never>?
     @ObservationIgnored private var proposalTimer: Task<Void, Never>?
@@ -170,6 +171,21 @@ final class MultisigHub {
         let facts = await facts()
         accounts.dispatch(["type": "networks", "networks": facts.networks])
         accounts.dispatch(["type": "space", "chain_ids": facts.space])
+        proposals.dispatch(["type": "networks", "networks": facts.networks])
+    }
+
+    /// r16-6: the space in front changed (or its networks did) — `chains`
+    /// are the space's networks as the home draws them. The accounts machine
+    /// hears them at once (`space`), so Create's other-space line
+    /// (`create.other_space`) is the core's over THIS space: told only at
+    /// boot, a switch to Testnet left the core on Mainnet's networks, and the
+    /// line named the testnets the picker already offered as "in Mainnet".
+    func spaceChanged(_ chains: [Int]) async {
+        // Before boot the machines have not started; boot says the space itself.
+        guard booted, !chains.isEmpty else { return }
+        let facts = await facts()
+        accounts.dispatch(["type": "networks", "networks": facts.networks])
+        accounts.dispatch(["type": "space", "chain_ids": chains])
         proposals.dispatch(["type": "networks", "networks": facts.networks])
     }
 

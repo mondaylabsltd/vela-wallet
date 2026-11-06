@@ -239,6 +239,13 @@ data class AssetRowModel(
     val logoUrls: List<String> = emptyList(),
     val badgeLogoUrl: String? = null,
     val badgeHidden: Boolean = false,
+    /**
+     * r16-13: the figure is the last one read there, not one read now — its
+     * network did not answer this round, or the account's first read is
+     * still out (a row kept from last session). Said in words ("Last seen
+     * …") and drawn in the quieter ink, the web's `stale` row.
+     */
+    val stale: Boolean = false,
 )
 
 enum class SectionMode { Rows, Empty, Loading }

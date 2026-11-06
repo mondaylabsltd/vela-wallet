@@ -108,7 +108,17 @@ struct MsProposalModel {
     var statusLine: String {
         if isDone, executedTx != nil { return words.t("proposal.executed") }
         if isDone, replaced { return words.t("proposal.voided") }
+        // r16-8: being executed from here — the press's passkey and its send,
+        // before the chain has it — is "Executing…", never the mailbox's
+        // "1/2 approved": the one press carries the last approval itself.
+        if executingHere { return words.t("status.executing") }
         return words.standing(standing, item: item)
+    }
+
+    /// r16-8: this device is executing it now (its Execute or one press is
+    /// out, or the core follows its flight).
+    var executingHere: Bool {
+        !isDone && (executeState?.kind == "working" || item.executing)
     }
 
     /// Who approved, by address (lowercased).
@@ -269,8 +279,10 @@ struct MsProposalModel {
         // r15-5: why a press did not go is said beside the button pressed
         // (`pressFailures`); here only when no button is drawn for it.
         out.append(contentsOf: pressFailures(at: .top).map { ($0.text, $0.tone, $0.id) })
-        if let failure = words.actionFailure(rejectState, chainId: chainId) {
-            out.append((failure, .danger, "rejectFailed"))
+        // r16-5: a Reject's failure is said beside Reject (`rejectLine`);
+        // here only when no Reject is drawn.
+        if !offersReject, let line = rejectLine {
+            out.append((line.text, line.tone, "rejectFailed"))
         }
         // r9-9: "none is signed in on this device" only when the core says
         // no member of it is here (`members_here`), whatever this one asks.
@@ -310,6 +322,31 @@ struct MsProposalModel {
             out.append((failure, .danger, "executeFailed"))
         }
         return out
+    }
+
+    /// r16-4: the one press does both or nothing (the core, §26). A fee that
+    /// could not be worked out or checked — its look, or its stop at the
+    /// press (`stopped {unpriced | unchecked}`) — offers "Check again" (a new
+    /// look) under the one press, as under Execute and on Android and the web.
+    func oneTouchChecksFee(_ presser: String) -> Bool {
+        let unlooked: Set<String> = ["unpriced", "unchecked"]
+        if let stop = executeState, stop.kind == "stopped" { return unlooked.contains(stop["preview"]?.kind ?? "") }
+        return unlooked.contains(preview(for: presser)?.kind ?? "")
+    }
+
+    /// r16-5 (Android's finding, iOS parity): how the last Reject ended, said
+    /// beside Reject with Try again — never only at the head of a sheet the
+    /// person has scrolled to its foot.
+    /// Reject is drawn: a member here can act on it, and it is no
+    /// cancellation and has none waiting.
+    var offersReject: Bool {
+        !isDone && (!canApprove.isEmpty || approvedByHere || !canExecute.isEmpty)
+            && item.action?.kind != "cancel" && item.cancelledBy == nil
+    }
+
+    var rejectLine: (text: String, tone: MsNote.Tone)? {
+        guard let state = rejectState, let failure = words.actionFailure(state, chainId: chainId) else { return nil }
+        return (failure, ["unread", "mailboxUnreadable"].contains(state.kind) ? .warning : .danger)
     }
 
     /// r15-14: "The network fee is paid by the executing member's account."
@@ -1071,6 +1108,15 @@ struct MultisigProposalSheet: View {
                     // r15-5: why the press did not go, here where it was pressed
                     // (the fee-moved stop: the new figure, for the next press).
                     pressFailures(model, at: .approve)
+                    // r16-4: a fee not worked out (the look's, or the one press's
+                    // stop) is asked again here — never a press with nothing to do.
+                    if completes, model.signable,
+                       model.oneTouchChecksFee(model.oneTouchExecutor(chosen: member) ?? oneTouch[0]) {
+                        Button(words.t("proposal.feeRetry")) { askPreviews(force: true) }
+                            .font(Typography.actionLabel.scaled(textScale).font)
+                            .foregroundStyle(theme.fgBase)
+                            .accessibilityIdentifier("multisig.proposal.oneTouchFeeRetry")
+                    }
                 }
                 if model.isReady, !model.canExecute.isEmpty {
                     let chosen = executor ?? model.canExecute.first ?? ""
@@ -1109,8 +1155,7 @@ struct MultisigProposalSheet: View {
                     }
                     .accessibilityIdentifier("multisig.proposal.sendAgain")
                 }
-                if !model.canApprove.isEmpty || model.approvedByHere || !model.canExecute.isEmpty,
-                   model.item.action?.kind != "cancel", model.item.cancelledBy == nil {
+                if model.offersReject {
                     Button(words.t("proposal.reject")) { confirmingReject = true }
                         .font(Typography.actionLabel.scaled(textScale).font)
                         .foregroundStyle(theme.errorBase)
@@ -1125,6 +1170,16 @@ struct MultisigProposalSheet: View {
                                 "threshold": String(model.item.threshold), "count": String(model.item.threshold),
                             ]))
                         }
+                    // r16-5: why the last Reject did not go, beside it, with Try again.
+                    if let line = model.rejectLine {
+                        HStack(alignment: .top, spacing: Tokens.Space.s12) {
+                            MsNote(text: line.text, tone: line.tone, identifier: "multisig.proposal.rejectFailed")
+                            Button(words.t("review.state.tryAgain")) { reject(model) }
+                                .font(Typography.actionLabel.scaled(textScale).font)
+                                .foregroundStyle(theme.fgBase)
+                                .accessibilityIdentifier("multisig.proposal.rejectRetry")
+                        }
+                    }
                 }
             }
             .padding(.top, Tokens.Space.s8)

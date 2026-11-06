@@ -560,7 +560,27 @@ fn a_review_neither_check_read_is_ready_but_every_press_signs_only_anyway() {
     assert!(door.enabled && door.anyway && door.retry);
     // The one press: approve and execute — the executor's own operation
     // (its approval as `msg.sender`) is asked "… anyway" too: its page says
-    // "Execute anyway".
+    // "Execute anyway". r16-4: the press is on the fee its look drew.
+    run(
+        &mut other,
+        &mut world,
+        Event::Preview {
+            chain_id: 100,
+            safe_tx_hash: safe_tx_hash.clone(),
+            executor: fixture(1).address,
+        },
+    );
+    let look = other.view().previews[&format!(
+        "100:{}:{}",
+        safe_tx_hash.to_ascii_lowercase(),
+        fixture(1).address.to_ascii_lowercase()
+    )]
+        .clone();
+    let shown = look["fee"]["amount"]
+        .as_str()
+        .and_then(vela_core::app::multisig_shell::quantity)
+        .map(|f| f.to_string());
+    assert!(shown.is_some(), "{look}");
     world.purposes.clear();
     run(
         &mut other,
@@ -569,7 +589,7 @@ fn a_review_neither_check_read_is_ready_but_every_press_signs_only_anyway() {
             chain_id: 100,
             safe_tx_hash: safe_tx_hash.clone(),
             executor: fixture(1).address,
-            shown_fee: None,
+            shown_fee: shown,
         },
     );
     assert!(matches!(

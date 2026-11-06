@@ -40,6 +40,8 @@ import app.getvela.wallet.core.platform.VelaHaptic
 import app.getvela.wallet.core.platform.rememberVelaHaptic
 import app.getvela.wallet.feature.flows.components.QrCard
 import app.getvela.wallet.feature.multisig.core.MultisigHub
+import app.getvela.wallet.feature.multisig.core.MultisigShellFailure
+import app.getvela.wallet.feature.multisig.core.bool
 import app.getvela.wallet.feature.multisig.core.get
 import app.getvela.wallet.feature.multisig.core.str
 import app.getvela.wallet.feature.multisig.core.ev
@@ -288,8 +290,7 @@ fun MultisigProposalSheet(
         // Actions.
         if (!model.isDone) {
             // The one press is offered with its own fee line (above): the general note would say it twice.
-            val oneTapOffered = model.showApprove && (member ?: model.defaultMember)
-                ?.let { chosen -> view.approveExecuteBy(item).any { it.equals(chosen, ignoreCase = true) } } == true
+            val oneTapOffered = model.showApprove && model.oneTapShown(member ?: model.defaultMember)
             if (model.showApprove) {
                 val chosen = member ?: model.defaultMember
                 if (model.canApprove.size > 1) {
@@ -297,8 +298,9 @@ fun MultisigProposalSheet(
                 }
                 // core-ms-2: the machine offers this member "Approve and execute"
                 // in one press (`approve_execute`): theirs reaches the threshold
-                // and their look says they can pay.
-                val oneTap = chosen != null && view.approveExecuteBy(item).any { it.equals(chosen, ignoreCase = true) }
+                // and their look says they can pay. r16-14: only while a press
+                // can sign — a shut button reads Approve, steady.
+                val oneTap = model.oneTapShown(chosen)
                 // r8-1: the core's sign rule decides the friction — `anyway` is
                 // danger-styled and confirmed a second time (MsSignButton).
                 MsSignButton(
@@ -318,17 +320,13 @@ fun MultisigProposalSheet(
                                 return if (s == null || s.kind == "working") null else s
                             }
                             if (oneTap) {
-                                // Should only the execute part be unable to run (before its
-                                // passkey), the machine still gives and keeps the approval (r4-11).
-                                // §24: it carries the fee drawn under it (`shown_fee`).
+                                // r16-4: both or nothing — the core approves nothing when the
+                                // execution stops before its signature, and the stop is said
+                                // beside this button (`executeFailure`). §24: it carries the fee
+                                // drawn under it (`shown_fee`).
                                 val ran = hub.proposals.request(model.executeEvent(owner, oneTap = true)) { v -> settledOf(v, "execute") }
-                                if (ran.kind == "done") {
-                                    haptic(VelaHaptic.Success)
-                                    return@launch
-                                }
-                                val approved = hub.proposals.until(600_000) { v -> settledOf(v, "approve") }
-                                VelaLog.event("multisig.approve", "settled", "kind" to (approved.kind ?: "none"), "execute" to (ran.kind ?: "none"))
-                                settledHaptic(approved.kind)?.let(haptic)
+                                VelaLog.event("multisig.approveExecute", "settled", "kind" to (ran.kind ?: "none"))
+                                if (ran.kind == "done") haptic(VelaHaptic.Success) else settledHaptic(ran.kind)?.let(haptic)
                                 return@launch
                             }
                             val settled = hub.proposals.request(ev("approve", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "owner" to owner)) { v -> settledOf(v, "approve") }
@@ -339,36 +337,74 @@ fun MultisigProposalSheet(
                         }
                     },
                     modifier = Modifier.fillMaxWidth().testTag("multisig.proposal.approve"),
-                    enabled = model.canSign && !approving,
-                    loading = approving,
+                    enabled = model.canSign && !approving && !(oneTap && executingNow),
+                    loading = if (oneTap) executingNow else approving,
                 )
                 // S4: what the one press costs, before it is pressed — the
                 // machine's look for this member (`previews`), as Execute's.
-                if (oneTap && chosen != null) {
+                // r16-14: only while a press can sign; a shut door's reason is
+                // the one note.
+                if (oneTap && chosen != null && model.saysExecution) {
                     // r15-7: and, for a multisig not deployed yet, its one-time setup.
-                    model.executionLines(chosen, model.executeFailure).forEach { line ->
-                        MsNote(line.text, tone = line.tone, tag = if (line.id == "fee") "multisig.proposal.oneTapFee" else "multisig.proposal.oneTapSetup")
-                    }
+                    ExecutionLines(model.executionLines(chosen, model.executeFailure), "multisig.proposal.oneTapFee", "multisig.proposal.oneTapSetup")
                     // r14-6: a fee that could not be worked out or checked offers
                     // Check again here too (the web's), as under Execute.
-                    if (LookAsk.offersCheckAgain(model.preview(chosen).kind)) {
+                    if (model.oneTapCheckAgain(chosen)) {
                         MsTextButton(words.t("proposal.feeRetry"), tag = "multisig.proposal.oneTapFeeRetry") {
                             hub.sendProposal(ev("preview", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "executor" to chosen))
                             lookRound += 1
                         }
                     }
-                } else if (chosen != null) {
+                } else if (chosen != null && model.saysExecution) {
                     // r10 S4: theirs would complete it, but the one press is not
                     // offered — said why (can't pay the fee, would fail), never
                     // a silent "Approve" alone (the web's execute-cant-pay).
                     model.approveOnlyWhy(chosen)?.let { (text, tone) -> MsNote(text, tone = tone, tag = "multisig.proposal.approveOnlyWhy") }
                 }
                 // r9-5: why the press did not go, here where it was pressed.
-                ActionFailure(listOfNotNull(model.approveFailure, if (oneTap) model.executeFailure else null), words) {
-                    hub.sendProposal(ev("refresh", "fresh" to true))
-                    (hub.accountsView.value.active ?: hub.proposalsView.value.followed)?.let { address ->
-                        hub.send(ev("check_on", "address" to address, "chain_id" to chainId))
+                // r16-4: a one press stopped for a fee it could not work out is
+                // asked again by a new look ("Check again").
+                val checksFee = oneTap && model.failureChecksFee
+                ActionFailure(
+                    listOfNotNull(model.approveFailure, if (oneTap) model.executeFailure else null),
+                    words,
+                    retryLabel = if (checksFee) words.t("proposal.feeRetry") else null,
+                ) {
+                    if (checksFee && chosen != null) {
+                        hub.sendProposal(ev("preview", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "executor" to chosen))
+                        lookRound += 1
+                    } else {
+                        hub.sendProposal(ev("refresh", "fresh" to true))
+                        (hub.accountsView.value.active ?: hub.proposalsView.value.followed)?.let { address ->
+                            hub.send(ev("check_on", "address" to address, "chain_id" to chainId))
+                        }
                     }
+                }
+                // r16-4: the approval alone, beside the one press (the web's and
+                // iOS's second button) — the one press does both or nothing.
+                if (model.approveAloneBeside(chosen)) {
+                    MsSignButton(
+                        text = words.t(if (model.signAnyway) "review.approveAnyway" else "proposal.approve"),
+                        anyway = model.signAnyway,
+                        dangerLines = model.dangerLines,
+                        words = words,
+                        secondary = true,
+                        onConfirm = {
+                            val owner = chosen ?: return@MsSignButton
+                            haptic(VelaHaptic.Press)
+                            scope.launch {
+                                val settled = hub.proposals.request(ev("approve", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "owner" to owner)) { v ->
+                                    val s = (v["actions"] as? JsonObject)?.entries?.firstOrNull { it.key.equals("approve:${item.safeTxHash}", ignoreCase = true) }?.value
+                                    if (s == null || s.kind == "working") null else s
+                                }
+                                VelaLog.event("multisig.approve", "settled", "kind" to (settled.kind ?: "none"))
+                                settledHaptic(settled.kind)?.let(haptic)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("multisig.proposal.approveOnly"),
+                        enabled = model.canSign && !approving && !executingNow,
+                        loading = approving,
+                    )
                 }
             }
             if (model.isReady && model.canExecute.isNotEmpty()) {
@@ -376,8 +412,9 @@ fun MultisigProposalSheet(
                 if (model.canExecute.size > 1) {
                     MemberPicker(words, words.t("proposal.as"), model.canExecute, chosen, "multisig.proposal.executor") { executor = it }
                 }
-                model.executionLines(chosen, model.executeFailure).forEach { line ->
-                    MsNote(line.text, tone = line.tone, tag = if (line.id == "fee") "multisig.proposal.fee" else "multisig.proposal.setup")
+                // r16-14: only while a press can sign.
+                if (model.saysExecution) {
+                    ExecutionLines(model.executionLines(chosen, model.executeFailure), "multisig.proposal.fee", "multisig.proposal.setup")
                 }
                 MsSignButton(
                     text = words.t(if (model.signAnyway) "review.executeAnyway" else "proposal.execute"),
@@ -400,7 +437,7 @@ fun MultisigProposalSheet(
                     lookRound += 1
                 }
                 val look = model.preview(chosen).kind
-                if (LookAsk.offersCheckAgain(look)) {
+                if (model.saysExecution && model.executeFailure == null && LookAsk.offersCheckAgain(look)) {
                     MsTextButton(words.t("proposal.feeRetry"), tag = "multisig.proposal.feeRetry") {
                         hub.sendProposal(ev("preview", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "executor" to chosen))
                         // "Check again": the timer's few asks are the person's again.
@@ -431,9 +468,34 @@ fun MultisigProposalSheet(
                 item.action.kind != "cancel" && item.cancelledBy == null
             ) {
                 var confirming by remember { mutableStateOf(false) }
+                // r16-5: how the last Reject ended, when there is something to say
+                // (the core's answer to the cancellation's draft) — beside Reject.
+                var rejectSettled by remember(item.safeTxHash) { mutableStateOf<JsonElement?>(null) }
+                var rejecting by remember(item.safeTxHash) { mutableStateOf(false) }
                 // r4D-13: the person's own proposal is withdrawn, not rejected.
                 val rejectWord = words.t(if (model.ownProposal) "proposal.withdraw" else "proposal.reject")
-                MsTextButton(rejectWord, tag = "multisig.proposal.reject", danger = true) { confirming = true }
+                val reject: () -> Unit = {
+                    rejectSettled = null
+                    rejecting = true
+                    // r9-13: the cancellation is a proposal like any other —
+                    // drawn with its review first (the draft sheet, its member
+                    // picked there), signed only on the person's word there,
+                    // through the core's sign door (§12).
+                    // On the hub's scope: this sheet steps aside for the review.
+                    hub.scope.launch {
+                        val settled = hub.propose(chainId, mapOf("kind" to "cancel", "nonce" to item.nonce), address = accounts.active)
+                        VelaLog.event("multisig.reject", "settled", "kind" to (settled.kind ?: "none"))
+                        rejectSettled = settled
+                        rejecting = false
+                    }
+                }
+                MsTextButton(rejectWord, tag = "multisig.proposal.reject", danger = true, enabled = !rejecting) { confirming = true }
+                rejectFailureLine(words, rejectSettled, chainId)?.let { line ->
+                    Row(verticalAlignment = Alignment.Top) {
+                        Column(Modifier.weight(1f)) { MsNote(line.text, tone = line.tone, tag = "multisig.proposal.rejectFailed") }
+                        MsTextButton(words.t("review.state.tryAgain"), tag = "multisig.proposal.rejectRetry") { reject() }
+                    }
+                }
                 if (confirming) {
                     AlertDialog(
                         onDismissRequest = { confirming = false },
@@ -442,15 +504,7 @@ fun MultisigProposalSheet(
                         confirmButton = {
                             TextButton(onClick = {
                                 confirming = false
-                                // r9-13: the cancellation is a proposal like any other —
-                                // drawn with its review first (the draft sheet, its member
-                                // picked there), signed only on the person's word there,
-                                // through the core's sign door (§12).
-                                // On the hub's scope: this sheet steps aside for the review.
-                                hub.scope.launch {
-                                    val settled = hub.propose(chainId, mapOf("kind" to "cancel", "nonce" to item.nonce), address = accounts.active)
-                                    VelaLog.event("multisig.reject", "settled", "kind" to (settled.kind ?: "none"))
-                                }
+                                reject()
                             }, modifier = Modifier.testTag("multisig.proposal.rejectConfirm")) { Text(rejectWord, color = colors.errorBase) }
                         },
                         dismissButton = { TextButton(onClick = { confirming = false }) { Text(words.t("proposal.rejectCancel")) } },
@@ -521,14 +575,52 @@ internal fun settledHaptic(kind: String?): VelaHaptic? = when (kind) {
 
 /** r9-5: why a press did not go, said under its button, with a way on (read again, then press again). */
 @Composable
-private fun ActionFailure(lines: List<MsLine>, words: MultisigWords, onRetry: () -> Unit) {
+private fun ActionFailure(lines: List<MsLine>, words: MultisigWords, retryLabel: String? = null, onRetry: () -> Unit) {
     if (lines.isEmpty()) return
     Row(verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.sm)) {
             for (line in lines) MsNote(line.text, tone = line.tone, tag = "multisig.proposal.note.${line.id}")
         }
-        MsTextButton(words.t("service.retry"), tag = "multisig.proposal.failureRetry") { onRetry() }
+        MsTextButton(retryLabel ?: words.t("service.retry"), tag = "multisig.proposal.failureRetry") { onRetry() }
     }
+}
+
+/**
+ * r15-7 + r16-15: what an execution costs, under its press — the fee line
+ * on its own, then the one-time setup as ONE block: its head ("Includes
+ * one-time setup on {network} ≈ {amount}:") and the lines it introduces
+ * drawn together. Each line drawn as its own note put the sheet's section
+ * gap between a head ending in a colon and its first item.
+ */
+@Composable
+private fun ExecutionLines(lines: List<MsLine>, feeTag: String, setupTag: String) {
+    lines.firstOrNull { it.id == "fee" }?.let { MsNote(it.text, tone = it.tone, tag = feeTag) }
+    val setup = lines.filter { it.id != "fee" }
+    if (setup.isEmpty()) return
+    Column(Modifier.fillMaxWidth().testTag(setupTag), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
+        setup.forEachIndexed { i, line ->
+            MsText(if (i == 0) line.text else "· ${line.text}", MsType.Sub, color = VelaTheme.colors.fgMuted)
+        }
+    }
+}
+
+/**
+ * r16-5: how a Reject (the cancellation's draft, `hub.propose`) ended, in the
+ * core's words, when there is something to say — its network or the multisig
+ * service not read, a refusal, a failure. `null` for the person's own
+ * withdrawal on the review, a cancellation proposed, or nothing yet. Said
+ * beside Reject with Try again: confirming did nothing visible while the
+ * draft's reads failed (`multisig.reject settled kind=unread`).
+ */
+internal fun rejectFailureLine(words: MultisigWords, settled: JsonElement?, chainId: Int): MsLine? {
+    val kind = settled?.kind ?: return null
+    if (kind in setOf("done", "working", "cancelled", "riskDeclined", "outsideAsked")) return null
+    // The person's own passkey "cancel" is their word, not a failure (iOS's `rejectSaysWhy`).
+    val failure = MultisigShellFailure.read(settled["detail"].str)
+    if (kind == "failed" && failure.kind == "passkey" && failure["failure"].str == "cancelled" && failure["timedOut"].bool != true) return null
+    val text = words.actionFailure(settled, chainId) ?: return null
+    val tone = if (kind == "unread" || kind == "mailboxUnreadable") MsTone.Warning else MsTone.Danger
+    return MsLine(text, tone, "rejectFailed")
 }
 
 /** r13-3: what a linked transaction's stand offers. Pure. */

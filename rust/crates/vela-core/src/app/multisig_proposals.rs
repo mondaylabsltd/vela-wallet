@@ -625,12 +625,12 @@ pub enum Event {
     /// core-ms-2: "Approve and execute", one press, offered where
     /// [`ProposalsView::approve_execute`] names `executor`: its execution —
     /// the same look, the same gate and review as Execute — counts its own
-    /// approval as the executor's (`msg.sender`). Should only the execution
-    /// be unable to run, stopped before any signature (a fee it cannot pay,
-    /// a transaction that would fail, a look that could not price or check
-    /// it), the approval is still given and kept (r4-11): then
-    /// `actions["execute:<hash>"]` is `stopped` (why) and
-    /// `actions["approve:<hash>"]` the approval's own outcome.
+    /// approval as the executor's (`msg.sender`). r16-4: both or nothing —
+    /// stopped before any signature (a fee it cannot pay, a transaction that
+    /// would fail, a look that could not price or check it at the press),
+    /// nothing is approved either: `actions["execute:<hash>"]` is `stopped`
+    /// (why), said beside the press; a figure priced only at the press over
+    /// a look that showed none is `failed {fee_moved}`, never signed unseen.
     ApproveExecute {
         #[cfg_attr(feature = "bindings", ts(type = "number"))]
         chain_id: u64,
@@ -1718,7 +1718,8 @@ impl App for MultisigProposals {
                 }
                 flow(model, move |io, st| async move {
                     let shown = shown_fee.as_deref().and_then(shell::quantity);
-                    approve_execute(&io, &st, chain_id, &safe_tx_hash, &executor, shown).await;
+                    approve_execute(&io, &st, chain_id, &safe_tx_hash, &executor, shown, true)
+                        .await;
                 })
             }
             Event::Withdraw => {
@@ -4484,7 +4485,9 @@ fn propose_draft(model: &Model, as_member: Option<String>, then_execute: bool) -
             .then(|| i.proposer.clone())
         });
         match proposer {
-            Some(proposer) => approve_execute(&io, &st, chain_id, &hash, &proposer, None).await,
+            Some(proposer) => {
+                approve_execute(&io, &st, chain_id, &hash, &proposer, None, false).await
+            }
             None => {
                 lock(&st)
                     .actions
@@ -4494,34 +4497,19 @@ fn propose_draft(model: &Model, as_member: Option<String>, then_execute: bool) -
     })
 }
 
-/// A stop before any signature (r4-11): the look could not price or check
-/// it, it would fail, or the executor cannot pay — not a number used
-/// meanwhile, nor who controls it refused.
-fn stopped_before_signing(outcome: &ActionState) -> bool {
-    match outcome {
-        ActionState::Stopped { preview } => matches!(
-            preview.get("kind").and_then(Value::as_str),
-            Some("fails" | "unpriced" | "unchecked" | "priced")
-        ),
-        _ => false,
-    }
-}
-
-/// A stop because the look could not price or check it in time (`unpriced`,
-/// `unchecked`) — not because it would fail or cannot be paid.
-fn unlooked(outcome: &ActionState) -> bool {
-    match outcome {
-        ActionState::Stopped { preview } => matches!(
-            preview.get("kind").and_then(Value::as_str),
-            Some("unpriced" | "unchecked")
-        ),
-        _ => false,
-    }
-}
-
 /// "Approve and execute" in one press (`ApproveExecute`): the execution,
-/// counting the executor's approval; stopped before its signature, the
-/// approval alone, kept.
+/// counting the executor's approval as `msg.sender` — one signature.
+///
+/// r16-4 (supersedes r4-11 and r11-9's quiet stop): the one press does both
+/// or nothing. Stopped before its signature — the fee could not be worked
+/// out or checked at the press, it would fail, the executor cannot pay —
+/// nothing is approved either, and the stop is recorded on
+/// `actions["execute:<hash>"]`, said beside the press by every shell (the
+/// fee unknown: "Couldn't work out the network fee right now." with Check
+/// again). The approval alone stays the person's own press. A press whose
+/// look priced nothing (no figure on screen, none carried) never signs a
+/// figure priced only at the press: `fee_moved` with that figure, nothing
+/// signed — the next press is on what is shown.
 async fn approve_execute(
     io: &Io<Event>,
     st: &Shared<State>,
@@ -4529,48 +4517,16 @@ async fn approve_execute(
     hash: &str,
     executor: &str,
     shown_fee: Option<u128>,
+    pressed: bool,
 ) {
     let lower = hash.to_ascii_lowercase();
     let input = execution_input(st, chain_id, hash, executor);
-    let approving = input.as_ref().is_some_and(|i| {
-        i.item.approved < i.item.threshold
-            && i.item.can_approve.iter().any(|o| same_address(o, executor))
-    });
-    let outcome = execute(io, st, chain_id, hash, executor, shown_fee).await;
+    let outcome = execute_as(io, st, chain_id, hash, executor, shown_fee, pressed).await;
     flows::remember_execution(io, st, input.as_ref(), &outcome).await;
     if matches!(outcome, ActionState::Done { .. }) {
         note_actor(io, st, chain_id, executor).await;
     }
-    let approve_too = approving && stopped_before_signing(&outcome);
-    // r11-9: the look could not price or check it, so the press approves
-    // alone. That is no failure of the execution — nothing was tried — and
-    // the look already says it ("Couldn't check whether it would run — you
-    // can still approve; Execute checks again"): one verdict, so the
-    // execution records nothing beside the approval (Android drew "This
-    // would fail if executed now: it couldn't be checked…" next to it).
-    let quiet_stop = approve_too && unlooked(&outcome);
-    {
-        let mut s = lock(st);
-        if quiet_stop {
-            s.actions.remove(&format!("execute:{lower}"));
-        } else {
-            s.actions.insert(format!("execute:{lower}"), outcome);
-        }
-        if approve_too {
-            s.actions
-                .insert(format!("approve:{lower}"), ActionState::Working);
-        }
-    }
-    if approve_too {
-        io.emit(Event::Changed);
-        let approved = approve(io, st, chain_id, hash, executor).await;
-        if matches!(approved, ActionState::Done { .. }) {
-            note_actor(io, st, chain_id, executor).await;
-        }
-        lock(st)
-            .actions
-            .insert(format!("approve:{lower}"), approved);
-    }
+    lock(st).actions.insert(format!("execute:{lower}"), outcome);
     refresh(io, st, false, true).await;
 }
 
@@ -4617,6 +4573,21 @@ async fn execute(
     hash: &str,
     executor: &str,
     shown_fee: Option<u128>,
+) -> ActionState {
+    execute_as(io, st, chain_id, hash, executor, shown_fee, false).await
+}
+
+/// [`execute`]; `one_press`: the person's "Approve and execute" (r16-4) —
+/// a figure priced only at the press, over a look that showed none, is
+/// said first (`fee_moved`), never signed unseen.
+async fn execute_as(
+    io: &Io<Event>,
+    st: &Shared<State>,
+    chain_id: u64,
+    hash: &str,
+    executor: &str,
+    shown_fee: Option<u128>,
+    one_press: bool,
 ) -> ActionState {
     let Some(input) = execution_input(st, chain_id, hash, executor) else {
         return ActionState::Failed {
@@ -4682,6 +4653,15 @@ async fn execute(
         (requoted || shown_fee.is_some(), said_fee, &preview)
     {
         if let Some(now) = fee_amount(fee).filter(|now| *now != was) {
+            return ActionState::Failed {
+                detail: fee_moved_detail(chain_id, &input.executor.address, now),
+            };
+        }
+    }
+    // r16-4: the one press over no figure at all (its look could not price
+    // it): the figure priced now is said, never signed unseen.
+    if let (true, None, Preview::Priced { fee, .. }) = (one_press && requoted, said_fee, &preview) {
+        if let Some(now) = fee_amount(fee) {
             return ActionState::Failed {
                 detail: fee_moved_detail(chain_id, &input.executor.address, now),
             };

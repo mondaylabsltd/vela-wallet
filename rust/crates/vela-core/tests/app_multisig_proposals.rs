@@ -2249,10 +2249,12 @@ fn approve_and_execute_is_offered_and_runs_in_one_press() {
     assert!(sut.view().approve_execute.is_empty());
 }
 
-/// r4-11: stopped before any signature (here: it would fail), the approval
-/// is still given and kept; the execution says why it did not run.
+/// r16-4 (supersedes r4-11): the one press does both or nothing. Stopped
+/// before any signature (here: it would fail), nothing is approved either —
+/// the execution's stop is said beside the press, the approval is the
+/// person's own next press.
 #[test]
-fn approve_and_execute_stopped_before_signing_still_approves() {
+fn approve_and_execute_stopped_before_signing_approves_nothing() {
     let (mut world, mut sut, account) = setup(&[0, 1]);
     let hash = hash_of(&propose(&mut sut, &mut world, transfer("1000"), None));
     world
@@ -2262,6 +2264,7 @@ fn approve_and_execute_stopped_before_signing_still_approves() {
     // A look that says it would fail offers no one press.
     assert_eq!(preview_of(&mut sut, &mut world, &hash, &b)["kind"], "fails");
     assert!(sut.view().approve_execute.is_empty());
+    let passkeys = world.passkeys.len();
     run(
         &mut sut,
         &mut world,
@@ -2278,10 +2281,69 @@ fn approve_and_execute_stopped_before_signing_still_approves() {
         panic!("{:?}", sut.view().actions);
     };
     assert_eq!(preview["kind"], "fails");
-    assert!(matches!(
-        sut.view().actions[&format!("approve:{lower}")],
-        ActionState::Done { .. }
-    ));
+    assert!(
+        !sut.view().actions.contains_key(&format!("approve:{lower}")),
+        "{:?}",
+        sut.view().actions
+    );
+    assert!(world.sent.is_empty());
+    assert_eq!(world.passkeys.len(), passkeys, "nothing signed");
+    let item = sut
+        .view()
+        .items
+        .into_iter()
+        .find(|i| i.safe_tx_hash == hash)
+        .unwrap();
+    assert_eq!(item.approved, 1, "no approval behind the person's back");
+}
+
+/// r16-4 (Android, Arc rate-limited): the sheet drew a priced fee, the look
+/// aged, and at the press its re-quote could not price it. The one press
+/// approved alone and said nothing (the stop was "quiet", r11-9), and the
+/// sheet then read "2/2" over a plain Execute. Now: nothing is signed, the
+/// stop says the fee could not be worked out (`stopped {unpriced}`, beside
+/// the press, with Check again); a later look that prices it lifts the stop
+/// and the one press is offered on the new figure.
+#[test]
+fn a_one_press_whose_fee_is_unknown_at_the_press_signs_nothing_and_says_why() {
+    let (mut world, mut sut, _account) = setup(&[0, 1]);
+    let hash = hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
+    let lower = hash.to_ascii_lowercase();
+    let b = fixture(1).address;
+    let look = preview_of(&mut sut, &mut world, &hash, &b);
+    assert_eq!(look["kind"], "priced", "{look}");
+    let shown = vela_core::app::multisig_shell::quantity(look["fee"]["amount"].as_str().unwrap())
+        .unwrap()
+        .to_string();
+    // The press comes after the look's window, and the network will not price it.
+    world.now += 20_000.0;
+    world.quote_answer = Some(
+        vela_core::app::multisig_shell::MultisigShellResult::Quoted {
+            quote: json!({"kind": "failed"}),
+        },
+    );
+    let passkeys = world.passkeys.len();
+    run(
+        &mut sut,
+        &mut world,
+        Event::ApproveExecute {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            executor: b.clone(),
+            shown_fee: Some(shown),
+        },
+    );
+    let ActionState::Stopped { preview } = sut.view().actions[&format!("execute:{lower}")].clone()
+    else {
+        panic!("said beside the press: {:?}", sut.view().actions);
+    };
+    assert_eq!(preview["kind"], "unpriced");
+    assert!(
+        !sut.view().actions.contains_key(&format!("approve:{lower}")),
+        "{:?}",
+        sut.view().actions
+    );
+    assert_eq!(world.passkeys.len(), passkeys, "nothing signed");
     assert!(world.sent.is_empty());
     let item = sut
         .view()
@@ -2289,7 +2351,85 @@ fn approve_and_execute_stopped_before_signing_still_approves() {
         .into_iter()
         .find(|i| i.safe_tx_hash == hash)
         .unwrap();
-    assert_eq!(item.approved, 2, "the approval was kept");
+    assert_eq!(item.approved, 1);
+    // Check again: the network prices it now — the stop is lifted, the new
+    // figure is drawn, and the one press is offered on it.
+    world.quote_answer = None;
+    world.now += 20_000.0;
+    let again = preview_of(&mut sut, &mut world, &hash, &b);
+    assert_eq!(again["kind"], "priced", "{again}");
+    assert!(
+        !sut.view().actions.contains_key(&format!("execute:{lower}")),
+        "a stop for a fee not worked out goes once it is: {:?}",
+        sut.view().actions
+    );
+    assert_eq!(sut.view().approve_execute[&format!("100:{lower}")], vec![b]);
+}
+
+/// r16-4: a one press over a look that priced nothing (the sheet drew no
+/// figure) never signs a fee the person did not see: a re-quote that prices
+/// it at the press stops with `fee_moved` (the figure said), nothing signed;
+/// the next press on that figure does both.
+#[test]
+fn a_one_press_over_no_figure_signs_nothing_until_a_figure_is_shown() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let hash = hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
+    let lower = hash.to_ascii_lowercase();
+    let b = fixture(1).address;
+    world.quote_answer = Some(
+        vela_core::app::multisig_shell::MultisigShellResult::Quoted {
+            quote: json!({"kind": "failed"}),
+        },
+    );
+    assert_eq!(
+        preview_of(&mut sut, &mut world, &hash, &b)["kind"],
+        "unpriced"
+    );
+    assert_eq!(
+        sut.view().approve_execute[&format!("100:{lower}")],
+        vec![b.clone()]
+    );
+    world.quote_answer = None;
+    world.now += 20_000.0;
+    let passkeys = world.passkeys.len();
+    let press = |shown: Option<String>| Event::ApproveExecute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: b.clone(),
+        shown_fee: shown,
+    };
+    run(&mut sut, &mut world, press(None));
+    let ActionState::Failed { detail } = sut.view().actions[&format!("execute:{lower}")].clone()
+    else {
+        panic!("{:?}", sut.view().actions);
+    };
+    let detail: Value = serde_json::from_str(&detail).expect("a failure the shells read");
+    assert_eq!(detail["kind"], "fee_moved");
+    assert!(!sut.view().actions.contains_key(&format!("approve:{lower}")));
+    assert_eq!(world.passkeys.len(), passkeys, "nothing signed");
+    assert!(world.sent.is_empty());
+    // Pressed on the figure now shown: both, in one operation.
+    let owners = owners_of_setup();
+    let mut after = DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2);
+    after.nonce = 1;
+    world.on_send = Some(Landing {
+        chain: 100,
+        safe: account.address.clone(),
+        after,
+        safe_tx_hash: hash.clone(),
+        tx_hash: format!("0x{}", "cd".repeat(32)),
+        user_op_hash: format!("0x{}", "ab".repeat(32)),
+    });
+    run(
+        &mut sut,
+        &mut world,
+        press(detail["amount"].as_str().map(str::to_owned)),
+    );
+    assert_eq!(world.sent.len(), 1, "signed at the figure shown");
+    assert!(matches!(
+        sut.view().actions[&format!("execute:{lower}")],
+        ActionState::Done { .. }
+    ));
 }
 
 /// [`execute_landed`] through `ApproveExecute`.

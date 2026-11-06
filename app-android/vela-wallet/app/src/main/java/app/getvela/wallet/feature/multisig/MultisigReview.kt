@@ -777,10 +777,20 @@ fun MsSignButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     loading: Boolean = false,
+    /**
+     * r16-4: the second choice beside a main press (Approve alone beside
+     * "Approve and execute") — the neutral secondary style, as iOS and the
+     * web draw it; "… anyway" keeps its danger style and second confirmation.
+     */
+    secondary: Boolean = false,
 ) {
     var confirming by remember { mutableStateOf(false) }
     if (!anyway) {
-        VelaValueButton(text = text, onClick = onConfirm, modifier = modifier, enabled = enabled, loading = loading)
+        if (secondary) {
+            VelaSecondaryButton(text = text, onClick = onConfirm, modifier = modifier, enabled = enabled, loading = loading)
+        } else {
+            VelaValueButton(text = text, onClick = onConfirm, modifier = modifier, enabled = enabled, loading = loading)
+        }
         return
     }
     VelaDangerButton(text = text, onClick = { confirming = true }, modifier = modifier, enabled = enabled, loading = loading)

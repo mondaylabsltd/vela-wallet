@@ -805,6 +805,22 @@ pub fn keep_look(s: &mut State, input: &ExecutionInput, preview: &Preview) {
         ),
         (input.item.approved, look),
     );
+    // r16-4: a press stopped only because its fee could not be worked out or
+    // checked (`stopped {unpriced | unchecked}`) says nothing true once a
+    // look prices it — the stop goes, the new figure is the line drawn.
+    if matches!(preview, Preview::Priced { .. }) {
+        let key = format!("execute:{}", input.item.safe_tx_hash.to_ascii_lowercase());
+        let unlooked = matches!(
+            s.actions.get(&key),
+            Some(ActionState::Stopped { preview }) if matches!(
+                preview.get("kind").and_then(Value::as_str),
+                Some("unpriced" | "unchecked")
+            )
+        );
+        if unlooked {
+            s.actions.remove(&key);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
