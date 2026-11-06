@@ -103,6 +103,7 @@
       ]
     },
     "feed": {
+      "account": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "contact_rows": [
         {
           "alias": "Bea",
@@ -787,6 +788,7 @@
           "type": "item"
         }
       ],
+      "settled": true,
       "toast": null,
       "transactions": [
         {
@@ -1103,6 +1105,7 @@
       ]
     },
     "feed": {
+      "account": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "contact_rows": [
         {
           "alias": "Bea",
@@ -1787,6 +1790,7 @@
           "type": "item"
         }
       ],
+      "settled": true,
       "toast": {
         "deadline_ms": 1700000004800.0,
         "item_id": "received",

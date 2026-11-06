@@ -1191,6 +1191,12 @@ pub struct Model {
     /// First sync pass done (`initializedRef`) — the backlog gate
     /// (invariant ③).
     initialized: bool,
+    /// r15-1: a store read for THIS account has committed since it was
+    /// switched to (kept through the same account said again).
+    store_read: bool,
+    /// r15-1: an incoming scan of THIS account has come back since it was
+    /// switched to.
+    scanned: bool,
     /// The next `StoreLoaded` commit is a post-sync re-read that may
     /// celebrate its newest incoming item.
     celebrate_read_id: Option<u32>,
@@ -1334,6 +1340,18 @@ pub struct FeedView {
     /// the wire), so a shell not moved yet keeps its own ticks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_scan: Option<FeedNextScan>,
+    /// r15-1: the account these rows are for (lower-cased; empty before any
+    /// was told). A shell draws them only under that account — never under
+    /// another one shown meanwhile (the D3 rule for the balance, here for
+    /// Activity). An account switch empties the rows at once.
+    #[serde(default)]
+    pub account: String,
+    /// r15-1: "nothing has happened here" may be said of [`Self::account`]:
+    /// its store was read AND its first incoming scan came back since it was
+    /// switched to. Before that an empty Activity is still being read (the
+    /// skeleton) — never "No activity yet".
+    #[serde(default)]
+    pub settled: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -1353,6 +1371,17 @@ impl App for ActivityFeed {
         match event {
             Event::AccountSwitched { address } => {
                 model.attempt += 1;
+                // r15-1: another account's rows are never drawn under this
+                // one — not for the moment its own store read takes (a cold
+                // start's link under a hung network made that seconds). The
+                // same account said again (a shell re-entering its home) is
+                // not a switch: what it read stays.
+                if !model.address.eq_ignore_ascii_case(&address) {
+                    model.items.clear();
+                    model.records.clear();
+                    model.store_read = false;
+                    model.scanned = false;
+                }
                 model.address = address;
                 model.initialized = false;
                 model.celebrate_read_id = None;
@@ -1528,6 +1557,8 @@ impl App for ActivityFeed {
             toast,
             history_empty_key: history_empty_key(model.chain_filter).to_owned(),
             home_empty_key: home_empty_key(model.chain_filter).to_owned(),
+            account: model.address.to_lowercase(),
+            settled: !model.address.is_empty() && model.store_read && model.scanned,
             contact_rows,
             hidden: model.privacy_hidden,
             next_scan: model.cadence.filter(|c| c.armed).map(|c| FeedNextScan {
@@ -1626,6 +1657,8 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
                     t
                 })
                 .collect();
+            // r15-1: this account's store is read — its rows are its own.
+            model.store_read = true;
             // The raw account-scoped list (`loadActivityTransactions`).
             let lc = model.address.to_lowercase();
             model.records = records
@@ -1784,6 +1817,11 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
 
         FeedShellResult::SyncCompleted { new_count } => {
             model.scan_in_flight = false;
+            // r15-1: the first scan of this account back settles whether
+            // "No activity yet" may be said — drawn once, when it flips (a
+            // quiet scan after it still never redraws, invariant ②).
+            let settles = !model.scanned && model.store_read;
+            model.scanned = true;
             // `initializedRef.current = true` runs whether or not anything
             // landed — the first pass is spent either way (invariant ③).
             let first_pass = !model.initialized;
@@ -1801,7 +1839,11 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
                 }
                 commands.push(shell_request(model.attempt, op));
             }
-            commands.extend(scan_settled(model, new_count));
+            let (after_scan, renders) = scan_settled(model, new_count);
+            commands.extend(after_scan);
+            if settles && !renders {
+                commands.push(render());
+            }
             Command::all(commands)
         }
 
@@ -3464,9 +3506,10 @@ fn interacting(model: &mut Model, on: bool, presence: FeedPresence) -> Command<F
 /// asked for while it was out runs now; otherwise the next timer is armed —
 /// drawn now when nothing landed (the one redraw of a quiet scan), by the
 /// re-read when something did, and only once the person stops interacting.
-fn scan_settled(model: &mut Model, new_count: u32) -> Vec<Command<FeedEffect, Event>> {
+/// Answers what to do next and whether that includes a render.
+fn scan_settled(model: &mut Model, new_count: u32) -> (Vec<Command<FeedEffect, Event>>, bool) {
     let Some(cadence) = model.cadence.as_mut() else {
-        return Vec::new();
+        return (Vec::new(), false);
     };
     if new_count > 0 {
         cadence.quiet_scans = 0;
@@ -3476,15 +3519,15 @@ fn scan_settled(model: &mut Model, new_count: u32) -> Vec<Command<FeedEffect, Ev
         cadence.quiet_scans = cadence.quiet_scans.saturating_add(1);
     }
     if std::mem::take(&mut cadence.again) {
-        return start_scan(model, false).into_iter().collect();
+        return (start_scan(model, false).into_iter().collect(), false);
     }
     let after = incoming_scan::next_scan_ms(cadence.presence.visible, cadence.quiet_scans);
     if new_count > 0 || cadence.interacting_at(cadence.presence.now_ms) {
         cadence.pending_arm = Some(after);
-        return Vec::new();
+        return (Vec::new(), false);
     }
     arm_scan(model, after);
-    vec![render()]
+    (vec![render()], true)
 }
 
 /// r9-17: the page's presence moved ([`Event::PresenceChanged`]) — the
