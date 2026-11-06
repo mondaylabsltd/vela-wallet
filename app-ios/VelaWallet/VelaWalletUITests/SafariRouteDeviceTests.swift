@@ -219,6 +219,7 @@ final class SafariRouteDeviceTests: XCTestCase {
         sleep(1)
         // One word, so the keyboard's autocorrect leaves it alone.
         field.typeText(locale == "zh" ? "钱包E2E" : "SafariE2E")
+        dismissKeyboardIntro()
         // Put the keyboard away (its ✓): the agreements sit under it.
         for label in ["Done", "完成"] where safari.buttons[label].exists {
             safari.buttons[label].tap()
@@ -419,6 +420,19 @@ final class SafariRouteDeviceTests: XCTestCase {
         sleep(1)
     }
 
+    /// A fresh simulator's keyboard shows its multilingual introduction
+    /// ("Type English (US) and German … Continue") over the page the first
+    /// time a field takes focus, covering the page's buttons: put it away.
+    func dismissKeyboardIntro() {
+        let intro = safari.staticTexts.matching(NSPredicate(
+            format: "label BEGINSWITH %@ AND label CONTAINS %@", "Type ", " and ")).firstMatch
+        guard intro.waitForExistence(timeout: 3) else { return }
+        let below = safari.buttons.matching(NSPredicate(format: "label == %@", "Continue"))
+            .allElementsBoundByIndex.last { $0.frame.minY > intro.frame.maxY }
+        below?.tap()
+        sleep(1)
+    }
+
     func closeSheets() {
         for _ in 0..<2 {
             let close = safari.webViews.buttons
@@ -466,6 +480,7 @@ final class SafariRouteDeviceTests: XCTestCase {
         field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         sleep(2)
         safari.typeText(name)
+        dismissKeyboardIntro()
         sleep(1)
         XCTAssertEqual(field.value as? String, name, "the name is in the Name field")
         for label in ["Done", "完成"] where safari.buttons[label].exists { safari.buttons[label].tap(); break }
