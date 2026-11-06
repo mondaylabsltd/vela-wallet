@@ -1880,7 +1880,7 @@ impl App for MultisigProposals {
                     default_member,
                 }
             }),
-            actions: s.actions.clone(),
+            actions: stops_follow_looks(&s.actions, &s.previews),
             reviews: one_note_per_failure(&s.reviews, &s.previews, &s.actions),
             review_states: s.review_states.clone(),
             previews: s.previews.clone(),
@@ -4051,6 +4051,56 @@ async fn balance_of(
     shell::quantity(if raw.len() > 66 { &raw[..66] } else { raw })
         .map(Some)
         .ok_or(Unread)
+}
+
+/// r16-1 / r16-7: a fee-moved stop names the figure the next press signs.
+/// The stop (`execute:<hash>` failed `{kind: "fee_moved", amount, chainId,
+/// executor}`) was the figure of the moment it was said, while the sheet's
+/// fee line kept re-quoting — two figures on one sheet, and the next press
+/// signed the fee line's. Served, the stop follows its executor's look now:
+/// a priced look's fee is its `amount` (the figure Execute carries next), and
+/// a look with no figure withdraws it (the fee line says why nothing can
+/// run). Chosen over freezing the re-quotes: a frozen look ages past
+/// `PREVIEW_FRESH_MS`, and the next press would re-quote and stop again.
+pub fn stops_follow_looks(
+    actions: &BTreeMap<String, ActionState>,
+    previews: &BTreeMap<String, Value>,
+) -> BTreeMap<String, ActionState> {
+    actions
+        .iter()
+        .filter_map(|(key, action)| {
+            let kept = Some((key.clone(), action.clone()));
+            let ActionState::Failed { detail } = action else {
+                return kept;
+            };
+            let Some(hash) = key.strip_prefix("execute:") else {
+                return kept;
+            };
+            let Ok(said) = serde_json::from_str::<Value>(detail) else {
+                return kept;
+            };
+            if said.get("kind").and_then(Value::as_str) != Some("fee_moved") {
+                return kept;
+            }
+            let (Some(chain_id), Some(executor)) = (
+                said.get("chainId").and_then(Value::as_u64),
+                said.get("executor").and_then(Value::as_str),
+            ) else {
+                return kept;
+            };
+            let Some(look) = previews.get(&preview_key(chain_id, hash, executor)) else {
+                return kept;
+            };
+            let priced = look.get("kind").and_then(Value::as_str) == Some("priced");
+            let amount = look.get("fee").and_then(fee_amount).filter(|_| priced)?;
+            Some((
+                key.clone(),
+                ActionState::Failed {
+                    detail: fee_moved_detail(chain_id, executor, amount),
+                },
+            ))
+        })
+        .collect()
 }
 
 /// r12 S4: one note for one fact. A proposal whose execution look says it
