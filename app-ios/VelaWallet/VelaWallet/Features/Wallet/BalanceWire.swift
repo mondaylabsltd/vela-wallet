@@ -173,6 +173,13 @@ struct BalanceViewWire: Decodable, Equatable {
     let hidden: Bool
     let refreshing: Bool
     let lastRefreshedAtMs: Double?
+    /// Round 16 leftover 6: whether "Updated <ago>" may be said, as ONE
+    /// answer for every shell — `lastRefreshedAtMs` only once the first read
+    /// of this account has ended and every network said for it was read.
+    /// `nil` otherwise: the control is named for what it does ("Refresh
+    /// balance"), never a freshness claim over a network that was not read.
+    /// The hero's "Updated" is drawn from this alone. Absent reads `nil`.
+    var updatedAtMs: Double? = nil
     var tokens: [BalanceTokenWire]
     /// Held but unpriceable — listed separately so the total stays honest.
     var unpricedTokens: [BalanceTokenWire]

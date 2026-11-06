@@ -100,14 +100,15 @@ struct MultisigOutsideSheet: View {
 
     @ViewBuilder private var relayLine: some View {
         if let relay = outside.relay, relay.kind == "retrying" || relay.kind == "failed" {
-            let reason: String = switch relay["why"]?.string {
-            case "refused": words.t("external.relayRefused")
-            default: relay["detail"]?.string ?? ""
-            }
+            // Round 16 leftover 4: the reason in the catalog's words (or the
+            // relay's host) — never a transport error's text.
+            let reason = MsWords.relayReason(why: relay["why"]?.string, detail: relay["detail"]?.string, words: words)
             HStack(alignment: .top) {
-                MsNote(text: relay.kind == "failed"
-                    ? words.t("external.relayFailed", ["reason": reason])
-                    : words.t("external.relayUnreachable", ["reason": reason]), tone: .warning, identifier: "multisig.outside.relay")
+                MsNote(text: reason.map { reason in
+                    relay.kind == "failed"
+                        ? words.t("external.relayFailed", ["reason": reason])
+                        : words.t("external.relayUnreachable", ["reason": reason])
+                } ?? words.t("external.velaOffline"), tone: .warning, identifier: "multisig.outside.relay")
                 Button(words.t("external.retry")) { outside.retryRelay() }
                     .font(Typography.actionLabel.scaled(textScale).font)
                     .foregroundStyle(theme.fgBase)
@@ -116,16 +117,10 @@ struct MultisigOutsideSheet: View {
     }
 
     @ViewBuilder private var failureLine: some View {
-        if let failure = outside.failure {
-            let text: String = switch failure.kind {
-            case "connectDeclined": words.t("external.connectDeclined")
-            case "walletDeclined": words.t("external.declined")
-            case "otherChain": words.t("external.otherChain", ["chain": outside.view["chain"]?.string ?? ""])
-            case "badSignature": words.t("external.badSignature")
-            case "stoppedWaiting": words.t("external.stoppedWaiting")
-            case "noRoom": words.t("external.relayFailed", ["reason": failure["reason"]?.string ?? ""])
-            default: words.t("external.stillWaiting", ["wallet": outside.view["wallet"]?.string ?? words.t("external.ownerWallet")])
-            }
+        if let text = MsWords.outsideFailure(
+            outside.failure, words: words, chain: outside.view["chain"]?.string ?? "",
+            wallet: outside.view["wallet"]?.string ?? words.t("external.ownerWallet")
+        ) {
             MsNote(text: text, tone: .warning, identifier: "multisig.outside.failure")
         }
     }

@@ -200,14 +200,18 @@ enum FlowsLive {
         let isShown = shownAccount.map { feed.isFor($0) } ?? true
         let groups = isShown ? WalletLive.activityGroups(feed.rows, loc: loc, hidden: hidden, networks: networks) : []
         let looked = shownAccount == nil || (isShown && feed.settled)
+        // Round 16 leftover 5: a network the scan could not read is said —
+        // over the rows, or in the empty line's place.
+        let unread = isShown ? WalletLive.activityUnreadLine(feed, loc: loc, networks: networks) : nil
         return HistoryModel(
             header: header,
-            mode: !groups.isEmpty ? .rows : (looked ? .empty : .loading),
+            mode: !groups.isEmpty ? .rows : ((looked || unread != nil) ? .empty : .loading),
             // The core's choice (spec 082 RG5): "no transactions yet" on
             // every network, "none on this network" under a filter — never
             // the gallery board's filter sentence on an unfiltered history.
-            emptyText: loc.t(feed.historyEmptyKey),
-            groups: groups
+            emptyText: groups.isEmpty ? (unread ?? loc.t(feed.historyEmptyKey)) : loc.t(feed.historyEmptyKey),
+            groups: groups,
+            note: groups.isEmpty ? nil : unread
         )
     }
 

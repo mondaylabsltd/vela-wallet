@@ -477,7 +477,9 @@ struct MsWords {
         case "signingBlocked": return t("review.blocked")
         case "signingUnchecked": return t("authority.signUnchecked", ["network": network(chainId)])
         case "riskDeclined": return nil
-        case "refused": return t("proposal.refused", ["reason": state["reason"]?.string ?? ""])
+        // Round 16 leftover 4: the core's own refusal carries its English
+        // (`reason`) — said in the catalog's words, never that text.
+        case "refused": return t("review.refusedWhy.other")
         case "mailboxRefused": return t("proposal.reason.serviceRefused")
         case "stopped":
             // r11 (core): by the look's kind — it stands in the fee line's
@@ -493,41 +495,99 @@ struct MsWords {
             }
         case "noOutsideSigner":
             return t("proposal.failed", ["reason": t("proposal.noOutsideSigner")])
-        case "failed": return failureText(state["detail"]?.string)
+        case "failed": return failureText(state["detail"]?.string, chainId: chainId)
         default: return t("proposal.reason.unknown")
         }
     }
 
-    /// r13-3: the read the core named (`home.multisig.proposal.unread.*`, or
-    /// the service's `mailboxDown`), `{{network}}` the network's name.
+    /// r13-3: the read the core named (`home.multisig.proposal.unread.*`,
+    /// the service's `mailboxDown`, or — round 16 leftover 3 — its busy
+    /// words `home.multisig.service.busyNote`), `{{network}}` the network's
+    /// name. Any full catalog key reads (`said`).
     func unreadText(_ key: String?, chainId: Int) -> String {
-        let prefix = "home.multisig."
-        let leaf = key.map { $0.hasPrefix(prefix) ? String($0.dropFirst(prefix.count)) : $0 } ?? "proposal.unread.chain"
-        return t(leaf, ["network": network(chainId)])
+        said(key ?? "home.multisig.proposal.unread.chain", chainId: chainId)
     }
 
-    /// A shell failure (`MultisigShellFailure`'s JSON), or the core's own
-    /// words, said as the corpus says them.
-    func failureText(_ detail: String?) -> String {
-        guard let object = MultisigShellFailure.read(detail) else {
-            guard let detail, !detail.isEmpty else { return t("proposal.reason.unknown") }
-            return t("proposal.failed", ["reason": detail])
+    /// Any catalog key the core hands a sheet (`reason_key`, a
+    /// `review.missing` key, a failure's key) in words, `{{network}}` the
+    /// network's name: the FULL key wherever it lives (round 16 leftover 3:
+    /// `home.multisig.service.busyNote` is not under `proposal.`), or a leaf
+    /// under `home.multisig.`. Never a key on the screen: one neither reads
+    /// is "Something went wrong".
+    func said(_ key: String, chainId: Int) -> String {
+        let vars = ["network": network(chainId)]
+        let full = loc.t(key, vars: vars)
+        if full != key { return full }
+        let leaf = t(key, vars)
+        return leaf != "home.multisig.\(key)" ? leaf : t("proposal.reason.unknown")
+    }
+
+    /// Round 16 leftover 4: the create sheet's draft the core could not
+    /// make (`draft_error` is the core's English, never drawn).
+    var createDraftFailed: String { t("proposal.reason.unknown") }
+
+    /// The created multisig the service did not record (`refused` is the
+    /// core's English, never drawn): it is kept here, and Settings offers
+    /// "Share it again" — the catalog's words for exactly that.
+    var createRefused: String { t("settings.shareAgainNote") }
+
+    /// Why Vela's side is not on the signing relay (`RelayStatus.why`), as
+    /// the reason the relay line fills in: the relay's refusal and a pass
+    /// not got in the catalog's words (the web's `relayText`), the relay
+    /// unreached by its HOST (the core's `detail` for `unreachable`) — never
+    /// a transport error's text. `nil`: nothing sayable as a reason (the
+    /// line says Vela is reconnecting instead).
+    static func relayReason(why: String?, detail: String?, words: MsWords) -> String? {
+        switch why {
+        case "refused": return words.t("external.relayRefused")
+        case "unreachable":
+            guard let host = detail, !host.isEmpty,
+                  host.range(of: #"^[A-Za-z0-9.-]+(:[0-9]+)?$"#, options: .regularExpression) != nil
+            else { return nil }
+            return host
+        default: return words.t("external.relayNoToken")
         }
-        switch object["kind"] as? String {
-        case "passkey":
-            if object["timedOut"] as? Bool == true { return t("proposal.reason.passkeyTimedOut") }
-            switch object["failure"] as? String {
-            case "cancelled": return t("proposal.reason.passkeyClosed")
-            case "not_discoverable", "not_supported": return t("proposal.reason.passkeyMissing")
-            default:
-                // Real-device S3: the core's sentence for the platform's error
-                // (`passkey_error_words`), when the shell had one.
-                if let key = object["message"] as? String, key.hasPrefix("onboarding.common.") {
-                    return t("proposal.failed", ["reason": loc.t(key)])
-                }
-                return t("proposal.reason.passkeyFailed")
-            }
-        case "passkey_check": return t("proposal.reason.passkeyFailed")
+    }
+
+    /// The outside signing session's failure (`Failure`), in words. A room
+    /// that could not be opened (`noRoom`) carries a transport error's text
+    /// as its `reason` — never drawn: "Something went wrong", with the
+    /// sheet's Try again.
+    static func outsideFailure(_ failure: MsJSON?, words: MsWords, chain: String, wallet: String) -> String? {
+        guard let failure else { return nil }
+        switch failure.kind {
+        case "connectDeclined": return words.t("external.connectDeclined")
+        case "walletDeclined": return words.t("external.declined")
+        case "otherChain": return words.t("external.otherChain", ["chain": chain])
+        case "badSignature": return words.t("external.badSignature")
+        case "stoppedWaiting": return words.t("external.stoppedWaiting")
+        case "noRoom": return words.t("proposal.reason.unknown")
+        default: return words.t("external.stillWaiting", ["wallet": wallet])
+        }
+    }
+
+    /// A failed action's detail in words — round 16 leftover 4: by its
+    /// stable KIND through the core's door (`review.failure`), never its
+    /// text. The kinds the catalog says alone are their key's words
+    /// (`{{network}}`: the detail's network, else `chainId`'s); the fee that
+    /// moved, what the executor cannot pay and the venue's block are worded
+    /// from the detail's own facts. Plain text, an unknown kind, an error's
+    /// English: "Something went wrong, so nothing was sent."
+    func failureText(_ detail: String?, chainId: Int? = nil) -> String {
+        let said = MsRules.failure(detail)
+        let object = MultisigShellFailure.read(detail) ?? [:]
+        switch said.kind {
+        // r14-9 (the core's rule): the fee moved since the press — nothing
+        // signed; said with the new figure (its fee line's own words), so the
+        // next press is on it.
+        case "fee_moved":
+            let chain = (object["chainId"] as? NSNumber)?.intValue ?? chainId ?? 0
+            let fee = "\(MsRules.formatUnits(object["amount"] as? String ?? "0", decimals: Self.coinDecimals)) \(symbol(chain))"
+            return t("proposal.failed", ["reason": t("proposal.feeLine", [
+                "fee": fee, "name": label(object["executor"] as? String ?? ""),
+            ])])
+        case "cannot_pay":
+            return t("proposal.failed", ["reason": t("status.nobodyPays")])
         case "venue_blocked":
             if let block = object["block"] as? [String: Any],
                let wire = MultisigMachine.decode(VenueBlockWire.self, from: block) {
@@ -535,30 +595,21 @@ struct MsWords {
                 if !line.isEmpty { return line }
             }
             return t("proposal.reason.unknown")
-        case "page_declined": return loc.t(TrustedSignerNotice.closed.key)
-        case "page_sign_failed", "page_approval":
-            switch object["page"] as? String ?? object["failure"] as? String {
-            case "unanswered": return loc.t(TrustedSignerNotice.timeout.key)
-            case "mismatch": return loc.t(TrustedSignerNotice.mismatch.key)
-            case "not_opened": return loc.t(TrustedSignerNotice.unavailable.key)
-            default: return loc.t(TrustedSignerNotice.refused.key)
+        case "passkey_failed":
+            // Real-device S3: the core's sentence for the platform's error
+            // (`passkey_error_words`) — a catalog KEY this shell put in
+            // `message`, said only when the catalog has it; never text.
+            if let key = object["message"] as? String, key.hasPrefix("onboarding.common.") {
+                let words = loc.t(key)
+                if words != key { return t("proposal.failed", ["reason": words]) }
             }
-        case "not_sent": return t("proposal.notSent")
-        case "cannot_pay":
-            return t("proposal.failed", ["reason": t("status.nobodyPays")])
-        // r14-9 (the core's rule): the fee moved since the press — nothing
-        // signed; said with the new figure (its fee line's own words), so the
-        // next press is on it.
-        case "fee_moved":
-            let chain = (object["chainId"] as? NSNumber)?.intValue ?? 0
-            let fee = "\(MsRules.formatUnits(object["amount"] as? String ?? "0", decimals: Self.coinDecimals)) \(symbol(chain))"
-            return t("proposal.failed", ["reason": t("proposal.feeLine", [
-                "fee": fee, "name": label(object["executor"] as? String ?? ""),
-            ])])
         default:
-            let message = (object["message"] as? String) ?? ""
-            return message.isEmpty ? t("proposal.reason.unknown") : t("proposal.failed", ["reason": message])
+            break
         }
+        guard let key = said.key else { return t("proposal.reason.unknown") }
+        let chain = (object["chain_id"] as? NSNumber)?.intValue
+            ?? (object["chainId"] as? NSNumber)?.intValue ?? chainId ?? 0
+        return self.said(key, chainId: chain)
     }
 
     // MARK: - Authority findings (§3.5)

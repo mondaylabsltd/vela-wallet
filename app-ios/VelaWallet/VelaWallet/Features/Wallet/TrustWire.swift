@@ -171,4 +171,27 @@ struct TrustViewWire: Decodable, Equatable {
     /// The sign sheet's simulation verdict (spec 055). `nil` until something
     /// has been simulated for this account.
     let sim: TrustSimViewWire?
+    /// Round 16 leftover 5: the networks of this account the scan could not
+    /// read on its last look at each — handed to the Activity feed with the
+    /// scan's answer (`sync_completed.unread_chains`). Absent reads none.
+    var unreadChains: [Int] = []
+
+    private enum CodingKeys: String, CodingKey { case address, scanning, incoming, sim, unreadChains }
+
+    init(address: String?, scanning: Bool, incoming: [TrustIncomingWire], sim: TrustSimViewWire?, unreadChains: [Int] = []) {
+        self.address = address
+        self.scanning = scanning
+        self.incoming = incoming
+        self.sim = sim
+        self.unreadChains = unreadChains
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        address = try c.decodeIfPresent(String.self, forKey: .address)
+        scanning = try c.decode(Bool.self, forKey: .scanning)
+        incoming = try c.decode([TrustIncomingWire].self, forKey: .incoming)
+        sim = try c.decodeIfPresent(TrustSimViewWire.self, forKey: .sim)
+        unreadChains = try c.decodeIfPresent([Int].self, forKey: .unreadChains) ?? []
+    }
 }

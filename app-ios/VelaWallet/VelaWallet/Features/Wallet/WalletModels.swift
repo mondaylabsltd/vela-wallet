@@ -246,6 +246,9 @@ struct SectionModel {
     let action: String
     let mode: SectionMode
     var empty: SectionEmptyModel?
+    /// Round 16 leftover 5: a line over the rows (Activity on a network the
+    /// scan could not read) — `nil`: none.
+    var note: String? = nil
 }
 
 enum ChainDot {

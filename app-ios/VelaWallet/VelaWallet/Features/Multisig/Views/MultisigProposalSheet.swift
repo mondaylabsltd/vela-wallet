@@ -874,14 +874,11 @@ struct MultisigProposalSheet: View {
     // MARK: - States before the item reads
 
     /// §18 (b): the core's words for a sheet opened without a link whose
-    /// transaction is not in the list (`nil` while the multisig is not one
-    /// this sheet's network is read for yet and nothing is loading).
+    /// transaction is not in the list — round 16 leftover 3: a service that
+    /// answered with its rate limit (the view's `busy`) is said busy, with
+    /// Try again.
     private var missingSaid: (key: String, retry: Bool)? {
-        MsRules.missingSaid(
-            loading: view.loading,
-            unreadable: view.unreadable.contains(chainId),
-            mailbox: view.chains.first(where: { $0.chainId == chainId })?.mailbox
-        )
+        MsRules.missingSaid(view: view, chainId: chainId)
     }
 
     @ViewBuilder private var linkedState: some View {
@@ -896,12 +893,12 @@ struct MultisigProposalSheet: View {
                 .accessibilityIdentifier("multisig.proposal.openRetry")
         } else if linked?.stand == "notInMailbox" {
             MsNote(text: words.t("proposal.notInMailbox"), tone: .warning, identifier: "multisig.proposal.notInMailbox")
-        } else if linked == nil, let missing = missingSaid, missing.key != "proposal.opening" {
+        } else if linked == nil, let missing = missingSaid, missing.key != MsRules.missingOpening {
             // §18 (b), round 14: opened without a link and not in the list —
             // the core's words for why (a silent service is said as that,
             // with Try again), never an endless "Opening the transaction…".
             MsNote(
-                text: words.t(missing.key, ["network": words.network(chainId)]),
+                text: words.said(missing.key, chainId: chainId),
                 tone: .warning, identifier: "multisig.proposal.missing"
             )
             if missing.retry {

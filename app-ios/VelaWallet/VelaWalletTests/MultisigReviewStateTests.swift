@@ -106,7 +106,7 @@ struct MultisigReviewStateTests {
         let line = MsReviewPending.failedLine(door, words: words, network: "Arc Testnet")
         #expect(line.hasPrefix("Couldn't reach Arc Testnet to read this transaction."), "\(line)")
         let missing = MsRules.missingSaid(loading: false, unreadable: false, mailbox: false)
-        #expect(missing.key == "proposal.unread.linkService" && missing.retry)
+        #expect(missing.key == "home.multisig.proposal.unread.linkService" && missing.retry)
         #expect(MsRules.missingSaid(loading: false, unreadable: false, mailbox: true).retry == false)
     }
 

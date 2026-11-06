@@ -154,7 +154,20 @@ final class TokenTrustStore {
     /// (`incomingScanPlan`), used only to push the registry's stablecoins of
     /// those networks first — a fetch the core cannot make.
     func scan(address: String, facts: [String: Any]) async -> [TrustIncomingWire] {
-        guard !address.isEmpty, !polling else { return [] }
+        await scanned(address: address, facts: facts).incoming
+    }
+
+    /// Round 16 leftover 5: the networks of `address` the scan could not
+    /// read, as the core's view says them now (none for another account).
+    func unreadChains(address: String) -> [Int] {
+        guard let view = trust, view.address?.caseInsensitiveCompare(address) == .orderedSame else { return [] }
+        return view.unreadChains
+    }
+
+    /// `scan`, with what it could not read (`TrustView.unread_chains` after
+    /// the poll settled) — the feed's `sync_completed.unread_chains`.
+    func scanned(address: String, facts: [String: Any]) async -> (incoming: [TrustIncomingWire], unreadChains: [Int]) {
+        guard !address.isEmpty, !polling else { return ([], unreadChains(address: address)) }
         polling = true
         defer { polling = false }
 
@@ -174,7 +187,8 @@ final class TokenTrustStore {
            let data = try? JSONSerialization.data(withJSONObject: kept) {
             shelf.writeString(Self.cursorsKey(address), String(decoding: data, as: UTF8.self))
         }
-        return settled?.incoming ?? []
+        let unread = settled?.address?.caseInsensitiveCompare(address) == .orderedSame ? settled?.unreadChains ?? [] : []
+        return (settled?.incoming ?? [], unread)
     }
 
     /// The core's networks for these facts (`incoming_scan::scan_plan`).

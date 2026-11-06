@@ -279,6 +279,15 @@ struct HistoryBody: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, Tokens.Space.s48)
             } else {
+                // Round 16 leftover 5: a network the scan could not read.
+                if let note = model.note {
+                    Text(verbatim: note)
+                        .typeRole(Typography.rowSub.scaled(textScale))
+                        .foregroundStyle(theme.fgMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.vertical, Tokens.Space.s8)
+                        .accessibilityIdentifier("history.unread")
+                }
                 ForEach(Array(model.groups.enumerated()), id: \.element.id) { groupIndex, group in
                     Text(verbatim: group.label)
                         .typeRole(Typography.rowSub.scaled(textScale))
