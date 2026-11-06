@@ -1588,7 +1588,10 @@ impl App for BalanceDashboard {
             internal_chain_ids: model.internal_chain_ids.clone(),
             internal_key: (model.errored_internally || !model.internal_chain_ids.is_empty())
                 .then(|| super::fee_policy::REASON_INTERNAL_KEY.to_owned()),
-            checking_key: (!first_read_ended).then(|| CHECKING.to_owned()),
+            // r15-15: never "Checking…" under an outage the core already
+            // names (a network the pool found silent during the first read).
+            checking_key: (!first_read_ended && model.pool_said.is_empty())
+                .then(|| CHECKING.to_owned()),
             live_key: (model.last_round_answered
                 && !model.hidden
                 && !unknown
@@ -1771,7 +1774,23 @@ fn pool_unreached(
     fresh.extend(fresh_silent.iter().copied());
     model.pool_unreached = now;
     model.pool_silent = silent;
-    if model.address.is_none() || !model.bootstrapped || model.read_deferred {
+    if model.address.is_none() || model.read_deferred {
+        return Command::done();
+    }
+    if !model.bootstrapped {
+        // r15-15: the account's first round is still out, and the pool finds
+        // a network SILENT — the outage every other section already names.
+        // Said now (the hero leaves "Checking…" for "Can't reach …"); the
+        // round still out is the read, and its settle has the last word.
+        let home = said_home(model);
+        for id in fresh_silent {
+            if home.as_ref().is_none_or(|home| home.contains(&id))
+                && !model.failed_chain_ids.contains(&id)
+            {
+                model.failed_chain_ids.push(id);
+                model.pool_said.insert(id);
+            }
+        }
         return Command::done();
     }
     let unsaid: Vec<u32> = fresh

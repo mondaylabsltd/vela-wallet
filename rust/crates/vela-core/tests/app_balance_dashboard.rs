@@ -3213,6 +3213,53 @@ fn an_unread_network_never_yields_an_empty_claim() {
     );
 }
 
+/// Round 15 (r15-15): under a refused Arc the desktop's balance line said
+/// "Checking…" at 50 s while the other sections had named the outage. The
+/// pool's word that a network is SILENT is the core's outage naming: during
+/// the first read it is said at once — "Checking…" gives way to "Can't
+/// reach Arc Testnet" — and the round, when it settles, has the last word.
+#[test]
+fn a_silent_network_during_the_first_read_is_named_never_checking() {
+    use vela_core::app::balance_dashboard::CHECKING;
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(10.53),
+    });
+    assert_eq!(sut.view().checking_key.as_deref(), Some(CHECKING));
+    // A loss that is not silent only waits for the round.
+    sut.dispatch(Event::PoolUnreached {
+        chain_ids: vec![ARC_TESTNET],
+        silent: vec![],
+    });
+    assert_eq!(sut.view().checking_key.as_deref(), Some(CHECKING));
+    // Silent: named now, while the first round is still out.
+    sut.dispatch(Event::PoolUnreached {
+        chain_ids: vec![ARC_TESTNET],
+        silent: vec![ARC_TESTNET],
+    });
+    let view = sut.view();
+    assert_eq!(view.checking_key, None, "the outage is named, not Checking…");
+    assert_eq!(
+        view.unreachable_networks
+            .iter()
+            .map(|n| n.chain_id)
+            .collect::<Vec<_>>(),
+        vec![ARC_TESTNET]
+    );
+    assert!(view.unreachable_key.is_some());
+    assert_eq!(view.empty_key, None);
+    // The round settles: its word stands (Arc came back meanwhile).
+    sut.resolve(settled_read(
+        vec![token(ARC_TESTNET, "USDC", "10.53", Some(1.0))],
+        vec![],
+        vec![1, ARC_TESTNET],
+    ));
+    let view = sut.view();
+    assert_eq!(view.checking_key, None);
+    assert!(view.unreachable_networks.is_empty(), "{:?}", view.unreachable_networks);
+}
+
 /// A view written before the empty fact reads without it.
 #[test]
 fn a_view_from_before_the_empty_fact_still_reads() {

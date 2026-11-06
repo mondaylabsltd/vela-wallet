@@ -541,6 +541,62 @@
    ]
   },
   {
+   "name": "r15-15: a network the pool finds SILENT while the account's first round is out is named at once (never 'Checking…' under a named outage); the round, when it settles, has the last word",
+   "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "steps": [
+    {
+     "event": {
+      "type": "pool_unreached",
+      "chain_ids": [
+       5042002
+      ],
+      "silent": [
+       5042002
+      ]
+     },
+     "expect": {
+      "fetch": {
+       "force": false
+      },
+      "unreachable": [
+       5042002
+      ],
+      "live": false
+     }
+    },
+    {
+     "answer": {
+      "type": "cached_total_loaded",
+      "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "usd": null
+     }
+    },
+    {
+     "answer": {
+      "type": "fetch_settled",
+      "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "pull": false,
+      "tokens": [],
+      "failed_chain_ids": [
+       5042002
+      ],
+      "rate_limited_chain_ids": [],
+      "read_chain_ids": [
+       5042002,
+       11155111
+      ],
+      "now_ms": 1700000000000
+     },
+     "expect": {
+      "unreachable": [
+       5042002
+      ],
+      "live": false
+     }
+    }
+   ]
+  },
+  {
    "name": "r12-2: a plain account on mainnet, three networks that never answer: said, never Live",
    "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
    "steps": [
