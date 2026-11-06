@@ -722,9 +722,11 @@ object FlowLive {
         language: String = app.getvela.wallet.core.i18n.AppLanguage.tag,
         /** Spec 105: the testnet space — no row has a worth to show. */
         noValue: Boolean = false,
+        /** r16-13: `assets.lastSeen` filled — a figure not read this round is said as last seen. */
+        lastSeen: ((String) -> String)? = null,
     ): AssetsModel {
         // Spec 048: narrowed to the chosen network (the row id starts with its chain id).
-        val rows = WalletLive.assetRows(view, chainNames, currency, language, noValue = noValue)
+        val rows = WalletLive.assetRows(view, chainNames, currency, language, noValue = noValue, lastSeen = lastSeen)
             .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
         // Empty when the core says so (`empty_key`: the first read ended and
         // found nothing held) — it was this builder's own "no rows, not

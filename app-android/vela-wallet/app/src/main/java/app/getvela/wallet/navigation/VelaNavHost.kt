@@ -2953,6 +2953,9 @@ fun VelaNavHost(
                 }
                 // The connected sites, live from the browser core (spec 070).
                 val connectedSites by application.container.browser.dapp.collectAsStateWithLifecycle()
+                // r16-12: a multisig in front wears the one check in Switch account.
+                val settingsMsAccounts by application.container.multisig.accountsView.collectAsStateWithLifecycle()
+                val settingsMultisigShown = settingsMsAccounts.activeRow != null
                 LaunchedEffect(Unit) {
                     treasury = (application.container.relay.probeTreasury(100) as? SendTreasuryProbe.LowFloat)?.status
                 }
@@ -3030,7 +3033,7 @@ fun VelaNavHost(
                     m = SettingsLive.withAccounts(m, sessionView.accounts.map { it.name to it.address }, sessionView.activeIndex,
                         // Spec 105: no account is worth anything in the testnet space.
                         if (space.testnet) balanceView.switcher.copy(balances = emptyList()) else balanceView.switcher, currency, strings,
-                        unsynced = sessionView.unsynced, unreadable = storedUnreadable)
+                        unsynced = sessionView.unsynced, unreadable = storedUnreadable, multisigShown = settingsMultisigShown)
                     // Spec 048: the network detail is THIS network's, not the fixture's.
                     openNetworkId?.let { id ->
                         networks.networks.firstOrNull { it.id == id }?.let { row ->
@@ -3751,7 +3754,7 @@ private fun liveFlow(
                 ),
             )
         is FlowBase.Assets ->
-            FlowBase.Assets(FlowLive.assets(base.model, balances, chainNames, currency, chainFilter, FlowFixtures.assetsEmpty(strings), strings.language, noValue = noValue))
+            FlowBase.Assets(FlowLive.assets(base.model, balances, chainNames, currency, chainFilter, FlowFixtures.assetsEmpty(strings), strings.language, noValue = noValue, lastSeen = { strings.t(app.getvela.wallet.core.i18n.I18nKeys.SettingsUi.LAST_SEEN, mapOf("amount" to it)) }))
         else -> drawn.base
     },
     sheet = when (val sheet = drawn.sheet) {

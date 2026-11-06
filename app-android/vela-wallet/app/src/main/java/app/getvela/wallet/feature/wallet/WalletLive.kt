@@ -165,7 +165,11 @@ object WalletLive {
     ): WalletHomeModel {
         // The symbol is the language's (`fiatSymbol`): this screen's own, as its words are.
         val money = Money.of(currency, strings.language)
-        val rows = assetRows(view, chainNames, currency, strings.language, noValue = noValue != null)
+        val rows = assetRows(
+            view, chainNames, currency, strings.language, noValue = noValue != null,
+            // r16-13: a live home says a figure not read this round as last seen.
+            lastSeen = if (shownAccount == null) null else ({ strings.t(I18nKeys.SettingsUi.LAST_SEEN, mapOf("amount" to it)) }),
+        )
             .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
         // r15-1: another account's rows are never drawn under this one.
         val feedIsShown = shownAccount == null || feed.account.equals(shownAccount, ignoreCase = true)
@@ -466,9 +470,45 @@ object WalletLive {
         language: String = AppLanguage.tag,
         /** Spec 105: the testnet space — a row has no worth to show. */
         noValue: Boolean = false,
+        /**
+         * r16-13: `assets.lastSeen` filled with a figure ("Last seen {{amount}}").
+         * Given, a row whose figure was not read this round ([staleChains])
+         * says so; `null` (a board, a picker) draws the rows as given.
+         */
+        lastSeen: ((String) -> String)? = null,
     ): List<AssetRowModel> {
         val money = Money.of(currency, language)
-        return view.tokens.map { token -> assetRow(token, chainNames, money, view.hidden, noValue) }
+        val stale = staleChains(view)
+        return view.tokens.map { token ->
+            val row = assetRow(token, chainNames, money, view.hidden, noValue)
+            if (lastSeen == null || view.hidden || !stale(token.chain_id)) row else lastSeenRow(row, lastSeen)
+        }
+    }
+
+    /**
+     * r16-13: the networks whose rows hold a figure not read this round — the
+     * core's `unreachable_networks` (the web's `quiet` set) and the ones only
+     * rate-limited; and, while the account's FIRST read is still out
+     * (`checking_key`), every network: what is drawn then is the rows kept
+     * from last session (`holdings_restored`), "last session's" in the core's
+     * own words. A cold start with Arc hung drew last session's 0.827013 USDC
+     * as current (the balance was 0.467013).
+     */
+    fun staleChains(view: BalanceView): (Int) -> Boolean {
+        if (view.checking_key != null) return { true }
+        val quiet = view.unreachable_networks.map { it.chain_id }.toSet() + view.rate_limited_chain_ids
+        return { it in quiet }
+    }
+
+    /**
+     * r16-13: a row said as last seen. With a worth (mainnet): "Last seen
+     * $0.83" in the worth's place, as the web's row. Without one (the testnet
+     * space has no worth line): the amount itself, "Last seen 0.827013 USDC".
+     */
+    private fun lastSeenRow(row: AssetRowModel, lastSeen: (String) -> String): AssetRowModel = when (val fiat = row.fiat) {
+        is AssetFiatModel.Value -> row.copy(stale = true, fiat = AssetFiatModel.Value(lastSeen(fiat.text)))
+        AssetFiatModel.None -> row.copy(stale = true, balance = lastSeen(row.balance))
+        else -> row.copy(stale = true)
     }
 
     /**

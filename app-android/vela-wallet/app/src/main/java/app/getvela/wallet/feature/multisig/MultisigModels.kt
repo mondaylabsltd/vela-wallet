@@ -61,7 +61,15 @@ class MsProposalModel(
         // r10-7 (round 11, live): an executed one has no standing — the chip
         // fell back to today's count and read "1/2 approved" over an
         // execution that counted 2 of 2. Finished: what the heading says.
-        get() = if (isDone) approvalsCount else words.standingLine(standing, item)
+        get() = when {
+            isDone -> approvalsCount
+            // r16-8 (iOS's finding, Android parity): executed from here — the
+            // press's passkey and send, before the chain has it — is
+            // "Executing…", never the mailbox's "1/2 approved" (the one press
+            // carries the last approval itself).
+            executeState.kind == "working" || item.executing -> words.t("status.executing")
+            else -> words.standingLine(standing, item)
+        }
 
     /** r10-7: the execution's own line is said once — the notes' line, else the chain's word for it. */
     val executedSaidInNotes: Boolean get() = executionLine?.id == "executed"
@@ -306,6 +314,47 @@ class MsProposalModel(
         } ?: words.t("proposal.feeSetupPlain", "network" to words.network(chainId))
         return listOf(head) + lines
     }
+
+    /**
+     * r16-14: what is said under the presses about executing it — the fee
+     * lines, the setup, "Check again", why the one press is not offered —
+     * only while a press can sign. While the review is not read (or not
+     * signable) the door's own reason is the one note: the looks the
+     * timer takes meanwhile come and go with the same outage, and a label
+     * or a fee line that followed them flipped under a shut button.
+     */
+    val saysExecution: Boolean get() = canSign
+
+    /**
+     * core-ms-2 + r16-14: the main button is "Approve and execute" for
+     * [chosen] — the core offers them the one press (`approve_execute`) and
+     * a press can sign. While the door is shut it reads Approve, steady.
+     */
+    fun oneTapShown(chosen: String?): Boolean =
+        saysExecution && chosen != null && view.approveExecuteBy(item).any { it.equals(chosen, ignoreCase = true) }
+
+    /**
+     * r16-4: the approval alone, beside the one press (the web's and iOS's
+     * second button): the one press does both or nothing, so approving
+     * without executing is the person's own press.
+     */
+    fun approveAloneBeside(chosen: String?): Boolean = oneTapShown(chosen)
+
+    /**
+     * r16-4: the execution stopped only because its fee could not be worked
+     * out or checked at the press — its way on is a new look ("Check
+     * again"), not a read of the list.
+     */
+    val failureChecksFee: Boolean
+        get() = executeState.kind == "stopped" && executeState["preview"].kind in setOf("unpriced", "unchecked")
+
+    /**
+     * r14-6 + r16-4: "Check again" under the one press — a look that could
+     * not price or check it, while a press can sign and no stop beside the
+     * press already offers it (said once).
+     */
+    fun oneTapCheckAgain(chosen: String): Boolean =
+        saysExecution && executeFailure == null && LookAsk.offersCheckAgain(preview(chosen).kind)
 
     /**
      * r10 S4: why [member]'s approval — which would complete it — is offered

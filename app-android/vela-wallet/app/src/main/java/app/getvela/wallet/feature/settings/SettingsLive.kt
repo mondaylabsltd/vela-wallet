@@ -1444,9 +1444,15 @@ object SettingsLive {
         unsynced: List<app.getvela.wallet.feature.onboarding.core.SessionUnsynced> = emptyList(),
         /** §18 item 2: stored records this device cannot read. */
         unreadable: Int = 0,
+        /**
+         * r16-12 (iOS r15-9's rule, §23): a multisig is in front — its row in
+         * the multisig section wears the one check, so no Vela account row
+         * does (the header's switcher already drew it so).
+         */
+        multisigShown: Boolean = false,
     ): SettingsScreenModel = model.copy(
         accountsSheet = app.getvela.wallet.feature.wallet.WalletLive.accountSwitcher(
-            accounts, activeIndex, switcher, currency, strings, unsynced, unreadable,
+            accounts, if (multisigShown) -1 else activeIndex, switcher, currency, strings, unsynced, unreadable,
         ),
     )
 
