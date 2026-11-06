@@ -1312,7 +1312,12 @@ describe('a fee that moved before the press (r14-9, r15-6)', () => {
 			})
 		];
 		fake.executeThrows = new Error(
-			JSON.stringify({ kind: 'fee_moved', amount: '186000000000000000', chainId: 100, executor: ME })
+			JSON.stringify({
+				kind: 'fee_moved',
+				amount: '186000000000000000',
+				chainId: 100,
+				executor: ME
+			})
 		);
 		const m = words();
 		m.proposal.failed = 'Failed: {{reason}}';
@@ -2093,7 +2098,10 @@ describe('the network cannot be read (r4b-3)', () => {
 describe('a sheet on a multisig whose list is not read yet (r15-11)', () => {
 	it.each([
 		['nothing followed yet (a cold load)', null],
-		['another multisig still followed (a link just opened)', '0x0000000000000000000000000000000000000cc1']
+		[
+			'another multisig still followed (a link just opened)',
+			'0x0000000000000000000000000000000000000cc1'
+		]
 	])('%s: "Opening…", never "isn’t shown here" nor an unread read’s words', async (_, followed) => {
 		fake.chain = null;
 		fake.unreadable = [100];

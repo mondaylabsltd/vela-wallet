@@ -662,7 +662,6 @@
 				{m.create.solo}
 			</p>{/if}
 		{#if owners.length >= 1 && local.length === 0}<p class="error">{m.create.needLocal}</p>{/if}
-
 	{:else if step === 'threshold'}
 		<h3>{m.create.threshold}</h3>
 		<div class="stepper" role="group" aria-label={m.create.threshold}>
