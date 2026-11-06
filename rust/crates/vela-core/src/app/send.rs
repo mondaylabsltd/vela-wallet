@@ -4835,7 +4835,18 @@ fn form_estimate_fire(model: &mut Model) -> Cmd {
         model.pipeline = Pipeline::Idle;
         return Command::done();
     };
-    let (tx, batch) = build_estimate_shape(model, &token);
+    // Under a Max the form prices the Max's own transfer, as the warm-up and
+    // the Max's estimate do — never the whole balance as the operation's
+    // outflow: the fee machine weighs every coin against what the priced
+    // operation leaves, and the chain's coin, which a Max follows by holding
+    // its fee back, read "Insufficient … for gas fees" and could not be
+    // picked (R15 follow-up, web e2e `fee-coin-switch`). Continue's
+    // pre-check still prices the exact amount.
+    let (tx, batch) = if model.max_fill.is_some() {
+        (max_estimate_call(model, &token, &account.address), None)
+    } else {
+        build_estimate_shape(model, &token)
+    };
     let id = next(model);
     model.pipeline = Pipeline::FormEstimate { id, key };
     issue(

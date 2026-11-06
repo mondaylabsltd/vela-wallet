@@ -19,7 +19,29 @@ export async function denyOffOrigin(page: Page): Promise<void> {
 	await page.route(/^https?:\/\/(?!localhost|127\.0\.0\.1)/, (route) => route.abort('failed'));
 }
 
-/** Answer JSON-RPC POSTs on matching URLs; non-matching methods 500. */
+/**
+ * The reads the wallet makes of EVERY network in the background, whatever a
+ * suite is about: the deposit watch's `eth_getBalance` (home-5) and the
+ * Activity scan's `eth_getLogs`. A suite that does not answer them gets what
+ * a working node says of a method it does not serve — a JSON-RPC error, an
+ * ANSWER — never the HTTP 500 the other unhandled methods get.
+ *
+ * A 500 is a transport failure to the pool, and the next endpoints of the
+ * network are the shipped public nodes, which `denyOffOrigin` refuses: three
+ * silent endpoints on every watch tick. Whenever five seconds then passed
+ * before the stub answered anything else for that network (a loaded machine,
+ * a slow first round), the pool's silence rule (r13-4) found the network
+ * out of reach, and since r15-15 the home names a network found silent
+ * during the first read at once: `home-truth` (webkit) listed two or three
+ * extra unreachable networks beside the one it had faulted. The suite
+ * faulted none of them; its stub did.
+ */
+const BACKGROUND_READS = new Set(['eth_getBalance', 'eth_getLogs']);
+
+/**
+ * Answer JSON-RPC POSTs on matching URLs; other non-matching methods 500
+ * (the background reads: a JSON-RPC "method not found", see above).
+ */
 export async function stubJsonRpc(
 	page: Page,
 	urlPattern: RegExp,
@@ -35,6 +57,15 @@ export async function stubJsonRpc(
 			return route.fulfill({ status: 400, body: 'bad json' });
 		}
 		const result = handle(body.method ?? '', body.params ?? [], request.url());
+		if (result === undefined && BACKGROUND_READS.has(body.method ?? ''))
+			return route.fulfill({
+				contentType: 'application/json',
+				body: JSON.stringify({
+					jsonrpc: '2.0',
+					id: body.id ?? 1,
+					error: { code: -32601, message: 'the method is not available on this stub' }
+				})
+			});
 		if (result === undefined) return route.fulfill({ status: 500, body: 'unhandled method' });
 		return route.fulfill({
 			contentType: 'application/json',

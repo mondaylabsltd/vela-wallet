@@ -1793,6 +1793,22 @@ Left open:
 - Desktop: with only a rate-limited network and no rows the Assets strip
   stays loading, as the web's skeleton does.
 
+### 22.1 Two web e2e reds after the merge
+
+Both were timing-dependent: they passed alone and on a quiet machine, and
+failed under load. Neither reached a live endpoint. Every request was
+logged (`page.on('request' | 'requestfailed' | 'requestfinished')`), and
+every off-origin one was refused by `denyOffOrigin`. A full run with every
+page behind a proxy that does not exist had 505 green and two reds. Both
+reds came from the load (the Rust suite was running beside it) and passed
+alone behind the same proxy. The extension suites launch their own browser,
+so the proxy did not cover them.
+
+| Red | Cause | Decision |
+| --- | --- | --- |
+| `home-truth` :158 [webkit], three "Fix" rows | **Test hermeticity.** The list named Arbitrum and Gnosis ("Held nothing when last read": read, then lost) beside the faulted Ethereum. The stub answered the deposit watch's `eth_getBalance` and the Activity scan's `eth_getLogs` with HTTP 500. To the pool that is a transport failure, so it swept the network's shipped public nodes, which `denyOffOrigin` refuses (Arbitrum and Gnosis ship three each). That makes three silent endpoints on every tick. With five seconds between two such ticks and no other answer, the silence rule (r13-4) named the network, and r15-15 says it at once during the first read. The rule did what it says: the stub's network did fail two reads out of three. | `stubJsonRpc` answers those two background reads, when a suite does not, with a JSON-RPC "method not found". That is an answer, as a working node gives for a method it does not serve, and the callers read it as before (no reading). The silence rule is unchanged. |
+| `fee-coin-switch` :97 [chromium], `click` timed out | **Core.** The ETH row of the fee sheet was disabled ("Insufficient ETH for gas fees"). A Max pressed during the form quote's 400 ms debounce made that quote price the transfer of the WHOLE balance. The fee machine weighs each coin against what the priced operation leaves, so on the next re-price (12 s on Ethereum) the chain's coin had nothing left. But a Max follows a fee-coin switch by holding the fee back, so the coin could pay. The test passed only when the pick beat the re-price. A 14 s pause before the pick reproduces it every time. | Under a Max, the form's quote is the Max's own transfer (`max_estimate_call`: one wei of the chain's coin, as the warm-up and the Max's estimate already are). Continue's pre-check still prices the exact amount. Test `a_form_quote_under_a_max_prices_the_maxs_transfer_not_the_whole_balance`. |
+
 ## 23. Round 15 native fixes
 
 Round 15's Android and iOS findings (r15-1, r15-5, r15-7, r15-8, r15-9,
