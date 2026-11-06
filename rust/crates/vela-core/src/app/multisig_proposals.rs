@@ -1535,12 +1535,16 @@ impl App for MultisigProposals {
             } => {
                 // §12: `loading` at once (a review already read stays drawn
                 // while it is read again); one read at a time per review, so
-                // a shell asking again never pushes its bound back.
+                // a shell asking again never pushes its bound back. r15-13: a
+                // review that FAILED is read again only on the person's Try
+                // again (`review_again`) — a shell's open, refresh or timer
+                // asking `review` never retries it behind their back.
                 let run = {
                     let mut s = lock(&model.state);
                     let key = review_key_of(&s, chain_id, &safe_tx_hash);
                     s.review_blind.insert(key.clone(), blind);
-                    if s.reviewing.contains_key(&key) {
+                    let failed = matches!(s.review_states.get(&key), Some(ReviewState::Failed { .. }));
+                    if failed || s.reviewing.contains_key(&key) {
                         None
                     } else {
                         if !s.review_states.get(&key).is_some_and(ReviewState::is_ready) {

@@ -185,7 +185,8 @@ pub async fn gather_review<Ev: Send + 'static>(io: &Io<Ev>, subject: &ReviewSubj
         }
         reads = mr::review_reads(&base).unwrap_or_default();
     }
-    let simulate = async {
+    let sim_asked = !reads.sim_calls.is_empty();
+    let simulate = || async {
         if reads.sim_calls.is_empty() {
             return None;
         }
@@ -258,8 +259,24 @@ pub async fn gather_review<Ev: Send + 'static>(io: &Io<Ev>, subject: &ReviewSubj
         }
         read
     };
-    let (anchor, (trace, probe), sim_reply, recipient_facts, tokens) =
-        futures::join!(anchor, state, simulate, facts, tokens);
+    let (anchor, (mut trace, mut probe), mut sim_reply, recipient_facts, tokens) =
+        futures::join!(anchor, state, simulate(), facts, tokens);
+    // r15-12: a network coming back answers its multisig's own state (the
+    // pool's outage probe goes first) while the checks asked beside it were
+    // still turned away as silent. Landed as is, the review would be D1
+    // ("… anyway", signable) for the seconds until it is read again — a
+    // review on its way from failed to read passed through "anyway". The
+    // network has just answered: the checks are asked once more, within the
+    // same bounded run; only what is still unread then is said unread.
+    if answered(&anchor)
+        && checks_silent(trace.as_ref(), probe.as_ref(), sim_asked, sim_reply.as_deref())
+    {
+        let again = async { futures::join!(ask(reads.trace.clone()), ask(reads.probe.clone())) };
+        let ((t, p), s) = futures::join!(again, simulate());
+        trace = t;
+        probe = p;
+        sim_reply = s;
+    }
     answers.push(anchor);
     answers.extend(trace.iter().chain(probe.iter()).cloned());
     let mut known = subject.known.clone();
@@ -281,6 +298,34 @@ pub async fn gather_review<Ev: Send + 'static>(io: &Io<Ev>, subject: &ReviewSubj
         },
         answers,
     }
+}
+
+/// Whether a read's envelope is the network's answer (`{result}` or
+/// `{error}`), not silence (`{unreachable}`).
+fn answered(envelope: &Value) -> bool {
+    envelope.get("result").is_some() || envelope.get("error").is_some()
+}
+
+/// r15-12: whether every safety check a review asked — the state trace, the
+/// probe, the simulation — came back as silence (none answered, not even
+/// with an error), and at least one was asked.
+fn checks_silent(
+    trace: Option<&Value>,
+    probe: Option<&Value>,
+    sim_asked: bool,
+    sim_reply: Option<&str>,
+) -> bool {
+    let silent = |e: Option<&Value>| e.is_none_or(|e| !answered(e));
+    let sim_silent = !sim_asked
+        || sim_reply.is_none_or(|r| {
+            serde_json::from_str::<Value>(r)
+                .ok()
+                .is_none_or(|v| v.get("unreachable").is_some())
+        });
+    (trace.is_some() || probe.is_some() || sim_asked)
+        && silent(trace)
+        && silent(probe)
+        && sim_silent
 }
 
 /// The one review of what was read ([`mr::multisig_review`]); `None`: the

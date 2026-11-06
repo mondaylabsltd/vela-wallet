@@ -367,9 +367,14 @@
 		ask();
 		// Its hashes and fields are read once for a finished one; nothing is re-checked.
 		if (untrack(() => item?.status === 'done')) return;
-		const fresh = setInterval(ask, REVIEW_FRESH_MS);
+		// r15-13 (§12): a failed review waits for the person's Try again —
+		// the timers never ask it again (the core leaves it failed, too).
+		const failed = () => untrack(() => reviewState?.kind === 'failed');
+		const fresh = setInterval(() => {
+			if (!failed()) ask();
+		}, REVIEW_FRESH_MS);
 		const retry = setInterval(() => {
-			if (untrack(() => machineUnread)) ask();
+			if (!failed() && untrack(() => machineUnread)) ask();
 		}, REVIEW_RETRY_MS);
 		return () => {
 			clearInterval(fresh);
