@@ -1583,7 +1583,8 @@ impl App for MultisigProposals {
                     let mut s = lock(&model.state);
                     let key = review_key_of(&s, chain_id, &safe_tx_hash);
                     s.review_blind.insert(key.clone(), blind);
-                    let failed = matches!(s.review_states.get(&key), Some(ReviewState::Failed { .. }));
+                    let failed =
+                        matches!(s.review_states.get(&key), Some(ReviewState::Failed { .. }));
                     if failed || s.reviewing.contains_key(&key) {
                         None
                     } else {

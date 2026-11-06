@@ -269,7 +269,12 @@ pub async fn gather_review<Ev: Send + 'static>(io: &Io<Ev>, subject: &ReviewSubj
     // network has just answered: the checks are asked once more, within the
     // same bounded run; only what is still unread then is said unread.
     if answered(&anchor)
-        && checks_silent(trace.as_ref(), probe.as_ref(), sim_asked, sim_reply.as_deref())
+        && checks_silent(
+            trace.as_ref(),
+            probe.as_ref(),
+            sim_asked,
+            sim_reply.as_deref(),
+        )
     {
         let again = async { futures::join!(ask(reads.trace.clone()), ask(reads.probe.clone())) };
         let ((t, p), s) = futures::join!(again, simulate());

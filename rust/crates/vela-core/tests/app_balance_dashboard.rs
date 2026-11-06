@@ -3178,7 +3178,11 @@ fn an_unread_network_never_yields_an_empty_claim() {
         sut
     };
     // Arc refused; every other network answered holding nothing.
-    let refused = first(settled_read(vec![], vec![ARC_TESTNET], vec![1, 56, ARC_TESTNET]));
+    let refused = first(settled_read(
+        vec![],
+        vec![ARC_TESTNET],
+        vec![1, 56, ARC_TESTNET],
+    ));
     let view = refused.view();
     assert_eq!(view.checking_key, None, "the first read has ended");
     assert_eq!(view.empty_key, None, "Arc is unread: not an empty wallet");
@@ -3202,7 +3206,11 @@ fn an_unread_network_never_yields_an_empty_claim() {
         read_at_ms: None,
         now_ms: NOW,
     });
-    assert_eq!(limited.view().empty_key, None, "a rate-limited network is unread too");
+    assert_eq!(
+        limited.view().empty_key,
+        None,
+        "a rate-limited network is unread too"
+    );
 }
 
 /// A view written before the empty fact reads without it.

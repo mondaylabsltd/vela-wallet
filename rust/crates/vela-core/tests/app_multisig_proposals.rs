@@ -744,11 +744,12 @@ fn a_press_signs_only_the_fee_it_carries_even_on_a_fresh_look() {
     let no_clock = |sut: &mut Sut, world: &mut World, event: Event| {
         sut.dispatch(event);
         for _ in 0..20_000 {
-            let Some(op) = sut
-                .outstanding()
-                .into_iter()
-                .find(|op| !matches!(op, vela_core::app::multisig_shell::MultisigOperation::Wait { .. }))
-            else {
+            let Some(op) = sut.outstanding().into_iter().find(|op| {
+                !matches!(
+                    op,
+                    vela_core::app::multisig_shell::MultisigOperation::Wait { .. }
+                )
+            }) else {
                 return;
             };
             let res = world.answer(&op);
@@ -780,7 +781,11 @@ fn a_press_signs_only_the_fee_it_carries_even_on_a_fresh_look() {
     };
     let detail: Value = serde_json::from_str(&detail).expect("a failure the shells read");
     assert_eq!(detail["kind"], "fee_moved");
-    assert_eq!(detail["amount"], fee(&look), "the figure it would have signed");
+    assert_eq!(
+        detail["amount"],
+        fee(&look),
+        "the figure it would have signed"
+    );
     assert!(world.sent.is_empty(), "nothing signed or sent");
     assert_eq!(world.passkeys.len(), passkeys);
     // Pressed on the figure now shown: signed at exactly it.

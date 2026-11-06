@@ -99,7 +99,11 @@ fn a_multisig_followed_again_is_loading_until_its_own_read_lands() {
         account: Some(a.clone()),
     });
     assert_eq!(followed(&sut), a.address.to_ascii_lowercase());
-    assert_eq!(mailbox_read(&sut), Some(false), "its kept list, not read yet");
+    assert_eq!(
+        mailbox_read(&sut),
+        Some(false),
+        "its kept list, not read yet"
+    );
     assert!(sut.view().loading, "not read yet is loading");
     assert_eq!(missing_key(&sut), MISSING_OPENING_KEY);
     let answered = settle_reads_first(&mut sut, &mut world, 20_000);
