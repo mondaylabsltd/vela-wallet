@@ -442,7 +442,9 @@
 					? m.create.sharedSolo
 					: m.create.shared
 				: refused
-					? fillTemplate(m.create.refused, { reason: refused })
+					? // Round 16 leftover 4: the service's refusal is its own text — never
+						// drawn; what is true and what to do (iOS's words).
+						m.settings.shareAgainNote
 					: sharing
 						? m.create.savedSharing
 						: m.create.savedLater

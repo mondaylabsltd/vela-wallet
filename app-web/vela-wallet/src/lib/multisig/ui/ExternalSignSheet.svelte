@@ -117,15 +117,22 @@
 		return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 	}
 
-	/** r4C-4: Vela's own side not on the relay, in words. */
+	/**
+	 * r4C-4: Vela's own side not on the relay, in words. Round 16 leftover 4
+	 * (iOS's rule): the reason is the catalog's — the relay's refusal, a pass
+	 * not got — or, unreached, the relay's HOST; never a transport error's
+	 * text. Nothing sayable as a reason: "Vela went offline — reconnecting…".
+	 */
 	function relayText(status: RelayStatus): string {
 		if (status.kind !== 'retrying' && status.kind !== 'failed') return '';
+		const host = /^[A-Za-z0-9.-]+(:[0-9]+)?$/.test(status.detail) ? status.detail : null;
 		const reason =
 			status.why === 'refused'
 				? w.relayRefused
-				: status.why === 'noToken'
-					? w.relayNoToken
-					: status.detail;
+				: status.why === 'unreachable'
+					? host
+					: w.relayNoToken;
+		if (reason === null) return w.velaOffline;
 		if (status.kind === 'failed') return fillTemplate(w.velaRelayFailed, { reason });
 		if (status.at === null) return fillTemplate(w.velaRelayUnreachable, { reason });
 		return fillTemplate(w.velaRelayRetrying, {
@@ -185,7 +192,8 @@
 			case 'stoppedWaiting':
 				return w.stoppedWaiting;
 			case 'noRoom':
-				return problemText({ kind: 'unknown', reason: f.reason }, w, fillTemplate, walletLabel, '');
+				// Round 16 leftover 4: its `reason` is a transport error's text — never drawn.
+				return m.proposal.reason.unknown;
 			case 'wallet':
 				return problemText(
 					f.problem,
