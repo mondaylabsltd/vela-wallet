@@ -4566,7 +4566,7 @@ async fn approve_execute(
 /// these approvals says they can pay. Round 5 (S2): a look that could not
 /// price or check it in time (`unpriced`, `unchecked`) does not say they
 /// cannot — the press is offered, and the execution looks again before any
-/// signature (stopped then, the approval is still given). A look still out,
+/// signature (stopped then, nothing is approved either — r16-4). A look still out,
 /// or one that says it would fail, cannot be paid, is refused or its number
 /// is used, offers nothing.
 fn approve_executors(s: &State, item: &ProposalItem) -> Vec<String> {
