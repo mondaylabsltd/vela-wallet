@@ -1878,7 +1878,11 @@ Tests: core `a_one_press_whose_fee_is_unknown_at_the_press_signs_nothing_and_say
 r4-11 test); the D1 "… anyway" test now presses on its look's figure. Android
 JVM `R16NativeFixesTest`; device `R16NativeDeviceTest` (the r16-4 press over a
 refused re-quote: no passkey, no approval, the stop and one Check again, then
-lifted; the setup block's gap measured). iOS `MultisigR16NativeTests`.
+lifted; the setup block's gap measured); four older device tests that
+approved by pressing the one press over a refused quote (r4-11) now press
+Approve beside it. iOS `MultisigR16NativeTests` (the create sheet's Next whole
+on the SE's screen at open, hosted; the testnet accounts sheet with no worth);
+`MultisigFlowTests`' reject case reads the line beside Reject.
 
 Left open:
 
