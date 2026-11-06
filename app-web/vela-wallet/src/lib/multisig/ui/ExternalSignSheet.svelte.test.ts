@@ -194,6 +194,19 @@ describe('the outside-wallet sheet', () => {
 		await screen.unmount();
 	});
 
+	it('r16 leftover 4: a transport error is never the reason — the relay host, else "offline"', async () => {
+		fake.next = {
+			relay: { kind: 'failed', why: 'unreachable', detail: 'TypeError: Failed to fetch' }
+		};
+		const { screen } = open();
+		await vi.waitFor(
+			() => expect(testid('external-status')?.textContent).toContain('external.velaOffline'),
+			{ timeout: 3000 }
+		);
+		expect(document.body.textContent).not.toContain('Failed to fetch');
+		await screen.unmount();
+	});
+
 	it('r4C-3: a wallet silent for a while: timed, said, with Cancel and Ask again', async () => {
 		fake.next = { phase: 'confirming', since: Date.now() - 25_000 };
 		const { screen } = open();
