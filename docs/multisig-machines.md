@@ -1744,3 +1744,50 @@ Left open:
 - iOS wallet-level surfaces outside `Features/Multisig/Views` that put a short address inside prose (activity to/from lines, signing rows) are not bound yet.
 - Desktop: a short form drawn alone in a box narrower than itself can still wrap (none at shipped sizes).
 - Web: should Create's first step ever outgrow the sheet (many accounts, large text), Next scrolls with it; pinning it would mean a footer slot in `multisig/ui/Sheet.svelte`.
+
+## 22. Round 15 fixes (web, Safari, desktop, core)
+
+Decided by best practice under the owner's rules (one core owns the rules,
+full parity, honest and recoverable states: nothing claimed before it is
+read, nothing done behind the person's back). Each item was written test
+first; the native lane (r15-1, -5, -7, -8, -9, -14) is separate.
+
+| Item | Cause | Decision |
+| --- | --- | --- |
+| **r15-3 Safari Create sheet's Next** | Not `dvh`: on the iOS 26.2 simulator the wallet tab's web view shows 62–776 pt of 874 (top bar 62, floating toolbar 98) and the §21 cap held — the sheet ended at 777. Create's first step is taller than 88% of 714 pt, so Next sat in the sheet's scroll, under its bottom edge. | Every step's action row is the sheet's **foot, outside the scroll** (`multisig/ui/Sheet.svelte` and `settings/ui/Dialog.svelte` gain a `footer` slot; `BottomSheet`'s wallet skin draws the hairline where the body goes on). A step that outgrows the sheet scrolls its body; its action never moves. Chosen over shrinking the step or a sticky element inside the scroll: the foot is the bottom sheet's existing contract (the signing sheet's confirm). Proved: `CreateMultisigSheet.svelte.test.ts` (402×714, 375×548: Next / Next / Create on screen and hit-testable at open) and `SafariRouteDeviceTests` test01/02/07 on an erased iOS 26.2 simulator (new assertion: Next whole above the toolbar at open — 700–752 pt). Harness: a fresh simulator's keyboard introduction is put away (`dismissKeyboardIntro`). |
+| **r15-16 `MS_NAME`** | A word only an expansion produced is never an assignment: bash ran `TEST_RUNNER_VELA_MS_NAME=…` as the command (127). | The optional name rides as an `env` argument (`${extra[@]+"${extra[@]}"}`, bash 3.2 + `set -u`). `safari-route-e2e.test.sh` stubs `xcodebuild`/`xcrun`. |
+| **r15-6 doubled "That didn't go through"** | Web only: the fee-moved reason carried the failed prefix and the failed line added it again. Desktop, iOS and Android compose it once. | A reason is the reason alone; the line that draws a failed phase adds the prefix once (the draft's line too). |
+| **r15-13 a failed review re-read itself** | The web sheet asked `review` every 30 s whatever its state, and the core turned any review not `ready` back to `loading`. | **Core:** `review` on a `failed` review reads nothing — only `review_again` (the person's Try again) does. Every shell is covered, whatever its timers; the web's timers also skip a failed review. A reopened sheet shows the failure with Try again. |
+| **r15-12b "… anyway" flashed on recovery** | Right after an outage the anchor (`eth_getCode(safe)`) answered through the pool's outage probe while the checks asked beside it were still turned away: the review landed D1 (enabled "… anyway") until the 5 s re-read. | **Core (`gather_review`):** when the network answered but every safety check came back as silence, the checks are asked once more within the same bounded run; only what is still unread then is said unread. D1 stays for a network that answers but will not trace or simulate. |
+| **r15-11 / r15-12a list reads** | (a) A link's sheet opened on the multisig in front a moment ago; the machine said "not loading" for a multisig whose list was a kept copy (`mailbox: false` = not read yet) → "isn't shown here" / "Couldn't reach the multisig service". (b) A newly followed multisig's read, and a Try again, were dropped while another read was out (an old multisig's, or one hung in the outage). Aborted fetches and the link's `seq` were ruled out. | **Core (proposals machine):** a newly followed multisig, the person's `retry` and `online` start a read now (`read_gen`; the older read's answer is dropped when it lands); `loading` from such a Follow / Try again until that read lands. **Web:** a link's sheet is its multisig's (descriptor `address`), followed at once; a sheet whose multisig is not the one followed says "Opening…"; the sheet's Try again is the machine's `retry`. A 429 from the service is still worded as unreachable (not reproduced; left open below). |
+| **r15-4 false "Deposit your first asset"** | Desktop: the first round after launch carried nothing over (`LAST_SETTLED` is in memory), so a refused Arc wrote Dana's rows out of `vela.holdingsCache`. Core: `empty_key` was allowed while some networks were unread. | **Core:** `empty_key` is withheld while any network said for the account is unread (failed, silent, rate limited) — the list says that network (`unreachable_networks`, the hero's words); a rate limit keeps it loading while the pool waits. **Desktop:** the first round carries a failed chain's rows from the disk; the Assets strip and panel draw the unread words (the web's `unreadAssets`). |
+| **r15-15 "Checking…" at 50 s** | Desktop: the settle asked the pool thread (rate-limited and own-node chains) with no bound; a pool thread held by a refused network held the first settle. Core: `pool_unreached` ignored the pool until the first settle. | **Core:** a network the pool finds silent during the first read is named at once (`failed_chain_ids` + `pool_said`; `checking_key` gives way); the settle has the last word. Vector `balance-pool-unreached.json` gains the case. **Desktop:** the settle's pool questions are bounded (`SETTLE_ASK_MS` 1.5 s). |
+| **r15-2 desktop Add + invite link** | The sheet only sent `OpenLink` and waited for a one-shot link stand read at render; with a multisig in front it never reached the sheet (not reproduced headless). | Add reads the link itself with the core's pure parsers (`broken_link`, `add_link_fault`, `parse_add_link`, `parse_proposal_link`): an invite fills its address and card at once (and is still opened in the core), a damaged link says its words at once, a proposal link spins under "Opening…"; a failed lookup keeps its stand and Try again sends `RetryLink`. |
+| **r15-10 desktop full address** | Review rows drew full addresses as plain text; gpui broke at the overflowing character. | Rows draw them through `address_text` (22 + 20); `ui::prose` allows a break inside a full address only between its halves. |
+| **Fee moved (desktop, not concluded in R15)** | Desktop and web re-ask a priced look every 5 s; the core swaps a look older than 15 s. A press could sign a look that replaced the figure after it was painted, and the stop rarely fired. | **Core:** `Execute` / `ApproveExecute` carry `shown_fee` (base units): any look holding another figure stops with `fee_moved`, nothing signed; without it (older shells) the r14-9 rule stands. Web and desktop send it; the desktop scenario proves the stop and the line "That didn't go through: Network fee ≈ …, paid by Ana" (once). |
+
+Tests: core `app_multisig_review_state.rs`
+(`a_failed_review_is_read_again_only_on_the_persons_try_again`,
+`a_review_coming_back_from_an_outage_never_lands_anyway_on_the_way`),
+`app_multisig_proposals_reads.rs` (three cases),
+`app_multisig_proposals.rs`
+(`a_press_signs_only_the_fee_it_carries_even_on_a_fresh_look`),
+`app_balance_dashboard.rs` (`an_unread_network_never_yields_an_empty_claim`,
+`a_silent_network_during_the_first_read_is_named_never_checking`); web
+`CreateMultisigSheet`, `ProposalSheet` (fee prefix once, Opening for a
+multisig not read yet, `shown_fee` sent); desktop scenarios and unit tests
+(link read at once, Try again → `retry_link`, full-address halves, first
+round from disk, unread list words, settle budget, fee moved).
+
+Left open:
+
+- iOS and Android do not send `shown_fee` yet (optional; their presses keep
+  the r14-9 rule) — for the native lane, beside r15-5.
+- A 429 from the multisig service reads as "Couldn't reach the multisig
+  service" (the r15-11b rapid-link run could also have met the service's
+  rate limit; not reproduced here).
+- r15-2 and r15-15's desktop causes were not reproduced live; the fixes make
+  them unreachable (the sheet no longer depends on the one-shot stand; the
+  settle no longer waits on the pool thread).
+- Desktop: with only a rate-limited network and no rows the Assets strip
+  stays loading, as the web's skeleton does.
