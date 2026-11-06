@@ -596,30 +596,11 @@ pub(crate) fn stored_request(id: &str) -> Option<String> {
     (!text.trim().is_empty()).then_some(text)
 }
 
-/// R12 S4: the accounts (lowercased) whose first incoming scan has come
-/// back in this process. Before it an empty feed is not "No activity yet":
-/// the chains have not been asked what came in, and the home says it is
-/// still looking. Kept per account — a switch to one never scanned is a
-/// first look again. Loading versus empty is the shell's (`FeedView`'s
-/// `home_empty_key` doc); this is the fact it is decided from.
-static SCANNED: std::sync::Mutex<std::collections::BTreeSet<String>> =
-    std::sync::Mutex::new(std::collections::BTreeSet::new());
-
-/// Whether `address`'s first incoming scan has come back (R12 S4).
-#[must_use]
-pub fn scanned(address: &str) -> bool {
-    SCANNED
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .contains(&address.to_ascii_lowercase())
-}
-
-fn note_scanned(address: &str) {
-    SCANNED
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .insert(address.to_ascii_lowercase());
-}
+// R12 S4's "first scan back" is the core's now (r15-1, `FeedView.settled`:
+// this account's store read AND its first scan back since it was switched
+// to). The shell's per-process set it replaced said an account scanned once
+// in this process was looked at again at once after a switch back — the
+// r16-2 "No activity yet" before the account was read.
 
 /// Every stored row, as the core reads it. Crate-visible so the sign
 /// executor's test can prove the row it writes is the one Activity draws
@@ -673,7 +654,6 @@ impl Machine for ActivityFeed {
                 let address = address.clone();
                 Answer::Blocking(Box::new(move || {
                     let new_count = sync_received(&address);
-                    note_scanned(&address);
                     FeedShellResult::SyncCompleted { new_count }
                 }))
             }

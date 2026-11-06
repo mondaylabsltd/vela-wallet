@@ -4552,16 +4552,17 @@ impl WalletPage {
         // Try again) — the waiting group then does not say it again.
         let mut history_said = false;
         if self.identity.is_some() {
+            // r16-2: the feed's own words — whose rows they are, and whether
+            // it has looked (`FeedView.account` / `settled`) — over the
+            // account whose activity this is (the multisig shown, else the
+            // session's), and what the balance read of its networks.
+            let feed = self.feed_view(cx);
+            let shown = self.feed_shown(&feed, cx);
             let state = wallet_live::home_activity(
+                &feed,
+                &shown,
                 !activity.is_empty(),
-                resident::resident::<BalanceDashboard>(cx)
-                    .read(cx)
-                    .view()
-                    .balance_unknown,
-                // R12 S4: the account whose activity this is (the multisig
-                // shown, else the session's) has had its first scan back.
-                crate::executor::activity_feed::scanned(&crate::multisig::shown::address(cx)),
-                &resident::resident::<ActivityFeed>(cx).read(cx).shared(),
+                &crate::network_space::balance_view(cx),
                 &self.strings,
             );
             // r13-7: a multisig's Activity says what its history is — being
@@ -4579,8 +4580,19 @@ impl WalletPage {
                         .child(skeleton_row(theme));
                 }
                 wallet_live::HomeActivity::Empty { .. }
+                | wallet_live::HomeActivity::Unreachable { .. }
                 | wallet_live::HomeActivity::Unread { .. }
                     if elsewhere => {}
+                // r16-2: a network not read is named, never "No activity yet".
+                wallet_live::HomeActivity::Unreachable { title } => {
+                    activity_col = activity_col.child(empty_state(
+                        theme,
+                        &mut self.icons,
+                        Icon::Inbox,
+                        title,
+                        SharedString::default(),
+                    ));
+                }
                 wallet_live::HomeActivity::Unread { title, retry } => {
                     activity_col = activity_col.child(
                         div()
@@ -5195,7 +5207,21 @@ impl WalletPage {
             return fixtures::activity_default(&self.strings);
         }
         let feed = self.feed_view(cx);
+        // r16-2: another account's rows are never drawn under this one.
+        if !wallet_live::feed_is_for(&feed, &self.feed_shown(&feed, cx)) {
+            return Vec::new();
+        }
         wallet_live::activity_rows(&feed, &self.strings, &self.flow_strings, feed.hidden)
+    }
+
+    /// r16-2: the account whose activity is drawn — the multisig shown, else
+    /// the session's (`multisig::shown::address`, the feed's own
+    /// `AccountSwitched`); a pinned fixture feed is its own.
+    fn feed_shown(&self, feed: &vela_core::app::activity_feed::FeedView, cx: &gpui::App) -> String {
+        if Self::pinned_feed().is_some() {
+            return feed.account.clone();
+        }
+        crate::multisig::shown::address(cx)
     }
 
     /// The activity feed's view, with the balance's privacy told to it first:
@@ -5223,7 +5249,17 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) -> std::rc::Rc<vela_core::app::activity_feed::FeedView> {
         if let Some(pinned) = Self::pinned_feed() {
-            return std::rc::Rc::new(pinned);
+            // A fixture is its own account, read (r16-2's `feed_shown`).
+            let account = if pinned.account.is_empty() {
+                "0xme".to_owned()
+            } else {
+                pinned.account.clone()
+            };
+            return std::rc::Rc::new(vela_core::app::activity_feed::FeedView {
+                account,
+                settled: true,
+                ..pinned
+            });
         }
         self.sync_feed_privacy(cx);
         resident::resident::<ActivityFeed>(cx).read(cx).shared()
@@ -5723,7 +5759,8 @@ impl WalletPage {
                 &self.loc.relative_time(at, crate::executor::now_ms()),
             ))
         });
-        model.updated = wallet_live::updated_line(&model, ago);
+        // r16-2: never "Updated now" while a network it lives on is unread.
+        model.updated = wallet_live::updated_line(&model, &view, ago);
         // Issue 462: the core's "a read they asked for is out", held for at
         // least the press's minimum turn.
         model.refreshing = wallet_live::refresh_turning(
@@ -7921,14 +7958,23 @@ impl WalletPage {
             FlowPanel::Da1 => {
                 // Privacy is the feed's own flag, told from the balance's
                 // first (`feed_view`).
-                let balance_unknown = resident::resident::<BalanceDashboard>(cx)
-                    .read(cx)
-                    .shared()
-                    .balance_unknown;
                 let feed = self.feed_view(cx);
+                // r16-2: the feed's rows only under the account they are
+                // for, and its empty line only where Activity may say its
+                // own (`home_activity` over no rows).
+                let shown = self.feed_shown(&feed, cx);
+                let ours = wallet_live::feed_is_for(&feed, &shown);
+                let mode = wallet_live::home_activity(
+                    &feed,
+                    &shown,
+                    false,
+                    &crate::network_space::balance_view(cx),
+                    &self.strings,
+                );
                 let key = HistoryKey {
                     feed,
-                    balance_unknown,
+                    ours,
+                    mode,
                     language: self.loc.language().to_owned(),
                     day_ms: crate::executor::day_start_ms(crate::executor::now_ms()),
                 };
@@ -7940,7 +7986,8 @@ impl WalletPage {
                     _ => {
                         let panel = flows_live::history_panel(
                             &key.feed,
-                            balance_unknown,
+                            key.ours,
+                            &key.mode,
                             &self.flow_strings,
                             &self.strings,
                             key.feed.hidden,
@@ -22924,7 +22971,8 @@ impl WalletPage {
 /// the hero's ruling, the language and the day "Today" is.
 struct HistoryKey {
     feed: std::rc::Rc<vela_core::app::activity_feed::FeedView>,
-    balance_unknown: bool,
+    ours: bool,
+    mode: wallet_live::HomeActivity,
     language: String,
     day_ms: f64,
 }
@@ -22932,7 +22980,8 @@ struct HistoryKey {
 impl HistoryKey {
     fn same(&self, other: &Self) -> bool {
         std::rc::Rc::ptr_eq(&self.feed, &other.feed)
-            && self.balance_unknown == other.balance_unknown
+            && self.ours == other.ours
+            && self.mode == other.mode
             && self.language == other.language
             && self.day_ms.total_cmp(&other.day_ms).is_eq()
     }
