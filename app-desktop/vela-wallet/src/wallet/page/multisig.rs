@@ -524,16 +524,36 @@ impl WalletPage {
         self.account_switcher = false;
         self.panel = PanelId::Multisig;
         let host = self.ms_host(cx);
+        // r16-19: the review (and the history) only of a transaction the
+        // machine holds — asked before its list was read (a sheet opened at
+        // launch), the core found nothing and said "no longer in the list"
+        // until Try again. Not listed yet, the sheet says Opening… and its
+        // asks (`ms_sheet_asks`) ask once it is.
+        let listed = Self::ms_listed(&host.read(cx).machines().proposals_view, chain_id, &hash);
+        let key = item_key(chain_id, &hash.to_ascii_lowercase());
+        self.multisig.previewed.remove(&format!("review:{key}"));
+        self.multisig
+            .previewed
+            .remove(&format!("timeline-open:{key}"));
+        if listed {
+            let now = crate::executor::now_ms();
+            self.multisig.previewed.insert(format!("review:{key}"), now);
+            self.multisig
+                .previewed
+                .insert(format!("timeline-open:{key}"), now);
+        }
         host.update(cx, |host, cx| {
             host.proposals(ms_proposals::Event::Watch, cx);
-            host.proposals(
-                ms_proposals::Event::Review {
-                    chain_id,
-                    safe_tx_hash: hash.clone(),
-                    blind: false,
-                },
-                cx,
-            );
+            if listed {
+                host.proposals(
+                    ms_proposals::Event::Review {
+                        chain_id,
+                        safe_tx_hash: hash.clone(),
+                        blind: false,
+                    },
+                    cx,
+                );
+            }
             host.proposals(
                 ms_proposals::Event::ReadSigners {
                     chain_id,
@@ -541,15 +561,31 @@ impl WalletPage {
                 },
                 cx,
             );
-            host.proposals(
-                ms_proposals::Event::Timeline {
-                    chain_id,
-                    safe_tx_hash: hash,
-                },
-                cx,
-            );
+            if listed {
+                host.proposals(
+                    ms_proposals::Event::Timeline {
+                        chain_id,
+                        safe_tx_hash: hash,
+                    },
+                    cx,
+                );
+            }
         });
         cx.notify();
+    }
+
+    /// r16-19: the machine holds this transaction — in its list, or as a
+    /// link's read-only one.
+    fn ms_listed(view: &ms_proposals::ProposalsView, chain_id: u64, hash: &str) -> bool {
+        view.items
+            .iter()
+            .any(|i| i.chain_id == chain_id && same(&i.safe_tx_hash, hash))
+            || view.linked.as_ref().is_some_and(|l| {
+                same(&l.safe_tx_hash, hash)
+                    && l.item
+                        .as_ref()
+                        .is_some_and(|i| i.chain_id == chain_id && same(&i.safe_tx_hash, hash))
+            })
     }
 
     /// The sheet went: the slower pace again, a link's transaction let go.
@@ -1709,7 +1745,8 @@ impl WalletPage {
             .or_else(|| linked.as_ref().and_then(|l| l.item.clone()));
         let title: SharedString = words::t(&loc, "proposal.title").into();
         let Some(item) = item else {
-            let lines = no_item_lines(&loc, &view, linked.as_ref(), account.is_some(), chain_id);
+            let shown = account.as_ref().map(|a| a.address.as_str());
+            let lines = sheet_missing_lines(&loc, &view, linked.as_ref(), shown, chain_id);
             let mut body = div().flex().flex_col().gap(px(8.));
             for line in lines {
                 body = body.child(
@@ -1723,7 +1760,7 @@ impl WalletPage {
             // r13-3: a link not read in time offers Try again (iOS, the web)
             // — the machine's `retry`, which starts the link's bound again.
             if link_offers_try_again(linked.as_ref())
-                || missing_offers_try_again(&view, linked.as_ref(), account.is_some(), chain_id)
+                || sheet_missing_retry(&view, linked.as_ref(), shown, chain_id)
             {
                 body = body.child(div().pt(px(4.)).child(crate::ui::vela_button(
                     "ms-proposal-open-retry",
@@ -2029,37 +2066,49 @@ impl WalletPage {
         // The review: read once for one done; again while it waits — once
         // read (§12: one being read is the machine's; one that failed is the
         // person's "Try again", never asked again quietly here).
+        // r16-19: drawn means listed — a sheet opened before its list was
+        // read asks for its review (and its history) now, its first time.
         let state = crate::multisig::sheet::state_of(&view.review_states, chain_id, &hash);
+        let review = crate::multisig::sheet::review_of(&view.reviews, chain_id, &hash);
+        let unread = review.is_none_or(|r| {
+            r.is_null()
+                || r.pointer("/state/verdict/kind").and_then(Value::as_str) == Some("unavailable")
+                || r.pointer("/simulation/kind").and_then(Value::as_str) == Some("unreachable")
+        });
+        let every = if unread {
+            REVIEW_RETRY_MS
+        } else {
+            REVIEW_FRESH_MS
+        };
+        let listed_key = item_key(chain_id, &hash.to_ascii_lowercase());
+        let key = format!("review:{listed_key}");
         if item.status != ms_proposals::ProposalStatus::Done
-            && crate::multisig::sheet::asks_review_again(state)
+            && crate::multisig::sheet::asks_review_now(
+                true,
+                state,
+                self.multisig.previewed.get(&key).copied(),
+                now,
+                every,
+            )
         {
-            let review = crate::multisig::sheet::review_of(&view.reviews, chain_id, &hash);
-            let unread = review.is_none_or(|r| {
-                r.is_null()
-                    || r.pointer("/state/verdict/kind").and_then(Value::as_str)
-                        == Some("unavailable")
-                    || r.pointer("/simulation/kind").and_then(Value::as_str) == Some("unreachable")
+            self.multisig.previewed.insert(key, now);
+            events.push(ms_proposals::Event::Review {
+                chain_id,
+                safe_tx_hash: hash.clone(),
+                blind: false,
             });
-            let every = if unread {
-                REVIEW_RETRY_MS
-            } else {
-                REVIEW_FRESH_MS
-            };
-            let key = format!("review:{}", item_key(chain_id, &hash.to_ascii_lowercase()));
-            match self.multisig.previewed.get(&key) {
-                // First drawn: the open asked for it already.
-                None => {
-                    self.multisig.previewed.insert(key, now);
-                }
-                Some(at) if now - at >= every => {
-                    self.multisig.previewed.insert(key, now);
-                    events.push(ms_proposals::Event::Review {
-                        chain_id,
-                        safe_tx_hash: hash.clone(),
-                        blind: false,
-                    });
-                }
-                Some(_) => {}
+        }
+        if let std::collections::btree_map::Entry::Vacant(slot) = self
+            .multisig
+            .previewed
+            .entry(format!("timeline-open:{listed_key}"))
+        {
+            slot.insert(now);
+            if item.status != ms_proposals::ProposalStatus::Done {
+                events.push(ms_proposals::Event::Timeline {
+                    chain_id,
+                    safe_tx_hash: hash.clone(),
+                });
             }
         }
         if events.is_empty() {
@@ -4947,6 +4996,41 @@ pub(crate) fn fee_moved_words(
     )
 }
 
+/// r16-19 (§22 r15-11): the multisig shown is not (yet) the one the
+/// proposals machine follows — its list, read or kept, is another's: a
+/// sheet without a link can say nothing of it but that it is opening.
+fn following_another(view: &ms_proposals::ProposalsView, shown: Option<&str>) -> bool {
+    shown.is_some_and(|shown| view.followed.as_deref().is_none_or(|f| !same(f, shown)))
+}
+
+/// What a sheet whose transaction is not in the list says: Opening… while
+/// the multisig shown is not the one followed yet ([`following_another`]),
+/// else [`no_item_lines`].
+pub(crate) fn sheet_missing_lines(
+    loc: &crate::loc::Loc,
+    view: &ms_proposals::ProposalsView,
+    linked: Option<&ms_proposals::flows::LinkedView>,
+    shown: Option<&str>,
+    chain_id: u64,
+) -> Vec<String> {
+    if linked.is_none() && following_another(view, shown) {
+        return vec![words::t(loc, "proposal.opening")];
+    }
+    no_item_lines(loc, view, linked, shown.is_some(), chain_id)
+}
+
+/// Whether that sheet offers Try again ([`missing_offers_try_again`]) —
+/// never while it is opening.
+pub(crate) fn sheet_missing_retry(
+    view: &ms_proposals::ProposalsView,
+    linked: Option<&ms_proposals::flows::LinkedView>,
+    shown: Option<&str>,
+    chain_id: u64,
+) -> bool {
+    !(linked.is_none() && following_another(view, shown))
+        && missing_offers_try_again(view, linked, shown.is_some(), chain_id)
+}
+
 pub(crate) fn no_item_lines(
     loc: &crate::loc::Loc,
     view: &ms_proposals::ProposalsView,
@@ -5082,6 +5166,64 @@ mod tests {
         assert_eq!(
             super::member_label(None, executor, Some("Mine".into()), None),
             "Mine"
+        );
+    }
+
+    /// r16-19 (§22 r15-11, the web's adoption): a sheet opened while the
+    /// multisig shown is not yet the one the proposals machine follows — at
+    /// launch, the list it holds is not this multisig's — says Opening…,
+    /// never "no longer in the list" nor "isn't shown here", and offers no
+    /// Try again; once followed, the core's `missing_said` speaks.
+    #[test]
+    fn a_sheet_whose_multisig_is_not_followed_yet_says_opening() {
+        use vela_core::app::multisig_proposals::ProposalsView;
+        let loc = crate::loc::Loc::for_tag("en");
+        let opening = vec![super::words::t(&loc, "proposal.opening")];
+        let shown = "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32";
+        let none = ProposalsView::default();
+        assert_eq!(
+            super::sheet_missing_lines(&loc, &none, None, Some(shown), 100),
+            opening
+        );
+        assert!(!super::sheet_missing_retry(&none, None, Some(shown), 100));
+        let chain = |mailbox| vela_core::app::multisig_proposals::ChainState {
+            chain_id: 100,
+            members: vela_core::app::multisig_shell::ChainMembers {
+                deployed: true,
+                owners: vec![],
+                threshold: 1,
+                nonce: 0,
+            },
+            items: vec![],
+            mailbox,
+        };
+        // Another multisig's list, read (or a kept copy): still Opening….
+        for mailbox in [true, false] {
+            let other = ProposalsView {
+                followed: Some("0x1111111111111111111111111111111111111111".into()),
+                chains: vec![chain(mailbox)],
+                ..ProposalsView::default()
+            };
+            assert_eq!(
+                super::sheet_missing_lines(&loc, &other, None, Some(shown), 100),
+                opening
+            );
+            assert!(!super::sheet_missing_retry(&other, None, Some(shown), 100));
+        }
+        // Followed (any case), its list read and without it: the core's words.
+        let followed = ProposalsView {
+            followed: Some(shown.to_ascii_lowercase()),
+            chains: vec![chain(true)],
+            ..ProposalsView::default()
+        };
+        assert_eq!(
+            super::sheet_missing_lines(&loc, &followed, None, Some(shown), 100),
+            vec![super::words::t(&loc, "proposal.notInMailbox")]
+        );
+        // No multisig shown: as before.
+        assert_eq!(
+            super::sheet_missing_lines(&loc, &none, None, None, 100),
+            vec![super::words::t(&loc, "proposal.notHere")]
         );
     }
 

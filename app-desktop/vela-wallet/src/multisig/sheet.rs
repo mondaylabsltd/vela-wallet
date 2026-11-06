@@ -369,6 +369,23 @@ pub fn asks_review_again(state: Option<&ReviewState>) -> bool {
     matches!(state, None | Some(ReviewState::Ready))
 }
 
+/// r16-19: whether an open sheet asks for its review now. Only once the
+/// machine holds the transaction (`listed`: its list, or a link's read-only
+/// one) — a review asked before lands `failed {gone}` in the core, said as
+/// "no longer in the list" until Try again; then as
+/// [`asks_review_again`] allows, at most every `every` ms since this sheet
+/// last asked (`last`; `None`: never).
+#[must_use]
+pub fn asks_review_now(
+    listed: bool,
+    state: Option<&ReviewState>,
+    last: Option<f64>,
+    now: f64,
+    every: f64,
+) -> bool {
+    listed && asks_review_again(state) && last.is_none_or(|at| now - at >= every)
+}
+
 /// A member still to approve, as its row in the approvals list says how it
 /// signs (r7-8): the core's split, never this device's own member.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1039,5 +1056,48 @@ mod tests {
         actions.clear();
         actions.insert(key("execute"), ActionState::Working);
         assert!(press_failure_lines(&actions, HASH, words).is_empty());
+    }
+
+    /// r16-19: a sheet opened at launch, before the list holding its
+    /// transaction was read, asked for the review at once; the core found
+    /// nothing to review and landed it `failed {gone}` ("This transaction is
+    /// no longer in the list.") — and a failed review is read again only on
+    /// the person's Try again (r15-13). The review is asked only once the
+    /// machine holds the transaction; until then the sheet says Opening….
+    #[test]
+    fn the_review_is_asked_only_once_the_transaction_is_listed() {
+        const EVERY: f64 = 30_000.;
+        let now = 100_000.;
+        assert!(
+            !asks_review_now(false, None, None, now, EVERY),
+            "not listed yet"
+        );
+        assert!(
+            asks_review_now(true, None, None, now, EVERY),
+            "listed: asked at once"
+        );
+        assert!(
+            !asks_review_now(true, None, Some(now - 1_000.), now, EVERY),
+            "asked a moment ago"
+        );
+        assert!(asks_review_now(
+            true,
+            Some(&ReviewState::Ready),
+            Some(now - EVERY),
+            now,
+            EVERY
+        ));
+        let gone = ReviewState::failed(vela_core::app::multisig_review_state::REASON_GONE);
+        assert!(
+            !asks_review_now(true, Some(&gone), None, now, EVERY),
+            "a failed review waits for Try again"
+        );
+        assert!(!asks_review_now(
+            true,
+            Some(&ReviewState::Loading),
+            None,
+            now,
+            EVERY
+        ));
     }
 }
