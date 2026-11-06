@@ -334,6 +334,30 @@ class MsProposalModel(
         setupLines(executor).forEachIndexed { i, line -> add(MsLine(line, MsTone.Neutral, "setup$i")) }
     }
 
+    /**
+     * §24: the fee figure this sheet draws for [executor]'s execution (base
+     * units, as the core gave it) — what a press under it carries as
+     * `shown_fee`, so the core signs exactly that figure or stops with
+     * `fee_moved` (§19.11). `null` when no figure is drawn: no priced look,
+     * or the action's own line stands in the fee line's place. Read from the
+     * model the sheet painted, never from a view not drawn yet.
+     */
+    fun shownFee(executor: String): String? {
+        val look = preview(executor) ?: return null
+        if (look.kind != "priced" || feeLineBeside(executor, executeFailure) == null) return null
+        return look["fee"]["amount"].str?.takeIf { it.isNotBlank() }
+    }
+
+    /**
+     * §24: the press that executes — Execute, or the one press "Approve and
+     * execute" ([oneTap]) — carrying the figure drawn under it ([shownFee]).
+     */
+    fun executeEvent(executor: String, oneTap: Boolean): JsonObject {
+        val fields = mutableListOf<Pair<String, Any?>>("chain_id" to chainId, "safe_tx_hash" to hash, "executor" to executor)
+        shownFee(executor)?.let { fields += "shown_fee" to it }
+        return ev(if (oneTap) "approve_execute" else "execute", *fields.toTypedArray())
+    }
+
     /** The preview stops it (would fail, nobody can pay): Execute waits. */
     fun executeHeld(executor: String): Boolean {
         val preview = preview(executor) ?: return false
