@@ -7202,6 +7202,62 @@ fn a_max_follows_the_fee_machines_pick() {
     );
 }
 
+/// R15 follow-up (web e2e `fee-coin-switch`): a Max pressed while the form's
+/// quote waits out its debounce. The form's quote then priced the transfer of
+/// the WHOLE balance, the fee machine weighed every coin against what that
+/// transfer leaves — nothing of the chain's coin — and marked it "Insufficient
+/// ETH for gas fees": the coin a Max follows (it holds the fee back) could
+/// not be picked. Under a Max the form prices the Max's own transfer, as the
+/// warm-up and the Max's estimate do ([`max_estimate_call`]: one wei of the
+/// chain's coin, the value-bearing path without the balance the fee comes
+/// out of).
+#[test]
+fn a_form_quote_under_a_max_prices_the_maxs_transfer_not_the_whole_balance() {
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    // The fee machine's own pick: USDC pays, so a Max sends all the ETH.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 1_000_000),
+    });
+    let ops = sut.dispatch(Event::SetAmount {
+        amount: "0.1".to_owned(),
+    });
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [Op::StartTimer {
+                tag: SendTimerTag::FormEstimate,
+                ..
+            }]
+        ),
+        "{ops:?}"
+    );
+    sut.dispatch(Event::TapMax);
+    assert_eq!(sut.view().amount, "2", "USDC pays: the whole balance");
+    let ops = sut.resolve(Res::TimerElapsed {
+        tag: SendTimerTag::FormEstimate,
+    });
+    let Some(Op::EstimateFee { tx: Some(tx), .. }) = ops.last() else {
+        panic!("the form's quote is asked: {ops:?}");
+    };
+    assert_eq!(
+        (tx.to.as_str(), tx.value.as_str(), tx.data.as_str()),
+        (RECIPIENT, "1", "0x"),
+        "the Max's transfer — never the whole balance as the operation's outflow"
+    );
+    // A typed figure ends the Max: the exact transfer is quoted again.
+    sut.dispatch(Event::SetAmount {
+        amount: "0.5".to_owned(),
+    });
+    let ops = sut.resolve(Res::TimerElapsed {
+        tag: SendTimerTag::FormEstimate,
+    });
+    if let Some(Op::EstimateFee { tx: Some(tx), .. }) = ops.last() {
+        assert_eq!(tx.value, "500000000000000000", "the exact amount");
+    }
+}
+
 /// The fee coin the submit signs in is the one the quote named — with the
 /// choice left to the fee machine, `gas_fee_token` alone would say "none" and
 /// a native leg would carry a USDC amount.
