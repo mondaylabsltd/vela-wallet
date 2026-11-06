@@ -299,7 +299,9 @@ test.describe('a new site, for an account that holds only Arc USDC', () => {
 		await expect(
 			wallet
 				.getByText('Deposit your first asset')
-				.or(wallet.getByText("Your assets there aren't affected — we just can't read them right now."))
+				.or(
+					wallet.getByText("Your assets there aren't affected — we just can't read them right now.")
+				)
 				.first()
 		).toBeVisible({ timeout: 60_000 });
 
