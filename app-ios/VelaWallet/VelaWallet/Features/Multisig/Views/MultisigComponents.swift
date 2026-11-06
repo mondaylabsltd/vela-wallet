@@ -53,7 +53,6 @@ struct MsSheet<Content: View>: View {
                             .padding(.vertical, Tokens.Space.s12)
                     }
                     .background(theme.bgRaised)
-                    .accessibilityIdentifier("multisig.sheet.footer")
                 }
             }
             .background(theme.bgRaised)

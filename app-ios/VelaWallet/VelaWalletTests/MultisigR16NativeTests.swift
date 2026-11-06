@@ -185,6 +185,34 @@ struct MultisigR16NativeTests {
         #expect(foot.contains("multisig.create.next") && foot.contains("multisig.create.toReview") && foot.contains("multisig.create.create"))
     }
 
+    /// The create sheet as drawn on the SE's short screen: Next is whole on
+    /// screen at open — the sheet's foot, never scrolled out of reach.
+    @Test func theCreateSheetsNextIsWholeOnScreenAtOpen() async throws {
+        let world = try MsSimWorld()
+        world.locals = try MsSimWorld.fixtures([0, 1])
+        let localsJson = world.localsJson
+        let hub = MultisigHub(
+            ports: world, loc: loc,
+            shelf: VelaStore(defaults: UserDefaults(suiteName: "vela.tests.r16create.\(UUID().uuidString)")!), tokens: nil,
+            facts: { .init(serviceUrl: MsSimWorld.service, accounts: localsJson, networks: [100], space: [100], known: []) }
+        )
+        defer { hub.proposals.dispose(); hub.accounts.dispose(); hub.members.dispose() }
+        await hub.boot()
+        let accounts = world.locals.map { (address: $0.address, name: "Member") }
+        let screen = HostedScreen(
+            MultisigCreateSheet(hub: hub, words: MsWords(loc: loc, hub: hub), accounts: accounts, contacts: [],
+                                spaceNetworks: [100], onClose: {}, onCreated: { _ in }, onInvite: { _ in })
+                .themed(.light),
+            size: HostedScreen.se
+        )
+        defer { screen.close() }
+        let seen = try await screen.read { $0.element("multisig.create.next") != nil }
+        let next = try #require(seen.element("multisig.create.next"))
+        #expect(next.frame.maxY <= screen.size.height - screen.safeBottom + 0.5, "Next at \(next.frame) on \(screen.size)")
+        #expect(next.frame.minY > 0)
+        try await screen.save("i-r16-9-create-next-after")
+    }
+
     // MARK: - r16-10: one total; none in the testnet space
 
     private func session(_ accounts: [String]) throws -> SessionView {
@@ -220,6 +248,22 @@ struct MultisigR16NativeTests {
         #expect(testnet.accountsSheet.summary == loc.t(I18nKeys.SettingsUi.accountsCount, count: 2))
         let root = try source("VelaWallet/App/RootView.swift")
         #expect(root.contains("noValue: space.current == .testnet"))
+    }
+
+    @Test func theTestnetAccountsSheetShowsNoWorth() async throws {
+        let a = "0x00000000000000000000000000000000000000a1"
+        let b = "0x00000000000000000000000000000000000000b2"
+        let display = WalletLive.Display.from(CurrencyViewWire(code: "CNY", rate: 7, committed: true), language: "en")
+        let model = SettingsLive.withAccounts(session: try session([a, b]),
+                                              balances: [BalanceCacheEntryWire(address: a, usd: 0.5), BalanceCacheEntryWire(address: b, usd: 0.3)],
+                                              display: display, on: SettingsFixtures.build(.st1, loc: loc), loc: loc, noValue: true)
+        let screen = HostedScreen(
+            SettingsSheet(model: model, overlay: .accounts, loc: loc, onDismiss: {}, onSignOut: {}).themed(.light)
+        )
+        defer { screen.close() }
+        let seen = try await screen.read { $0.says("A0") }
+        #expect(!seen.says("CN¥"), "\(seen.words)")
+        try await screen.save("i-r16-10-testnet-accounts-after")
     }
 
     // MARK: - r16-11: a cold start on the account in front
