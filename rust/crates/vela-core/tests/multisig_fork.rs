@@ -501,11 +501,18 @@ fn create_two_of_three_propose_approve_twice_execute() {
         ms.view().previews[&format!("100:{hash}:{}", executor.to_ascii_lowercase())].clone();
     assert_eq!(preview["kind"], "priced", "{preview}");
     let before = balance_of(&shell, to);
+    // The press carries the figure the sheet drew (§24; round 16 leftover 1:
+    // a press over no figure signs nothing).
+    let shown_fee = preview["fee"]["amount"]
+        .as_str()
+        .and_then(vela_core::app::multisig_shell::quantity)
+        .map(|fee| fee.to_string());
+    assert!(shown_fee.is_some(), "a figure drawn: {preview}");
     ms.dispatch(proposals::Event::Execute {
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         executor,
-        shown_fee: None,
+        shown_fee,
     });
     settle(&mut ms, &mut shell);
     let verdict = ms.view().executions[&format!("100:{hash}")].clone();

@@ -756,6 +756,28 @@ fn the_followed_ones_presence_standing_and_timeline() {
         tx_hash: tx_hash.clone(),
         user_op_hash: format!("0x{}", "ab".repeat(32)),
     });
+    // The sheet's look, its figure carried on the press (round 16 leftover
+    // 1: a press over no figure signs nothing).
+    run(
+        &mut sut,
+        &mut world,
+        Event::Preview {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            executor: fixture(0).address,
+        },
+    );
+    let look = format!(
+        "100:{}:{}",
+        hash.to_ascii_lowercase(),
+        fixture(0).address.to_ascii_lowercase()
+    );
+    let shown_fee = sut.view().previews.get(&look).and_then(|look| {
+        look["fee"]["amount"]
+            .as_str()
+            .and_then(vela_core::app::multisig_shell::quantity)
+            .map(|fee| fee.to_string())
+    });
     run(
         &mut sut,
         &mut world,
@@ -763,7 +785,7 @@ fn the_followed_ones_presence_standing_and_timeline() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             executor: fixture(0).address,
-            shown_fee: None,
+            shown_fee,
         },
     );
     assert!(world.store.contains_key("vela.multisig.executed"));
