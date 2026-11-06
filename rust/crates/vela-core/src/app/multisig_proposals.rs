@@ -1134,6 +1134,9 @@ pub struct State {
     /// the old multisig, or started during an outage; the older read's
     /// answer is dropped when it lands.
     read_gen: u64,
+    /// The multisig the read out now is of (lowercase): a Follow supersedes
+    /// a read only when that read is another multisig's.
+    reading: Option<String>,
     held: u32,
     outbox: BTreeMap<String, Submission>,
     outbox_entries: BTreeMap<String, OutboxEntry>,
@@ -1481,8 +1484,15 @@ impl App for MultisigProposals {
                     let now = io.now().await;
                     let flights = flights_to_resume(&mut lock(&st), now);
                     // r15-11: another multisig's read still out never holds
-                    // this one's back (nor drops it): it starts now.
-                    refresh_as(&io, &st, false, false, !same).await;
+                    // this one's back (nor drops it): it starts now. A read
+                    // of this very multisig still out (followed again after
+                    // a moment of none) is its read: it is waited for.
+                    let other = {
+                        let s = lock(&st);
+                        let now = s.account.as_ref().map(|a| a.address.to_ascii_lowercase());
+                        s.inflight && s.reading != now
+                    };
+                    refresh_as(&io, &st, false, false, !same && other).await;
                     resume_flights(&io, &st, flights);
                 })
             }
@@ -1547,7 +1557,7 @@ impl App for MultisigProposals {
                         let s = lock(&st);
                         lock(&s.service.outage).reset();
                     }
-                    refresh_as(&io, &st, false, false, true).await;
+                    refresh(&io, &st, false, false).await;
                 })
             }
             Event::Watch => {
@@ -2297,8 +2307,8 @@ async fn refresh(io: &Io<Event>, st: &Shared<State>, tick: bool, fresh: bool) {
 }
 
 /// [`refresh`]; `supersede` (r15-11, r15-12): a read that starts NOW even
-/// with one out — a newly followed multisig, the person's Try again, the
-/// device back online. The read out is no longer waited for: its answer is
+/// with one out — a newly followed multisig while another's read is out, the
+/// person's Try again. The read out is no longer waited for: its answer is
 /// dropped when it lands (`read_gen`), and this one owns the list.
 async fn refresh_as(io: &Io<Event>, st: &Shared<State>, tick: bool, fresh: bool, supersede: bool) {
     let gen = {
@@ -2312,6 +2322,7 @@ async fn refresh_as(io: &Io<Event>, st: &Shared<State>, tick: bool, fresh: bool,
         s.inflight = true;
         s.queued = false;
         s.read_gen += 1;
+        s.reading = s.account.as_ref().map(|a| a.address.to_ascii_lowercase());
         s.read_gen
     };
     loop {
