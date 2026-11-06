@@ -1478,8 +1478,16 @@
 		return owner && !approved ? item.approved + 1 : item.approved;
 	});
 
+	/**
+	 * r15-11: the list is not this multisig's yet — nothing followed (a cold
+	 * load) or another multisig still followed (a link just opened): it is
+	 * being read, never "isn't shown here" nor the other one's unread words.
+	 */
+	const listLoading = $derived(
+		store.loading || (!preview && !sameAddress(proposals.followed, account.address))
+	);
 	/** r4b-3: the network did not answer the last read (or the device is offline). */
-	const chainDown = $derived(store.unreadable.includes(chainId));
+	const chainDown = $derived(!listLoading && store.unreadable.includes(chainId));
 	/**
 	 * §18 (b), round 14: a sheet opened without a link whose transaction is
 	 * not in the list — the core's rule (`review.missing`): a multisig service
@@ -1487,7 +1495,7 @@
 	 * been shared with the members yet".
 	 */
 	const missing = $derived(
-		missingSaid(store.loading, chainDown, store.chain(chainId)?.mailbox ?? null)
+		missingSaid(listLoading, chainDown, store.chain(chainId)?.mailbox ?? null)
 	);
 	let retrying = $state(false);
 	/** Withdraw the person's own proposal on its review (§3.6), or decline a site's request. */
@@ -1500,7 +1508,9 @@
 	async function retryRead() {
 		retrying = true;
 		try {
-			await store.refresh(account, account.chainIds);
+			// r15-12: the person's Try again is a read begun now (the machine's
+			// `retry`), never one joined to a read still out from the outage.
+			await (preview ? store.refresh(account, account.chainIds) : proposals.retry());
 		} finally {
 			retrying = false;
 		}
@@ -1534,7 +1544,7 @@
 				onclick={retryLink}
 				testid="proposal-open-retry">{m.review.state.tryAgain}</Button
 			>
-		{:else if !store.loading && (chainDown || offline())}
+		{:else if !listLoading && (chainDown || offline())}
 			<!-- r4b-3: the network (or this device) is not answering: said as
 			     that, with Retry — never "it hasn't been shared". -->
 			<p class="warn" role="alert" data-testid="proposal-chain-down">
@@ -1559,7 +1569,7 @@
 			>
 		{:else}
 			<!-- Being read, or read from the mailbox and still not there (ms-22). -->
-			<p class="quiet" aria-busy={store.loading}>
+			<p class="quiet" aria-busy={listLoading}>
 				{missingWords(m.proposal, missing.key, chainName(chainId))}
 			</p>
 		{/if}

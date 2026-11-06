@@ -1110,6 +1110,12 @@ pub struct State {
     ticks: u64,
     inflight: bool,
     queued: bool,
+    /// r15-11 / r15-12: the read that owns the list now. A newly followed
+    /// multisig, or the person's Try again, starts a read at once rather
+    /// than wait out (or be dropped behind) one already out — maybe hung for
+    /// the old multisig, or started during an outage; the older read's
+    /// answer is dropped when it lands.
+    read_gen: u64,
     held: u32,
     outbox: BTreeMap<String, Submission>,
     outbox_entries: BTreeMap<String, OutboxEntry>,
@@ -1411,7 +1417,7 @@ impl App for MultisigProposals {
                 })
             }
             Event::Follow { account } => {
-                {
+                let same = {
                     let mut s = lock(&model.state);
                     let same = match (&s.account, &account) {
                         (Some(a), Some(b)) => same_address(&a.address, &b.address),
@@ -1419,6 +1425,10 @@ impl App for MultisigProposals {
                         _ => false,
                     };
                     if !same {
+                        // r15-11: nothing is said of the multisig now followed
+                        // ("not here", "couldn't reach the service") until a
+                        // read of it lands — its kept list included.
+                        s.loading = account.is_some();
                         s.chains.clear();
                         s.missing.clear();
                         s.lists.clear();
@@ -1439,16 +1449,22 @@ impl App for MultisigProposals {
                     if account.is_some() && s.chains.is_empty() {
                         seed(&mut s);
                     }
-                }
+                    if account.is_none() {
+                        s.loading = false;
+                    }
+                    same
+                };
                 if account.is_none() {
                     return render();
                 }
-                flow(model, |io, st| async move {
+                flow(model, move |io, st| async move {
                     // r4b-7: what this device sent for it before a reload is
                     // watched again, once its list is read.
                     let now = io.now().await;
                     let flights = flights_to_resume(&mut lock(&st), now);
-                    refresh(&io, &st, false, false).await;
+                    // r15-11: another multisig's read still out never holds
+                    // this one's back (nor drops it): it starts now.
+                    refresh_as(&io, &st, false, false, !same).await;
                     resume_flights(&io, &st, flights);
                 })
             }
@@ -1494,7 +1510,13 @@ impl App for MultisigProposals {
                     s.history.retain(|_, stand| *stand != HistoryStand::Unread);
                 }
                 if !flows::retry_linked(&io, &st).await {
-                    refresh(&io, &st, false, false).await;
+                    // r15-12: the person's Try again is a read begun now —
+                    // never one started during the outage and still hung —
+                    // and the list is `loading` until it lands, so the words
+                    // of the read that failed are not said again meanwhile.
+                    lock(&st).loading = true;
+                    io.emit(Event::Changed);
+                    refresh_as(&io, &st, false, false, true).await;
                 }
             }),
             Event::Online { online } => {
@@ -1507,7 +1529,7 @@ impl App for MultisigProposals {
                         let s = lock(&st);
                         lock(&s.service.outage).reset();
                     }
-                    refresh(&io, &st, false, false).await;
+                    refresh_as(&io, &st, false, false, true).await;
                 })
             }
             Event::Watch => {
@@ -2247,18 +2269,32 @@ fn has_open(list: &[Proposal], nonce: u128) -> bool {
 /// Re-read every chain the multisig is used on (`refresh`). One at a time:
 /// a read asked for during another runs once it ends when `fresh`.
 async fn refresh(io: &Io<Event>, st: &Shared<State>, tick: bool, fresh: bool) {
-    {
+    refresh_as(io, st, tick, fresh, false).await;
+}
+
+/// [`refresh`]; `supersede` (r15-11, r15-12): a read that starts NOW even
+/// with one out — a newly followed multisig, the person's Try again, the
+/// device back online. The read out is no longer waited for: its answer is
+/// dropped when it lands (`read_gen`), and this one owns the list.
+async fn refresh_as(io: &Io<Event>, st: &Shared<State>, tick: bool, fresh: bool, supersede: bool) {
+    let gen = {
         let mut s = lock(st);
-        if s.inflight {
+        if s.inflight && !supersede {
             if fresh {
                 s.queued = true;
             }
             return;
         }
         s.inflight = true;
-    }
+        s.queued = false;
+        s.read_gen += 1;
+        s.read_gen
+    };
     loop {
-        refresh_once(io, st, tick).await;
+        if !refresh_once(io, st, tick, gen).await {
+            // Superseded: the newer read owns `inflight` and `queued`.
+            return;
+        }
         let again = {
             let mut s = lock(st);
             let again = s.queued;
@@ -2275,11 +2311,14 @@ async fn refresh(io: &Io<Event>, st: &Shared<State>, tick: bool, fresh: bool) {
     flows::after_refresh(io, st).await;
 }
 
-async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool) {
+/// One read of every chain; `false`: a newer read (`read_gen`) took over
+/// while it was out, and nothing it read was kept.
+async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool, gen: u64) -> bool {
     let (account, service, round, networks) = {
         let mut s = lock(st);
         let Some(account) = s.account.clone() else {
-            return;
+            s.loading = false;
+            return true;
         };
         let round = if tick {
             s.ticks += 1;
@@ -2296,7 +2335,9 @@ async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool) {
             }
             s.source = Some(source);
         }
-        s.loading = s.chains.is_empty();
+        // Loading while nothing is drawn — and, from a Follow or a Try
+        // again, until this read lands (r15-11).
+        s.loading = s.loading || s.chains.is_empty();
         (account, s.service.clone(), round, s.networks.clone())
     };
     let started = io.now().await;
@@ -2331,7 +2372,7 @@ async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool) {
             }
         }
         let mut s = lock(st);
-        if s.followed(&account.address) {
+        if s.read_gen == gen && s.followed(&account.address) {
             s.missing.clone_from(missing);
         }
     }
@@ -2389,6 +2430,11 @@ async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool) {
     let mut next = Vec::new();
     {
         let mut s = lock(st);
+        if s.read_gen != gen {
+            // r15-11 / r15-12: a newer read took over (another multisig
+            // followed, a Try again): this one's answer is not the list's.
+            return false;
+        }
         let followed = s.followed(&account.address);
         for (chain_id, read, previous) in results {
             match read {
@@ -2493,6 +2539,7 @@ async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool) {
     }
     drop(s);
     io.emit(Event::Changed);
+    true
 }
 
 /// r8-7: tell the accounts machine who the members are now — once every

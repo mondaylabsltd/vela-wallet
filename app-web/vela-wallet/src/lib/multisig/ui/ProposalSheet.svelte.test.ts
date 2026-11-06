@@ -1568,6 +1568,8 @@ describe('a link whose read did not come back (§18 item 1)', () => {
 	}
 
 	it('notInMailbox: an answer — said as that, and no Try again', async () => {
+		// The multisig's own list, read (r15-11: never said of another's).
+		fake.followed = SAFE;
 		fake.chain = { chainId: 100, members, items: [], mailbox: true };
 		fake.machineLinked = linkedAs('notInMailbox', null, false);
 		const screen = show();
@@ -2077,12 +2079,32 @@ describe('the network cannot be read (r4b-3)', () => {
 	it('says it cannot reach the network, with Retry — never "hasn’t been shared"', async () => {
 		fake.chain = null;
 		fake.unreadable = [100];
+		fake.followed = SAFE;
 		const screen = show();
 		await settle();
 		const text = document.body.textContent ?? '';
 		expect(text).toContain('proposal.cantCheck');
 		expect(text).not.toContain('proposal.notFound');
 		expect(buttons()).toContain('service.retry');
+		await screen.unmount();
+	});
+});
+
+describe('a sheet on a multisig whose list is not read yet (r15-11)', () => {
+	it.each([
+		['nothing followed yet (a cold load)', null],
+		['another multisig still followed (a link just opened)', '0x0000000000000000000000000000000000000cc1']
+	])('%s: "Opening…", never "isn’t shown here" nor an unread read’s words', async (_, followed) => {
+		fake.chain = null;
+		fake.unreadable = [100];
+		fake.followed = followed;
+		const screen = show();
+		await settle();
+		const text = document.body.textContent ?? '';
+		expect(text).toContain('proposal.opening');
+		expect(text).not.toContain('proposal.notHere');
+		expect(text).not.toContain('proposal.cantCheck');
+		expect(text).not.toContain('proposal.unread');
 		await screen.unmount();
 	});
 });

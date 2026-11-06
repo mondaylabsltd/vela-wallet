@@ -315,9 +315,12 @@
 			multisigUi.open({ kind: 'preview', chainId, safeTxHash, account });
 			return;
 		}
-		multisigUi.open({ kind: 'proposal', chainId, safeTxHash });
+		// r15-11: the sheet is the link's multisig's, and its list is read
+		// now (followed at once: the machine reads it even with another's
+		// read still out) — never the multisig in front a moment ago.
+		multisigUi.open({ kind: 'proposal', chainId, safeTxHash, address: notice.address });
 		const fresh = multisig.find(notice.address);
-		if (fresh) void proposals.refresh(fresh, fresh.chainIds);
+		if (fresh) proposals.follow(fresh, fresh.chainIds);
 	}
 
 	/**
@@ -359,6 +362,10 @@
 
 	const sheet = $derived(multisigUi.sheet);
 	const active = $derived(multisig.active);
+	/** r15-11: a link's sheet is its multisig's, whichever is in front. */
+	const sheetAccount = $derived(
+		sheet?.kind === 'proposal' && sheet.address ? (multisig.find(sheet.address) ?? null) : null
+	);
 	/** The multisig a dApp's request is for: the one it was granted, shown or not. */
 	const dappAccount = $derived(
 		sheet?.kind === 'dapp' ? (multisig.find(sheet.request.held.safe) ?? null) : null
@@ -424,11 +431,11 @@
 			}}
 		/>
 	{/key}
-{:else if sheet?.kind === 'proposal' && active}
+{:else if sheet?.kind === 'proposal' && (sheetAccount ?? active)}
 	<ProposalSheet
 		{m}
 		{signing}
-		account={active}
+		account={(sheetAccount ?? active)!}
 		chainId={sheet.chainId}
 		safeTxHash={sheet.safeTxHash}
 		{locale}
