@@ -1051,7 +1051,7 @@ where
         let Some(op) = outstanding
             .iter()
             .find(|op| !matches!(op, Op::Wait { .. }))
-            .or_else(|| outstanding.first())
+            .or_else(|| soonest_wait(&outstanding))
             .cloned()
         else {
             break;
@@ -1061,6 +1061,21 @@ where
         answered += 1;
     }
     answered
+}
+
+/// The wait a clock ends first among `outstanding`: the shortest (r16-3: a
+/// review's 1 s re-ask pause runs out long before its 40 s bound, whichever
+/// was asked first).
+pub fn soonest_wait(outstanding: &[Op]) -> Option<&Op> {
+    outstanding
+        .iter()
+        .filter_map(|op| match op {
+            Op::Wait { ms } => Some((*ms, op)),
+            _ => None,
+        })
+        .min_by_key(|(ms, _)| *ms)
+        .map(|(_, op)| op)
+        .or_else(|| outstanding.first())
 }
 
 impl World {
