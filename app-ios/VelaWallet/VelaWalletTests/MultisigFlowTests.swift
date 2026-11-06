@@ -775,12 +775,14 @@ struct MultisigFlowTests {
         let (hub, _, owners, transfer) = try await Self.rejecting(world, salt: "0x43")
         defer { hub.proposals.dispose(); hub.accounts.dispose(); hub.members.dispose() }
         let words = MsWords(loc: hub.loc, hub: nil)
+        // What the sheet says: its notes, and (r16-5) the line beside Reject.
         func notes() throws -> [(text: String, tone: MsNote.Tone, id: String)] {
             let item = try #require(hub.proposalsView.items.first { $0.safeTxHash == transfer.safeTxHash })
-            return MsProposalModel(
+            let model = MsProposalModel(
                 item: item, view: hub.proposalsView, words: words, account: nil,
                 rejectState: hub.rejectFailure(chainId: 100, safeTxHash: transfer.safeTxHash)
-            ).notes
+            )
+            return model.notes + (model.rejectLine.map { [($0.text, $0.tone, "rejectFailed")] } ?? [])
         }
 
         // Closed.

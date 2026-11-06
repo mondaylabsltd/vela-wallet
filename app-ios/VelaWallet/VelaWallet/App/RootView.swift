@@ -112,6 +112,11 @@ struct RootView: View {
     /// last). A flag rather than a route: it is a sheet over the wallet, the
     /// way the rescue overlays are.
     @State private var homeSwitcherOpen = false
+    /// r16-11: the multisig in front when the app last ran (its stored
+    /// `vela.activeMultisig`), read once at launch; and whether the hold
+    /// for the hub to read it has run out.
+    @State private var launchMultisig: String? = LaunchFront.storedMultisig(VelaStore())
+    @State private var launchHoldOver = false
     /// The anti-scam core behind the receipt scan — resident, because the
     /// trusted-token set it builds is shared by everything that reads a chain.
     private var trust: TokenTrustStore { graph.trust }
@@ -1422,6 +1427,21 @@ struct RootView: View {
                             }
                         )
                     }
+                    // r16-11: a multisig was in front when the app last ran —
+                    // until the multisig hub has read which, no account's home
+                    // shows (Parallel Two's flashed for ~0.5 s before the
+                    // multisig's): the page's own ground stands, bounded.
+                    .overlay {
+                        if LaunchFront.holds(storedMultisig: launchMultisig, hubLoaded: multisig.loaded, expired: launchHoldOver) {
+                            Theme(scheme: scheme).bgBase
+                                .ignoresSafeArea()
+                                .accessibilityIdentifier("wallet.launchHold")
+                                .task {
+                                    try? await Task.sleep(for: .milliseconds(LaunchFront.holdMs))
+                                    launchHoldOver = true
+                                }
+                        }
+                    }
                     // The hero's status line, as a sheet over the wallet —
                     // which is what SR2 and SR3 are drawn as. The settings
                     // route would put the settings list behind a sentence
@@ -1518,6 +1538,9 @@ struct RootView: View {
                     .onChange(of: walletNetworks.chains.map(\.chainId), initial: true) { _, chains in
                         activity.spaceChains(chains)
                         wallet.spaceChanged(chains, space: space.current.rawValue)
+                        // r16-6: the multisig machines hear the space too —
+                        // Create's other-space line is the core's over it.
+                        Task { await multisig.spaceChanged(chains) }
                     }
                     .task {
                         activity.open(address: shownAddress,
@@ -4300,7 +4323,9 @@ struct RootView: View {
             // §18 item 2: stored records this device cannot read, said under the list.
             unreadable: StoredAccountsWatch.shared.unreadable,
             // r15-9: one check — the account shown's.
-            multisigShown: shownMultisig != nil
+            multisigShown: shownMultisig != nil,
+            // r16-10: the testnet space shows no worth anywhere, as its home.
+            noValue: space.current == .testnet
         )
         // Asked of the chain for THIS wallet, or still being asked (spec 062).
         let backedUp = backupCheck.flatMap {

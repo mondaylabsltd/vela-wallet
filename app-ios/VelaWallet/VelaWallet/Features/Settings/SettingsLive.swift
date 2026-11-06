@@ -580,7 +580,10 @@ enum SettingsLive {
         /// r15-9: a multisig is shown — its row wears the check, so no Vela
         /// account row does (every switcher: the header's, Settings → Switch
         /// account, Explore's).
-        multisigShown: Bool = false
+        multisigShown: Bool = false,
+        /// r16-10 (spec 105): the testnet space is in front — nothing there
+        /// has real value, as the home says: no figure on a row, no total.
+        noValue: Bool = false
     ) -> SettingsScreenModel {
         guard session.hasWallet else { return model }
         let k = I18nKeys.SettingsUi.self
@@ -607,7 +610,7 @@ enum SettingsLive {
                 // …and while the display currency is not known yet (PR 3),
                 // the empty cell an unpriced account shows: no dollars first.
                 // The one formatter withholds it (`Display.fiat`).
-                amount: hidden ? WalletFixtures.mask : usd.flatMap(display.fiat) ?? "",
+                amount: hidden ? WalletFixtures.mask : noValue ? "" : usd.flatMap(display.fiat) ?? "",
                 selected: !multisigShown && index == session.activeIndex
             )
         }
@@ -628,9 +631,19 @@ enum SettingsLive {
             // (Settings' total is one of the withheld surfaces).
             + ((hidden
                 ? WalletFixtures.mask
-                : display.fiat(session.accounts.reduce(0) { $0 + (total(for: $1.account.address) ?? 0) })
+                : noValue ? nil : accountsTotal(session.accounts.map { total(for: $0.account.address) }).flatMap(display.fiat)
             ).map { loc.t(k.accountsTotal, vars: ["amount": $0]) } ?? "")
         return copy
+    }
+
+    /// r16-10: the switcher's total is the sum of the balance core's figure
+    /// for EVERY account — said only when each is known. An account whose
+    /// figure is not known yet was summed as 0 ("Total CN¥0.00" in the
+    /// header beside CN¥2.99 in Settings, read a moment apart); now the count
+    /// stands alone until every figure is in.
+    static func accountsTotal(_ figures: [Double?]) -> Double? {
+        guard !figures.isEmpty, figures.allSatisfy({ $0 != nil }) else { return nil }
+        return figures.reduce(0) { $0 + ($1 ?? 0) }
     }
 
     /// The default transaction speed (spec 069): the row's value and which

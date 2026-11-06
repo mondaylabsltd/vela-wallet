@@ -22,6 +22,9 @@ struct MsSheet<Content: View>: View {
     var closeLabel: String
     var tall = false
     var onClose: () -> Void
+    /// r16-9: the step's action row, drawn as the sheet's FOOT outside the
+    /// scroll — it rides above the keyboard, so it is never under it.
+    var footer: AnyView? = nil
     @ViewBuilder var content: () -> Content
 
     var body: some View {
@@ -33,8 +36,26 @@ struct MsSheet<Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, Tokens.Layout.screenPaddingX)
                 .padding(.bottom, Tokens.Space.s32)
+                // r16-9: a tap on the sheet's empty space puts the keyboard
+                // away (the fields, toggles and buttons keep their own taps).
+                .background(Color.clear.contentShape(Rectangle()).onTapGesture { MsKeyboard.dismiss() })
             }
-            .scrollDismissesKeyboard(.interactively)
+            // r16-9: a drag of the body puts the keyboard away, even where
+            // the body is shorter than the sheet.
+            .scrollDismissesKeyboard(.immediately)
+            .scrollBounceBehavior(.always)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if let footer {
+                    VStack(spacing: 0) {
+                        Rectangle().fill(theme.borderBase).frame(height: 1)
+                        footer
+                            .padding(.horizontal, Tokens.Layout.screenPaddingX)
+                            .padding(.vertical, Tokens.Space.s12)
+                    }
+                    .background(theme.bgRaised)
+                    .accessibilityIdentifier("multisig.sheet.footer")
+                }
+            }
             .background(theme.bgRaised)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
@@ -47,11 +68,26 @@ struct MsSheet<Content: View>: View {
                     .accessibilityLabel(closeLabel)
                     .accessibilityIdentifier("multisig.sheet.close")
                 }
+                // r16-9: the keyboard's own way away, always on screen above it.
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button(closeLabel) { MsKeyboard.dismiss() }
+                        .foregroundStyle(theme.fgBase)
+                        .accessibilityIdentifier("multisig.sheet.keyboardDone")
+                }
             }
         }
         .presentationDetents(tall ? [.large] : [.medium, .large])
         .presentationDragIndicator(.visible)
         .presentationBackground(theme.bgRaised)
+    }
+}
+
+/// r16-9: the keyboard put away — whichever field holds it.
+@MainActor
+enum MsKeyboard {
+    static func dismiss() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }
 
@@ -251,6 +287,9 @@ struct MsField: View {
                 .foregroundStyle(theme.fgBase)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                // r16-9: Return puts the keyboard away.
+                .submitLabel(.done)
+                .onSubmit { MsKeyboard.dismiss() }
                 .padding(.vertical, Tokens.Space.s12)
                 .padding(.horizontal, Tokens.Space.s12)
                 .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgSunken))
