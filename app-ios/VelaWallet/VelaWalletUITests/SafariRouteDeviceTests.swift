@@ -443,6 +443,19 @@ final class SafariRouteDeviceTests: XCTestCase {
         let fields = safari.webViews.textFields
         XCTAssertTrue(fields.firstMatch.waitForExistence(timeout: 20), "the sheet's name field")
         capture("\(locale)-\(tag)c-sheet")
+        // r15-3: at open, unscrolled, the sheet's Next stands whole above
+        // Safari's floating toolbar (its capsule bar region starts ~20 pt
+        // above the page menu button) — the sheet's foot, never its scroll.
+        let firstNext = safari.webViews.buttons
+            .matching(NSPredicate(format: "label == %@ OR label == %@", "Next", "下一步")).firstMatch
+        XCTAssertTrue(firstNext.waitForExistence(timeout: 10), "the sheet's Next")
+        let bar = safari.buttons["PageFormatMenuButton"]
+        if bar.exists {
+            let toolbarTop = bar.frame.minY - 20
+            XCTAssertLessThanOrEqual(firstNext.frame.maxY, toolbarTop,
+                                     "Next (\(firstNext.frame)) is whole above Safari's toolbar (\(toolbarTop)) at open")
+            XCTAssertGreaterThan(firstNext.frame.minY, 62, "Next is below Safari's top bar")
+        }
         // A run cut short keeps its draft (r7-9): start over, from a blank sheet.
         if tapControl(["Start over", "重新开始"], timeout: 2) { sleep(2) }
         // The Name field by its label, tapped once, and typed into where the

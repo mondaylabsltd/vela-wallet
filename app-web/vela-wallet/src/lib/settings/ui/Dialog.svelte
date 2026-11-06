@@ -28,9 +28,11 @@
 		closeLabel: string;
 		onclose?: () => void;
 		children: Snippet;
+		/** The action row, outside the scroll: never scrolled out of sight. */
+		footer?: Snippet;
 	}
 
-	let { title, subtitle, closeLabel, onclose, children }: Props = $props();
+	let { title, subtitle, closeLabel, onclose, children, footer }: Props = $props();
 
 	const self = Symbol('dialog');
 	let panel = $state<HTMLElement>();
@@ -118,6 +120,7 @@
 		</button>
 	</div>
 	<div class="content">{@render children()}</div>
+	{#if footer}<div class="foot">{@render footer()}</div>{/if}
 </div>
 
 <style>
@@ -212,6 +215,10 @@
 					transparent
 				)
 				bottom / 100% var(--space-lg) no-repeat scroll;
+	}
+
+	.foot {
+		flex: none;
 	}
 
 	.dialog:focus {

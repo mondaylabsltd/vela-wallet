@@ -1217,6 +1217,14 @@
 	/* A hairline where the body goes on under the foot, and none where it
 	   ends: the first layer travels with the content and covers the second,
 	   which stays at the body's bottom edge. No box, so nothing moves. */
+	.wallet .sheet.footed > .content {
+		background:
+			linear-gradient(var(--color-bg-base), var(--color-bg-base)) local bottom / 100%
+				var(--space-sm) no-repeat,
+			linear-gradient(var(--color-border-base), var(--color-border-base)) scroll bottom / 100%
+				var(--border-hairline) no-repeat;
+	}
+
 	.signing .sheet.footed > .content {
 		background:
 			linear-gradient(var(--color-bg-raised), var(--color-bg-raised)) local bottom / 100%

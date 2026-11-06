@@ -838,6 +838,56 @@ describe('§19.10: the create sheet at an iPhone’s size, its Next in sight on 
 		await screen.unmount();
 		host.remove();
 	});
+
+	// r15-3: Safari 26's wallet tab shows 714 of the iPhone 17 Pro's 874 pt
+	// (its top bar 62, its floating toolbar 98); an iPhone SE shows ~548. The
+	// sheet was capped there, but its content outgrew it and Next scrolled
+	// under its edge. Whatever the height, every step's action is in sight.
+	it.each([
+		[402, 714],
+		[375, 548]
+	])('at %ix%i every step’s action is on screen and uncovered at open', async (w, h) => {
+		await page.viewport(w, h);
+		const host = document.createElement('div');
+		host.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%;';
+		document.body.appendChild(host);
+		const screen = render(CreateMultisigSheet, {
+			target: host,
+			props: {
+				m: words(),
+				locale: 'en',
+				current: ME,
+				wide: false,
+				closeLabel: 'Close',
+				onclose: () => {},
+				oncreated: () => {}
+			}
+		});
+		await settle();
+		await new Promise((r) => setTimeout(r, 300));
+		const inSight = (label: string) => {
+			const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+				(b) => b.textContent?.trim() === label
+			);
+			expect(button, label).toBeTruthy();
+			const box = button!.getBoundingClientRect();
+			const seen = window.visualViewport?.height ?? window.innerHeight;
+			expect(box.top).toBeGreaterThanOrEqual(0);
+			expect(box.bottom).toBeLessThanOrEqual(seen + 0.5);
+			const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+			expect(hit && button!.contains(hit), `${label} is covered`).toBe(true);
+			return button!;
+		};
+		type('.name-field', 'Team');
+		await settle();
+		inSight('create.next').click();
+		await settle();
+		inSight('create.next').click();
+		await settle();
+		inSight('create.create');
+		await screen.unmount();
+		host.remove();
+	});
 });
 
 /**
