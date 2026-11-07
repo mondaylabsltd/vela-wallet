@@ -684,6 +684,22 @@ sealed class FeedEvent {
     @SerialName("space_chains_changed")
     data class SpaceChainsChanged(val chain_ids: List<Int>? = null) : FeedEvent()
 
+    /**
+     * r17-3 / r18-1 (core §29): where the balance's reads of [account] stand,
+     * in the core's own words (`BalanceView.networks_read` /
+     * `unread_chain_ids`), handed on whenever the balance view moves
+     * ([feedFollowsBalance]). "No activity yet" is a claim about every network
+     * of the space: never said while the balance's first read is out or a
+     * network of it is unread.
+     */
+    @Serializable
+    @SerialName("balance_read")
+    data class BalanceRead(
+        val account: String,
+        val read: Boolean,
+        val unread_chain_ids: List<Int> = emptyList(),
+    ) : FeedEvent()
+
     /** Spec 093: a contact's page opened (its address) or closed (`null`) — the view's [FeedView.contact_rows]. */
     @Serializable
     @SerialName("contact_filter_changed")
@@ -803,6 +819,13 @@ data class FeedView(
      * network was read.
      */
     val unread_key: String? = null,
+    /**
+     * r17-4 (core §29): the one unread network's name (the built-in table's),
+     * `null` when none or several are unread, or the table has no name. A
+     * shell names the network from its own list, else this, else says the
+     * many-networks words — never a raw chain id.
+     */
+    val unread_network: String? = null,
 )
 
 object FeedItemList : app.getvela.wallet.core.crux.FailSoftListSerializer<FeedItem>(FeedItem.serializer())

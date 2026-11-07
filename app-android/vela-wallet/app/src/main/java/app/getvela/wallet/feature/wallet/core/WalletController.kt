@@ -41,6 +41,7 @@ import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.NetView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import uniffi.vela_core_uniffi.ActivityFeedCore
@@ -61,6 +62,23 @@ import uniffi.vela_core_uniffi.TokenTrustCore
  * a dozen chains every time somebody switches tabs.
  */
 private val ADDRESS = Regex("^0x[0-9a-fA-F]{40}$")
+
+/**
+ * r18-1 (core §29, r17-3): the balance's reads, handed to the Activity feed
+ * as the core says them — the web's `balance_read` (`feed.svelte.ts`) and
+ * the desktop's. "No activity yet" is a claim about every network of the
+ * space: the scan reads where the account holds or lives, the balance reads
+ * the rest, and the feed settles only once the balance's first read of THIS
+ * account is over with none of its networks unread (a failure, a silence or
+ * a 429 is never a read). Said for every distinct word, the first included.
+ */
+internal fun feedFollowsBalance(scope: CoroutineScope, balance: Flow<BalanceView>, dispatch: (FeedEvent.BalanceRead) -> Unit) = scope.launch {
+    balance.map(::balanceRead).distinctUntilChanged().collect(dispatch)
+}
+
+/** The feed's word for [view]: whose reads, whether the first ended, which networks were not read. */
+internal fun balanceRead(view: BalanceView): FeedEvent.BalanceRead =
+    FeedEvent.BalanceRead(account = view.address.orEmpty(), read = view.networks_read, unread_chain_ids = view.unread_chain_ids)
 
 /**
  * Issue 188 (the web's feed resident): a transfer the scan just found moved
@@ -814,6 +832,11 @@ class WalletController(
                 if (chains != null) feedHost.dispatch(FeedEvent.SpaceChainsChanged(chains.toList()), FeedEvent.serializer())
             }
         }
+        // r18-1 (core §29, r17-3): the balance's reads of the account shown —
+        // the core's own view, unfiltered (the feed filters to the space) —
+        // handed to the feed on every move: "No activity yet" waits for every
+        // network of the space, never beside "Can't reach OP Sepolia".
+        feedFollowsBalance(scope, balanceHost.view) { event -> feedHost.dispatch(event, FeedEvent.serializer()) }
         // r12-3 (core §13.2): the pool's networks out of reach, told to the
         // balance machine on every change — the incoming scan, a balance
         // watch or a send may be the read that lost one, and the home must not

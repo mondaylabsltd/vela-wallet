@@ -149,6 +149,18 @@ data class BalanceView(
      * The hero draws "Updated" from this alone.
      */
     val updated_at_ms: Double? = null,
+    /**
+     * r17-3 (core §29): the first read of this account has ended — every
+     * network said for it was asked (its answer, or its failure, is in).
+     * Handed to the Activity feed ([FeedEvent.BalanceRead]).
+     */
+    val networks_read: Boolean = false,
+    /**
+     * r17-3: the networks said for this account that were NOT read now —
+     * failed, refused, silent or rate limited — ascending. "No activity yet"
+     * is a claim about every network of the space ([FeedEvent.BalanceRead]).
+     */
+    val unread_chain_ids: List<Int> = emptyList(),
     val tokens: List<BalanceToken> = emptyList(),
     /** Held, but with no price — shown, never counted. */
     val unpriced_tokens: List<BalanceToken> = emptyList(),

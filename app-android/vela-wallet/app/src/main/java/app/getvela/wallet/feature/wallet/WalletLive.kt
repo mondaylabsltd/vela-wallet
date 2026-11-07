@@ -261,11 +261,16 @@ object WalletLive {
     ): String? {
         val key = feed.unread_key ?: return null
         val first = feed.unread_chains.firstOrNull()
+        // r17-4 / r18-1 (core §29): the one network by this device's name,
+        // else the core's (`unread_network`, then its catalog) — and with no
+        // name anywhere, the many-networks words, never a raw chain id.
+        val name = first?.let { chainNames[it] ?: allNames[it] ?: feed.unread_network?.takeIf(String::isNotBlank) ?: catalogName(it) }
+        val words = if (key == I18nKeys.Wallet.ACTIVITY_UNREAD_ONE && name == null) I18nKeys.Wallet.ACTIVITY_UNREAD_MANY else key
         return strings.t(
-            key,
+            words,
             mapOf(
-                "network" to (first?.let { chainNames[it] ?: allNames[it] ?: catalogName(it) ?: it.toString() } ?: ""),
-                "n" to feed.unread_chains.size.toString(),
+                "network" to name.orEmpty(),
+                "n" to feed.unread_chains.size.coerceAtLeast(1).toString(),
             ),
         )
     }
