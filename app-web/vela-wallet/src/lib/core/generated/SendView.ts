@@ -6,6 +6,7 @@ import type { SendAmountWarning } from "./SendAmountWarning";
 import type { SendDuplicateRowView } from "./SendDuplicateRowView";
 import type { SendFeeCoin } from "./SendFeeCoin";
 import type { SendFeeIssueView } from "./SendFeeIssueView";
+import type { SendFeeMoved } from "./SendFeeMoved";
 import type { SendLockError } from "./SendLockError";
 import type { SendMaxMoved } from "./SendMaxMoved";
 import type { SendMultiSpecView } from "./SendMultiSpecView";
@@ -338,6 +339,21 @@ submit_slow?: SendSubmitSlow | null,
  * amount sent). Said beside the amount until the Max is let go of.
  */
 max_moved?: SendMaxMoved | null, 
+/**
+ * §34: while the person's press is out (preparing, the passkey or the
+ * signing page, the POST), the fee and the amount drawn are frozen at
+ * the press — the figures being signed — and this is the line under
+ * the fee that says so ([`FEE_SIGNING_KEY`]). `None` otherwise.
+ */
+fee_signing_key?: string | null, 
+/**
+ * §34: the last press signed nothing — the quote at the signature was
+ * not the one shown. Drawn beside the confirm in its words; the page
+ * already draws the new fee (and a Max's new amount). Cleared by the
+ * next press, by editing, by leaving the confirm, or by a Max that
+ * moves again (`max_moved` then says it).
+ */
+fee_moved?: SendFeeMoved | null, 
 /**
  * Spec 102: with `tx_error` = [`SendTxErrorKey::VenueBlocked`], why this
  * account cannot sign here — drawn as `VenueBlock::key()` with its

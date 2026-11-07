@@ -2184,6 +2184,13 @@ enum MaxFill {
     Exact(String),
 }
 
+/// §34: one press of the confirm, from the press to its signature, cancel or
+/// stop — the quote it was pressed on.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct Press {
+    fee: Option<FeeEstimate>,
+}
+
 /// What [`Event::FeeTokenChanged`] said, and the form's chain when it said
 /// it: a contract is an address on ONE chain, and a word about the network
 /// the form just left never names this one's coin.
@@ -2345,6 +2352,13 @@ pub struct Model {
     /// [`SendView::max_moved`] (r5reg-3): the figure the Max first showed, and
     /// the one it shows now.
     max_moved: Option<SendMaxMoved>,
+    /// §34: what the person's press froze — the fee drawn beside the button
+    /// at the press. While that press is out ([`press_frozen`]) the confirm
+    /// draws THIS, never a newer quote, and the Max does not move.
+    press: Option<Press>,
+    /// §34: [`SendView::fee_moved`] — the last press signed nothing because
+    /// the quote at the signature was not the one shown.
+    fee_moved: Option<SendFeeMoved>,
     fee_held: bool,
     /// The relay is topping up its gas before it sends (098 follow-up). Not
     /// sticky: the next outcome clears it.
@@ -2555,6 +2569,32 @@ pub struct SendSubmitSlow {
 pub struct SendMaxMoved {
     pub from: String,
     pub to: String,
+}
+
+/// §34: [`SendView::fee_signing_key`] — the line under the fee while a press
+/// is out: the fee and the amount drawn are the ones being signed, and they
+/// stay as they are until the signature, a cancel or a stop.
+pub const FEE_SIGNING_KEY: &str = "send.feeSigning";
+/// §34: [`SendFeeMoved::key`] when the amount did not move.
+pub const FEE_MOVED_KEY: &str = "send.feeMoved";
+/// §34: [`SendFeeMoved::key`] when a Max moved with the fee
+/// (`{{to}}`, `{{from}}`, `{{symbol}}`).
+pub const FEE_MOVED_MAX_KEY: &str = "send.feeMovedMax";
+
+/// [`SendView::fee_moved`] (§34): the person pressed confirm on one fee and
+/// the quote at the signature was another — nothing was signed. Said beside
+/// the confirm, which now draws the new figures; the next press signs
+/// exactly those.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendFeeMoved {
+    /// [`FEE_MOVED_KEY`], or [`FEE_MOVED_MAX_KEY`] when `max` is set.
+    pub key: String,
+    /// A Max re-derived from the new quote: what it read at the press and
+    /// what it reads now, as the field shows them ([`max_figure`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional = nullable))]
+    pub max: Option<SendMaxMoved>,
 }
 
 /// [`SendView::previous_pending`]: the transaction this send waits for.
@@ -2894,6 +2934,21 @@ pub struct SendView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "bindings", ts(optional = nullable))]
     pub max_moved: Option<SendMaxMoved>,
+    /// §34: while the person's press is out (preparing, the passkey or the
+    /// signing page, the POST), the fee and the amount drawn are frozen at
+    /// the press — the figures being signed — and this is the line under
+    /// the fee that says so ([`FEE_SIGNING_KEY`]). `None` otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional = nullable))]
+    pub fee_signing_key: Option<String>,
+    /// §34: the last press signed nothing — the quote at the signature was
+    /// not the one shown. Drawn beside the confirm in its words; the page
+    /// already draws the new fee (and a Max's new amount). Cleared by the
+    /// next press, by editing, by leaving the confirm, or by a Max that
+    /// moves again (`max_moved` then says it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional = nullable))]
+    pub fee_moved: Option<SendFeeMoved>,
     /// Spec 102: with `tx_error` = [`SendTxErrorKey::VenueBlocked`], why this
     /// account cannot sign here — drawn as `VenueBlock::key()` with its
     /// domains. `None` otherwise.
@@ -3154,7 +3209,9 @@ impl Send {
             Event::SlideConfirm { review } => match review {
                 // Drawn for another review than the one up now: nothing is
                 // confirmed, and the review in front is what is drawn next.
-                Some(drawn) if review_digest(model).as_deref() != Some(drawn.as_str()) => render(),
+                Some(drawn) if review_digest(model).as_deref() != Some(drawn.as_str()) => {
+                    stale_press(model)
+                }
                 _ => slide_confirm(model),
             },
             Event::SigningStarted => {
@@ -3430,7 +3487,7 @@ impl Send {
             .as_ref()
             .filter(|_| model.multi_select_mode)
             .map(|token| {
-                multi_token_specs(model, token.chain_id)
+                multi_token_specs(model, token.chain_id, shown_fee(model))
                     .into_iter()
                     .map(|s| SendMultiSpecView {
                         token_address: s.token_address,
@@ -3530,6 +3587,14 @@ impl Send {
                 .max_moved
                 .clone()
                 .filter(|_| matches!(model.max_fill, Some(MaxFill::Exact(_)))),
+            fee_signing_key: (stage == SendStage::Confirm
+                && press_frozen(model)
+                && shown_fee(model).is_some())
+            .then(|| FEE_SIGNING_KEY.to_owned()),
+            fee_moved: model
+                .fee_moved
+                .clone()
+                .filter(|_| stage == SendStage::Confirm),
             tx_venue_block: model
                 .venue_block
                 .clone()
@@ -4699,6 +4764,10 @@ fn max_follow_up(model: &mut Model, token: &SendToken) -> Cmd {
     if model.max_fill.is_none() {
         return Command::done();
     }
+    // §34: what a press froze is not re-derived under it.
+    if press_frozen(model) {
+        return Command::done();
+    }
     // A multisig's Max is its whole balance: the executor pays the fee.
     if proposing(model).is_some() {
         set_max(model, full_balance(token));
@@ -4786,6 +4855,10 @@ fn set_max(model: &mut Model, exact: String) {
             from: shown,
             to: figure.clone(),
         });
+        // §34: a stop's figures that moved again are `max_moved`'s to say.
+        if model.max_moved.is_some() {
+            model.fee_moved = None;
+        }
     }
     model.amount = DenominatedAmount::token(figure);
     model.max_fill = Some(MaxFill::Exact(exact));
@@ -5645,7 +5718,7 @@ fn build_sim_calls(model: &Model, token: &SendToken) -> Option<Vec<FeeCall>> {
     if model.multi_select_mode {
         build_multi_token_calls(
             model.recipient.trim(),
-            &multi_token_specs(model, token.chain_id),
+            &multi_token_specs(model, token.chain_id, shown_fee(model)),
         )
     } else if model.split_mode {
         build_split_calls(
@@ -5694,6 +5767,14 @@ fn selected_fee(model: &Model) -> Option<&FeeEstimate> {
 /// cancel — the newest quote is drawn again, and the next confirm signs that
 /// one: re-quoted, shown, then signed.
 fn shown_fee(model: &Model) -> Option<&FeeEstimate> {
+    // §34: from the press to its signature, cancel or stop — the preparing
+    // reads included, before the operation is out — the fee pressed on.
+    if press_frozen(model) {
+        if let Some(press) = &model.press {
+            let chain = model.selected_token.as_ref().map(|t| t.chain_id);
+            return press.fee.as_ref().filter(|f| Some(f.chain_id) == chain);
+        }
+    }
     match &model.pipeline {
         Pipeline::Submitting { fee: Some(fee), .. }
             if matches!(model.tx, SendTxStatus::Submitting | SendTxStatus::Signing) =>
@@ -5702,6 +5783,73 @@ fn shown_fee(model: &Model) -> Option<&FeeEstimate> {
         }
         _ => selected_fee(model),
     }
+}
+
+/// §34: a press of the confirm is out — from the press (preparing: the
+/// credential, the relay's float) through the passkey or the signing page
+/// to the POST — and what it was pressed on is frozen on screen.
+fn press_frozen(model: &Model) -> bool {
+    model.press.is_some()
+        && model.step == SendStep::Confirm
+        && model.lock.busy()
+        && matches!(
+            model.tx,
+            SendTxStatus::Preparing | SendTxStatus::Signing | SendTxStatus::Submitting
+        )
+}
+
+/// §34: a confirm tapped on a review that is no longer the one up (a quote
+/// landed between the paint and the tap) confirms nothing — and says so
+/// beside the button, over the figures now drawn. Never a silent no-op the
+/// person takes for a tap that did not register.
+fn stale_press(model: &mut Model) -> Cmd {
+    if model.step == SendStep::Confirm && !model.lock.busy() {
+        model.fee_moved = Some(SendFeeMoved {
+            key: FEE_MOVED_KEY.to_owned(),
+            max: None,
+        });
+    }
+    render()
+}
+
+/// §34: the quote at the signature is not the one the press was made on.
+/// Nothing is signed. The press ends; the newest quote is drawn; a Max is
+/// re-derived from it — and the stop says all of that beside the button
+/// ([`SendView::fee_moved`]). The next press signs exactly what is drawn.
+fn press_moved(model: &mut Model, gen: u64) -> Cmd {
+    let pressed_max = match &model.max_fill {
+        Some(MaxFill::Exact(exact)) => Some(max_figure(exact)),
+        _ => None,
+    };
+    model.confirmed_review = None;
+    model.press = None;
+    model.pipeline = Pipeline::Idle;
+    model.tx = SendTxStatus::Idle;
+    model.lock.end(gen);
+    // The Max follows the quote it will now be signed on — said here, in
+    // the stop's words, not as a quiet swap.
+    hold_max_to_quote(model);
+    let max = match (&pressed_max, &model.max_fill) {
+        (Some(from), Some(MaxFill::Exact(now))) if *from != max_figure(now) => Some(SendMaxMoved {
+            from: from.clone(),
+            to: max_figure(now),
+        }),
+        _ => None,
+    };
+    // One sentence for one move: the stop's.
+    model.max_moved = None;
+    // A quote that failed draws its failure in the fee's place; a fee
+    // moved is said only over a fee drawn.
+    model.fee_moved = shown_fee(model).is_some().then(|| SendFeeMoved {
+        key: if max.is_some() {
+            FEE_MOVED_MAX_KEY
+        } else {
+            FEE_MOVED_KEY
+        }
+        .to_owned(),
+        max,
+    });
+    Command::all([reprobe_after_fee(model), render()])
 }
 
 /// The chain's own coin, when the registry knows it — the symbol a `None` in
@@ -6143,7 +6291,16 @@ fn derive_same_asset_issue(model: &Model) -> Option<SendFeeIssueView> {
 /// `multiTokenSpecs` (`useSendController.ts:559-568`): the EXACT per-token
 /// amounts a multiSelect submits — reserve whichever asset pays the displayed
 /// fee so preview and signed MultiSend stay identical (invariant ⑪).
-fn multi_token_specs(model: &Model, chain_id: u32) -> Vec<MultiTokenSpec> {
+///
+/// `fee` is the quote the amounts are figured against: the one drawn
+/// ([`shown_fee`] — frozen while a press is out, §34) for the page, the
+/// newest for the submit's plan, so a sweep whose reserve moved between the
+/// press and the signature is a review that moved, and stops.
+fn multi_token_specs(
+    model: &Model,
+    chain_id: u32,
+    fee: Option<&FeeEstimate>,
+) -> Vec<MultiTokenSpec> {
     let specs: Vec<MultiTokenSpec> = picked_tokens(model)
         .iter()
         .map(|tk| MultiTokenSpec {
@@ -6152,10 +6309,7 @@ fn multi_token_specs(model: &Model, chain_id: u32) -> Vec<MultiTokenSpec> {
             amount: full_balance(tk),
         })
         .collect();
-    let fee = model
-        .fee_estimate
-        .as_ref()
-        .filter(|f| f.chain_id == chain_id);
+    let fee = fee.filter(|f| f.chain_id == chain_id);
     // r10-3: on a chain whose native coin wears an ERC-20 interface, the fee
     // may be quoted in the face the sweep does not hold a line for — the
     // reserve then comes out of the line that holds that money.
@@ -6467,6 +6621,7 @@ fn edit_amount(model: &mut Model) -> Cmd {
 /// (`useSendController.ts:467-473`).
 fn leave_confirm(model: &mut Model) {
     model.passkey_note = None;
+    model.fee_moved = None;
     model.gas_fee_token = None;
     // The reset is back to "nobody chose" — the fee machine's pick — rather
     // than to the native coin, which is what "no choice" used to mean.
@@ -6535,6 +6690,11 @@ fn slide_confirm(model: &mut Model) -> Cmd {
     };
     // What this confirm is for, frozen: the submit signs it or nothing.
     model.confirmed_review = submit_plan(model).as_ref().and_then(signed_review);
+    // §34: …and what it was pressed on stays on screen until then.
+    model.press = Some(Press {
+        fee: selected_fee(model).cloned(),
+    });
+    model.fee_moved = None;
     model.cancelled = false;
     model.passkey_note = None;
     model.tx = SendTxStatus::Preparing;
@@ -6750,7 +6910,7 @@ fn submit_plan(model: &Model) -> Option<SubmitPlan> {
     // One send line per output; split/multiSelect settle as ONE MultiSend
     // UserOp (one signature, one gas).
     let built: Option<(Vec<FeeCall>, Vec<SendLine>)> = if model.multi_select_mode {
-        let specs = multi_token_specs(model, chain_id);
+        let specs = multi_token_specs(model, chain_id, current_fee.as_ref());
         let picked = picked_tokens(model);
         let recipient = model.recipient.trim().to_owned();
         // `specs.length === 0` throws `multiSendNoFundsAfterGas`; the generic
@@ -6931,12 +7091,10 @@ fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
     // What the confirm froze is what is signed. Anything that moved since —
     // a re-quote that landed during the confirm's own checks — puts the
     // review back in front of the person with its new figures, unsigned.
+    // §34: said beside the button, with the new figures — never a silent
+    // return of the button, never a quiet re-derivation of a Max.
     if model.confirmed_review.as_ref() != Some(&review) {
-        model.confirmed_review = None;
-        model.pipeline = Pipeline::Idle;
-        model.tx = SendTxStatus::Idle;
-        model.lock.end(gen);
-        return render();
+        return press_moved(model, gen);
     }
     let SubmitPlan {
         chain_id,

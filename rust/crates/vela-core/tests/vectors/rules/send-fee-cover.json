@@ -213,6 +213,86 @@
       }
     ]
   },
+  "press_freeze": {
+    "about": "§34 (R20 S1, iOS, Arc Testnet): charged = shown, frozen at the press. The tester's account held 0.3 USDC and had never deployed, so its first send also deployed it; Max on the confirm read 0.0675 with a 0.2325 fee, and the chain took 0.0058875 + 0.29411249999: a re-quote landed between the press and the signature, the submit returned the button without a word, and the Max was re-derived from the new quote under it. Each case boots on `tokens`, selects `token`, types the payee, lets `quotes[0]` land on the form, then either taps Max (`max`) or types `amount`, and Continues with the pre-check answered by `quotes[1]`. `moment`: `preparing` — the confirm is pressed on the review drawn, and `quotes[2]` lands while the press reads the credential and the relay's float (before the operation is built); `before_tap` — `quotes[2]` lands on the confirm and the tap carries the review it was drawn on before that. Expected `pressed`: the figures drawn while the press is out (`SendView.confirm_amount`, the fee in wei, `SendView.fee_signing_key`). `stopped`: no SubmitUserOp was issued; `SendView.fee_moved` names `fee_moved_key` and, for a Max, `max_from` → `max_to`; the page draws `after.amount` and `after.fee_wei`. `signed`: the SubmitUserOp of the NEXT press (or of this one when not stopped) — its review's transfer amount and fee amount in base units. Every quote is a native fee in wei with `deployed` false (the deployment is in the fee).",
+    "cases": [
+      {
+        "name": "the R20 figures: a deploying account's Max, the quote up between the press and the signature",
+        "tokens": [{ "chain_id": 5042002, "address": null, "decimals": 18, "symbol": "USDC", "balance": "0.3" }],
+        "token": 0,
+        "max": true,
+        "moment": "preparing",
+        "quotes": [
+          { "asset": "native", "total_wei": "267375000000000000" },
+          { "asset": "native", "total_wei": "232500000000000000" },
+          { "asset": "native", "total_wei": "294112500000000000" }
+        ],
+        "pressed": { "amount": "0.0675", "fee_wei": "232500000000000000" },
+        "stopped": {
+          "fee_moved_key": "send.feeMovedMax",
+          "max_from": "0.0675",
+          "max_to": "0.005888",
+          "after": { "amount": "0.0058875", "fee_wei": "294112500000000000" }
+        },
+        "signed": { "amount": "5887500000000000", "fee": "294112500000000000" }
+      },
+      {
+        "name": "a Max whose quote lands unchanged under the press signs the figures pressed",
+        "tokens": [{ "chain_id": 5042002, "address": null, "decimals": 18, "symbol": "USDC", "balance": "0.3" }],
+        "token": 0,
+        "max": true,
+        "moment": "preparing",
+        "quotes": [
+          { "asset": "native", "total_wei": "267375000000000000" },
+          { "asset": "native", "total_wei": "232500000000000000" },
+          { "asset": "native", "total_wei": "232500000000000000" }
+        ],
+        "pressed": { "amount": "0.0675", "fee_wei": "232500000000000000" },
+        "stopped": null,
+        "signed": { "amount": "67500000000000000", "fee": "232500000000000000" }
+      },
+      {
+        "name": "a typed amount keeps its figure; only the fee moved, and it is said",
+        "tokens": [{ "chain_id": 5042002, "address": null, "decimals": 18, "symbol": "USDC", "balance": "0.3" }],
+        "token": 0,
+        "amount": "0.01",
+        "moment": "preparing",
+        "quotes": [
+          { "asset": "native", "total_wei": "232500000000000000" },
+          { "asset": "native", "total_wei": "232500000000000000" },
+          { "asset": "native", "total_wei": "250000000000000000" }
+        ],
+        "pressed": { "amount": "0.01", "fee_wei": "232500000000000000" },
+        "stopped": {
+          "fee_moved_key": "send.feeMoved",
+          "max_from": null,
+          "max_to": null,
+          "after": { "amount": "0.01", "fee_wei": "250000000000000000" }
+        },
+        "signed": { "amount": "10000000000000000", "fee": "250000000000000000" }
+      },
+      {
+        "name": "a tap drawn before the quote landed confirms nothing, and says so",
+        "tokens": [{ "chain_id": 5042002, "address": null, "decimals": 18, "symbol": "USDC", "balance": "0.3" }],
+        "token": 0,
+        "max": true,
+        "moment": "before_tap",
+        "quotes": [
+          { "asset": "native", "total_wei": "267375000000000000" },
+          { "asset": "native", "total_wei": "232500000000000000" },
+          { "asset": "native", "total_wei": "294112500000000000" }
+        ],
+        "pressed": null,
+        "stopped": {
+          "fee_moved_key": "send.feeMoved",
+          "max_from": null,
+          "max_to": null,
+          "after": { "amount": "0.0058875", "fee_wei": "294112500000000000" }
+        },
+        "signed": { "amount": "5887500000000000", "fee": "294112500000000000" }
+      }
+    ]
+  },
   "fee_machine": {
     "about": "The fee machine a dApp request's sheet runs (fee_policy; its confirm gate is sign_confirm::confirm_state — FeeView.confirm_fee_ready false with a fee in hand is ConfirmBlock::FeeShort). Each case asks a quote on `chain_id` for `calls` (value in base units; `erc20_transfer` encodes transfer(to, amount) on `token`) with the fee coin `fee_token` (null = native) as the person's pick. The relay's rows are built from the machine's OWN fee figure: the row that pays holds fee + what the calls state they move of that balance (in its places, rounded up) + `delta`; a `twin` row (the other face of one balance) holds the same money in its own places. `measured`, when present, is the simulation's balance changes (Event::BalanceChangesMeasured) and replaces the stated outflow. Expected: FeeView.confirm_fee_ready.",
     "cases": [

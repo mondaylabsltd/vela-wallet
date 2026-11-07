@@ -368,6 +368,7 @@ export * from './SendEstimateFailure';
 export * from './SendEvent';
 export * from './SendFeeCoin';
 export * from './SendFeeIssueView';
+export * from './SendFeeMoved';
 export * from './SendFeeOutcome';
 export * from './SendHapticKind';
 export * from './SendHoldReason';

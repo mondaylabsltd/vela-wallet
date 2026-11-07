@@ -1416,8 +1416,14 @@ for (let i = 1; i < PATHS.length; i++) {
 //   plain Send's Continue when Vela's relay gave no price or simulation
 //   ("Vela's relay didn't answer, so nothing was sent. Try again in a
 //   moment.", r18-14). 2293 + 1 = 2294 paths, 2174 leaves, 120 branches.
-if (PATHS.length !== 2294) fail(`expected 2294 paths (2174 leaf + 120 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2174) fail(`expected 2174 leaf paths, got ${leafSet.size}`);
+// 2297 (Send: charged = shown, frozen at confirm, §34, 2026-11-08): +
+//   `send.feeSigning` (the line under the fee while a press is out: the fee
+//   and the amount drawn are the ones being signed), `send.feeMoved` and
+//   `send.feeMovedMax` (the quote at the signature was not the one shown:
+//   nothing signed, the new figures drawn — a Max's with them —
+//   `SendView.fee_moved`). 2294 + 3 = 2297 paths, 2177 leaves, 120 branches.
+if (PATHS.length !== 2297) fail(`expected 2297 paths (2177 leaf + 120 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2177) fail(`expected 2177 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
