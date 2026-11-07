@@ -25,6 +25,13 @@ enum NetworkSpaceKind: String {
     case mainnet, testnet
 
     var other: NetworkSpaceKind { self == .mainnet ? .testnet : .mainnet }
+
+    /// r17-14 / r18-9: whether this space shows fiat at all — the core's one
+    /// rule (`network_space::shows_fiat`, uniffi `network_space_shows_fiat`):
+    /// the testnet space shows no total, no currency code, no worth on a row
+    /// and no "≈ …" beside an amount or a fee. Every money surface of this
+    /// shell asks here; it keeps no copy of the rule.
+    var showsFiat: Bool { networkSpaceShowsFiat(space: rawValue) }
 }
 
 @Observable
@@ -42,6 +49,9 @@ final class NetworkSpace {
     }
 
     var testnet: Bool { current == .testnet }
+
+    /// r18-9: the space in front shows fiat (the core's rule).
+    var showsFiat: Bool { current.showsFiat }
 
     /// The person's switch (through the `set_network_space` intent), or the
     /// agent's once the person allowed it.

@@ -39,11 +39,13 @@ enum FlowsLive {
         selected: Int? = nil,
         on model: AssetsModel,
         loc: Loc,
-        networks: WalletNetworks = .builtin
+        networks: WalletNetworks = .builtin,
+        /// r18-9: the space shows no fiat (the core's rule) — no worth on a row.
+        noValue: Bool = false
     ) -> AssetsModel {
         let all = WalletLive.assetRows(
             balance, display: WalletLive.Display.from(currency, language: loc.resolvedLanguage),
-            networks: networks
+            networks: networks, noValue: noValue
         )
         let rows = visibleAssetIndices(balance, selected: selected).map { all[$0] }
         // Empty exactly when the core says the list is (`emptyKey`: a read

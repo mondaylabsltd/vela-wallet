@@ -312,6 +312,11 @@ final class SendStore {
         WalletLive.Display.sendContext(currency, testnet: testnet)
     }
 
+    /// r18-9: the space's own word on fiat (the core's rule).
+    static func displayContext(_ currency: CurrencyViewWire?, space: NetworkSpaceKind) -> (code: String, rate: Double?) {
+        WalletLive.Display.sendContext(currency, space: space)
+    }
+
     func dispatch(_ event: [String: Any]) { core.dispatch(CoreJSON.string(event)) }
 
     // MARK: - What the drawn screens send

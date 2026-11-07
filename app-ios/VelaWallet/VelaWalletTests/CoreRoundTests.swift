@@ -193,7 +193,9 @@ struct CoreRoundTests {
         let kinds: [Any] = ["internal", "would_fail", "quote_unavailable", "timeout", "other", chainRead]
         let keys = kinds.map { sendEstimateFailureBodyKey(failure: SendLive.estimateFailureText($0)) }
         #expect(keys == [
-            "componentsUi.gas.reasonInternal", "send.alertEstimateFailedBody", "send.alertEstimateFailedBody",
+            // r18-14 (the core, §32): a quote the relay did not give is the
+            // relay's words, never the general estimate sentence.
+            "componentsUi.gas.reasonInternal", "send.alertEstimateFailedBody", "send.alertEstimateRelayBody",
             "send.alertEstimateFailedBody", "send.alertEstimateFailedBody", "send.alertEstimateChainDownBody",
         ], "\(keys)")
     }
@@ -209,7 +211,8 @@ struct CoreRoundTests {
         #expect(body(chainRead).contains("Gnosis"))
         #expect(body("internal") == loc.t("componentsUi.gas.reasonInternal"))
         #expect(!body("internal").contains("Gnosis"))
-        #expect(body("quote_unavailable") == loc.t("send.alertEstimateFailedBody"))
+        // r18-14 (the core, §32): the relay's own words.
+        #expect(body("quote_unavailable") == loc.t("send.alertEstimateRelayBody"))
         #expect(body("other") == loc.t("send.alertEstimateFailedBody"))
         #expect(SendLive.alertText(["type": "estimate_failed", "kind": "internal"], loc: loc).title
                 == loc.t("send.alertEstimateFailedTitle"))

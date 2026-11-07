@@ -247,7 +247,8 @@ struct MultisigR16NativeTests {
         #expect(testnet.accountsSheet.rows.allSatisfy { $0.amount.isEmpty })
         #expect(testnet.accountsSheet.summary == SettingsLive.accountsSummary(count: loc.t(I18nKeys.SettingsUi.accountsCount, count: 2), total: nil))
         let root = try source("VelaWallet/App/RootView.swift")
-        #expect(root.contains("noValue: space.current == .testnet"))
+        // r18-9: the space's own word on fiat, the core's.
+        #expect(root.contains("noValue: !space.showsFiat"))
     }
 
     @Test func theTestnetAccountsSheetShowsNoWorth() async throws {
