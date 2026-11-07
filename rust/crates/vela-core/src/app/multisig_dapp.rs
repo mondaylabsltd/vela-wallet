@@ -97,6 +97,46 @@ pub fn multisig_refusal(method: &str) -> Option<DappError> {
     })
 }
 
+/// §31 (`parent_safe_guard`): the request would have made this multisig act
+/// for a Safe it owns — `execTransaction`, `approveHash` or an owner/module
+/// change on it — or whether it owns that Safe could not be read. Refused,
+/// with no "anyway": said in the window first (the shell words it from
+/// `data.key`), then answered. `data` names the call and the Safe.
+pub fn parent_refusal(
+    target: &super::parent_safe_guard::ParentTarget,
+    reason: super::parent_safe_guard::ParentReason,
+) -> DappError {
+    use super::parent_safe_guard::ParentReason;
+    let unchecked = reason == ParentReason::Unchecked;
+    DappError {
+        code: -32603,
+        message: format!(
+            "{} ({} on {}{})",
+            super::dapp_rpc::sign_error_message(
+                super::sign_request::SignErrorKind::ParentSafeBlocked
+            ),
+            target.function,
+            target.safe,
+            if unchecked {
+                ": ownership could not be checked"
+            } else {
+                ""
+            }
+        ),
+        data: Some(json!({
+            "reason": "parent_safe",
+            "why": reason,
+            "safe": target.safe,
+            "function": target.function,
+            "key": if unchecked { PARENT_UNCHECKED_KEY } else { PARENT_BLOCKED_KEY },
+        })),
+    }
+}
+
+/// The sentences a parent-Safe refusal is said in (§31).
+pub const PARENT_BLOCKED_KEY: &str = "componentsUi.signing.parentSafeBlocked";
+pub const PARENT_UNCHECKED_KEY: &str = "componentsUi.signing.parentSafeUnchecked";
+
 /// A transaction proposed but not executed — the person left, or the
 /// request's limit is near (`leftProposed`): not a rejection, not a
 /// disconnect, not a hash. `data` carries the proposal, so nobody proposes

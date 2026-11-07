@@ -825,6 +825,12 @@ impl World {
             "0xe75235b8" => ok(format!("0x{}", word_u(s.threshold))),
             "0xaffed0e0" => ok(format!("0x{}", word_u(s.nonce))),
             "0xcc2f8452" => ok(modules_ret(&s.modules)),
+            // isOwner(address) (§31)
+            "0x2f54bf6e" => {
+                let who = format!("0x{}", &data[10 + 24..10 + 64]);
+                let owns = s.owners.iter().any(|o| o.eq_ignore_ascii_case(&who));
+                ok(format!("0x{}", word_u(u64::from(owns))))
+            }
             // approvedHashes(address,bytes32)
             "0x7d832974" => {
                 let owner = format!("0x{}", &data[10 + 24..10 + 64]);

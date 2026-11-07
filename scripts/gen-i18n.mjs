@@ -1406,8 +1406,14 @@ for (let i = 1; i < PATHS.length; i++) {
 //   won't write to the live service; point it at a local one.",
 //   `service_defaults::REFUSED_KEY`). 2289 + 2 = 2291 paths, 2171 leaves,
 //   120 branches.
-if (PATHS.length !== 2291) fail(`expected 2291 paths (2171 leaf + 120 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2171) fail(`expected 2171 leaf paths, got ${leafSet.size}`);
+// 2293 (the parent-Safe guard, §31, 2026-11-07): +
+//   `componentsUi.signing.parentSafe{Blocked,Unchecked}` — what the sheet says
+//   when a site asks this account to change or approve something for a
+//   multisig it is a member of, or when whether it owns that Safe could not
+//   be read (`SignBlockedView.parent` / `reason`). 2291 + 2 = 2293 paths,
+//   2173 leaves, 120 branches.
+if (PATHS.length !== 2293) fail(`expected 2293 paths (2173 leaf + 120 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2173) fail(`expected 2173 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.

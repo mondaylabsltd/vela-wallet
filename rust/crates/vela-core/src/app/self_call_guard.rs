@@ -51,6 +51,13 @@ pub enum SelfCallFunction {
     SafeTxTypedData,
     /// A `delegatecall` leg inside a batch — the Bybit primitive.
     DelegateCall,
+    /// `approveHash(bytes32)` — one counting approval of a Safe this account
+    /// owns (§31, `parent_safe_guard`; never a self-call: a Safe does not
+    /// approve for itself).
+    ApproveHash,
+    /// Not a call: an EIP-712 `SafeMessage` under a Safe's own domain — a
+    /// nested EIP-1271 approval for that Safe (§31).
+    SafeMessageTypedData,
 }
 
 impl SelfCallFunction {
@@ -71,6 +78,8 @@ impl SelfCallFunction {
             Self::ExecTransactionFromModule => "execTransactionFromModule",
             Self::SafeTxTypedData => "SafeTx",
             Self::DelegateCall => "delegatecall",
+            Self::ApproveHash => "approveHash",
+            Self::SafeMessageTypedData => "SafeMessage",
         }
     }
 }
@@ -90,7 +99,7 @@ pub struct SelfCallBlock {
 /// Safe v1.4.1 ownership and configuration selectors. `setModuleGuard` is
 /// v1.5's; listing it now costs nothing and closes the gap the day a wallet
 /// runs on one.
-const BLOCKED: &[(&str, SelfCallFunction)] = &[
+pub(super) const BLOCKED: &[(&str, SelfCallFunction)] = &[
     ("0x0d582f13", SelfCallFunction::AddOwner),
     ("0xf8dc5dd9", SelfCallFunction::RemoveOwner),
     ("0xe318b52b", SelfCallFunction::SwapOwner),
@@ -106,17 +115,17 @@ const BLOCKED: &[(&str, SelfCallFunction)] = &[
     ("0x5229073f", SelfCallFunction::ExecTransactionFromModule),
 ];
 
-const MULTI_SEND: &str = "0x8d80ff0a";
-const EXEC_TRANSACTION: &str = "0x6a761202";
+pub(super) const MULTI_SEND: &str = "0x8d80ff0a";
+pub(super) const EXEC_TRANSACTION: &str = "0x6a761202";
 
-fn blocked_function(selector: &str) -> Option<SelfCallFunction> {
+pub(super) fn blocked_function(selector: &str) -> Option<SelfCallFunction> {
     BLOCKED
         .iter()
         .find(|(sel, _)| sel.eq_ignore_ascii_case(selector))
         .map(|(_, f)| *f)
 }
 
-fn same_address(a: &str, b: &str) -> bool {
+pub(super) fn same_address(a: &str, b: &str) -> bool {
     a.trim()
         .trim_start_matches("0x")
         .eq_ignore_ascii_case(b.trim().trim_start_matches("0x"))
@@ -124,7 +133,7 @@ fn same_address(a: &str, b: &str) -> bool {
 
 /// Raw bytes of a `0x…` string; odd or non-hex input yields what parsed, which
 /// is enough to read a selector and never panics on hostile input.
-fn hex_bytes(data: &str) -> Vec<u8> {
+pub(super) fn hex_bytes(data: &str) -> Vec<u8> {
     let body = data.trim().trim_start_matches("0x");
     let usable = body.len() - (body.len() % 2);
     (0..usable)
@@ -133,19 +142,19 @@ fn hex_bytes(data: &str) -> Vec<u8> {
         .collect()
 }
 
-fn selector_of(data: &str) -> Option<String> {
+pub(super) fn selector_of(data: &str) -> Option<String> {
     let bytes = hex_bytes(data);
     (bytes.len() >= 4).then(|| to_hex(&bytes[..4], true))
 }
 
 /// One leg of a `multiSend` payload: `operation(1) to(20) value(32) len(32) data(len)`.
-struct InnerCall {
-    operation: u8,
-    to: String,
-    data: String,
+pub(super) struct InnerCall {
+    pub(super) operation: u8,
+    pub(super) to: String,
+    pub(super) data: String,
 }
 
-fn decode_multi_send(data: &str) -> Vec<InnerCall> {
+pub(super) fn decode_multi_send(data: &str) -> Vec<InnerCall> {
     let bytes = hex_bytes(data);
     // selector(4) + head: offset(32) + length(32), then the packed payload.
     if bytes.len() < 4 + 64 {
@@ -187,7 +196,7 @@ fn u32_at(bytes: &[u8], at: usize) -> u32 {
 
 /// `execTransaction(address to, uint256 value, bytes data, uint8 operation, …)`
 /// — the three fields that decide whether the inner call is a takeover.
-fn decode_exec_transaction(data: &str) -> Option<InnerCall> {
+pub(super) fn decode_exec_transaction(data: &str) -> Option<InnerCall> {
     let bytes = hex_bytes(data);
     if bytes.len() < 4 + 32 * 4 {
         return None;

@@ -95,6 +95,7 @@ pub mod name_verify;
 pub mod net_health;
 pub mod network_admin;
 pub mod network_space;
+pub mod parent_safe_guard;
 pub mod passkey_end;
 pub mod passkey_error;
 pub mod payment_request;

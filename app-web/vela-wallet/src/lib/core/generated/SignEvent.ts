@@ -6,7 +6,7 @@ import type { SignApproveOpts } from "./SignApproveOpts";
 import type { SignDappIdentity } from "./SignDappIdentity";
 import type { TrackStatus } from "./TrackStatus";
 
-export type SignEvent = { "type": "in_flight_ops", ops: Array<InFlightOp>, } | { "type": "networks_changed", chain_ids: Array<number>, } | { "type": "accounts_changed", accounts: Array<SignAccountRef>, active_index: number, } | { "type": "request_arrived", id: string, method: string, 
+export type SignEvent = { "type": "in_flight_ops", ops: Array<InFlightOp>, } | { "type": "networks_changed", chain_ids: Array<number>, } | { "type": "accounts_changed", accounts: Array<SignAccountRef>, active_index: number, } | { "type": "multisigs_changed", addresses: Array<string>, } | { "type": "request_arrived", id: string, method: string, 
 /**
  * The raw JSON-RPC params array, verbatim and untrusted.
  */

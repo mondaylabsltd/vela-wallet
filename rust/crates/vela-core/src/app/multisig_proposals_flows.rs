@@ -36,6 +36,9 @@ use super::super::multisig_presence::{
     DeviceFacts, FactsSource, FrozenFacts, ListFacts, Look, ReadyBlock, Standing, TimelineEnd,
     TimelineStep, Waiting, WaitingNote, EXECUTED_KEEP, EXECUTED_KEY,
 };
+use super::super::parent_safe_guard::{
+    self as parent_guard, OwnerFact, ParentVerdict, SafeOwnerAnswer,
+};
 use super::*;
 
 // ---------------------------------------------------------------------------
@@ -1094,26 +1097,135 @@ fn dapp_request(
             return render();
         }
     };
-    follow_for(&mut s, account);
+    held.view.calls.clone_from(&calls);
+    // §31: a site may never make this multisig act for a Safe it owns — one
+    // of this device's multisigs, refused at once; any other Safe a call
+    // would act for, read (`isOwner`) before anything is drafted.
+    let targets = parent_targets_of(&calls, &account.address, chain);
+    let known: Vec<String> = s.more.accounts.iter().map(|a| a.address.clone()).collect();
+    match parent_guard::verdict(&targets, &known, &[]) {
+        ParentVerdict::Refuse { target, reason } => {
+            held.view.stage = HeldStage::Refused;
+            held.view.refusal = Some(dapp::parent_refusal(&target, reason));
+            s.more.dapp.insert(id, held);
+            render()
+        }
+        ParentVerdict::Clear => {
+            start_dapp_draft(&mut s, id, held, account);
+            drop(s);
+            flow(model, move |io, st| async move {
+                draft(
+                    &io,
+                    &st,
+                    chain_id,
+                    ProposalKind::Calls {
+                        calls,
+                        origin: Some(origin),
+                    },
+                )
+                .await;
+            })
+        }
+        ParentVerdict::Read { reads } => {
+            // Held, unreviewable, while the chain is read: no draft round is
+            // its yet, so leaving now is the person's 4001.
+            held.round = u64::MAX;
+            s.more.dapp.insert(id.clone(), held);
+            drop(s);
+            flow(model, move |io, st| async move {
+                let signer = account.address.clone();
+                let mut facts = Vec::new();
+                for read in reads {
+                    let answer = match io
+                        .eth_call(
+                            u64::from(read.chain_id),
+                            &read.safe,
+                            &parent_guard::is_owner_calldata(&signer),
+                        )
+                        .await
+                    {
+                        Ok(data) => SafeOwnerAnswer::Returned { data },
+                        Err(shell::RpcFail::Error { code, message, .. }) => {
+                            SafeOwnerAnswer::RpcError { code, message }
+                        }
+                        Err(shell::RpcFail::Unanswered(detail)) => {
+                            SafeOwnerAnswer::Unreachable { detail }
+                        }
+                    };
+                    facts.push(OwnerFact {
+                        chain_id: read.chain_id,
+                        safe: read.safe,
+                        reading: parent_guard::classify_owner_answer(&answer),
+                    });
+                }
+                let refused = {
+                    let mut s = lock(&st);
+                    let Some(held) = s.more.dapp.remove(&id) else {
+                        return;
+                    };
+                    if held.view.settled() {
+                        s.more.dapp.insert(id, held);
+                        return;
+                    }
+                    let mut held = held;
+                    // `enforce`: a Safe still unread (none should be) refuses.
+                    match parent_guard::enforce(&targets, &known, &facts) {
+                        ParentVerdict::Refuse { target, reason } => {
+                            held.view.stage = HeldStage::Refused;
+                            held.view.refusal = Some(dapp::parent_refusal(&target, reason));
+                            s.more.dapp.insert(id, held);
+                            true
+                        }
+                        _ => {
+                            start_dapp_draft(&mut s, id, held, account);
+                            false
+                        }
+                    }
+                };
+                io.emit(Event::Changed);
+                if !refused {
+                    draft(
+                        &io,
+                        &st,
+                        chain_id,
+                        ProposalKind::Calls {
+                            calls,
+                            origin: Some(origin),
+                        },
+                    )
+                    .await;
+                }
+            })
+        }
+    }
+}
+
+/// A site's request becomes the draft under review (its round).
+fn start_dapp_draft(s: &mut State, id: String, mut held: Held, account: MultisigAccount) {
+    follow_for(s, account);
     s.draft = None;
     s.draft_round += 1;
     s.actions.insert("propose".to_owned(), ActionState::Working);
     held.round = s.draft_round;
-    held.view.calls.clone_from(&calls);
     s.more.dapp.insert(id, held);
-    drop(s);
-    flow(model, move |io, st| async move {
-        draft(
-            &io,
-            &st,
-            chain_id,
-            ProposalKind::Calls {
-                calls,
-                origin: Some(origin),
-            },
-        )
-        .await;
-    })
+}
+
+/// §31: the Safes other than `safe` these calls would act for.
+fn parent_targets_of(
+    calls: &[crate::multisig::CallArg],
+    safe: &str,
+    chain: u32,
+) -> Vec<parent_guard::ParentTarget> {
+    let calls: Vec<Value> = calls
+        .iter()
+        .map(|c| json!({ "to": c.to, "data": c.data }))
+        .collect();
+    parent_guard::parent_targets(
+        "wallet_sendCalls",
+        &json!([{ "calls": calls }]),
+        safe,
+        chain,
+    )
 }
 
 /// core-ms-2: the draft is a site's request under review.

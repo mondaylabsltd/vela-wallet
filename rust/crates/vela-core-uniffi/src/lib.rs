@@ -25,6 +25,8 @@ mod multisig_bridge;
 mod native_parity_tests;
 mod onboarding_bridge;
 // Native multisig M4: PeerConnect's sans-I/O peer, the rooms an outside owner's wallet meets Vela in.
+/// §31: the parent-Safe guard's rule, for the vector replay.
+mod parent_safe_guard_bridge;
 mod peer_bridge;
 /// Small core rules the web reads over wasm (F0.2): RPC clocks, fee figures,
 /// dApp RPC answers, provenance, names, currencies.
