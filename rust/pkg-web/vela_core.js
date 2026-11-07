@@ -6200,6 +6200,20 @@ export function networkSpaceRead(stored) {
 }
 
 /**
+ * r18-9 (spec 105, r17-13): whether `space` ("mainnet" / "testnet", as
+ * stored; anything else is the mainnet space) shows any fiat value
+ * (`network_space::shows_fiat`) — the testnet space shows none anywhere.
+ * @param {string} space
+ * @returns {boolean}
+ */
+export function networkSpaceShowsFiat(space) {
+    const ptr0 = passStringToWasm0(space, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.networkSpaceShowsFiat(ptr0, len0);
+    return ret !== 0;
+}
+
+/**
  * `parent_safe_guard::check` over JSON: a `CheckInput` in, a
  * `ParentVerdict` out (`{ verdict: "clear" | "refuse" | "read", … }`), or
  * `{ "error": … }` for an input that does not read.
