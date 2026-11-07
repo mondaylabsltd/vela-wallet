@@ -1045,8 +1045,19 @@ object WalletLive {
     ) {
         private fun convert(usd: Double): Double = rate?.let { usd * it } ?: usd
 
-        /** r17-14: this money in a space with no worth — every figure none. */
-        fun withoutValue(): Money = Money(code, symbol, rate, settled = true, label = label, noValue = true)
+        /**
+         * r17-14: this money in a space with no worth — every figure none, and
+         * (r18-9) no currency named beside them either ([label] empty).
+         */
+        fun withoutValue(): Money = Money(code, symbol, rate, settled = true, label = "", noValue = true)
+
+        /**
+         * r18-9 (§33): this money in [space], as the core rules it
+         * ([app.getvela.wallet.feature.settings.core.NetworkSpace.showsFiat]):
+         * itself where the space shows fiat, [withoutValue] where it does not.
+         * Every surface that draws money is handed money through this.
+         */
+        fun inSpace(space: app.getvela.wallet.feature.settings.core.NetworkSpace): Money = if (space.showsFiat) this else withoutValue()
 
         /**
          * A fiat figure in this money, drawn with the person's number format
@@ -1105,7 +1116,9 @@ object WalletLive {
              * with strings in hand passes `strings.language`; the rest read
              * the app's ([AppLanguage]).
              */
-            fun of(view: CurrencyView, language: String = AppLanguage.tag): Money {
+            fun of(view: CurrencyView, language: String = AppLanguage.tag): Money = currencyOf(view, language).inSpace(space)
+
+            private fun currencyOf(view: CurrencyView, language: String): Money {
                 // No settled choice yet: the placeholder's dollars, marked as
                 // not the person's — figures drawn in the display currency wait.
                 if (!view.committed) return Money("USD", "$", null, settled = false, label = view.pending.orEmpty())
@@ -1114,6 +1127,17 @@ object WalletLive {
                 if (rate == null) return Money("USD", "$", null)
                 return Money(view.code, fiatPrefix(view.code, language), rate)
             }
+
+            /**
+             * r18-9 (§33): the space in front, as the app last said it
+             * (`AppContainer` follows `NetworkSpacePreference.space`). Every
+             * [of] is that space's money ([inSpace], the core's
+             * `network_space::shows_fiat`): in the testnet space no surface
+             * — the hero's label, a row, the Activity detail, Send, a fee, the
+             * switcher, a dApp sheet — can draw a fiat figure or a currency.
+             */
+            @Volatile
+            var space: app.getvela.wallet.feature.settings.core.NetworkSpace = app.getvela.wallet.feature.settings.core.NetworkSpace.Mainnet
 
             /**
              * The symbol a fiat figure in [code] is written with — the CORE's

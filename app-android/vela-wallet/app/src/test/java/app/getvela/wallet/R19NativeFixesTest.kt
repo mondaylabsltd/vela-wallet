@@ -390,6 +390,92 @@ class R19NativeFixesTest {
         agree("executed", done)
     }
 
+    // -- r18-9: no fiat and no currency in the testnet space -----------------
+
+    private val cny = CurrencyView(code = "CNY", rate = 7.1, committed = true)
+
+    /** A currency symbol or code, anywhere in what a surface draws. */
+    private val fiatMark = Regex("""[$¥€£₩₹]|\b(USD|CNY|EUR|JPY|GBP|HKD)\b""")
+
+    private fun noFiat(surface: String, drawn: Any?) {
+        val text = drawn.toString()
+        val found = fiatMark.findAll(text).map { m -> text.substring((m.range.first - 30).coerceAtLeast(0), (m.range.last + 30).coerceAtMost(text.length - 1)) }.toList()
+        assertTrue("$surface draws fiat in the testnet space: $found", found.isEmpty())
+    }
+
+    @Test
+    fun `r18-9 every money surface in the testnet space draws no currency symbol or code`() {
+        val testnet = app.getvela.wallet.feature.settings.core.NetworkSpace.Testnet
+        assertTrue("the core's word", !testnet.showsFiat && app.getvela.wallet.feature.settings.core.NetworkSpace.Mainnet.showsFiat)
+        val was = WalletLive.Money.space
+        WalletLive.Money.space = testnet
+        try {
+            val chain = 5042002
+            val names = mapOf(chain to "Arc Testnet")
+            val usdc = app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = chain, symbol = "USDC", name = "USDC", balance = "0.3", decimals = 6, token_address = "0x3600000000000000000000000000000000000000", price_usd = 1.0)
+            val balance = BalanceView(
+                address = ACCOUNT, display_total_usd = 0.3, tokens = listOf(usdc), last_refreshed_at_ms = 1.0, networks_read = true,
+                failed_chain_ids = listOf(11155111),
+                unreachable_networks = listOf(app.getvela.wallet.feature.wallet.core.UnreachableNetwork(chain_id = 11155111, last_known = "held", last_seen_usd = 4.2)),
+                switcher = app.getvela.wallet.feature.wallet.core.BalanceSwitcherView(open = true, balances = listOf(app.getvela.wallet.feature.wallet.core.BalanceCacheEntry(ACCOUNT, 12.5))),
+            )
+            val received = app.getvela.wallet.feature.wallet.core.FeedItem(
+                id = "r1", direction = app.getvela.wallet.feature.wallet.core.FeedDirection.In, counterparty = "0x3e9b9555EC4b80d0aaf59Da8E956A494ab31692D",
+                value = "0.3", symbol = "USDC", decimals = 6, usd_value = 0.3, priced = true, chain_id = chain,
+                timestamp = 1_790_000_000.0, day_start_ms = 1_789_948_800_000.0,
+            )
+            val rows = listOf(
+                app.getvela.wallet.feature.wallet.core.FeedRow.Header(id = "day-1", day_start_ms = 1_789_948_800_000.0, timestamp = 1_790_000_000.0),
+                app.getvela.wallet.feature.wallet.core.FeedRow.Item(received),
+            )
+            val feed = FeedView(rows = rows, home_rows = rows, account = ACCOUNT, settled = true)
+
+            // The home: the hero (its figure AND its currency label), the asset rows, Activity.
+            val home = WalletLive.home(
+                WalletFixtures.buildMobileState(WalletScreenState.H1, strings), balance, feed, cny, strings, names,
+                noValue = strings.t(app.getvela.wallet.core.i18n.I18nKeys.NetworkSpace.NO_VALUE), shownAccount = ACCOUNT,
+            )
+            noFiat("the hero", home.balance)
+            noFiat("the asset rows", home.assetRows)
+            noFiat("the home's Activity", home.activityGroups)
+            // The Activity detail — "≈ $0.30" on Android in R18.
+            val txFallback = (app.getvela.wallet.feature.flows.FlowFixtures.build(app.getvela.wallet.feature.flows.FlowState.A2, strings).sheet as app.getvela.wallet.feature.flows.FlowSheet.TxDetail).model
+            val detail = app.getvela.wallet.feature.flows.FlowLive.txDetail(txFallback, feed, "r1", strings, names, emptyMap(), WalletLive.Money.of(cny, "en"))
+            assertTrue("the detail is drawn", detail != null)
+            noFiat("the Activity detail", detail)
+            // History.
+            val historyFallback = (app.getvela.wallet.feature.flows.FlowFixtures.build(app.getvela.wallet.feature.flows.FlowState.A1, strings).base as app.getvela.wallet.feature.flows.FlowBase.History).model
+            noFiat("History", app.getvela.wallet.feature.flows.FlowLive.history(historyFallback, feed, strings, chainNames = names, shownAccount = ACCOUNT).groups)
+            // A token's page.
+            val tokenFallback = (app.getvela.wallet.feature.flows.FlowFixtures.build(app.getvela.wallet.feature.flows.FlowState.T2, strings).sheet as app.getvela.wallet.feature.flows.FlowSheet.TokenDetail).model
+            val token = app.getvela.wallet.feature.flows.FlowLive.tokenDetail(tokenFallback, balance, feed, WalletLive.holdingId(chain, usdc.token_address), names, cny, strings, noValue = true)
+            assertTrue("the token page is drawn", token != null)
+            noFiat("the token page's facts", token!!.facts)
+            // The switcher's rows and total.
+            val switcher = WalletLive.accountSwitcher(listOf(ACCOUNT to "Main"), 0, balance.switcher, cny, strings)
+            noFiat("the account switcher", switcher)
+            // The hero's status sheet and the unreachable list ("last seen …").
+            noFiat("the unreachable list", app.getvela.wallet.feature.settings.SettingsLive.unreachable(balance, cny, mapOf(11155111 to "Sepolia"), strings))
+            // Send: the pick, the form, the confirm.
+            val ctx = app.getvela.wallet.feature.send.SendLive.Context(strings, names, emptyMap(), WalletLive.Money.of(cny, "en"), "Main", ACCOUNT)
+            val sendToken = app.getvela.wallet.feature.send.core.SendToken(network = "Arc Testnet", chain_id = chain, symbol = "USDC", balance = "0.3", decimals = 6, price_usd = 1.0)
+            val pickFallback = (app.getvela.wallet.feature.flows.FlowFixtures.build(app.getvela.wallet.feature.flows.FlowState.SD1, strings).base as app.getvela.wallet.feature.flows.FlowBase.SendPick).model
+            noFiat("Send's pick", app.getvela.wallet.feature.send.SendLive.pick(pickFallback, app.getvela.wallet.feature.send.core.SendView(tokens = listOf(sendToken)), ctx).rows)
+            val typed = app.getvela.wallet.feature.send.core.SendView(selected_token = sendToken, amount = "0.1", token_amount = "0.1", confirm_amount = "0.1")
+            val confirmFallback = (app.getvela.wallet.feature.flows.FlowFixtures.build(app.getvela.wallet.feature.flows.FlowState.SD3K, strings).base as app.getvela.wallet.feature.flows.FlowBase.SendConfirm).model
+            val confirm = app.getvela.wallet.feature.send.SendLive.confirm(confirmFallback, typed, ctx)
+            assertEquals("" to false, confirm.subline to confirm.sublineWithheld)
+            // The money itself: no figure, no currency named.
+            val money = WalletLive.Money.of(cny, "en")
+            assertEquals(null, money.fiat(1.0))
+            assertEquals("", money.label)
+        } finally {
+            WalletLive.Money.space = was
+        }
+        // The mainnet space still prices what it can.
+        assertEquals("CN¥7.10", WalletLive.Money.of(cny, "en").fiat(1.0))
+    }
+
     companion object {
         const val ACCOUNT = "0x1111111111111111111111111111111111111111"
     }

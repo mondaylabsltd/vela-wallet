@@ -2,6 +2,7 @@ package app.getvela.wallet
 
 import app.getvela.wallet.feature.send.SendLive
 import app.getvela.wallet.navigation.LaunchFront
+import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.multisig.MultisigWiring
 import app.getvela.wallet.feature.multisig.MultisigNotifier
 import app.getvela.wallet.feature.multisig.MultisigWords
@@ -1310,6 +1311,12 @@ class AppContainer(private val app: Application) {
         // wallet that has not been opened.
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
             networkSpace.space.drop(1).collect { if (walletOnce.isInitialized()) wallet.spaceChanged() }
+        }
+        // r18-9 (§33): every money surface is handed money in the space in
+        // front (`WalletLive.Money.of`), so the testnet space draws no fiat and
+        // names no currency anywhere — said before the screens recompose.
+        CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+            networkSpace.space.collect { WalletLive.Money.space = it }
         }
         // Debug trace of the pool's chain verdicts (spec 043 phase 4).
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {

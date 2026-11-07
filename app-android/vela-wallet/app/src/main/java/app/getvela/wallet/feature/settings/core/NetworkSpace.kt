@@ -26,6 +26,14 @@ enum class NetworkSpace(val wire: String) {
 
     val testnet: Boolean get() = this == Testnet
 
+    /**
+     * r18-9 (§33): whether this space shows fiat at all — the core's word
+     * (`network_space::shows_fiat`, uniffi `network_space_shows_fiat`), never
+     * this shell's copy of the rule. The testnet space shows none: no total,
+     * no currency code, no worth on a row, no "≈ $…" beside an amount or fee.
+     */
+    val showsFiat: Boolean by lazy { uniffi.vela_core_uniffi.networkSpaceShowsFiat(wire) }
+
     /** Where the switch goes from here. */
     val other: NetworkSpace get() = if (testnet) Mainnet else Testnet
 
