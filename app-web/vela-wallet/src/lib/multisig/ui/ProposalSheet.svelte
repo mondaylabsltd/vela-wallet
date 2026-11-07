@@ -42,7 +42,7 @@
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { SigningMessages } from '$lib/signing/messages';
-	import type { MultisigMessages } from '../messages';
+	import { PRODUCTION_WRITE_REFUSED, testBuildRefused, type MultisigMessages } from '../messages';
 	import { readingBlocks, readingTitle, type ReadingContext } from '../core/reading-blocks';
 	import { REVIEW_FRESH_MS, REVIEW_RETRY_MS, simEndedOf } from '../core/proposal-review.svelte';
 	import type { SimEnded } from '$lib/signing/verdict';
@@ -1941,7 +1941,13 @@
 						})}
 					</p>
 				{:else}
-					<p class="fine">{m.proposal.outboxNotSent}</p>
+					<!-- r18-8 (§28, §32): kept because this test build refused to write it
+					     to the live service — said so, and sent again only on Send again. -->
+					<p class="fine" data-testid="proposal-unsent-why">
+						{kept?.why === PRODUCTION_WRITE_REFUSED
+							? testBuildRefused(m)
+							: m.proposal.outboxNotSent}
+					</p>
 					<Button variant="secondary" shape="rounded" disabled={resending} onclick={sendAgain}
 						>{m.proposal.outboxSendAgain}</Button
 					>
@@ -2248,6 +2254,12 @@
 						})}
 						<div class="fee" data-testid="execute-fee">
 							<p class="fine">{words.fee}</p>
+							{#if words.signing}
+								<!-- r18-5: a press is out on this figure — the one signed, never re-quoted. -->
+								<p class="fine" role="status" data-testid="execute-fee-signing">
+									{words.signing}
+								</p>
+							{/if}
 							{#if words.setup}
 								<p class="fine">{words.setup}</p>
 								<ul class="fine setup">

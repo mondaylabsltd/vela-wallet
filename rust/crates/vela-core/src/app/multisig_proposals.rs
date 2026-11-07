@@ -78,6 +78,10 @@ pub const OPEN_POLL_MS: u32 = 4_000;
 pub const QUIET_POLLS: u64 = 5;
 /// How long a kept approval is sent again on its own.
 pub const OUTBOX_PATIENCE_MS: f64 = 120_000.0;
+/// r18-8 (§32): an outbox entry's `why` when this test build refused to write
+/// it to the live service (§28): said with
+/// `common.testBuild.productionWriteRefused`, sent again only on Send again.
+pub const OUTBOX_REFUSED: &str = "production_write_refused";
 const OUTBOX_BACKOFF_MAX_MS: f64 = 30_000.0;
 const WAITING_CAP: usize = 20;
 /// How long one read of a review or a preview is waited for.
@@ -1178,6 +1182,11 @@ pub struct State {
     preview_plans: BTreeMap<String, (f64, Preview)>,
     /// The looks under way ([`preview_key`]): never two at once.
     looking: BTreeSet<String>,
+    /// r18-5 (§32): the looks a press is out on ([`preview_key`] of the
+    /// pressed executor) — from the press to its signature, cancel or stop.
+    /// Not re-quoted while here ([`look_if_stale`] takes no new look), and
+    /// served marked `signing` ([`pressed_looks`]).
+    pressing: BTreeSet<String>,
     verdicts: BTreeMap<String, Value>,
     /// The executions being watched ([`exec_key`]): each flight followed once.
     watching: BTreeSet<String>,
@@ -1736,17 +1745,20 @@ impl App for MultisigProposals {
                 executor,
                 shown_fee,
             } => {
+                let pressed = preview_key(chain_id, &safe_tx_hash, &executor);
                 {
                     let mut s = lock(&model.state);
                     let hash = safe_tx_hash.to_ascii_lowercase();
                     s.actions
                         .insert(format!("execute:{hash}"), ActionState::Working);
                     s.actions.remove(&format!("approve:{hash}"));
+                    s.pressing.insert(pressed.clone());
                 }
                 person_flow(model, move |io, st| async move {
                     let shown = shown_fee.as_deref().and_then(shell::quantity);
                     approve_execute(&io, &st, chain_id, &safe_tx_hash, &executor, shown, true)
                         .await;
+                    lock(&st).pressing.remove(&pressed);
                 })
             }
             Event::Withdraw => {
@@ -1810,14 +1822,18 @@ impl App for MultisigProposals {
                 shown_fee,
             } => {
                 let key = format!("execute:{}", safe_tx_hash.to_ascii_lowercase());
-                lock(&model.state)
-                    .actions
-                    .insert(key.clone(), ActionState::Working);
+                let pressed = preview_key(chain_id, &safe_tx_hash, &executor);
+                {
+                    let mut s = lock(&model.state);
+                    s.actions.insert(key.clone(), ActionState::Working);
+                    s.pressing.insert(pressed.clone());
+                }
                 person_flow(model, move |io, st| async move {
                     let input = execution_input(&st, chain_id, &safe_tx_hash, &executor);
                     let shown = shown_fee.as_deref().and_then(shell::quantity);
                     let outcome =
                         execute(&io, &st, chain_id, &safe_tx_hash, &executor, shown).await;
+                    lock(&st).pressing.remove(&pressed);
                     flows::remember_execution(&io, &st, input.as_ref(), &outcome).await;
                     if matches!(outcome, ActionState::Done { .. }) {
                         note_actor(&io, &st, chain_id, &executor).await;
@@ -1936,7 +1952,7 @@ impl App for MultisigProposals {
             actions: served_failures(stops_follow_looks(&s.actions, &s.previews)),
             reviews: one_note_per_failure(&s.reviews, &s.previews, &s.actions),
             review_states: s.review_states.clone(),
-            previews: s.previews.clone(),
+            previews: pressed_looks(&s.previews, &s.pressing),
             executions: s.verdicts.clone(),
             frozen: more.frozen,
             last_actor: s
@@ -3103,6 +3119,9 @@ async fn attempt(io: &Io<Event>, st: &Shared<State>, key: &str, req: &Submission
             let (why, wait) = match fail {
                 ServiceFail::Busy(w) => ("busy", w.unwrap_or(backoff).max(1_000.0)),
                 ServiceFail::Unavailable(_) => ("away", backoff.max(1_000.0)),
+                // r18-8 (§28, §32): this test build refused to write to the
+                // live service — kept, never sent again by itself (Send again).
+                ServiceFail::Refused => (OUTBOX_REFUSED, f64::INFINITY),
             };
             let retry_at = (now + wait <= since + OUTBOX_PATIENCE_MS).then_some(now + wait);
             s.outbox_entries.insert(
@@ -4850,6 +4869,28 @@ async fn execute_as(
     }
 }
 
+/// r18-5 (§32): the looks as served — each one a press is out on
+/// (`pressing`, [`preview_key`]s) carries `"signing": true`: its figure is
+/// the one being signed, frozen until the signature, the cancel or the stop,
+/// and every shell marks the fee line so (`home.multisig.proposal.feeSigning`).
+pub fn pressed_looks(
+    previews: &BTreeMap<String, Value>,
+    pressing: &BTreeSet<String>,
+) -> BTreeMap<String, Value> {
+    previews
+        .iter()
+        .map(|(key, look)| {
+            let mut look = look.clone();
+            if pressing.contains(key) {
+                if let Some(o) = look.as_object_mut() {
+                    o.insert("signing".to_owned(), Value::Bool(true));
+                }
+            }
+            (key.clone(), look)
+        })
+        .collect()
+}
+
 /// A look's fee amount (`fee.amount`, decimal or `0x`).
 fn fee_amount(fee: &Value) -> Option<u128> {
     match fee.get("amount")? {
@@ -4911,7 +4952,9 @@ pub(crate) async fn look_if_stale(
     let now = io.now().await;
     {
         let mut s = lock(st);
-        if s.looking.contains(&key) {
+        // r18-5 (§32): a press is out on this look — the figure on screen is
+        // the one being signed, never re-quoted under the passkey.
+        if s.looking.contains(&key) || s.pressing.contains(&key) {
             return;
         }
         // r10-6: a refused review is never looked at (a look would say

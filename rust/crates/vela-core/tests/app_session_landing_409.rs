@@ -212,6 +212,7 @@ fn a_failed_landing_keeps_the_record_and_the_sign_out_warning() {
         &mut sut,
         Res::RegistryLandingUnconfirmed {
             message: "Register failed: execution reverted".to_owned(),
+            refused: None,
         },
     );
     assert!(
@@ -305,6 +306,7 @@ fn every_waiting_record_is_confirmed_in_turn() {
         &mut sut,
         Res::RegistryLandingUnconfirmed {
             message: "Register timed out after 120s".to_owned(),
+            refused: None,
         },
     );
     assert_eq!(
@@ -532,6 +534,7 @@ fn an_unlanded_publish_stays_and_is_tried_again() {
         &mut sut,
         Res::RegistryLandingUnconfirmed {
             message: "Register failed: 500".to_owned(),
+            refused: None,
         },
     );
     assert!(ops.is_empty(), "nothing removed; got {ops:?}");
@@ -584,6 +587,7 @@ fn every_watch_operation_is_a_read_or_a_local_write() {
         Res::RegistryLanded,
         Res::RegistryLandingUnconfirmed {
             message: "gone".to_owned(),
+            refused: None,
         },
     ] {
         let mut sut = established();
@@ -606,4 +610,26 @@ fn every_watch_operation_is_a_read_or_a_local_write() {
         }
         assert!(asked.iter().all(is_read_or_local_write), "{asked:?}");
     }
+}
+
+/// r18-8 (§28, §32): a publish this test build refused to send to the live
+/// index is never asked again by itself — the record stays (still named),
+/// and the shell's "try again" runs no round.
+#[test]
+fn a_publish_the_test_build_refused_is_not_tried_again_by_itself() {
+    let mut sut = established();
+    answer_outbox(&mut sut, vec![unlanded(CRED)]);
+    let ops = answer_publish(
+        &mut sut,
+        Res::RegistryLandingUnconfirmed {
+            message: "refused".to_owned(),
+            refused: Some(true),
+        },
+    );
+    assert!(ops.is_empty(), "nothing removed; got {ops:?}");
+    assert_eq!(sut.view().unsynced.len(), 1, "still owed, still named");
+    assert!(
+        sut.dispatch(Event::SyncPending).is_empty(),
+        "no automatic retry of a refused write"
+    );
 }

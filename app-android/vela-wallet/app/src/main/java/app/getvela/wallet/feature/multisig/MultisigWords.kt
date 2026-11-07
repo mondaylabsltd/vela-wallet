@@ -405,6 +405,21 @@ class MultisigWords(
     val createRefused: String get() = t("settings.shareAgainNote")
 
     /**
+     * r18-8 (§28, §32): this test build refused to write to the live service —
+     * the catalog's sentence (`common.testBuild.productionWriteRefused`), never
+     * "can't be reached", "didn't answer" or "offline".
+     */
+    val productionWriteRefused: String get() = raw(uniffi.vela_core_uniffi.productionWriteRefusedKey())
+
+    /**
+     * The created multisig's `create.refused`, in words: the test build's refusal
+     * ([PRODUCTION_WRITE_REFUSED]) its own sentence; any other — the service
+     * answered and did not take it — "Share it again".
+     */
+    fun createRefused(refused: String?): String =
+        if (refused == PRODUCTION_WRITE_REFUSED) productionWriteRefused else createRefused
+
+    /**
      * Round 16 leftover 4: why Vela's side is not on the signing relay
      * (`RelayStatus.why`), as the reason its line fills in — the relay's
      * refusal and a pass not got in the catalog's words, the relay unreached
@@ -582,6 +597,9 @@ class MultisigWords(
     }
 
     companion object {
+        /** r18-8: the core's word for a write this test build refused (§28): `create.refused`, an outbox `why`. */
+        const val PRODUCTION_WRITE_REFUSED = "production_write_refused"
+
         /** "0xd9c79C…a20432": short, in its EIP-55 case. */
         fun short(address: String): String =
             // r11-6: THE short form is the core's (`names.short`, 6+6 EIP-55).

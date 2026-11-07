@@ -973,6 +973,11 @@ pub const ESTIMATE_FAILED_BODY_KEY: &str = "send.alertEstimateFailedBody";
 /// {{chain}} to price this transaction. Try again in a moment." — `{{chain}}`
 /// is the chain's name, filled by the shell.
 pub const ESTIMATE_CHAIN_DOWN_BODY_KEY: &str = "send.alertEstimateChainDownBody";
+/// r18-14 (§32): the body when Vela's relay gave no price or no simulation —
+/// "Vela's relay didn't answer, so nothing was sent. Try again in a moment."
+/// (the fee row's own cause, `componentsUi.gas.reasonQuote` /
+/// `reasonSimulation`), never the generic sentence.
+pub const ESTIMATE_RELAY_BODY_KEY: &str = "send.alertEstimateRelayBody";
 
 impl SendEstimateFailure {
     /// The corpus key of the alert's body for this failure (PR 2 note 13):
@@ -985,11 +990,10 @@ impl SendEstimateFailure {
         match self {
             Self::ChainRead { .. } => ESTIMATE_CHAIN_DOWN_BODY_KEY,
             Self::Internal => super::fee_policy::REASON_INTERNAL_KEY,
+            Self::QuoteUnavailable | Self::EstimateFailed => ESTIMATE_RELAY_BODY_KEY,
             Self::MissingPublicKey
             | Self::FeeTokenUnavailable
-            | Self::QuoteUnavailable
             | Self::CalculationFailed
-            | Self::EstimateFailed
             | Self::GasQuoteTooHigh
             | Self::Timeout
             | Self::Other

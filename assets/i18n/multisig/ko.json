@@ -159,6 +159,7 @@
     "feeUnchecked": "실행될지 확인하지 못했습니다. 승인은 할 수 있으며, 실행할 때 다시 확인합니다.",
     "feeUncheckedHeld": "실행될지 확인하지 못했습니다. 실행할 때 다시 확인합니다.",
     "feeRetry": "다시 확인",
+    "feeSigning": "이 수수료로 서명합니다. 확인하거나 취소할 때까지 바뀌지 않습니다.",
     "feeSetup": "{{network}}에서의 1회성 설정 포함 ≈ {{amount}}:",
     "feeSetupPlain": "{{network}}에서의 1회성 설정 포함:",
     "setupMultisig": "이 멀티시그 배포",

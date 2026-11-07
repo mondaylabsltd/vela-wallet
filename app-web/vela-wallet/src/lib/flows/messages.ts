@@ -461,6 +461,8 @@ export const WALLET_FLOW_KEYS = [
 	// (`sendEstimateFailureBodyKey`) — the chain out of reach by name; a fault
 	// inside Vela is `componentsUi.gas.reasonInternal` (above).
 	'send.alertEstimateChainDownBody',
+	// r18-14: Vela's relay gave no price or no simulation — its own sentence.
+	'send.alertEstimateRelayBody',
 	'send.alertAccountUnavailableBody',
 	'send.alertInvalidAddressTitle',
 	'send.alertInvalidAddressBody',

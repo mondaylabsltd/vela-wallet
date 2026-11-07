@@ -57,6 +57,10 @@ pub enum FailureKind {
     /// A read before the passkey on a network that is failing
     /// (`{{network}}`).
     ChainUnreachable,
+    /// r18-8 (§28, §32): this test build refused to write to the live
+    /// service — nothing was sent (`common.testBuild.productionWriteRefused`).
+    /// Never worded as the network, never retried by itself.
+    ProductionWriteRefused,
     /// Anything else: "Something went wrong, so nothing was sent."
     Unknown,
 }
@@ -80,6 +84,11 @@ pub fn passkey_check() -> String {
 /// [`FailureKind::Unknown`]).
 pub fn core_reason(reason: &str) -> String {
     json!({ "kind": "unknown", "reason": reason }).to_string()
+}
+
+/// r18-8: this test build refused the write before it left (§28).
+pub fn production_write_refused() -> String {
+    json!({ "kind": "production_write_refused" }).to_string()
 }
 
 /// Nothing that can be said more precisely.
@@ -159,6 +168,10 @@ pub fn failure_said(detail: &str) -> FailureSaid {
         "cannot_pay" => said(FailureKind::CannotPay, None),
         "fee_moved" => said(FailureKind::FeeMoved, None),
         "chain_unreachable" => said(FailureKind::ChainUnreachable, reason("chainUnreachable")),
+        "production_write_refused" => said(
+            FailureKind::ProductionWriteRefused,
+            Some(crate::service_defaults::REFUSED_KEY.to_owned()),
+        ),
         _ => unknown(),
     }
 }

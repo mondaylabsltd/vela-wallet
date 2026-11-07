@@ -30,6 +30,7 @@ function drawn(
 		round?: number;
 		retryDelaysMs?: number[];
 		showStartOver?: boolean;
+		wordsKey?: string | null;
 	} = {}
 ) {
 	const onRetry = vi.fn();
@@ -37,6 +38,7 @@ function drawn(
 	const screen = render(RetryScreen, {
 		props: {
 			detail: 'Failed to fetch',
+			wordsKey: props.wordsKey ?? null,
 			busy: props.busy ?? false,
 			strings,
 			onRetry,
@@ -97,5 +99,27 @@ describe('the retry screen', () => {
 		const { onRetry } = drawn({ busy: true });
 		window.dispatchEvent(new Event('online'));
 		expect(onRetry).not.toHaveBeenCalled();
+	});
+
+	/**
+	 * r18-8 (§28, §32): the publish was refused by this test build before it
+	 * left (the core's `sync_error_key`) — said in its words, not "keeps
+	 * trying on its own" nor the network's; nothing retries by itself (the
+	 * refusal would only repeat), and Retry stays the person's.
+	 */
+	it('says a publish the test build refused in its words, and asks nothing again by itself', async () => {
+		const key = 'common.testBuild.productionWriteRefused';
+		const { root, onRetry, button } = drawn({ wordsKey: key, retryDelaysMs: [20] });
+		const text = root.textContent ?? '';
+		expect(text).toContain(
+			"This test build won't write to the live service; point it at a local one."
+		);
+		expect(text).not.toContain(strings('onboarding.create.syncFailedHint'));
+		expect(text).not.toMatch(/didn.t answer|can.t be reached|offline|connection is back/i);
+		window.dispatchEvent(new Event('online'));
+		await new Promise((r) => setTimeout(r, 60));
+		expect(onRetry).not.toHaveBeenCalled();
+		button(strings('onboarding.create.retryUploadBtn'))?.click();
+		expect(onRetry).toHaveBeenCalledOnce();
 	});
 });

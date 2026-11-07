@@ -55,6 +55,10 @@ pub struct RegistryError {
     /// `network`, and every route out of this machine refused (spec 038): the
     /// sentence is "check your network", not "the service is down".
     pub local: bool,
+    /// §28 / r18-8: this test build's guard refused the write before it left
+    /// — neither the index's answer nor the network's. The core says it in
+    /// the test build's words and never asks again by itself.
+    pub refused: bool,
 }
 
 impl RegistryError {
@@ -63,6 +67,7 @@ impl RegistryError {
             message: message.into(),
             network: true,
             local,
+            refused: false,
         }
     }
 
@@ -71,6 +76,15 @@ impl RegistryError {
             message: message.into(),
             network: false,
             local: false,
+            refused: false,
+        }
+    }
+
+    /// §28: refused by this test build before it left (r18-8).
+    fn refused(message: impl Into<String>) -> Self {
+        Self {
+            refused: true,
+            ..Self::answered(message)
         }
     }
 }
@@ -130,7 +144,7 @@ fn classify(label: &str, failure: Transport) -> RegistryError {
         // §28: this test build would not ask the live index — the index did
         // not fail, and the network did not either.
         refused if super::production_guard::is_refusal(&refused) => {
-            RegistryError::answered(format!("{label}: {refused}"))
+            RegistryError::refused(format!("{label}: {refused}"))
         }
         other => RegistryError::network(format!("{label} failed: {other}"), failure.local),
     }
@@ -1502,6 +1516,36 @@ mod tests {
             },
         );
         assert!(local.network && local.local);
+        assert!(
+            !local.refused,
+            "a machine that could not get out is not a refusal"
+        );
+    }
+
+    /// r18-8 (§28, §32): the test build's guard refusing a write to the live
+    /// index is its own kind — not the index's answer, not the network — so
+    /// the core can say it in the test build's words and ask nothing again.
+    #[test]
+    fn a_guard_refusal_is_its_own_kind() {
+        let refused = classify(
+            "Register",
+            Transport {
+                error: super::super::production_guard::refusal("p256-index-v2.getvela.app"),
+                local: true,
+                proxy: None,
+            },
+        );
+        assert!(refused.refused);
+        assert!(!refused.network, "never the network");
+        let answered = classify(
+            "Register",
+            Transport {
+                error: ureq::Error::StatusCode(500),
+                local: false,
+                proxy: None,
+            },
+        );
+        assert!(!answered.refused);
     }
 
     /// A credential id is hex today, but the query string is built from it —

@@ -235,6 +235,7 @@
         "feeUnchecked": "无法确认它能否执行 — 你仍可以批准；执行时会再检查一次。",
         "feeUncheckedHeld": "无法确认它能否执行 — 执行时会再检查一次。",
         "feeRetry": "重新检查",
+        "feeSigning": "按这笔网络费签名——在你确认或取消之前不会变。",
         "feeSetup": "包含在 {{network}} 上的一次性设置 ≈ {{amount}}：",
         "feeSetupPlain": "包含在 {{network}} 上的一次性设置：",
         "setupMultisig": "部署这个多签",

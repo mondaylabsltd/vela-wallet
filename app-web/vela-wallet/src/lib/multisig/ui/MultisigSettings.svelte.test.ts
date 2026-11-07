@@ -28,6 +28,9 @@ const seams = vi.hoisted(() => ({
 	renamed: [] as [string, number, string][],
 	opened: [] as unknown[],
 	sharedAgain: 0,
+	/** r18-8: how a share-again ends, and the core's failure for it. */
+	shareEnds: 'done' as string,
+	shareFailure: null as string | null,
 	/** How often where it can be renamed was asked (`plan_rename`). */
 	planned: 0,
 	/** A creation's proof is kept here: its record is on its way (r4a-12). */
@@ -129,7 +132,7 @@ vi.mock('../core/store.svelte', () => ({
 					}
 				},
 				share_again: {},
-				share_again_failure: {}
+				share_again_failure: seams.shareFailure === null ? {} : { [key]: seams.shareFailure }
 			};
 		},
 		send: (event: { type: string }) => {
@@ -138,7 +141,7 @@ vi.mock('../core/store.svelte', () => ({
 		request: async (event: { type: string }) => {
 			if (event.type === 'share_again') {
 				seams.sharedAgain += 1;
-				return 'done';
+				return seams.shareEnds;
 			}
 			throw new Error(`not asked here: ${event.type}`);
 		}
@@ -260,6 +263,8 @@ describe('the name in the registry (v4)', () => {
 		seams.renamed = [];
 		seams.opened = [];
 		seams.sharedAgain = 0;
+		seams.shareEnds = 'done';
+		seams.shareFailure = null;
 	});
 
 	it('is renamed by a proposal of its own, on the network holding its record', async () => {
@@ -308,6 +313,31 @@ describe('the name in the registry (v4)', () => {
 		await expect.element(screen.getByText('settings.shareAgainNote')).toBeVisible();
 		await screen.getByRole('button', { name: 'settings.shareAgain' }).click();
 		await vi.waitFor(() => expect(seams.sharedAgain).toBe(1));
+	});
+
+	/**
+	 * r18-8 (§28, §32): Share again in a test build pointed at the live
+	 * service — the core fails it as `production_write_refused` (its
+	 * `review.failure` names `common.testBuild.productionWriteRefused`),
+	 * said in the test build's words, never "couldn't reach the service".
+	 */
+	it('r18-8: a share-again the test build refused is said as that, never the network', async () => {
+		seams.shared = false;
+		seams.recordedOn = [];
+		seams.shareEnds = 'failed';
+		seams.shareFailure = JSON.stringify({ kind: 'production_write_refused' });
+		const m = words();
+		m.proposal.failed = 'Failed: {{reason}}';
+		m.testBuild = { productionWriteRefused: 'This test build won’t write to the live service.' };
+		const screen = shown(MultisigSettings, { props: { ...props(), m } });
+		await screen.getByRole('button', { name: 'settings.shareAgain' }).click();
+		await expect
+			.element(screen.getByRole('alert'))
+			.toHaveTextContent('Failed: This test build won’t write to the live service.');
+		expect(screen.getByText('add.unavailable').elements()).toHaveLength(0);
+		expect(screen.getByText('proposal.reason.unknown', { exact: false }).elements()).toHaveLength(
+			0
+		);
 	});
 
 	it('r4a-12: a creation still sharing says so — no "older registry", no "not on a network"', async () => {

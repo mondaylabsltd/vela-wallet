@@ -2407,6 +2407,11 @@ async fn record_home_chain(io: &Io<Event>, service: &Service) -> u64 {
         .unwrap_or(REGISTRY_HOME_CHAIN_ID)
 }
 
+/// r18-8 (§32): `create.refused` when this test build refused to write the
+/// record to the live service (§28) — said with
+/// `common.testBuild.productionWriteRefused`, never "can't be reached".
+pub const PRODUCTION_WRITE_REFUSED: &str = "production_write_refused";
+
 /// Why a record was not asked for: the service (away, busy — asked again
 /// later), or something else (said on the created screen).
 enum RecordFail {
@@ -2432,10 +2437,11 @@ async fn record(
     if let Some(proof) = proof {
         req["ownerProof"] = serde_json::to_value(proof).unwrap_or(Value::Null);
     }
-    let answer = service
-        .import_genesis(io, req)
-        .await
-        .map_err(|_| RecordFail::Service)?;
+    let answer = service.import_genesis(io, req).await.map_err(|e| match e {
+        // r18-8 (§28, §32): the test build's refusal is its own word.
+        ServiceFail::Refused => RecordFail::Other(PRODUCTION_WRITE_REFUSED.to_owned()),
+        _ => RecordFail::Service,
+    })?;
     match answer {
         ImportAnswer::Recorded { .. } | ImportAnswer::Queued { .. } => Ok(true),
         // r17-19: the service answered and would not record it (its refusal,
@@ -2650,7 +2656,9 @@ async fn follow_unrecorded(io: &Io<Event>, st: &Shared<State>) {
 pub async fn retry_unrecorded(io: &Io<Event>, st: &Shared<State>) {
     let service = lock(st).service.clone();
     let now = io.now().await;
-    if lock(&service.outage).blocked(now) {
+    // r18-8 (§28): a write this test build refused is never sent again by
+    // itself — only on the person's Share again.
+    if lock(&service.outage).blocked(now) || service.write_refused() {
         return;
     }
     let unrecorded: Vec<MultisigAccount> = lock(st)
@@ -2743,7 +2751,7 @@ async fn share_again(
             Ok(None) => return (Phase::Cancelled, None),
             Err(detail) => return (Phase::Failed, Some(detail)),
         };
-    let recorded = record(
+    let recorded = match record(
         io,
         &service,
         &account.address,
@@ -2751,7 +2759,21 @@ async fn share_again(
         Some(&proof),
     )
     .await
-    .unwrap_or(false);
+    {
+        Ok(recorded) => recorded,
+        // r18-8 (§32): said in the test build's words, never "can't reach".
+        Err(RecordFail::Other(word)) if word == PRODUCTION_WRITE_REFUSED => {
+            lock(st)
+                .proofs
+                .insert(account.address.to_ascii_lowercase(), proof);
+            save_proofs(io, st).await;
+            return (
+                Phase::Failed,
+                Some(super::multisig_failure::production_write_refused()),
+            );
+        }
+        Err(_) => false,
+    };
     if !recorded {
         lock(st)
             .proofs
@@ -3575,7 +3597,7 @@ async fn creation_genesis(
     );
     let (status, body) = match io.http("GET", url, None, 15_000).await {
         shell::HttpAnswer::Answered { status, body, .. } => (status, body),
-        shell::HttpAnswer::Unreachable(d) => return Err(d),
+        shell::HttpAnswer::Unreachable(d) | shell::HttpAnswer::Refused(d) => return Err(d),
     };
     if status == 404 || status == 422 {
         return Ok(None);

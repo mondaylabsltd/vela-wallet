@@ -331,6 +331,8 @@ pub struct SyncState {
     /// A failed `create` is not yet a failure: the query below decides. Kept so
     /// the original cause is what surfaces if confirmation also fails.
     pub create_error: Option<String>,
+    /// r18-8: the last failure was this test build's refusal (§28).
+    pub refused: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -522,6 +524,12 @@ pub struct CreateView {
     /// invite funding a wallet that may never be reachable.
     pub address: Option<String>,
     pub sync_error_detail: Option<String>,
+    /// r18-8 (§32): the sync-failed screen's sentence when the failure has
+    /// its own words — this test build refused to write to the live index
+    /// (`common.testBuild.productionWriteRefused`). `None`: the screen's own.
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sync_error_key: Option<String>,
     pub can_go_back: bool,
     /// The drafted founding keys, founding order. Non-empty from the moment
     /// the first registration lands.
@@ -712,6 +720,8 @@ impl App for CreateWallet {
                 CreateStage::SyncFailed => model.sync.last_error.clone(),
                 _ => None,
             },
+            sync_error_key: (stage == CreateStage::SyncFailed && model.sync.refused)
+                .then(|| crate::service_defaults::REFUSED_KEY.to_owned()),
             // Does the CORE have a step to go back to? Only the key list
             // does — everywhere else "back" means leaving the flow, which
             // the host owns because the core cannot see what contains it.
@@ -1425,9 +1435,22 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
         // The member-mode challenge could not be fetched (index/network).
         // The passkey is made and stays drafted, unconfirmed; the sheet says
         // so and points at its row's Confirm (ob-4), not the raw error.
-        (Stage::SigningKey, ShellResult::IndexFailed { message, network }) => {
+        (
+            Stage::SigningKey,
+            ShellResult::IndexFailed {
+                message,
+                network,
+                refused,
+            },
+        ) => {
             model.signing_index = None;
-            fail_to_add_keys(model, PromptKind::key_kept_unconfirmed(message, network))
+            let kind = if refused == Some(true) {
+                // r18-8 (§32): the test build refused it — its own words.
+                PromptKind::key_kept_refused(message)
+            } else {
+                PromptKind::key_kept_unconfirmed(message, network)
+            };
+            fail_to_add_keys(model, kind)
         }
 
         // -- pending record --------------------------------------------------
@@ -1483,8 +1506,14 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
         // record keeps the whole publish, so the retry screen says so, the
         // retry replays the proofs with no prompt, and the session publishes
         // the record on its own once the person has entered (ob-2).
-        (Stage::Syncing(SyncStep::Publishing), ShellResult::IndexFailed { message, .. }) => {
+        (
+            Stage::Syncing(SyncStep::Publishing),
+            ShellResult::IndexFailed {
+                message, refused, ..
+            },
+        ) => {
             model.sync.last_error = Some(message);
+            model.sync.refused = refused == Some(true);
             model.stage = Stage::SyncFailed;
             model.status = None;
             render()

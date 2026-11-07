@@ -235,6 +235,7 @@
         "feeUnchecked": "Çalışıp çalışmayacağı kontrol edilemedi — yine de onaylayabilirsiniz; Yürüt yeniden kontrol eder.",
         "feeUncheckedHeld": "Çalışıp çalışmayacağı kontrol edilemedi — Yürüt yeniden kontrol eder.",
         "feeRetry": "Yeniden kontrol et",
+        "feeSigning": "Bu ücretle imzalanıyor — onaylayana ya da iptal edene kadar değişmez.",
         "feeSetup": "{{network}} üzerinde tek seferlik kurulum dahil ≈ {{amount}}:",
         "feeSetupPlain": "{{network}} üzerinde tek seferlik kurulum dahil:",
         "setupMultisig": "bu multisig’i dağıtma",

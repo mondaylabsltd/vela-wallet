@@ -660,3 +660,7 @@ fn main() {
         }
     });
 }
+
+/// r18-7: no debug-formatted text reaches the person (a source guard).
+#[cfg(test)]
+mod debug_text_guard;

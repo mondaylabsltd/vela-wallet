@@ -48,7 +48,7 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
-	import type { MultisigMessages } from '../messages';
+	import { PRODUCTION_WRITE_REFUSED, testBuildRefused, type MultisigMessages } from '../messages';
 	import { chainName, localName, ruleTitle, shortenAddress } from '../core/display';
 	import { looksLikeEns, resolveEns, type EnsAnswer } from '../core/ens-name';
 	import { inviteLink } from '../core/invite';
@@ -426,7 +426,9 @@
 			return;
 		}
 		// The person closed the passkey: nothing to say.
-		if (first.phase === 'failed') failure = failureWords(first.error, m.proposal);
+		if (first.phase === 'failed') {
+			failure = failureWords(first.error, m.proposal, '', testBuildRefused(m));
+		}
 	}
 
 	/** The created multisig as the machine holds it now (its sharing moves on its own). */
@@ -441,13 +443,17 @@
 				? solo
 					? m.create.sharedSolo
 					: m.create.shared
-				: refused
-					? // Round 16 leftover 4: the service's refusal is its own text — never
-						// drawn; what is true and what to do (iOS's words).
-						m.settings.shareAgainNote
-					: sharing
-						? m.create.savedSharing
-						: m.create.savedLater
+				: refused === PRODUCTION_WRITE_REFUSED
+					? // r18-8 (§28, §32): this test build refused to write the record
+						// to the live service — its own words, never "can't be reached".
+						testBuildRefused(m)
+					: refused
+						? // Round 16 leftover 4: the service's refusal is its own text — never
+							// drawn; what is true and what to do (iOS's words).
+							m.settings.shareAgainNote
+						: sharing
+							? m.create.savedSharing
+							: m.create.savedLater
 	);
 
 	async function copy() {

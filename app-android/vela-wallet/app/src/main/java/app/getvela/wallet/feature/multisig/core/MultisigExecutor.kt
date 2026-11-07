@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.multisig.core
 
 import app.getvela.wallet.core.crux.JsonShell
+import app.getvela.wallet.core.net.ProductionWriteRefused
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
@@ -59,6 +60,11 @@ class MultisigExecutor(private val ports: MultisigPorts) {
             MultisigShellResult.HttpAnswered(answer.status, answer.retryAfter, answer.body)
         } catch (cancelled: CancellationException) {
             throw cancelled
+        } catch (refused: ProductionWriteRefused) {
+            // r18-8 (§28, §32): this test build's guard refused the write
+            // before it left — the core asks once and says it in the test
+            // build's words, never "can't be reached".
+            MultisigShellResult.HttpUnreachable(describe(refused), refused = true)
         } catch (error: Throwable) {
             MultisigShellResult.HttpUnreachable(describe(error))
         }

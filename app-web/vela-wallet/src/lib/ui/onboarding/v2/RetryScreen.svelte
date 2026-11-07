@@ -27,6 +27,13 @@
 		 *  report, so prettifying it here would lose the only detail worth
 		 *  filing. */
 		detail: string | null;
+		/**
+		 * r18-8 (§32): the core's `sync_error_key` — the failure's own sentence
+		 * (this test build refused to write to the live index). Said in place
+		 * of "Vela keeps trying on its own", and nothing is tried on its own:
+		 * the refusal would only repeat (Retry stays the person's).
+		 */
+		wordsKey?: string | null;
 		busy: boolean;
 		strings: (key: string) => string;
 		onRetry: () => void;
@@ -43,6 +50,7 @@
 
 	let {
 		detail,
+		wordsKey = null,
 		busy,
 		strings,
 		onRetry,
@@ -59,6 +67,7 @@
 	// One retry per showing: a failed retry brings this screen back with the
 	// next `round`, and so the next, longer wait.
 	onMount(() => {
+		if (wordsKey) return;
 		const retry = () => {
 			if (!busy) onRetry();
 		};
@@ -91,7 +100,11 @@
 	<header class="intro">
 		<h1 class="title">{strings('onboarding.create.syncFailedTitle')}</h1>
 		<p class="subtitle">{strings('onboarding.create.syncFailedMessage')}</p>
-		<p class="hint">{strings('onboarding.create.syncFailedHint')}</p>
+		{#if wordsKey}
+			<p class="hint" role="status" data-testid="sync-failed-words">{strings(wordsKey)}</p>
+		{:else}
+			<p class="hint">{strings('onboarding.create.syncFailedHint')}</p>
+		{/if}
 		{#if next !== null}
 			<p class="next" role="status">{next}</p>
 		{/if}

@@ -159,6 +159,7 @@
     "feeUnchecked": "実行できるか確認できませんでした。承認はできます。実行時にもう一度確認します。",
     "feeUncheckedHeld": "実行できるか確認できませんでした。実行時にもう一度確認します。",
     "feeRetry": "もう一度確認",
+    "feeSigning": "この手数料で署名します。確認かキャンセルまで変わりません。",
     "feeSetup": "{{network}} での一度きりのセットアップを含みます ≈ {{amount}}：",
     "feeSetupPlain": "{{network}} での一度きりのセットアップを含みます：",
     "setupMultisig": "このマルチシグのデプロイ",

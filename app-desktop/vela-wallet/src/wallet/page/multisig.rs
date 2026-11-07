@@ -1942,29 +1942,7 @@ impl WalletPage {
             body = body.child(ms_note(theme, &text, Tone::Neutral));
         }
         if let Some(entry) = view.outbox.get(&key) {
-            // r8-16: on its way now — "Sending…", never "Not sent yet".
-            let text = match (entry.why.as_str(), entry.retry_at) {
-                _ if entry.sending || entry.why == "sending" => {
-                    words::t(&loc, "proposal.outboxSending")
-                }
-                ("busy", Some(at)) => words::tv(
-                    &loc,
-                    "proposal.outboxBusy",
-                    &[(
-                        "seconds",
-                        &(((at - crate::executor::now_ms()) / 1000.).max(0.).ceil()).to_string(),
-                    )],
-                ),
-                (_, Some(at)) => words::tv(
-                    &loc,
-                    "proposal.outboxAway",
-                    &[(
-                        "seconds",
-                        &(((at - crate::executor::now_ms()) / 1000.).max(0.).ceil()).to_string(),
-                    )],
-                ),
-                (_, None) => words::t(&loc, "proposal.outboxNotSent"),
-            };
+            let text = outbox_words(&loc, entry, crate::executor::now_ms());
             body = body.child(ms_note(theme, &text, Tone::Caution));
         }
 
@@ -2149,6 +2127,8 @@ impl WalletPage {
         account: Option<&MultisigAccount>,
         // D8: the review's door is open — Approve can be pressed.
         approve_open: bool,
+        // r18-5: a press is out on this look (`look_signing`).
+        signing: bool,
         cx: &mut Context<Self>,
     ) -> Div {
         use crate::multisig::sheet::Look;
@@ -2244,6 +2224,9 @@ impl WalletPage {
             .flex_col()
             .gap(px(4.))
             .child(ms_note(theme, &text, tone));
+        if let Some(mark) = fee_signing_words(&loc, look, signing) {
+            line = line.child(ms_note(theme, &mark, Tone::Neutral));
+        }
         if retry {
             line = line.child(self.ms_check_again(theme, item, "ms-look-again", cx));
         }
@@ -2576,6 +2559,12 @@ impl WalletPage {
                     foot = foot.child(self.ms_check_again(theme, item, "ms-stop-look-again", cx));
                 }
                 if !stopped {
+                    let signing = rule::look_signing(
+                        &view.previews,
+                        item.chain_id,
+                        &item.safe_tx_hash,
+                        &actor,
+                    );
                     foot = foot.child(self.ms_look_line(
                         theme,
                         item,
@@ -2584,6 +2573,7 @@ impl WalletPage {
                         payer.as_deref(),
                         account,
                         door.enabled,
+                        signing,
                         cx,
                     ));
                 }
@@ -2921,13 +2911,21 @@ impl WalletPage {
                 }
             }
             ActionState::MailboxRefused { .. } => reason("serviceRefused"),
-            // The look stopped it before the passkey: why, as the look says.
-            // r11 (core): by the look's kind — fails → wouldFail, unpriced →
-            // feeUnpriced, unchecked → feeUnchecked; it stands in the fee
-            // line's place.
+            // The look stopped it before the passkey: why, as the look says,
+            // beside the press (it stands in the fee line's place).
+            // r18-13: a fee not worked out or not checked is the press's
+            // failure — never the fee line's note again, which read as
+            // nothing having happened.
             ActionState::Stopped { preview } => match preview.get("kind").and_then(Value::as_str) {
-                Some("unpriced") => words::t(loc, "proposal.feeUnpriced"),
-                Some("unchecked") => words::t(loc, "proposal.feeUnchecked"),
+                Some(kind @ ("unpriced" | "unchecked")) => {
+                    let chain = u32::try_from(chain_id).unwrap_or(u32::MAX);
+                    fee_stop_words(
+                        loc,
+                        kind,
+                        chain_id,
+                        crate::executor::pool::out_of_reach_now().contains(&chain),
+                    )
+                }
                 // r14-4: a setup not checked, or read and refused — in the
                 // core's distinction, never "would fail".
                 Some("unverified" | "refused") => {
@@ -5009,6 +5007,11 @@ pub(crate) fn failure_words(
                 &[("network", &network(chain_id))],
             )
         }
+        // r18-8 (§28, §32): this test build refused to write to the live
+        // service — its own sentence, never the network or the service.
+        (FailureKind::ProductionWriteRefused, _) => {
+            loc.t(vela_core::service_defaults::REFUSED_KEY).to_string()
+        }
         // Spec 102: why this member cannot sign here — the venue's own
         // sentence, filled with its domains.
         (FailureKind::VenueBlocked, Some(ShellFailure::VenueBlocked { block })) => {
@@ -5029,6 +5032,72 @@ pub(crate) fn failure_words(
             })
             .filter(|text| !text.starts_with("home.") && !text.starts_with("componentsUi."))
             .unwrap_or_else(unknown),
+    }
+}
+
+/// r18-13 (r16-18's rule): an Execute — plain, or the one press — the look
+/// stopped because its fee could not be worked out (`unpriced`) or checked
+/// (`unchecked`), said beside the press: on a network the pool finds
+/// failing (`failing`: out of reach, as the r16-18 rule reads it) "Can't
+/// reach {{network}} right now, so nothing was sent"; otherwise "That didn't
+/// go through: {{reason}}". Its way on stays Check again.
+pub(crate) fn fee_stop_words(
+    loc: &crate::loc::Loc,
+    kind: &str,
+    chain_id: u64,
+    failing: bool,
+) -> String {
+    if failing {
+        return words::tv(
+            loc,
+            "proposal.reason.chainUnreachable",
+            &[("network", &network(chain_id))],
+        );
+    }
+    let reason = if kind == "unpriced" {
+        "proposal.unpricedReason"
+    } else {
+        "proposal.uncheckedReason"
+    };
+    words::tv(
+        loc,
+        "proposal.failed",
+        &[("reason", &words::t(loc, reason))],
+    )
+}
+
+/// r18-5 (§32): under the fee line of a look a press is out on — "Signing
+/// at this fee — it stays fixed until you confirm or cancel." The figure
+/// above it is the one being signed; nothing re-quotes it under the passkey.
+pub(crate) fn fee_signing_words(
+    loc: &crate::loc::Loc,
+    look: Option<&crate::multisig::sheet::Look>,
+    signing: bool,
+) -> Option<String> {
+    use crate::multisig::sheet::Look;
+    (signing && matches!(look, Some(Look::Priced { can_pay: true, .. })))
+        .then(|| words::t(loc, "proposal.feeSigning"))
+}
+
+/// A kept approval's line (`view.outbox`). r8-16: on its way now —
+/// "Sending…", never "Not sent yet". r18-8 (§28, §32): one this test build
+/// refused to write to the live service (`OUTBOX_REFUSED`, sent again only on
+/// Send again) is said in the test build's words — never "couldn't reach the
+/// multisig service".
+pub(crate) fn outbox_words(
+    loc: &crate::loc::Loc,
+    entry: &ms_proposals::OutboxEntry,
+    now_ms: f64,
+) -> String {
+    let seconds = |at: f64| (((at - now_ms) / 1000.).max(0.).ceil()).to_string();
+    match (entry.why.as_str(), entry.retry_at) {
+        _ if entry.sending || entry.why == "sending" => words::t(loc, "proposal.outboxSending"),
+        (ms_proposals::OUTBOX_REFUSED, _) => {
+            loc.t(vela_core::service_defaults::REFUSED_KEY).to_string()
+        }
+        ("busy", Some(at)) => words::tv(loc, "proposal.outboxBusy", &[("seconds", &seconds(at))]),
+        (_, Some(at)) => words::tv(loc, "proposal.outboxAway", &[("seconds", &seconds(at))]),
+        (_, None) => words::t(loc, "proposal.outboxNotSent"),
     }
 }
 
@@ -5172,8 +5241,63 @@ pub(crate) fn missing_offers_try_again(
     linked.is_none() && multisig_shown && missing_said(view, chain_id).retry
 }
 
+/// What a refusal of this test build's guard must never be said as (r18-8):
+/// the catalog's test-build sentence, never the network or the service.
+#[cfg(test)]
+pub(crate) fn assert_test_builds_words(loc: &crate::loc::Loc, line: &str) {
+    assert_eq!(
+        line,
+        loc.t(vela_core::service_defaults::REFUSED_KEY).as_ref(),
+        "the catalog's test-build sentence"
+    );
+    assert!(!line.starts_with("common."), "a key, not words: {line}");
+    let lowered = line.to_lowercase();
+    for network in [
+        "can't be reached",
+        "can’t be reached",
+        "couldn't reach",
+        "couldn’t reach",
+        "didn't answer",
+        "didn’t answer",
+        "offline",
+    ] {
+        assert!(!lowered.contains(network), "worded as the network: {line}");
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    /// r18-8 (§28, §32): Settings' Share again refused by this test build
+    /// (`FailureKind::ProductionWriteRefused`) and an approval kept because
+    /// it was refused (`OUTBOX_REFUSED`) are said in the test build's words,
+    /// never as the service or the network — in English and Chinese.
+    #[test]
+    fn a_test_builds_refusal_is_said_in_its_own_words() {
+        use vela_core::app::multisig_proposals::{OUTBOX_REFUSED, OutboxEntry};
+        for tag in ["en", "zh"] {
+            let loc = crate::loc::Loc::for_tag(tag);
+            let detail = vela_core::app::multisig_failure::production_write_refused();
+            let share_again = super::failure_words(&loc, &detail, 5_042_002, &|a| a.to_owned());
+            super::assert_test_builds_words(&loc, &share_again);
+            let kept = OutboxEntry {
+                why: OUTBOX_REFUSED.to_owned(),
+                retry_at: None,
+                sending: false,
+            };
+            super::assert_test_builds_words(&loc, &super::outbox_words(&loc, &kept, 0.));
+            // The service away is still the service away.
+            let away = OutboxEntry {
+                why: "away".to_owned(),
+                retry_at: Some(5_000.),
+                sending: false,
+            };
+            assert_eq!(
+                super::outbox_words(&loc, &away, 0.),
+                super::words::tv(&loc, "proposal.outboxAway", &[("seconds", "5")])
+            );
+        }
+    }
+
     #[test]
     fn an_execution_whose_fee_moved_says_the_new_fee_and_nothing_signed() {
         // r14-9 (the core's rule): the failure the core hands back is read

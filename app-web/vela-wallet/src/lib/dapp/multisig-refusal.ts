@@ -12,6 +12,7 @@
  *
  * The core decides which; this only reads its answer.
  */
+import { checksumAddress } from '$lib/core/kernels';
 import { shortenAddress } from '$lib/wallet/identity';
 import type { RequestMessages } from './messages';
 
@@ -21,6 +22,19 @@ export interface MultisigRefusalWords {
 }
 
 const UNCHECKED_KEY = 'componentsUi.signing.parentSafeUnchecked';
+
+/**
+ * r18-23: the Safe in its EIP-55 checksummed form, shortened (the core's
+ * `checksumAddress`) — the signing sheet's own, never the lowercase the
+ * refusal's data carries.
+ */
+function safeShort(address: string): string {
+	try {
+		return shortenAddress(checksumAddress(address));
+	} catch {
+		return shortenAddress(address);
+	}
+}
 
 export function multisigRefusalWords(
 	error: { data?: unknown } | null | undefined,
@@ -46,7 +60,7 @@ export function multisigRefusalWords(
 			title: m.parentSafeTitle,
 			body: sentence
 				.replaceAll('{{function}}', typeof data.function === 'string' ? data.function : '')
-				.replaceAll('{{safe}}', typeof data.safe === 'string' ? shortenAddress(data.safe) : '')
+				.replaceAll('{{safe}}', typeof data.safe === 'string' ? safeShort(data.safe) : '')
 		};
 	}
 	return {

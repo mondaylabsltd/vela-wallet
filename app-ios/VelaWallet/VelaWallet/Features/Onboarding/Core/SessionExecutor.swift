@@ -119,10 +119,7 @@ final class SessionExecutor {
                 try await registry.awaitTask(id: operation["task_id"] as? String ?? "")
                 return CoreJSON.string(["type": "registry_landed"])
             } catch {
-                return CoreJSON.string([
-                    "type": "registry_landing_unconfirmed",
-                    "message": (error as? RegistryFailure)?.message ?? error.localizedDescription,
-                ])
+                return CoreJSON.string(Self.landingUnconfirmed(error))
             }
 
         // Only ever after `registry_landed` — the core's rule. Best effort: a
@@ -149,10 +146,7 @@ final class SessionExecutor {
                 )
                 return CoreJSON.string(["type": "registry_landed"])
             } catch {
-                return CoreJSON.string([
-                    "type": "registry_landing_unconfirmed",
-                    "message": (error as? RegistryFailure)?.message ?? error.localizedDescription,
-                ])
+                return CoreJSON.string(Self.landingUnconfirmed(error))
             }
 
         default:
@@ -161,6 +155,18 @@ final class SessionExecutor {
             // in onboarding rather than in a wallet it cannot prove exists.
             return CoreJSON.string(["type": "accounts_unavailable"])
         }
+    }
+
+    /// The landing not confirmed: the record stays. r18-8 (§28, §32): a
+    /// publish this test build refused before it left says so (`refused`),
+    /// so the session never asks again by itself. Absent otherwise.
+    static func landingUnconfirmed(_ error: Error) -> [String: Any] {
+        var result: [String: Any] = [
+            "type": "registry_landing_unconfirmed",
+            "message": (error as? RegistryFailure)?.message ?? error.localizedDescription,
+        ]
+        if (error as? RegistryFailure)?.refused == true { result["refused"] = true }
+        return result
     }
 
     /// The replayed publish (ob-2), under the relying party the create would

@@ -277,6 +277,12 @@ pub enum SessionShellResult {
     /// not land. The record stays; `message` is for the log.
     RegistryLandingUnconfirmed {
         message: String,
+        /// r18-8 (§28, §32): this test build refused the publish to the live
+        /// index before it left — the session never asks again by itself
+        /// (the record stays; the person's own sign-in publishes it).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        refused: Option<bool>,
     },
     /// Issue 409: the confirmed record is gone (best effort).
     PendingUploadRemoved,
@@ -412,6 +418,9 @@ pub struct Model {
     watching: Option<String>,
     /// A watch round is between reading the outbox and its last answer.
     watch_running: bool,
+    /// r18-8 (§28): this test build refused a publish to the live index this
+    /// session — `SyncPending` asks nothing more by itself.
+    write_refused: bool,
     /// ob-2: the outbox as the last round read it, less what it has removed
     /// since — what [`SessionView::unsynced`] names.
     outbox: Vec<super::PendingUpload>,
@@ -569,7 +578,9 @@ impl App for Session {
             Event::SyncPending => {
                 // Not before the restore has decided (its own round starts
                 // there), and never a second round over a running one.
-                if model.phase == Phase::Restoring || model.watch_running {
+                // r18-8 (§28): a publish this test build refused is not asked
+                // again by itself.
+                if model.phase == Phase::Restoring || model.watch_running || model.write_refused {
                     return Command::done();
                 }
                 start_watch(model)
@@ -1073,8 +1084,11 @@ fn accept_watch(model: &mut Model, result: SessionShellResult) -> Command<Sessio
         },
         // Not confirmed. The record stays — warning at sign-out, asked again
         // next launch — and the watch moves on to the next one.
-        SessionShellResult::RegistryLandingUnconfirmed { .. } => {
+        SessionShellResult::RegistryLandingUnconfirmed { refused, .. } => {
             model.watching = None;
+            if refused == Some(true) {
+                model.write_refused = true;
+            }
             next_landing(model)
         }
         SessionShellResult::PendingUploadRemoved => next_landing(model),

@@ -685,13 +685,17 @@ final class OnboardingExecutor {
     }
 
     private static func indexFailure(_ error: Error) -> [String: Any] {
-        [
+        var failure: [String: Any] = [
             "type": "index_failed",
             "message": describe(error),
             // The one bit of classification only a shell can supply: a request
             // that never arrived is not the same as one the server refused.
             "network": (error as? RegistryFailure)?.network ?? true,
         ]
+        // r18-8 (§28, §32): this test build refused the write before it left —
+        // the core says it in the test build's words. Absent otherwise.
+        if (error as? RegistryFailure)?.refused == true { failure["refused"] = true }
+        return failure
     }
 
     private static func describe(_ error: Error) -> String {

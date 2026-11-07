@@ -232,4 +232,28 @@ describe('the replayed publish, on the web (ob-2)', () => {
 			'registry_landing_unconfirmed'
 		);
 	});
+
+	/**
+	 * r18-8 (§28, §32): this test build refused the publish to the live index
+	 * before it left — answered `refused`, so the session never asks again by
+	 * itself (the record stays). Never the network's word.
+	 */
+	it('a publish this test build refused is unconfirmed and refused — asked once', async () => {
+		const { RegistryError } = await import('$lib/onboarding/core/registry');
+		const { ProductionWriteRefused } = await import('$lib/services/production-guard');
+		publish.mockRejectedValue(new RegistryError('Register failed: refused', false, true));
+		expect(
+			await executeSession(effect({ type: 'publish_pending_upload', publish: pending }))
+		).toMatchObject({ type: 'registry_landing_unconfirmed', refused: true });
+		// The guard's own error, should a publish ever throw it bare.
+		publish.mockRejectedValue(new ProductionWriteRefused('p256-index-v2.getvela.app'));
+		expect(
+			await executeSession(effect({ type: 'publish_pending_upload', publish: pending }))
+		).toMatchObject({ type: 'registry_landing_unconfirmed', refused: true });
+		// A publish the index refused, or the network lost, carries no `refused`.
+		publish.mockRejectedValue(new RegistryError('Register failed: Failed to fetch', true));
+		expect(
+			await executeSession(effect({ type: 'publish_pending_upload', publish: pending }))
+		).not.toHaveProperty('refused');
+	});
 });

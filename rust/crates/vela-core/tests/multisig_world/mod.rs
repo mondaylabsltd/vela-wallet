@@ -331,6 +331,9 @@ pub struct World {
     // The genesis service.
     pub service_url: String,
     pub service_down: bool,
+    /// r18-8 (§28): a test build's guard refuses every write to the service
+    /// before it leaves (`HttpUnreachable { refused: true }`).
+    pub writes_refused: bool,
     /// r16-16: every read of the service answers `429` (its rate limit).
     pub service_rate_limited: bool,
     pub home_chain: Option<u64>,
@@ -370,6 +373,8 @@ pub struct World {
     pub sent: Vec<(u64, String, Vec<Value>)>,
     /// What each sent user operation was for, in order.
     pub purposes: Vec<Option<SendPurpose>>,
+    /// The fee each sent user operation was signed at, in order (r18-5).
+    pub sent_fees: Vec<Option<Value>>,
     pub send_answer: Option<Res>,
     pub quote_answer: Option<Res>,
     pub notices: Vec<Notice>,
@@ -404,6 +409,7 @@ impl Default for World {
             store: BTreeMap::new(),
             service_url: SERVICE.to_owned(),
             service_down: false,
+            writes_refused: false,
             service_rate_limited: false,
             home_chain: Some(100),
             served: vec![100],
@@ -434,6 +440,7 @@ impl Default for World {
             risks_asked: Vec::new(),
             sent: Vec::new(),
             purposes: Vec::new(),
+            sent_fees: Vec::new(),
             send_answer: None,
             quote_answer: None,
             notices: Vec::new(),
@@ -551,11 +558,19 @@ impl World {
         let Some(path) = url.strip_prefix(&self.service_url) else {
             return Res::HttpUnreachable {
                 detail: format!("no host for {url}"),
+                refused: None,
             };
         };
+        if self.writes_refused && method != "GET" {
+            return Res::HttpUnreachable {
+                detail: "guard: refused".to_owned(),
+                refused: Some(true),
+            };
+        }
         if self.service_down {
             return Res::HttpUnreachable {
                 detail: "connection refused".to_owned(),
+                refused: None,
             };
         }
         if self.service_rate_limited && method == "GET" {
@@ -941,9 +956,10 @@ impl World {
                 from,
                 calls,
                 purpose,
-                ..
+                fee,
             } => {
                 self.purposes.push(purpose.clone());
+                self.sent_fees.push(fee.clone());
                 if let Some(landing) = self.on_send.take() {
                     self.land(landing);
                 }

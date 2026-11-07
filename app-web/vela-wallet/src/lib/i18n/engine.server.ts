@@ -1704,5 +1704,10 @@ export function resolveMultisigMessages(locale: Locale): MultisigMessages {
 		'home.multisig'
 	) as unknown as MultisigMessages;
 	// A member who approves on a trusted signing page sees the apps' hand-off card.
-	return { ...words, handoff: resolveHandoffMessages(locale) };
+	return {
+		...words,
+		handoff: resolveHandoffMessages(locale),
+		// r18-8 (§28, §32): a test build's refusal, in its own words.
+		testBuild: { productionWriteRefused: t(locale, 'common.testBuild.productionWriteRefused') }
+	};
 }

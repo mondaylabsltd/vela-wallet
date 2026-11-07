@@ -4,6 +4,23 @@
  * Templates keep their `{{name}}` slots; `fillTemplate` fills them.
  */
 import type { PluralCopy } from '$lib/i18n/plural';
+import { PRODUCTION_WRITE_REFUSED_ENGLISH } from '$lib/core/generated/serviceDefaults';
+
+/**
+ * r18-8: "This test build won't write to the live service; point it at a
+ * local one." — in the page's language (the corpus' English in a fixture
+ * that resolved none). Never the network's words.
+ */
+/**
+ * r18-8 (§32): the core's word for a write this test build refused — a
+ * created multisig's `create.refused` and a kept approval's outbox `why`
+ * (`multisig_accounts::PRODUCTION_WRITE_REFUSED`, `OUTBOX_REFUSED`).
+ */
+export const PRODUCTION_WRITE_REFUSED = 'production_write_refused';
+
+export function testBuildRefused(m: Pick<MultisigMessages, 'testBuild'>): string {
+	return m.testBuild?.productionWriteRefused || PRODUCTION_WRITE_REFUSED_ENGLISH;
+}
 
 export interface MultisigMessages {
 	/**
@@ -12,6 +29,12 @@ export interface MultisigMessages {
 	 * (`resolveHandoffMessages`). Absent in fixtures that draw no hand-off.
 	 */
 	handoff?: import('$lib/signing/messages').HandoffMessages;
+	/**
+	 * r18-8 (§28, §32): this test build refused to write to the live service —
+	 * `common.testBuild.productionWriteRefused`, resolved beside the multisig
+	 * words. Absent in fixtures that draw no refusal ({@link testBuildRefused}).
+	 */
+	testBuild?: { productionWriteRefused: string };
 	switcher: {
 		section: string;
 		create: string;
@@ -265,6 +288,12 @@ export interface MultisigMessages {
 		uncheckedReason: string;
 		/** r4-7: the fee before the passkey (`{{fee}}`, `{{name}}`: who pays). */
 		feeLine: string;
+		/**
+		 * r18-5: the mark under the fee line while a press is out on it — the
+		 * figure on screen is the one being signed, fixed until the passkey's
+		 * confirm or cancel.
+		 */
+		feeSigning: string;
 		feeChecking: string;
 		feeUnpriced: string;
 		feeUnchecked: string;
@@ -1163,6 +1192,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		unpricedReason: '',
 		uncheckedReason: '',
 		feeLine: '',
+		feeSigning: '',
 		feeChecking: '',
 		feeUnpriced: '',
 		feeUnchecked: '',

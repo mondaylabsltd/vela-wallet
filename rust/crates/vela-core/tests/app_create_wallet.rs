@@ -602,6 +602,7 @@ fn a_failed_publish_shows_the_retry_screen() {
     let next = sut.resolve(ShellResult::IndexFailed {
         message: "offline".to_owned(),
         network: true,
+        refused: None,
     });
     assert!(next.is_empty() || next.iter().all(|op| !is_save_account(op)));
 
@@ -638,6 +639,7 @@ fn retry_upload_resumes_at_the_publish_never_at_registration() {
     sut.resolve(ShellResult::IndexFailed {
         message: "offline".to_owned(),
         network: true,
+        refused: None,
     });
     assert_eq!(sut.view().stage, CreateStage::SyncFailed);
 
@@ -1408,6 +1410,7 @@ fn a_failed_multi_publish_retries_every_member() {
     sut.resolve(ShellResult::IndexFailed {
         message: "offline".to_owned(),
         network: true,
+        refused: None,
     });
     assert_eq!(sut.view().stage, CreateStage::SyncFailed);
 
@@ -1441,6 +1444,7 @@ fn an_unreachable_index_at_confirmation_keeps_the_key_and_says_so() {
     let next = sut.resolve(ShellResult::IndexFailed {
         message: "Challenge failed: Failed to fetch".to_owned(),
         network: true,
+        refused: None,
     });
     let [ShellOperation::Prompt { kind, .. }] = next.as_slice() else {
         panic!("expected one prompt, got {next:?}");
@@ -2032,4 +2036,66 @@ fn a_security_key_that_cannot_register_is_not_blamed_on_biometrics() {
             security_key: false
         }
     );
+}
+
+/// r18-8 (§32): the test build's guard refused the member challenge to the
+/// live key index (§28). Web and iOS said "Vela's passkey index didn't
+/// answer" (or "this device is offline"). A refusal is its own kind: the key
+/// is kept and the sheet says the test build's sentence — never the network.
+#[test]
+fn a_challenge_the_test_build_refused_is_said_as_that_never_the_index() {
+    let mut sut = registered("Ann");
+    sut.dispatch(Event::AddKey {
+        name: "Backup".to_owned(),
+        method: KeyMethod::Platform,
+    });
+    sut.resolve(ShellResult::PasskeyRegistered {
+        registration: support::second_registration(CRED2),
+        now_iso: NOW.to_owned(),
+    });
+    let next = sut.resolve(ShellResult::IndexFailed {
+        message: "This test build won't write to the live service; point it at a local one. (p256-index-v2.getvela.app)".to_owned(),
+        network: false,
+        refused: Some(true),
+    });
+    let [ShellOperation::Prompt { kind, .. }] = next.as_slice() else {
+        panic!("expected one prompt, got {next:?}");
+    };
+    match kind {
+        PromptKind::CreateFailed {
+            key_kept: true,
+            local: false,
+            words_key,
+            ..
+        } => assert_eq!(
+            words_key.as_deref(),
+            Some("common.testBuild.productionWriteRefused")
+        ),
+        other => panic!("{other:?}"),
+    }
+}
+
+/// r18-8: a publish the test build refused says so on the retry screen.
+#[test]
+fn a_publish_the_test_build_refused_says_so_on_the_retry_screen() {
+    let mut sut = uploading("Ann");
+    sut.resolve(ShellResult::IndexFailed {
+        message: "refused".to_owned(),
+        network: false,
+        refused: Some(true),
+    });
+    let view = sut.view();
+    assert_eq!(view.stage, CreateStage::SyncFailed);
+    assert_eq!(
+        view.sync_error_key.as_deref(),
+        Some("common.testBuild.productionWriteRefused")
+    );
+    // Any other failure keeps the screen's own words.
+    let mut sut = uploading("Ann");
+    sut.resolve(ShellResult::IndexFailed {
+        message: "offline".to_owned(),
+        network: true,
+        refused: None,
+    });
+    assert_eq!(sut.view().sync_error_key, None);
 }

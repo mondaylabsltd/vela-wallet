@@ -327,7 +327,7 @@ fn owner_answer(reply: Result<Value, crate::executor::pool::PoolError>) -> SafeO
         Ok(envelope) => envelope,
         Err(error) => {
             return SafeOwnerAnswer::Unreachable {
-                detail: format!("{error:?}"),
+                detail: error.to_string(),
             };
         }
     };

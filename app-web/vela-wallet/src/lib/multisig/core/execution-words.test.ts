@@ -115,6 +115,7 @@ describe('the fee line (r4-7)', () => {
 	it('says the fee in the executor’s coin and who pays — no setup line when nothing is set up', () => {
 		expect(feeWords(words(), priced(), opts)).toEqual({
 			fee: 'Network fee ≈ 0.035 USDC, paid by Alice',
+			signing: null,
 			setup: null,
 			items: []
 		});
@@ -150,6 +151,29 @@ describe('the fee line (r4-7)', () => {
 		const shown = feeWords(words(), priced({ executor: true }), opts);
 		expect(shown.setup).toBe('Includes one-time setup on Arc Testnet:');
 		expect(shown.items).toEqual(['activating Alice’s account, which pays the fee']);
+	});
+
+	it('marks the fee line while a press is out on the look (r18-5, `signing`)', async () => {
+		const { previewOf } = await import('../shell/proposal-failure');
+		const m = words();
+		m.proposal.feeSigning = 'Signing at this fee — it stays fixed until you confirm or cancel.';
+		const served = (signing?: boolean) =>
+			previewOf(
+				{
+					kind: 'priced',
+					calls: [],
+					fee: { amount: String((35n * USDC) / 1000n), recipient: '0xfe' },
+					balance: String(USDC),
+					...(signing === undefined ? {} : { signing })
+				},
+				5042002
+			) as Priced;
+		expect(feeWords(m, served(true), opts)).toMatchObject({
+			fee: 'Network fee ≈ 0.035 USDC, paid by Alice',
+			signing: 'Signing at this fee — it stays fixed until you confirm or cancel.'
+		});
+		expect(feeWords(m, served(false), opts).signing).toBeNull();
+		expect(feeWords(m, served(), opts).signing).toBeNull();
 	});
 });
 

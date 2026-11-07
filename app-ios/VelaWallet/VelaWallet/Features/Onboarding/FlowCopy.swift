@@ -197,10 +197,14 @@ func promptCopy(_ kind: PromptKind, loc: Loc) -> PromptCopy {
     // confirmation did not reach the index (or never left the device). What
     // happened, and the way on — its row's Confirm — never the index's raw
     // words, never a silent drop back to the list.
+    // r18-8 (§28, §32): a confirmation this test build refused to send to
+    // the live index is the core's own sentence (`words_key`), never the
+    // index's or the network's.
     case "create_failed" where kind.keyKept:
         PromptCopy(
             title: loc.t(I18nKeys.Create.keyKeptTitle),
-            message: loc.t(kind.local ? I18nKeys.Create.keyKeptBodyNetwork : I18nKeys.Create.keyKeptBodyIndex)
+            message: kind.wordsKey.map { loc.t($0) }
+                ?? loc.t(kind.local ? I18nKeys.Create.keyKeptBodyNetwork : I18nKeys.Create.keyKeptBodyIndex)
         )
     case "create_failed":
         PromptCopy(

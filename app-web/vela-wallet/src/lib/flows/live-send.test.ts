@@ -1143,6 +1143,16 @@ describe('a failed fee on Send, in the core’s one state', () => {
 		expect(said({ type: 'estimate_failed', kind: 'would_fail' })).toBe(
 			`${m['send.alertEstimateFailedTitle']} · ${m['send.alertEstimateFailedBody']}`
 		);
+		// r18-14 (§32): Vela's relay gave no price or no simulation — said as
+		// the relay's silence, never the generic "valid transaction estimate".
+		for (const kind of ['quote_unavailable', 'estimate_failed'] as const) {
+			const relay = said({ type: 'estimate_failed', kind });
+			expect(relay).toBe(
+				`${m['send.alertEstimateFailedTitle']} · ${m['send.alertEstimateRelayBody']}`
+			);
+			expect(relay).toContain("Vela's relay didn't answer, so nothing was sent.");
+			expect(relay).not.toContain('valid transaction estimate');
+		}
 		// On the form, the chain is the selected token's.
 		const form = liveSendForm(formModel(), {
 			...inputs({ selected_token: ETH, recipient: alice, amount: '1' }),

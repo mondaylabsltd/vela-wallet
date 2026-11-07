@@ -27,7 +27,7 @@ use vela_core::multisig_review::SimCall;
 
 use super::machines::{Facts, Job, Machines, Screen};
 use super::shell::{
-    self, Arrival, Deps, HttpReply, Opened, Perform, RecipientFacts, Rooms, RpcReply,
+    self, Arrival, Deps, HttpFailure, HttpReply, Opened, Perform, RecipientFacts, Rooms, RpcReply,
 };
 
 // The core's own file, formatted by the core's rustfmt (edition 2021): this
@@ -90,7 +90,7 @@ impl Deps for Shared {
         url: &str,
         body: Option<&str>,
         _timeout: Duration,
-    ) -> Result<HttpReply, String> {
+    ) -> Result<HttpReply, HttpFailure> {
         match self.ask(&Op::Http {
             method: method.to_owned(),
             url: url.to_owned(),
@@ -106,7 +106,12 @@ impl Deps for Shared {
                 retry_after,
                 body,
             }),
-            Res::HttpUnreachable { detail } => Err(detail),
+            // The world's guard (`writes_refused`) speaks as the desktop's.
+            Res::HttpUnreachable {
+                detail,
+                refused: Some(true),
+            } => Err(HttpFailure::refused(detail)),
+            Res::HttpUnreachable { detail, .. } => Err(HttpFailure::unanswered(detail)),
             other => panic!("{other:?}"),
         }
     }
@@ -544,6 +549,46 @@ fn a_created_multisig_is_shown_and_followed() {
     assert_eq!(wen, Some(Some("Wen".to_owned())), "{members:?}");
 }
 
+/// r18-8 (§28, §32), desktop: the genesis import refused by this test
+/// build's guard was retried three times and said "the service can't be
+/// reached". Through the desktop's executor the refusal reaches the core as
+/// `refused: Some(true)`: asked once, never the service's outage, never asked
+/// again by itself — and the created screen says the test build's sentence.
+#[test]
+fn a_genesis_import_the_test_build_refused_is_asked_once_and_said_so() {
+    let imports = |sim: &Sim| {
+        sim.world()
+            .http_log
+            .iter()
+            .filter(|l| l.starts_with("POST ") && l.ends_with("/api/import"))
+            .count()
+    };
+    let mut sim = booted(&[0, 1]);
+    sim.world().writes_refused = true;
+    let _ = created(&mut sim);
+    let view = sim.machines.accounts_view.clone();
+    assert_eq!(
+        view.create.refused.as_deref(),
+        Some(vela_core::app::multisig_accounts::PRODUCTION_WRITE_REFUSED)
+    );
+    assert_eq!(imports(&sim), 1, "asked once, never retried");
+    assert!(!view.service_down, "a refusal is not the service's outage");
+    for _ in 0..3 {
+        sim.world().now += 400_000.0;
+        sim.accounts(AccountsEvent::Tick);
+    }
+    assert_eq!(imports(&sim), 1, "never asked again by itself");
+    for tag in ["en", "zh"] {
+        let loc = crate::loc::Loc::for_tag(tag);
+        let line = crate::wallet::page::multisig_create_note(
+            &loc,
+            view.create.refused.as_deref(),
+            &view.create.phase,
+        );
+        crate::wallet::page::multisig::assert_test_builds_words(&loc, &line);
+    }
+}
+
 /// M2: proposed from the send flow's transfer (the review first, then one
 /// passkey), approved by the second member on this device, executed by the
 /// first and followed until it landed: its Activity rows are routed to the
@@ -802,6 +847,225 @@ fn a_fee_that_moved_after_it_was_drawn_stops_the_press_and_names_its_executor() 
         shown_fee: Some(now),
     });
     assert_eq!(sim.world().sent.len(), 1, "signed at the fee drawn");
+}
+
+/// r18-5 (§32): while a press is out — from the press to its signature —
+/// the fee line keeps the figure pressed on (the sheet's own re-quote does
+/// not move it) and says it is the one being signed
+/// (`proposal.feeSigning`); once the press is over, the mark goes.
+#[test]
+fn the_fee_line_keeps_the_pressed_figure_and_says_so_while_the_press_is_out() {
+    let mut sim = booted(&[0, 1]);
+    created(&mut sim);
+    let hash = propose(&mut sim, transfer("1"));
+    sim.proposals(ProposalsEvent::Approve {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        owner: fixture(1).address,
+    });
+    let executor = fixture(0).address;
+    let drawn = drawn_fee(&mut sim, &hash, &executor).expect("a priced look drawn");
+    let line = |sim: &Sim, tag: &str| {
+        let previews = &sim.machines.proposals_view.previews;
+        let look = super::sheet::look_of(previews, 100, &hash, &executor);
+        let signing = super::sheet::look_signing(previews, 100, &hash, &executor);
+        (
+            look.as_ref().and_then(super::sheet::Look::shown_fee),
+            crate::wallet::page::multisig::fee_signing_words(
+                &crate::loc::Loc::for_tag(tag),
+                look.as_ref(),
+                signing,
+            ),
+        )
+    };
+    assert_eq!(line(&sim, "en").1, None, "no press out: no mark");
+    // The press, held at the user operation (the passkey's moment).
+    sim.held = Some(|op| matches!(op, Op::SendCalls { .. }));
+    sim.proposals(ProposalsEvent::Execute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: executor.clone(),
+        shown_fee: Some(drawn.clone()),
+    });
+    // The sheet looks again while the passkey is up, at a fee that moved.
+    sim.world().now += 20_000.0;
+    sim.world().quote_answer = Some(Res::Quoted {
+        quote: serde_json::json!({"kind": "quoted", "fee": {"token": null, "amount": "0x2a"}, "totalGas": "0x1", "executorDeployed": true}),
+    });
+    sim.proposals(ProposalsEvent::Preview {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: executor.clone(),
+    });
+    for (tag, mark) in [
+        (
+            "en",
+            "Signing at this fee — it stays fixed until you confirm or cancel.",
+        ),
+        ("zh", ""),
+    ] {
+        let (fee, said) = line(&sim, tag);
+        assert_eq!(fee.as_deref(), Some(drawn.as_str()), "the pressed figure");
+        let said = said.expect("the mark while the press is out");
+        let loc = crate::loc::Loc::for_tag(tag);
+        assert_eq!(said, super::words::t(&loc, "proposal.feeSigning"));
+        assert!(!said.starts_with("home."), "{said}");
+        if !mark.is_empty() {
+            assert_eq!(said, mark);
+        }
+    }
+    // The press goes through: signed at the figure pressed, and the mark goes.
+    sim.held = None;
+    sim.run(Vec::new());
+    assert_eq!(sim.world().sent.len(), 1, "signed");
+    assert_eq!(line(&sim, "en").1, None, "the press is over: no mark");
+}
+
+/// r18-13 (S3, r16-18's rule): "Approve and execute" — and a plain Execute —
+/// pressed under a refused Arc came back stopped (`unpriced`) and was said
+/// as the fee line's own note (`feeUnpriced` → `feeUnchecked`), which read
+/// as nothing beside the press. The press's stop is said beside the pressed
+/// button as the press's failure: on a network the pool finds failing, "Can't
+/// reach {{network}} right now, so nothing was sent"; otherwise "That didn't
+/// go through: …" with the fee's reason. Check again stays its way on. In
+/// English and Chinese, nothing signed or sent.
+#[test]
+fn a_press_stopped_for_its_fee_says_why_beside_the_press() {
+    use super::sheet::{FootFacts, FootKind, foot, press_failure_lines, presses_drawn};
+    use crate::wallet::page::multisig::fee_stop_words;
+    let mut sim = booted(&[0, 1]);
+    created(&mut sim);
+    let hash = propose(&mut sim, transfer("1"));
+    // The relay gives no price: every look is unpriced.
+    sim.world().quote_answer = Some(Res::QuoteFailed {
+        detail: "relay refused".to_owned(),
+    });
+    let one_press = fixture(1).address;
+    let plain = fixture(0).address;
+    let stop = |sim: &Sim| {
+        sim.machines.proposals_view.actions[&format!("execute:{}", hash.to_ascii_lowercase())]
+            .clone()
+    };
+    let check = |sim: &Sim, executor: &str, approved_by: Vec<String>| {
+        let view = sim.machines.proposals_view.clone();
+        let ActionState::Stopped { preview } = stop(sim) else {
+            panic!("{:?}", stop(sim));
+        };
+        let kind = preview["kind"].as_str().unwrap().to_owned();
+        assert!(
+            matches!(kind.as_str(), "unpriced" | "unchecked"),
+            "{preview}"
+        );
+        let item = listed(sim, &hash);
+        let plan = foot(
+            &FootFacts {
+                chain_id: 100,
+                hash: &hash,
+                status: item.status,
+                readable: true,
+                approved: item.approved,
+                threshold: item.threshold,
+                approved_by: &approved_by,
+                can_approve: &item.can_approve,
+                can_execute: &item.can_execute,
+                previews: &view.previews,
+                approve_execute: &view.approve_execute,
+                last_actor: None,
+            },
+            Some(executor),
+        );
+        assert!(matches!(plan.kind, FootKind::Execute { .. }), "{plan:?}");
+        assert!(
+            presses_drawn(&plan.kind, plan.actor.is_some()),
+            "said right under the presses"
+        );
+        assert!(
+            super::sheet::stop_offers_check_again(&view.actions, &hash),
+            "Check again stays the way on"
+        );
+        for tag in ["en", "zh"] {
+            let loc = crate::loc::Loc::for_tag(tag);
+            for failing in [true, false] {
+                let lines = press_failure_lines(&view.actions, &hash, |state| match state {
+                    ActionState::Stopped { preview } => Some(fee_stop_words(
+                        &loc,
+                        preview["kind"].as_str().unwrap_or_default(),
+                        100,
+                        failing,
+                    )),
+                    _ => None,
+                });
+                assert_eq!(lines.len(), 1, "{lines:?}");
+                let line = &lines[0];
+                let network = crate::wallet::page::multisig::network(100);
+                let want = if failing {
+                    super::words::tv(
+                        &loc,
+                        "proposal.reason.chainUnreachable",
+                        &[("network", &network)],
+                    )
+                } else {
+                    let reason = if kind == "unpriced" {
+                        "proposal.unpricedReason"
+                    } else {
+                        "proposal.uncheckedReason"
+                    };
+                    super::words::tv(
+                        &loc,
+                        "proposal.failed",
+                        &[("reason", &super::words::t(&loc, reason))],
+                    )
+                };
+                assert_eq!(line, &want);
+                if failing {
+                    assert!(line.contains(&network), "{line}");
+                }
+                for note in ["proposal.feeUnpriced", "proposal.feeUnchecked"] {
+                    assert_ne!(line, &super::words::t(&loc, note), "never the fee note");
+                }
+                assert!(!line.starts_with("home."), "{line}");
+            }
+        }
+        assert_eq!(
+            fee_stop_words(&crate::loc::Loc::for_tag("en"), &kind, 5_042_002, true),
+            "Can't reach Arc Testnet right now, so nothing was sent. Try again in a moment."
+        );
+    };
+    // The one press: the member whose approval completes it.
+    sim.proposals(ProposalsEvent::Preview {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: one_press.clone(),
+    });
+    sim.proposals(ProposalsEvent::ApproveExecute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: one_press.clone(),
+        shown_fee: None,
+    });
+    assert!(sim.world().sent.is_empty(), "nothing sent");
+    let approved_by = vec![fixture(0).address];
+    check(&sim, &one_press, approved_by);
+    // A plain Execute, once it has its approvals.
+    sim.proposals(ProposalsEvent::Approve {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        owner: one_press.clone(),
+    });
+    sim.proposals(ProposalsEvent::Preview {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: plain.clone(),
+    });
+    sim.proposals(ProposalsEvent::Execute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: plain.clone(),
+        shown_fee: None,
+    });
+    assert!(sim.world().sent.is_empty(), "nothing sent");
+    let approved_by = vec![fixture(0).address, one_press.clone()];
+    check(&sim, &plain, approved_by);
 }
 
 #[test]

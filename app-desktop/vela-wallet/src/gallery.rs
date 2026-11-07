@@ -575,6 +575,7 @@ fn base_view() -> CreateView {
         show_start_over: false,
         address: None,
         sync_error_detail: None,
+        sync_error_key: None,
         can_go_back: false,
         keys: Vec::new(),
         can_add_key: true,

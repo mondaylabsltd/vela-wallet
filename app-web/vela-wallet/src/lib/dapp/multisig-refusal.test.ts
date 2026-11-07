@@ -40,7 +40,7 @@ describe('a multisig’s refusal, in its own words', () => {
 				expect(words.body).toBe(
 					sheet.parentSafeBlocked
 						.replace('{{function}}', 'execTransaction')
-						.replace('{{safe}}', '0x5afe5a…fe5afe')
+						.replace('{{safe}}', '0x5afe5a…fe5AfE')
 				);
 				expect(words.body).not.toContain('{{');
 				expect(words.body).not.toBe(m.multisigNoMessagesBody.replace('{{host}}', 'app.example'));
@@ -52,7 +52,7 @@ describe('a multisig’s refusal, in its own words', () => {
 			expect(words.body).toBe(
 				sheet.parentSafeUnchecked
 					.replace('{{function}}', 'execTransaction')
-					.replace('{{safe}}', '0x5afe5a…fe5afe')
+					.replace('{{safe}}', '0x5afe5a…fe5AfE')
 			);
 		});
 

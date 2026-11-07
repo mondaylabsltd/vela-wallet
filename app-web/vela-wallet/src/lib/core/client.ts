@@ -70,6 +70,7 @@ import init, {
 	networkChainIsTestnet,
 	networkSpaceChainIds,
 	networkSpaceRead,
+	networkSpaceShowsFiat,
 	shownNetworksSettle,
 	passkeyDirectoryEntry,
 	passkeyDirectoryUrl,
@@ -169,6 +170,9 @@ export { minGasPriceWei, peggedNativeUsd };
 // The mainnet and testnet spaces (spec 105): which space a stored value names,
 // which chains a space holds, whether a chain is a testnet.
 export { networkChainIsTestnet, networkSpaceChainIds, networkSpaceRead };
+// r18-9 (spec 105): whether a space shows any fiat value — the testnet space
+// shows none anywhere (`network_space::shows_fiat`).
+export { networkSpaceShowsFiat };
 // Which of Vela's networks a person's lists show (owner decision 2026-10-29):
 // a device's one-time settling of `vela.shownNetworks` from what it holds.
 export { shownNetworksSettle };

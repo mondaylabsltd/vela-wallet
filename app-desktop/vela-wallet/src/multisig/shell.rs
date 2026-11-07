@@ -53,6 +53,36 @@ pub enum RpcReply {
     },
 }
 
+/// Why nothing answered a request (`Deps::http`'s `Err`): its detail, for
+/// the log, and whether this test build's guard refused it before it left
+/// (§28, r18-8) — never sent, never the network's answer, and said so to the
+/// core (`HttpUnreachable.refused`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HttpFailure {
+    pub detail: String,
+    pub refused: bool,
+}
+
+impl HttpFailure {
+    /// Nothing answered (refused connection, offline, timed out).
+    #[must_use]
+    pub fn unanswered(detail: impl Into<String>) -> Self {
+        Self {
+            detail: detail.into(),
+            refused: false,
+        }
+    }
+
+    /// This test build's guard refused it before it left (§28).
+    #[must_use]
+    pub fn refused(detail: impl Into<String>) -> Self {
+        Self {
+            detail: detail.into(),
+            refused: true,
+        }
+    }
+}
+
 /// The facts the send flow knows of a recipient (`None`: unread).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RecipientFacts {
@@ -65,14 +95,15 @@ pub struct RecipientFacts {
 /// answers — a failure is its `Err` (or the vocabulary's own failure for the
 /// ones that answer a [`Res`]), never a panic.
 pub trait Deps: Send + Sync + 'static {
-    /// One request; `Err` when nothing answered (refused, offline, timed out).
+    /// One request; `Err` when nothing answered (refused, offline, timed
+    /// out) — or this test build's guard refused it ([`HttpFailure::refused`]).
     fn http(
         &self,
         method: &str,
         url: &str,
         body: Option<&str>,
         timeout: Duration,
-    ) -> Result<HttpReply, String>;
+    ) -> Result<HttpReply, HttpFailure>;
     /// One call through the RPC pool; `Err` when no node answered (`bound`:
     /// past it nobody did). `person`: asked on the person's own word (their
     /// Try again, their press — `MultisigOperation::Rpc::person`), handed to
@@ -217,7 +248,10 @@ impl Perform {
 pub fn failure_of(op: &Op, detail: &str) -> Res {
     let detail = detail.to_owned();
     match op {
-        Op::Http { .. } => Res::HttpUnreachable { detail },
+        Op::Http { .. } => Res::HttpUnreachable {
+            detail,
+            refused: None,
+        },
         Op::Rpc { .. } => Res::RpcUnanswered { detail },
         Op::LoadStore { .. } | Op::WriteStore { .. } => Res::StoreFailed { detail },
         Op::Wait { .. } => Res::Waited,
@@ -286,7 +320,12 @@ pub fn perform(op: &Op, deps: &Arc<dyn Deps>, rooms: &Arc<dyn Rooms>) -> Perform
                         retry_after: reply.retry_after,
                         body: reply.body,
                     },
-                    Err(detail) => Res::HttpUnreachable { detail },
+                    // r18-8 (§28, §32): the guard's refusal is said as such,
+                    // once — the core neither retries it nor calls it an outage.
+                    Err(failure) => Res::HttpUnreachable {
+                        detail: failure.detail,
+                        refused: failure.refused.then_some(true),
+                    },
                 }
             }))
         }
@@ -488,7 +527,7 @@ mod tests {
     /// field, and every call is written down.
     #[derive(Default)]
     pub(super) struct Fake {
-        pub http: Mutex<Option<Result<HttpReply, String>>>,
+        pub http: Mutex<Option<Result<HttpReply, HttpFailure>>>,
         pub rpc: Mutex<Option<Result<RpcReply, String>>>,
         pub store: Mutex<BTreeMap<String, String>>,
         pub store_down: bool,
@@ -517,7 +556,7 @@ mod tests {
             url: &str,
             body: Option<&str>,
             timeout: Duration,
-        ) -> Result<HttpReply, String> {
+        ) -> Result<HttpReply, HttpFailure> {
             self.note(format!(
                 "http {method} {url} {body:?} {}",
                 timeout.as_millis()
@@ -701,7 +740,7 @@ mod tests {
     #[test]
     fn http_nothing_answered_is_unreachable() {
         let fake = Fake::default();
-        *fake.http.lock().unwrap() = Some(Err("connection refused".to_owned()));
+        *fake.http.lock().unwrap() = Some(Err(HttpFailure::unanswered("connection refused")));
         let (res, _) = run(
             fake,
             &Op::Http {
@@ -714,8 +753,40 @@ mod tests {
         assert_eq!(
             res,
             Res::HttpUnreachable {
-                detail: "connection refused".to_owned()
+                detail: "connection refused".to_owned(),
+                refused: None,
             }
+        );
+    }
+
+    /// r18-8 (§28, §32): a write this test build's guard refused reaches the
+    /// core as `refused: Some(true)` — the core's cue to say it in the test
+    /// build's words, ask once and never call it the service's outage.
+    #[test]
+    fn http_refused_by_the_guard_is_said_refused() {
+        let fake = Fake::default();
+        *fake.http.lock().unwrap() = Some(Err(HttpFailure::refused("guard: refused")));
+        let (res, fake) = run(
+            fake,
+            &Op::Http {
+                method: "POST".to_owned(),
+                url: "https://genesis.getvela.app/api/import".to_owned(),
+                body: Some("{}".to_owned()),
+                timeout_ms: 1,
+            },
+        );
+        assert_eq!(
+            res,
+            Res::HttpUnreachable {
+                detail: "guard: refused".to_owned(),
+                refused: Some(true),
+            }
+        );
+        let log = fake.log.lock().unwrap().clone();
+        assert_eq!(
+            log.iter().filter(|l| l.starts_with("http ")).count(),
+            1,
+            "asked once: {log:?}"
         );
     }
 

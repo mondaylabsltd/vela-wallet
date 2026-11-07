@@ -8,6 +8,8 @@
  * reads the FEED (a wallet resident) and the wallet's own formatters, and the
  * flow overlay only needs to be handed the finished model.
  */
+import { showsFiat } from '$lib/network-space/fiat';
+import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { FeedDapp } from '$lib/core/generated/FeedDapp';
 import type { FeedDappChange } from '$lib/core/generated/FeedDappChange';
@@ -119,6 +121,11 @@ export interface TxDetailContext {
 	/** The wallet corpus, for the day words the home already uses. */
 	wm: WalletMessages;
 	currency: CurrencyView;
+	/**
+	 * r18-9 (spec 105): the space in front — the testnet space shows no fiat
+	 * beside an activity's figure (`showsFiat`). Absent: the device's space.
+	 */
+	space?: NetworkSpace;
 	hidden: boolean;
 	identicon: (seed: string) => string;
 	now?: number;
@@ -239,7 +246,8 @@ function hashFact(label: string, hash: string, m: WalletFlowMessages): FactRowMo
  * `FeedItem.priced`) — none at all when it knows none, never "≈ $0.00".
  */
 function fiatText(item: FeedItem, ctx: TxDetailContext): string {
-	if (!item.priced) return '';
+	// r18-9: nothing in the testnet space has a worth to state.
+	if (!item.priced || !showsFiat(ctx.space)) return '';
 	return ctx.hidden ? MASK : `≈ ${moneyText(item.usd_value, ctx.currency)}`;
 }
 

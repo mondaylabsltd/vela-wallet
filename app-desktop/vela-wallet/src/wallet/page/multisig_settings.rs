@@ -890,9 +890,11 @@ impl WalletPage {
                 NetworkState::Reading => {
                     col = col.child(set_head(title, Some("…".to_owned())));
                 }
-                NetworkState::Unreadable { detail } => {
+                NetworkState::Unreadable { .. } => {
                     // Its chain did not answer: nothing is said of its
                     // members there, and it is read again on the person's word.
+                    // r18-7: said in the core's words, as on the web and iOS
+                    // — the detail is for the log, never drawn.
                     col = col.child(
                         div()
                             .flex()
@@ -903,7 +905,7 @@ impl WalletPage {
                                 div()
                                     .text_size(theme::text_label())
                                     .text_color(theme.fg_subtle)
-                                    .child(crate::ui::prose(detail.clone())),
+                                    .child(crate::ui::prose(unreadable_words(loc, &net))),
                             )
                             .child(
                                 div().flex().child(
@@ -2405,10 +2407,35 @@ pub(crate) fn name_and_rule_line() -> Div {
         .min_w(px(0.))
 }
 
+/// r18-7: a network whose members could not be read, in the core's words
+/// (`settings.unreadableOn`) — never the read's detail (it once drew the
+/// pool's debug text, `Failed { rate_limited: false }`).
+pub(crate) fn unreadable_words(loc: &Loc, network: &str) -> String {
+    words::tv(loc, "settings.unreadableOn", &[("network", network)])
+}
+
 #[cfg(test)]
 mod tests {
     use super::{RECHECK_CAP, RECHECK_FIRST, recheck_after, recheck_step};
     use std::time::{Duration, Instant};
+
+    /// r18-7 (S3): "Current members on Arc Testnet" under a refused Arc drew
+    /// the pool's debug text (`Failed { rate_limited: false }`). It says the
+    /// core's words, naming the network — in English and Chinese.
+    #[test]
+    fn unreadable_members_are_said_in_the_cores_words_never_the_detail() {
+        for tag in ["en", "zh"] {
+            let loc = crate::loc::Loc::for_tag(tag);
+            let line = super::unreadable_words(&loc, "Arc Testnet");
+            assert!(line.contains("Arc Testnet"), "{line}");
+            assert!(!line.contains("home."), "a key, not words: {line}");
+            assert!(!line.contains('{') && !line.contains("Failed"), "{line}");
+        }
+        assert_eq!(
+            super::unreadable_words(&crate::loc::Loc::for_tag("en"), "Arc Testnet"),
+            "Couldn't read its members on Arc Testnet."
+        );
+    }
 
     /// r17 (seen after launch): "Vela couldn't check the Safe contracts on
     /// Arc Testnet yet" stood for a deployed multisig until the person

@@ -193,7 +193,8 @@ struct CoreRoundTests {
         let kinds: [Any] = ["internal", "would_fail", "quote_unavailable", "timeout", "other", chainRead]
         let keys = kinds.map { sendEstimateFailureBodyKey(failure: SendLive.estimateFailureText($0)) }
         #expect(keys == [
-            "componentsUi.gas.reasonInternal", "send.alertEstimateFailedBody", "send.alertEstimateFailedBody",
+            // r18-14 (§32): the relay giving no price is the relay's sentence.
+            "componentsUi.gas.reasonInternal", "send.alertEstimateFailedBody", "send.alertEstimateRelayBody",
             "send.alertEstimateFailedBody", "send.alertEstimateFailedBody", "send.alertEstimateChainDownBody",
         ], "\(keys)")
     }
@@ -209,7 +210,8 @@ struct CoreRoundTests {
         #expect(body(chainRead).contains("Gnosis"))
         #expect(body("internal") == loc.t("componentsUi.gas.reasonInternal"))
         #expect(!body("internal").contains("Gnosis"))
-        #expect(body("quote_unavailable") == loc.t("send.alertEstimateFailedBody"))
+        // r18-14 (§32): the relay gave no price — its own sentence.
+        #expect(body("quote_unavailable") == loc.t("send.alertEstimateRelayBody"))
         #expect(body("other") == loc.t("send.alertEstimateFailedBody"))
         #expect(SendLive.alertText(["type": "estimate_failed", "kind": "internal"], loc: loc).title
                 == loc.t("send.alertEstimateFailedTitle"))

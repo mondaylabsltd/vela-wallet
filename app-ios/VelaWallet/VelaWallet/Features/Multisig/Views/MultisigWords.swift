@@ -531,6 +531,22 @@ struct MsWords {
     /// "Share it again" — the catalog's words for exactly that.
     var createRefused: String { t("settings.shareAgainNote") }
 
+    /// r18-8 (§28, §32): this test build refused to write to the live
+    /// service — the catalog's sentence (`common.testBuild.productionWriteRefused`),
+    /// never "can't be reached", "didn't answer" or "offline".
+    var productionWriteRefused: String { loc.t(productionWriteRefusedKey()) }
+
+    /// The created multisig's `create.refused`, in words: the test build's
+    /// refusal (`production_write_refused`) its own sentence; any other —
+    /// the service answered and did not take it — "Share it again".
+    func createRefused(_ refused: String?) -> String {
+        refused == Self.productionWriteRefusedWord ? productionWriteRefused : createRefused
+    }
+
+    /// The core's word for a write this test build refused (§28): the
+    /// accounts machine's `create.refused`, an outbox entry's `why`.
+    static let productionWriteRefusedWord = "production_write_refused"
+
     /// Why Vela's side is not on the signing relay (`RelayStatus.why`), as
     /// the reason the relay line fills in: the relay's refusal and a pass
     /// not got in the catalog's words (the web's `relayText`), the relay

@@ -74,6 +74,7 @@
 	import { preferences } from '$lib/services/preferences.svelte';
 	import { accountLivesOn, publishExtChains, setExtAccountChains } from '$lib/dapp/core/ext-chains';
 	import { networkSpace } from '$lib/network-space/network-space.svelte';
+	import { showsFiat } from '$lib/network-space/fiat';
 	import { chainName, subscribeNetworks } from '$lib/services/networks';
 	import { ownNodes } from '$lib/services/own-node.svelte';
 	import { reportToast } from '$lib/settings/report-toast.svelte';
@@ -2055,7 +2056,10 @@
 				: balance.view.tokens.find((t) => balanceTokenId(t) === selectedAssetId),
 		refresh: { now: refreshClock, held: refreshHold.held, language: data.locale ?? 'en' },
 		// Spec 105: the testnet space has no total and no worth on a row.
-		noValue: networkSpace.testnet ? (networkSpace.words?.noValue ?? undefined) : undefined,
+		// r18-9: the core's rule (`network_space::shows_fiat`), every surface's.
+		noValue: !showsFiat(networkSpace.current)
+			? (networkSpace.words?.noValue ?? undefined)
+			: undefined,
 		// r13-1: an account of the other space claims nothing of this one.
 		elsewhere:
 			elsewhere && networkSpace.words
@@ -2594,9 +2598,17 @@
 	const rpcRestored = $derived(
 		rpcSaved && rpcDraft === null && rescueRow?.rpc_health?.type === 'ok'
 	);
-	const unreachableModel = $derived(liveUnreachable(balance.view, currency.view, rm));
+	const unreachableModel = $derived(
+		liveUnreachable(balance.view, currency.view, rm, networkSpace.current)
+	);
 	const balanceDetailModel = $derived(
-		liveBalanceDetail(balance.view, currency.view, rm, data.walletMessages.balance.unpriced)
+		liveBalanceDetail(
+			balance.view,
+			currency.view,
+			rm,
+			data.walletMessages.balance.unpriced,
+			networkSpace.current
+		)
 	);
 	const relayerModel = $derived(
 		sendView?.treasury_bootstrap ? liveRelayer(sendView.treasury_bootstrap, rm) : undefined

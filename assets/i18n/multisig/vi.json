@@ -159,6 +159,7 @@
     "feeUnchecked": "Không kiểm tra được giao dịch có chạy được không — bạn vẫn có thể duyệt; Thực thi sẽ kiểm tra lại.",
     "feeUncheckedHeld": "Không kiểm tra được giao dịch có chạy được không — Thực thi sẽ kiểm tra lại.",
     "feeRetry": "Kiểm tra lại",
+    "feeSigning": "Đang ký với mức phí này — phí giữ nguyên cho đến khi bạn xác nhận hoặc huỷ.",
     "feeSetup": "Bao gồm thiết lập một lần trên {{network}} ≈ {{amount}}:",
     "feeSetupPlain": "Bao gồm thiết lập một lần trên {{network}}:",
     "setupMultisig": "triển khai multisig này",

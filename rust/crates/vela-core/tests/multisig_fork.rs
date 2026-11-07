@@ -193,7 +193,10 @@ impl Shell {
                         body,
                     }
                 }
-                Err(detail) => Res::HttpUnreachable { detail },
+                Err(detail) => Res::HttpUnreachable {
+                    detail,
+                    refused: None,
+                },
             },
             Op::Rpc {
                 chain_id,

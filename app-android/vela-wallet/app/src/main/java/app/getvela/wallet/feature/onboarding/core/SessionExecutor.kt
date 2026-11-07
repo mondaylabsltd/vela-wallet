@@ -136,7 +136,12 @@ class SessionExecutor(
                 "waitedMs" to System.currentTimeMillis() - started,
                 "reason" to error.message,
             )
-            SessionShellResult.RegistryLandingUnconfirmed(error.message ?: error.javaClass.simpleName)
+            // r18-8 (§28, §32): a publish this test build refused before it
+            // left says so — the session never asks again by itself.
+            SessionShellResult.RegistryLandingUnconfirmed(
+                error.message ?: error.javaClass.simpleName,
+                refused = true.takeIf { (error as? RegistryFailure)?.refused == true },
+            )
         }
     }
 

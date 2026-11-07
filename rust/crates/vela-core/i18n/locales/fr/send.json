@@ -89,6 +89,7 @@
     "removeRecipient": "Retirer",
     "alertInsufficientBalanceBody": "Le total dépasse votre solde.",
     "alertEstimateChainDownBody": "Impossible de joindre {{chain}} pour calculer les frais de cette transaction. Réessayez dans un instant.",
+    "alertEstimateRelayBody": "Le relais de Vela n’a pas répondu, rien n’a donc été envoyé. Réessayez dans un instant.",
     "alertAccountUnavailableBody": "Impossible de charger la clé du compte nécessaire pour préparer cette transaction. Veuillez réessayer.",
     "recipientPickAria": "Choisir un contact",
     "multiSendNoFundsAfterGas": "Solde insuffisant après la réserve de gas.",

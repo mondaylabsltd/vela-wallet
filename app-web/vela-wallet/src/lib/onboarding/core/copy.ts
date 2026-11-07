@@ -246,8 +246,11 @@ export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 					// S4 (r8): "offline" only when the device says it is — a fetch
 					// the browser refused (CORS, a 404 page) is the index not
 					// answering, never "This device is offline".
-					message:
-						kind.local && deviceOffline()
+					// r18-8 (§28, §32): the core's own sentence first — this test
+					// build refused to write to the live index — never the network's.
+					message: kind.words_key
+						? t(kind.words_key)
+						: kind.local && deviceOffline()
 							? t('onboarding.create.keyKeptBodyNetwork')
 							: t('onboarding.create.keyKeptBodyIndex')
 				};

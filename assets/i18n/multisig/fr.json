@@ -161,6 +161,7 @@
     "feeUnchecked": "Impossible de vérifier si elle passerait — vous pouvez quand même approuver ; Exécuter vérifie à nouveau.",
     "feeUncheckedHeld": "Impossible de vérifier si elle passerait — Exécuter vérifie à nouveau.",
     "feeRetry": "Vérifier à nouveau",
+    "feeSigning": "Signature à ces frais : ils restent fixes jusqu’à ce que vous confirmiez ou annuliez.",
     "feeSetup": "Comprend une mise en place unique sur {{network}} ≈ {{amount}} :",
     "feeSetupPlain": "Comprend une mise en place unique sur {{network}} :",
     "setupMultisig": "déployer ce multisig",

@@ -15,6 +15,50 @@ with no "anyway" for this device's multisigs and for any Safe whose
 again at submit; independently on the signing page (2c649b76). Proved on the
 fork harness (`multisig_fork.rs` `parent::…`).
 
+## R18-11 (open, S4, 2026-11-07, desktop) — a site's request to the connected multisig flashes a "passkey prompt was closed" sheet first
+
+**Platform:** desktop. **Symptom:** a request arriving as the multisig (in-app browser, a site connected to a multisig) shows a sheet that says the passkey prompt was closed, with live Decline / Try again, for 0.7–2 s before the parent-Safe refusal replaces it (Round 18, desk-2). Nothing is signed; the refusal and the site's `-32603` are right. **Severity:** S4. Not fixed in Round 19 (scope frozen).
+
+## R18-12 (open, S4, 2026-11-07, desktop) — after a multisig's parent refusal the tab's banner blames the relay
+
+**Platform:** desktop. **Symptom:** after a connected multisig's request is refused in the parent-Safe words, the tab's status banner says "Vela's relay couldn't take it · eth_sendTransaction" — the Vela-account case says "Vela refused this request" (Round 18, desk-3, shot desktop-61). **Severity:** S4.
+
+## R18-15 (open, S4, 2026-11-07, Android) — the deep4 and delegate member sheets have no Reject
+
+**Platform:** Android. **Symptom:** a member's sheet for a transaction Vela refuses to sign (deep4, delegate) offers no Reject, where the web, iOS, desktop and the outside page (r17, `can_reject` on Blocked) do. **Severity:** S4.
+
+## R18-16 (open, S4, 2026-11-07, Android) — "Executing…" over an "Executed" body after an execution
+
+**Platform:** Android. **Symptom:** for about 2.2 s after an execution lands, the chip says "Executing…" over a body that already says "Executed", with a transient "isn't recorded" line (r17-6's family). **Severity:** S4.
+
+## R18-17 (open, S4, 2026-11-07, Android) — after a locale change an "Opening the transaction…" sheet never resolves
+
+**Platform:** Android. **Symptom:** a proposal sheet opened after switching the app's language stays on "Opening the transaction…" and never shows the transaction. **Severity:** S4.
+
+## R18-19 (open, S4, 2026-11-07, iOS) — the executing member's fee has no History row
+
+**Platform:** iOS. **Symptom:** the member who executed a multisig transaction paid its network fee (B 0.248201775, A 0.12 in Round 18), but that member's own History shows no row for it — only "+0.5 Received", still an hour later. **Severity:** S4.
+
+## R18-20 (open, S4, 2026-11-07, iOS, web) — "Couldn't check whether it would run" lingers after the network recovers
+
+**Platform:** iOS, web. **Symptom:** after an outage lifts and one Try again recovers the review, the fee line keeps "Couldn't check whether it would run…" for 23 s on iOS and 7–28 s on the web before the priced line returns. No "… anyway" is drawn meanwhile. **Severity:** S4.
+
+## R18-21 (open, S4, 2026-11-07, iOS, Android) — a refusal aimed at the connected multisig's own address offers a Try again that can't help
+
+**Platform:** iOS, Android. **Symptom:** a site's request refused because it targets the connected multisig's own address shows Try again, which can only meet the same refusal. **Severity:** S4. Related to the §31 open item below (the self-call rule for a connected multisig's own address).
+
+## R18-22 (open, S4, 2026-11-07, desktop, dev-only) — a parallel-space keyset replaced an existing fixture account
+
+**Platform:** desktop (dev-fixtures builds only). **Symptom:** entering the parallel space with a keyset re-created a fixture account over an existing one in the profile, instead of refusing or adding beside it. Release builds have no parallel space. **Severity:** S4.
+
+## SEC-PARENT-2 (open, S4, 2026-11-07, every platform; §31 left open) — a connected multisig's own address is not held to the self-call rule
+
+**Platform:** every wallet surface. **Symptom:** a site connected to a multisig is held to the parent-Safe rule (§31), but not to the self-call list for the multisig's own address: a site may propose an owner, threshold or module change of the multisig itself. Each such request is still a proposal every member reviews before it can run (the review names the member change), so nothing is signed or executed by the site alone. **Severity:** S4 (recorded in §31 "Left open").
+
+## SEC-PARENT-3 (open, S4, 2026-11-07, every platform; §31 left open) — an unlisted Safe's ownership answer comes from one RPC
+
+**Platform:** every wallet surface. **Symptom:** for a Safe that is not on this device's multisig list, whether the account owns it is one `isOwner(account)` `eth_call` answered by the request chain's RPC pool; a lying or compromised node answering `false` would clear the request (a Safe on the list never depends on the read; a node that fails or answers junk refuses "couldn't check"). The signing page stays stricter (it refuses these shapes on any Safe but the account). **Severity:** S4 (recorded in §31 "Left open").
+
 ## ANDROID-1 (open, 2026-09-12, spec 047) — the parallel-space flag was found off at 047's first launch
 
 **Symptom:** after 046's last device run (badge on, fixture account active), 047's first

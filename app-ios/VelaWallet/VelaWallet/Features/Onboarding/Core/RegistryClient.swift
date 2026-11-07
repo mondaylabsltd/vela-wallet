@@ -21,6 +21,9 @@ import VelaCore
 struct RegistryFailure: Error {
     let message: String
     let network: Bool
+    /// r18-8 (§28, §32): this test build's guard refused the write to the
+    /// live index before it left — neither the index nor the network.
+    var refused = false
 }
 
 struct GroupChallenge {
@@ -591,7 +594,7 @@ actor RegistryClient {
             // §28: this test build would not ask the live index — the index
             // did not fail, and the network did not either.
             if ProductionWriteRefused.matches(error) {
-                throw RegistryFailure(message: "\(label): \(error.localizedDescription)", network: false)
+                throw RegistryFailure(message: "\(label): \(error.localizedDescription)", network: false, refused: true)
             }
             #endif
             // The request never arrived. This is the ONE line that separates the
