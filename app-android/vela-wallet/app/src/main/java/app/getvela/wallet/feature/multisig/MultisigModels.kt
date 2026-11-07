@@ -302,6 +302,9 @@ class MsProposalModel(
         get() {
             if (!item.unsent) return false
             val entry = outboxEntry ?: return true
+            // r18-8 (§32): refused by this test build — sending it again is
+            // refused again; the way on is a local service (iOS parity).
+            if (entry["why"].str == "production_write_refused") return false
             return !outboxSending && entry["retryAt"].long == null
         }
 

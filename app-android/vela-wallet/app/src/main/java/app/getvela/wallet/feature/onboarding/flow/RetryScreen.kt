@@ -95,13 +95,18 @@ fun ColumnScope.RetryScreen(
         Spacer(modifier = Modifier.height(VelaSpacing.xl3))
     }
 
-    VelaPrimaryButton(
-        text = strings.t(I18nKeys.Create.RETRY_UPLOAD_BTN),
-        onClick = onRetry,
-        loading = busy,
-        modifier = Modifier.fillMaxWidth(),
-    )
-    Spacer(modifier = Modifier.height(VelaSpacing.lg))
+    // r18-8 (core §32): a publish this test build refused would be refused
+    // again — no Retry upload; the way on is pointing the index at a local
+    // one (below), as iOS draws it.
+    if (sentenceKey == null) {
+        VelaPrimaryButton(
+            text = strings.t(I18nKeys.Create.RETRY_UPLOAD_BTN),
+            onClick = onRetry,
+            loading = busy,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(modifier = Modifier.height(VelaSpacing.lg))
+    }
     VelaSecondaryButton(
         text = strings.t(I18nKeys.Flow.EDIT_INDEX_ENDPOINT),
         onClick = onEditEndpoint,
