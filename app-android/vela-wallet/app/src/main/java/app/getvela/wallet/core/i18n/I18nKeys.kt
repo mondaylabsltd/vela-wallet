@@ -952,6 +952,11 @@ object I18nKeys {
         const val SUBMIT_SLOW_BUSY = "send.submitSlowBusy"
         const val QUEUED_BEHIND_TAB = "send.queuedBehindTab"
         const val MAX_MOVED = "send.maxMoved"
+        /** §34: the line under the fee while a press is out (`SendView.fee_signing_key`). */
+        const val FEE_SIGNING = "send.feeSigning"
+        /** §34: the press signed nothing — the fee moved (`SendView.fee_moved`). */
+        const val FEE_MOVED = "send.feeMoved"
+        const val FEE_MOVED_MAX = "send.feeMovedMax"
         const val PASSKEY_TIMED_OUT = "componentsUi.signing.passkeyTimedOut"
         const val PASSKEY_CLOSED = "componentsUi.signing.passkeyClosed"
         const val RECIPIENT_CHECKSUM = "send.recipientChecksum"

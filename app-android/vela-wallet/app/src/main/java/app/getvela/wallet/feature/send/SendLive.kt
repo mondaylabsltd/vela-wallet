@@ -1440,7 +1440,10 @@ object SendLive {
                         view.fee != null -> app.getvela.wallet.feature.send.core.ConfirmFeeRow.prefix() + feeLine
                         else -> s.t(I18nKeys.Flows.FEE_ESTIMATING)
                     },
-                    note = rowFailure?.reason_key?.let { s.t(it, mapOf("chain" to chain)) },
+                    note = rowFailure?.reason_key?.let { s.t(it, mapOf("chain" to chain)) }
+                        // §34: the fee and amount drawn are the ones being
+                        // signed, frozen until the signature, a cancel or a stop.
+                        ?: view.fee_signing_key?.let { s.t(it) },
                     // PR 2 polish: the line that shows the failure is its
                     // control, as the form's row is — "Tap to retry" asks
                     // again, "Pay with another coin" opens the coins — so the
@@ -1505,7 +1508,7 @@ object SendLive {
                 else -> null
             },
             // send-11: a passkey that signed nothing is said calmly too.
-            noticeCalm = notSent(view) || wentFirst(view) || passkeyNote(view, s) != null,
+            noticeCalm = notSent(view) || wentFirst(view) || passkeyNote(view, s) != null || feeMovedNote(view, ctx) != null,
             noticeFund = fundAddress(view, ctx),
             noticeReport = reportLabel(view, ctx),
             // The treasury pause has two exits (spec 045 US4): the core's retry,
@@ -1577,9 +1580,31 @@ object SendLive {
     internal fun wentFirst(view: SendView): Boolean =
         view.tx_error == SendTxErrorKey.NonceUsed && view.relay_unreachable == null && view.treasury_bootstrap == null
 
-    /** r7-6: the confirmed operation is out to be signed — its passkey, its page, its POST. */
+    /**
+     * r7-6: the confirmed operation is out to be signed — its passkey, its
+     * page, its POST. §34: and from the press itself, while it prepares — the
+     * core then serves the fee the press was made on (`fee_signing_key`).
+     */
     internal fun outToSign(view: SendView): Boolean =
-        view.tx_status == SendTxStatus.Signing || view.tx_status == SendTxStatus.Submitting
+        view.tx_status == SendTxStatus.Signing || view.tx_status == SendTxStatus.Submitting ||
+            view.fee_signing_key != null
+
+    /**
+     * §34: the last press signed nothing — the quote at the signature was not
+     * the one shown (`SendView.fee_moved`). Said beside the confirm in the
+     * core's words, a Max's new figure with them; the page draws the new
+     * figures, and the next press signs exactly those.
+     */
+    internal fun feeMovedNote(view: SendView, ctx: Context): String? = view.fee_moved?.let { moved ->
+        ctx.strings.t(
+            moved.key.ifEmpty { if (moved.max != null) I18nKeys.Flows.FEE_MOVED_MAX else I18nKeys.Flows.FEE_MOVED },
+            mapOf(
+                "from" to (moved.max?.from?.let(::coinText) ?: ""),
+                "to" to (moved.max?.to?.let(::coinText) ?: ""),
+                "symbol" to (view.selected_token?.symbol ?: ""),
+            ),
+        )
+    }
 
     /**
      * r5reg-3 (the web's `maxMovedNote`): a Max filled again from a newer fee
@@ -1674,7 +1699,7 @@ object SendLive {
             SendTxErrorKey.PageMismatch -> s.t("componentsUi.signing.trustedSignerMismatch")
             SendTxErrorKey.PageRefused -> s.t("componentsUi.signing.trustedSignerRefused")
             SendTxErrorKey.PageNotOpened -> s.t("componentsUi.signing.integrity.couldNotCheck")
-            null -> if (view.tx_status == SendTxStatus.Signing) s.t(I18nKeys.Flows.TX_PREPARING_BIOMETRIC) else passkeyNote(view, s)
+            null -> if (view.tx_status == SendTxStatus.Signing) s.t(I18nKeys.Flows.TX_PREPARING_BIOMETRIC) else feeMovedNote(view, ctx) ?: passkeyNote(view, s)
         }
     }
 
