@@ -37,7 +37,7 @@ const { proposalsHost } = await import('./proposals-host.svelte');
 const { holdDappRequest } = await import('./dapp-requests.svelte');
 const { multisigUi } = await import('../core/ui.svelte');
 
-function deps(): MultisigShellDeps {
+function deps(over: Partial<MultisigShellDeps> = {}): MultisigShellDeps {
 	const map = new Map<string, string>();
 	return {
 		// The mailbox is out of reach: a draft cannot take a number.
@@ -64,7 +64,8 @@ function deps(): MultisigShellDeps {
 			close: async () => {}
 		},
 		wallet: async () => null,
-		notice: () => {}
+		notice: () => {},
+		...over
 	};
 }
 
@@ -82,16 +83,16 @@ const settled = async () => {
 	for (let i = 0; i < 50; i += 1) await new Promise((r) => setTimeout(r, 0));
 };
 
-async function boot() {
+async function boot(over: Partial<MultisigShellDeps> = {}, list: unknown[] = []) {
 	await proposalsHost.boot({
-		deps: deps(),
+		deps: deps(over),
 		load: async () => {},
 		facts: () => ({
 			serviceUrl: SERVICE,
 			accounts: [{ address: ME, name: 'Me', keys: [], route: 'vela' }],
 			networks: [100]
 		}),
-		multisigs: () => ({ accounts: [] })
+		multisigs: () => ({ accounts: [account, ...list] as never })
 	});
 }
 
@@ -180,5 +181,110 @@ describe("a dApp's request to a multisig, held by the machine", () => {
 		expect(hold.closing()).toEqual({
 			error: { code: 4001, message: 'User rejected the request' }
 		});
+	});
+});
+
+/**
+ * §31: a site connected to this multisig may never make it act for a Safe it
+ * owns — another multisig on this device (refused at once), or one whose
+ * `isOwner(this multisig)` reads true, or cannot be read (refused after the
+ * machine's own read). Refused like a message (dapp-7: said first, answered
+ * once read), with `data.reason: "parent_safe"` and the key it is said in.
+ */
+describe('§31: a request to act for a Safe this multisig owns', () => {
+	const PARENT = '0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe';
+	const UNKNOWN = '0x7777777777777777777777777777777777777777';
+	const approveHash = '0xd4d9bdcd' + 'cd'.repeat(32);
+	const TRUE = '0x' + '0'.repeat(63) + '1';
+	const parentRow = { ...(account as object), address: PARENT, owners: [SAFE] };
+
+	function toSafe(to: string) {
+		const h = handOff('eth_sendTransaction');
+		h.request.params = [{ from: SAFE, to, value: '0x0', data: approveHash }];
+		return h;
+	}
+
+	it('another multisig on this device: refused at once, no sheet, answered -32603 once read', async () => {
+		const reads: unknown[] = [];
+		await boot(
+			{
+				rpc: async (chainId, method, params) => {
+					reads.push({ chainId, method, params });
+					return { error: { code: -32000, message: 'no node here' } };
+				}
+			},
+			[parentRow]
+		);
+		const h = toSafe(PARENT);
+		const hold = await holdDappRequest(h.request);
+		await settled();
+		expect(h.refused).toEqual([
+			{
+				code: -32603,
+				message: expect.stringContaining('approveHash on ' + PARENT),
+				data: {
+					reason: 'parent_safe',
+					why: 'member',
+					safe: PARENT,
+					function: 'approveHash',
+					key: 'componentsUi.signing.parentSafeBlocked'
+				}
+			}
+		]);
+		expect(reads.filter((r) => (r as { method: string }).method === 'eth_call')).toEqual([]);
+		expect(multisigUi.sheet).toBeNull();
+		expect(h.answers).toEqual([]);
+		hold.leave();
+		expect(h.answers).toEqual([{ error: h.refused[0] }]);
+	});
+
+	it('a Safe not on the list whose isOwner reads true: refused `owner`, its sheet taken down', async () => {
+		const calls: unknown[] = [];
+		await boot({
+			rpc: async (chainId, method, params) => {
+				calls.push({ chainId, method, params });
+				return method === 'eth_call'
+					? { result: TRUE }
+					: { error: { code: -32000, message: 'no node here' } };
+			}
+		});
+		const h = toSafe(UNKNOWN);
+		await holdDappRequest(h.request);
+		await settled();
+		expect(calls).toContainEqual({
+			chainId: 100,
+			method: 'eth_call',
+			params: [{ to: UNKNOWN, data: '0x2f54bf6e' + SAFE.slice(2).padStart(64, '0') }, 'latest']
+		});
+		expect(h.refused).toMatchObject([
+			{
+				code: -32603,
+				data: { reason: 'parent_safe', why: 'owner', safe: UNKNOWN, function: 'approveHash' }
+			}
+		]);
+		expect(multisigUi.sheet).toBeNull();
+	});
+
+	it('a Safe whose ownership cannot be read: refused `unchecked`, in the unchecked words', async () => {
+		await boot({
+			rpc: async () => {
+				throw new Error('no node answered');
+			}
+		});
+		const h = toSafe(UNKNOWN);
+		await holdDappRequest(h.request);
+		await settled();
+		expect(h.refused).toMatchObject([
+			{
+				code: -32603,
+				data: {
+					reason: 'parent_safe',
+					why: 'unchecked',
+					safe: UNKNOWN,
+					key: 'componentsUi.signing.parentSafeUnchecked'
+				}
+			}
+		]);
+		expect(multisigUi.sheet).toBeNull();
 	});
 });

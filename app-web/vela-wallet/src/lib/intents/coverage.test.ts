@@ -182,6 +182,7 @@ const FUNCTIONS: Record<string, Place> = {
 			"answering a dApp's request in the extension's window: the web wallet's agent has no browser (spec 107 E7)"
 	},
 	'dapp/add-network.addNetworkCard': { view: 'what the sheet draws' },
+	'dapp/multisig-refusal.multisigRefusalWords': { view: 'what the sheet draws' },
 	'dapp/panel-surface.isPanelDocument': { machine: 'a read' },
 	'dapp/panel-surface.panelNeedsWallet': { machine: 'a read' },
 	'dapp/transport.inExtension': { machine: 'a read' },
@@ -296,6 +297,7 @@ const CALLED: Record<string, Place> = {
 	'signRequest.boot': { machine: 'boot' },
 	'signRequest.syncNetworks': { machine: 'the networks' },
 	'signRequest.syncAccounts': { machine: 'the accounts' },
+	'signRequest.syncMultisigs': { machine: 'the device’s multisigs (§31)' },
 	'signRequest.registerTransport': { machine: 'the dApp’s connection' },
 	'currency.boot': { machine: 'boot' },
 	'preferences.boot': { machine: 'boot' },

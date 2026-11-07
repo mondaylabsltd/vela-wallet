@@ -1080,6 +1080,9 @@ export function resolveRequestMessages(locale: Locale): RequestMessages {
 		multisigNoMessagesTitle: k('connect.browser.multisigNoMessagesTitle'),
 		multisigNoMessagesBody: k('connect.browser.multisigNoMessagesBody'),
 		multisigConnectNote: k('connect.browser.multisigConnectNote'),
+		parentSafeTitle: k('componentsUi.signing.selfCallBlockedTitle'),
+		parentSafeBlocked: k('componentsUi.signing.parentSafeBlocked'),
+		parentSafeUnchecked: k('componentsUi.signing.parentSafeUnchecked'),
 		spaceMoved: k('connect.browser.spaceMoved'),
 		gotIt: k('common.gotIt'),
 		addNetwork: {
@@ -1497,6 +1500,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		selfCallBlockedBody: k('componentsUi.signing.selfCallBlockedBody'),
 		selfCallBlockedLegBody: k('componentsUi.signing.selfCallBlockedLegBody'),
 		selfCallBlockedSafeTx: k('componentsUi.signing.selfCallBlockedSafeTx'),
+		parentSafeBlocked: k('componentsUi.signing.parentSafeBlocked'),
+		parentSafeUnchecked: k('componentsUi.signing.parentSafeUnchecked'),
 		invalidAmount: k('componentsUi.signingApprove.invalidAmount'),
 		loading: k('componentsUi.signing.loading'),
 		summarySend: k('componentsUi.signing.summarySend'),

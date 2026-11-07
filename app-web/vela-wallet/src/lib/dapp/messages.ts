@@ -39,6 +39,15 @@ export interface RequestMessages {
 	multisigNoMessagesBody: string;
 	multisigConnectNote: string;
 	/**
+	 * §31: a site asked a multisig to act for a Safe it owns (the core's
+	 * refusal, `data.reason: "parent_safe"`) — said in the signing sheet's own
+	 * words: its refusal title, and the sentence `data.key` names (templates —
+	 * '{{function}}', '{{safe}}').
+	 */
+	parentSafeTitle: string;
+	parentSafeBlocked: string;
+	parentSafeUnchecked: string;
+	/**
 	 * r10 follow-up (template — '{{network}}'): a network-space switch moved
 	 * the site since its last request; the consent says so once.
 	 */
