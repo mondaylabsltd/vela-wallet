@@ -650,6 +650,11 @@ final class MultisigHub {
     /// Whether `address` is a multisig on this device (a site granted it).
     func isMultisig(_ address: String) -> Bool { accountsView.row(address) != nil }
 
+    /// §31: every multisig on this device — the signing sheet's
+    /// `multisigs_changed`, so a site's request that would make a Vela
+    /// account act for one of them is refused at once.
+    var multisigAddresses: [String] { accountsView.accounts.map(\.account.address) }
+
     /// A site's request to a multisig (`eth_sendTransaction`,
     /// `wallet_sendCalls`, …): the machine decides everything — refused (a
     /// message), drafted with its review, proposed on the person's word, held

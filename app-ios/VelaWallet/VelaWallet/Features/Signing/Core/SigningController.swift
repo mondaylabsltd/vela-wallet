@@ -45,7 +45,8 @@
 //
 //  ## The order the machine is told things
 //
-//  `networks_changed` and `accounts_changed` BEFORE `request_arrived`. A
+//  `networks_changed`, `accounts_changed` and `multisigs_changed` (§31)
+//  BEFORE `request_arrived`. A
 //  request that names a chain nobody vouched for is refused 4902 — which is
 //  correct, and looks exactly like a broken chain when the reason is that the
 //  shell spoke out of order.
@@ -54,6 +55,26 @@
 import Foundation
 import Observation
 import VelaCore
+
+extension SigningController.Incoming {
+    /// A page's request the in-app browser's core forwarded (spec 070), as the
+    /// sheet takes it: the browser's facts — the tab, the site's chain, the
+    /// address the site was shown — never the page's claims. The one place a
+    /// forward becomes a request (`RootView.openBrowserSigning`, and the
+    /// tests that drive that entry).
+    init(browser forward: DbrForward) {
+        self.init(
+            id: forward.id,
+            method: forward.method,
+            paramsJson: forward.paramsJson,
+            origin: forward.origin,
+            transportId: forward.tab,
+            chainId: forward.chainId,
+            grantedAddress: forward.grantedAddress,
+            spaceNote: forward.spaceNote
+        )
+    }
+}
 
 extension SignRequestCore: CoreBridge {}
 extension ClearSigningCore: CoreBridge {}
@@ -104,6 +125,14 @@ final class SigningController {
         var recordsPersisted: () -> Void = {}
         var nativeSymbol: (_ chainId: Int) -> String = { _ in "" }
         var knownChains: () -> [Int] = { [] }
+        /// §31: every multisig on this device (the multisig accounts list,
+        /// any member) — told to the core with the accounts, so a request
+        /// that would act for one of them is refused at once. Any other Safe
+        /// a request would act for is read on chain first (`read_safe_owner`).
+        var knownMultisigs: () -> [String] = { [] }
+        /// §31: one `eth_call`, its answer as it came; `nil` = through the
+        /// pool. A test seam (`SignExecutor.Ports.ethCall`).
+        var ethCall: (@MainActor (_ chainId: Int, _ params: [Any]) async -> RpcOutcome)? = nil
         /// The descriptor endpoint base.
         var dataBase: () -> String = { "" }
         /// The simulated deltas, to the `token_trust` machine that judges them
@@ -361,7 +390,7 @@ final class SigningController {
         )
 
         self.spine = spine
-        let signExecutor = SignExecutor(spine: spine, relay: relay, store: store, timers: timers)
+        let signExecutor = SignExecutor(spine: spine, relay: relay, store: store, pool: pool, timers: timers)
         self.signExecutor = signExecutor
         let clearExecutor = ClearExecutor(dataBase: ports.dataBase, pool: pool)
         let guardExecutor = GuardExecutor(pool: pool)
@@ -458,7 +487,8 @@ final class SigningController {
                 guard let request = self?.request else { return false }
                 return !request.firstParty
             },
-            trustedSignerEnded: { [weak self] notice in self?.trustedSignerNotice = notice }
+            trustedSignerEnded: { [weak self] notice in self?.trustedSignerNotice = notice },
+            ethCall: ports.ethCall
         )
     }
 
@@ -488,6 +518,9 @@ final class SigningController {
             "accounts": [["address": wallet.address, "credential_id": wallet.credentialId]],
             "active_index": 0,
         ])
+        // §31: this device's multisigs, with the accounts and before the
+        // request — one of them named by it is refused before anything else.
+        multisigsChanged(ports.knownMultisigs())
         dispatchSign([
             "type": "request_arrived",
             "id": incoming.id,
@@ -883,6 +916,13 @@ final class SigningController {
     }
 
     func reject() { dispatchSign(["type": "reject_tapped"]) }
+
+    /// §31: the device's multisig list changed (one added, imported, found
+    /// as a member, removed) — told again, whole. A request on the sheet that
+    /// now names one is refused by the core.
+    func multisigsChanged(_ addresses: [String]) {
+        dispatchSign(["type": "multisigs_changed", "addresses": addresses])
+    }
     func dismiss() { dispatchSign(["type": "dismiss_tapped"]) }
     /// Spec 096 F8: Try again on a failure that sent nothing — the core takes
     /// the request back to review, still unanswered.

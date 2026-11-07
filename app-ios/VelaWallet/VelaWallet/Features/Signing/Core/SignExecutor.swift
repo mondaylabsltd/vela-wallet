@@ -61,6 +61,16 @@
 //  has gone too — the core tells a stale one apart. There is no other clock
 //  in that flow, here or in the controller.
 //
+//  ## Whether this account owns a Safe is the chain's answer (§31)
+//
+//  `read_safe_owner` is one `eth_call` of the core's own `isOwner(account)`
+//  calldata to the Safe a request would act for, through the app's pool —
+//  the same endpoints, bans and timeouts as every other read — answered as
+//  it came: the node's `result` verbatim, its JSON-RPC error, or
+//  `unreachable` when no node answered in time. Nothing here reads the
+//  answer: whether the request is refused is the core's
+//  (`parent_safe_guard`), and an answer it cannot read refuses it.
+//
 
 import Foundation
 import VelaCore
@@ -71,7 +81,7 @@ final class SignExecutor {
     static let operations = [
         "send_response", "check_bundler_funding", "attempt_sponsorship",
         "sign_and_submit", "persist_record", "update_record", "switch_active_account",
-        "clear_to_post", "delete_record", "sim_verdict_timer",
+        "clear_to_post", "delete_record", "sim_verdict_timer", "read_safe_owner",
     ]
 
     struct Ports {
@@ -125,9 +135,22 @@ final class SignExecutor {
         /// cancelled ceremony — the request stays open and may be signed
         /// another way — and the sheet says which sentence applies.
         var trustedSignerEnded: (TrustedSignerNotice) -> Void = { _ in }
+        /// §31: one `eth_call` (`[{to, data}, "latest"]`) on `chainId`, its
+        /// answer as it came; `nil` = through the pool. A test seam — the
+        /// app's reads go through the pool.
+        var ethCall: (@MainActor (_ chainId: Int, _ params: [Any]) async -> RpcOutcome)? = nil
     }
 
     private let spine: UserOpSpine
+    /// The app's one pool (issue #483), for `read_safe_owner`. `nil` (a test
+    /// that never reads a Safe): no node answers.
+    private let pool: RpcPool?
+    /// How long a `read_safe_owner` may take, the whole sweep: each POST is
+    /// already bounded by the pool's read timeout (`CoreHTTP.Timeout.rpcRead`),
+    /// and this bounds the endpoints it tries after one another — the confirm
+    /// stays shut while a read is out, so a read never hangs. A test seam.
+    private let ownerReadSeconds: Double
+    static let ownerReadDefaultSeconds = CoreHTTP.Timeout.rpcRead * 2
     private let relay: RelayClient
     private let store: VelaStore
     var ports: Ports
@@ -170,15 +193,19 @@ final class SignExecutor {
         spine: UserOpSpine,
         relay: RelayClient,
         store: VelaStore,
+        pool: RpcPool? = nil,
         ports: Ports = Ports(),
         receiptWaitMs: @escaping (_ elapsedMs: Double) -> Double = { dappReceiptWaitMs(elapsedMs: $0) },
         receiptPollMs: Double = 3_000,
         clearanceWaitMs: Double? = Double(userOpWriteAheadWaitMs()),
-        timers: FeeStore.Timers = .wallClock
+        timers: FeeStore.Timers = .wallClock,
+        ownerReadSeconds: Double = SignExecutor.ownerReadDefaultSeconds
     ) {
         self.spine = spine
         self.relay = relay
         self.store = store
+        self.pool = pool
+        self.ownerReadSeconds = ownerReadSeconds
         self.ports = ports
         self.receiptWaitMs = receiptWaitMs
         self.receiptPollMs = receiptPollMs
@@ -286,6 +313,23 @@ final class SignExecutor {
             }
             return Self.simVerdictTimerFired(operation)
 
+        // §31: whether the signer owns the Safe this request would act for —
+        // read, never judged. Echoes `id`, `chain_id` and `safe` as given.
+        case "read_safe_owner":
+            let chainId = (operation["chain_id"] as? NSNumber)?.intValue ?? 0
+            let params: [Any] = [
+                ["to": operation["safe"] as? String ?? "", "data": operation["data"] as? String ?? "0x"],
+                "latest",
+            ]
+            let call = ports.ethCall
+            let pool = self.pool
+            let outcome = await Self.within(seconds: ownerReadSeconds) { () async -> RpcOutcome in
+                if let call { return await call(chainId, params) }
+                guard let pool else { return .failed(rateLimited: false) }
+                return await pool.call(chainId: chainId, method: "eth_call", params: params)
+            }
+            return Self.safeOwnerRead(operation, answer: Self.safeOwnerAnswer(outcome))
+
         default:
             VelaLog.failure(.sign, kind: "unhandled_operation", "\(operation["type"] ?? "?")")
             return Self.neutralAnswer(operation)
@@ -312,7 +356,46 @@ final class SignExecutor {
         // POSTed (RJ1).
         case "clear_to_post": return CoreJSON.string(["type": "responded"])
         case simVerdictTimer: return simVerdictTimerFired(operation)
+        // Nobody read it: the core refuses the request ("couldn't check").
+        case "read_safe_owner":
+            return safeOwnerRead(operation, answer: ["type": "unreachable", "detail": "unanswered"])
         default: return CoreJSON.string(["type": "account_switched"])
+        }
+    }
+
+    /// `read_safe_owner`'s answer (`SignShellResult::SafeOwnerRead`): the
+    /// operation's own `id`, `chain_id` and `safe`, and what the read came
+    /// back as.
+    static func safeOwnerRead(_ operation: [String: Any], answer: [String: Any]) -> String {
+        CoreJSON.string([
+            "type": "safe_owner_read",
+            "id": operation["id"] as? String ?? "",
+            "chain_id": (operation["chain_id"] as? NSNumber)?.intValue ?? 0,
+            "safe": operation["safe"] as? String ?? "",
+            "answer": answer,
+        ])
+    }
+
+    /// The pool's outcome as the core's `SafeOwnerAnswer`, decided nothing
+    /// about: the node's `result` string verbatim (`returned`), the node's
+    /// JSON-RPC error (`rpc_error`), or no answer at all (`unreachable` — every
+    /// endpoint failed, or the read ran out of time: `nil`). A `result` that is
+    /// not a string is no `eth_call` answer, and reads as none.
+    static func safeOwnerAnswer(_ outcome: RpcOutcome?) -> [String: Any] {
+        switch outcome {
+        case .ok(let body)?:
+            guard let data = body as? String else {
+                return ["type": "unreachable", "detail": "the node's result was not a string"]
+            }
+            return ["type": "returned", "data": data]
+        case .rpcError(let code, let message)?:
+            return ["type": "rpc_error", "code": code.map { $0 as Any } ?? NSNull(), "message": message]
+        case .failed(let rateLimited)?:
+            return ["type": "unreachable", "detail": rateLimited ? "rate limited" : "no node answered"]
+        case .rangeCap?:
+            return ["type": "unreachable", "detail": "no node answered"]
+        case nil:
+            return ["type": "unreachable", "detail": "timed out"]
         }
     }
 
