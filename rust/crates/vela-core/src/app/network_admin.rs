@@ -189,15 +189,16 @@ f989ef9bfaae0fee03c36625e88eae99806a879d813411f876e7e03a2ffd8314";
 /// The wizard's search debounce (SettingsScreen.tsx:606).
 pub const SEARCH_DEBOUNCE_MS: u32 = 300;
 
-// `DEFAULT_SERVICE_ENDPOINTS` (models/types.ts:317-324).
-pub const DEFAULT_ETHEREUM_DATA_URL: &str = "https://ethereum-data.getvela.app";
-pub const DEFAULT_PASSKEY_INDEX_URL: &str = "https://p256-index-v2.getvela.app";
-pub const DEFAULT_BUNDLER_SERVICE_URL: &str = "https://vela-relay-cf.getvela.app";
-pub const DEFAULT_FIAT_RATES_URL: &str = "https://vela-currency.getvela.app/v2/rates?base=USD";
+// `DEFAULT_SERVICE_ENDPOINTS` (models/types.ts:317-324) — names kept, the
+// values are `crate::service_defaults`'s, the one spelling (§28).
+pub const DEFAULT_ETHEREUM_DATA_URL: &str = crate::service_defaults::ETHEREUM_DATA_URL;
+pub const DEFAULT_PASSKEY_INDEX_URL: &str = crate::service_defaults::PASSKEY_INDEX_URL;
+pub const DEFAULT_BUNDLER_SERVICE_URL: &str = crate::service_defaults::BUNDLER_SERVICE_URL;
+pub const DEFAULT_FIAT_RATES_URL: &str = crate::service_defaults::FIAT_RATES_URL;
 /// The multisig service (the Safe Genesis Registry's API): where a multisig's
 /// genesis is recorded and its proposals are shared. A shell with multisig
 /// accounts only ([`NetShellResult::StoreLoaded`]'s `multisig_service`).
-pub const DEFAULT_GENESIS_SERVICE_URL: &str = "https://safe-genesis.getvela.app";
+pub const DEFAULT_GENESIS_SERVICE_URL: &str = crate::service_defaults::GENESIS_SERVICE_URL;
 
 /// The curated public RPCs of the built-in networks — the pool's `public`
 /// tier: below a person's own endpoint, a provider key and the network's

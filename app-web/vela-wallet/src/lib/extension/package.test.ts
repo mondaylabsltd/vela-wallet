@@ -264,6 +264,20 @@ describe('the development package', () => {
 	it('keeps the parallel space the e2e enters through', () => {
 		expect(existsSync(join(DIST, 'en/parallel.html'))).toBe(true);
 	});
+
+	it('is marked a test build, which never writes to production (§28)', () => {
+		const marker = JSON.parse(readFileSync(join(DIST, 'vela-test-build.json'), 'utf8'));
+		expect(marker.testBuild).toBe(true);
+	});
+});
+
+describe.each([
+	['release', RELEASE_DIST],
+	['store', STORE_DIST]
+])('the %s package (§28)', (_name, dist) => {
+	it('carries no test-build marker: a release build is unaffected', () => {
+		expect(existsSync(join(dist, 'vela-test-build.json'))).toBe(false);
+	});
 });
 
 /** Developer pages: the parallel space, a gallery, the `dev/` tree. */

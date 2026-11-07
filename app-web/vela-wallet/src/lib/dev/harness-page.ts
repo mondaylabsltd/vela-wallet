@@ -25,13 +25,14 @@
  *     is a page at all; anything else is refused, and the production page
  *     stays.
  */
+import { SERVICE_DEFAULTS } from '$lib/core/generated/serviceDefaults';
 import { isPackagedApp } from '$lib/extension/page-url';
 import { isDevelopmentManifest } from '../../../extension/lib/safari-manifest.js';
 
 export const HARNESS_PAGE_KEY = 'vela.dev.signingPage';
 
-/** The production signing page — the core's `trusted_signer::DEFAULT_SIGNER_URL`. */
-export const OFFICIAL_SIGNING_PAGE = 'https://sign.getvela.app/';
+/** The production signing page — the core's (`service_defaults`, §28). */
+export const OFFICIAL_SIGNING_PAGE = SERVICE_DEFAULTS.signingPageUrl;
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 

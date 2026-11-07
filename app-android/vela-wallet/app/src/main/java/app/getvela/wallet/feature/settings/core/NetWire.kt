@@ -106,7 +106,7 @@ data class NetServiceEndpoints(
     val bundler_service_url: String,
     val fiat_rates_url: String,
     /** The multisig service ([NetEndpointField.GenesisService]) — stored as `genesisServiceURL`, as the web does. */
-    val genesis_service_url: String = "https://safe-genesis.getvela.app",
+    val genesis_service_url: String = app.getvela.wallet.core.net.CoreServiceDefaults.value.genesisServiceUrl,
 )
 
 /**

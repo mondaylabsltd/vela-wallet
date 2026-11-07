@@ -25,13 +25,14 @@
 //
 
 import Foundation
+import VelaCore
 
 @MainActor
 final class FiatFx {
 
-    /// `network_admin`'s own default (`DEFAULT_FIAT_RATES_URL`), mirrored for
-    /// the one case the shell needs before it has read the store.
-    static let defaultURL = "https://vela-currency.getvela.app/v2/rates?base=USD"
+    /// The core's default (`service_defaults`, §28), for the one case the
+    /// shell needs before it has read the store.
+    static let defaultURL = CoreServiceDefaults.value.fiatRatesUrl
 
     private static let cacheKey = VelaStore.Key.fxRates
     /// ECB/Frankfurter publish once per business day; six hours is plenty.

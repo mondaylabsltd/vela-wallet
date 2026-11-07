@@ -7,7 +7,10 @@
     "somethingWrong": "出错了",
     "tryAgain": "重试",
     "done": "完成",
-    "gotIt": "知道了"
+    "gotIt": "知道了",
+    "testBuild": {
+      "productionWriteRefused": "这是测试版本，不会写入线上服务；请把它指向本地服务。"
+    }
   },
   "language": {
     "title": "语言",

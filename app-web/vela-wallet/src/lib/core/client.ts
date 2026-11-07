@@ -94,6 +94,7 @@ import init, {
 	intentWorldNeeds,
 	prefsMigrations,
 	prefsRead,
+	productionWriteVerdict,
 	publicRpcUrls,
 	ReceiveWatchCore,
 	registryBackupStep,
@@ -157,6 +158,9 @@ export {
 // key for the registry; identicon and passkey artwork resolved offline by
 // construction.
 export { buildGroupProof, buildMemberProof, groupPublicKeyFromSeed, toHex };
+// §28: the core's rule that a test build never writes to production
+// (`$lib/services/production-guard.ts`).
+export { productionWriteVerdict };
 export { bestNativeDexPrice, checksumAddress, chooseNativePrice, keccak256 };
 // Native-coin money rules the shells used to each keep a copy of (spec 060):
 // the $1 peg for a coin that IS a dollar, and the chain gas floor below which

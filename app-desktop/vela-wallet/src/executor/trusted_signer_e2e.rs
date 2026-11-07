@@ -770,7 +770,7 @@ fn the_page_creates_a_key_and_then_signs_in_with_it() {
         method: KeyMethod::Platform,
         page: Some(rig.page.clone()),
     };
-    let registry = "https://p256-index-v2.getvela.app";
+    let registry = vela_core::service_defaults::PASSKEY_INDEX_URL;
 
     let (created, found) = std::thread::scope(|scope| {
         let flow = scope.spawn(|| {

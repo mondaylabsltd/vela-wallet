@@ -34,6 +34,8 @@ object LaunchExtras {
         "vela.serviceEndpoints",
         "vela.rpcOverrides",
         "vela.peerconnectRelay",
+        // §28: a test build's opt-in to production writes (off by default).
+        "vela.allowProductionWrites",
     )
 
     /** `value` when this build may act on the extra `name`, else `null`. */

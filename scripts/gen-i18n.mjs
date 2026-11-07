@@ -1400,9 +1400,15 @@ for (let i = 1; i < PATHS.length; i++) {
 //   read on {{network}} right now." / "… on {{n}} networks …",
 //   `FeedView.unread_key`), never "No activity yet" over them. 2287 + 2 =
 //   2289 paths, 2170 leaves, 119 branches.
-if (PATHS.length !== 2289) fail(`expected 2289 paths (2170 leaf + 119 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2170) fail(`expected 2170 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
+// 2291 (no production writes from a test build, §28, 2026-11-07): +
+//   `common.testBuild.productionWriteRefused` and its branch — what a test
+//   build says when it refuses a write to a live service ("This test build
+//   won't write to the live service; point it at a local one.",
+//   `service_defaults::REFUSED_KEY`). 2289 + 2 = 2291 paths, 2171 leaves,
+//   120 branches.
+if (PATHS.length !== 2291) fail(`expected 2291 paths (2171 leaf + 120 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2171) fail(`expected 2171 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
 // 579 (round 6, the outside owner's connect page, 2026-10-30): + 17

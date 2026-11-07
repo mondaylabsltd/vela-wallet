@@ -3,6 +3,8 @@ package app.getvela.wallet.feature.onboarding.core
 import uniffi.vela_core_uniffi.SignerRegistryDeployment
 import java.io.IOException
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.core.net.CoreServiceDefaults
+import app.getvela.wallet.core.net.ProductionWriteGuard
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -440,6 +442,16 @@ class RegistryClient(
         label: String,
     ): JSONObject = withContext(Dispatchers.IO) {
         val startedAt = System.currentTimeMillis()
+        // §28: a test build never writes to production — refused here, before
+        // the connection opens, and said as what it is (the index did not
+        // fail; this build would not ask it).
+        if (body != null) {
+            val url = baseUrl + path
+            ProductionWriteGuard.refusal("POST", url) { body.toString() }?.let { host ->
+                val refused = ProductionWriteGuard.refused("POST", url, host)
+                throw RegistryFailure("$label: ${refused.message}", network = false)
+            }
+        }
         val connection = try {
             (URL(baseUrl + path).openConnection() as HttpURLConnection)
         } catch (error: Exception) {
@@ -494,8 +506,11 @@ class RegistryClient(
     private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
 
     companion object {
-        /** The v2 registry. Overridable so a self-hosted stack is a setting, not a fork. */
-        const val DEFAULT_REGISTRY_URL = "https://p256-index-v2.getvela.app"
+        /**
+         * The v2 registry: the core's default (`service_defaults`, §28 — no copy
+         * here). Overridable so a self-hosted stack is a setting, not a fork.
+         */
+        val DEFAULT_REGISTRY_URL: String get() = CoreServiceDefaults.value.passkeyIndexUrl
 
         /** A 20-byte hex address, and nothing else, reaches the index. */
         private val ADDRESS = Regex("^0x[0-9a-fA-F]{40}$")

@@ -543,6 +543,7 @@ vector_replays:
     - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/AppLinksTest.kt }
     - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/LaunchGateTest.kt }
     - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, note: 'review-state.json (§12)' }
+    - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/ProductionWriteGuardTest.kt, note: 'production-writes.json (§28)' }
   ios:
     - { file: app-ios/VelaWallet/VelaWalletTests/CoreWireDriftTests.swift, note: 'not a vector file: the wire drift gate, required to run' }
     - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR8FixTests.swift }
@@ -554,6 +555,7 @@ vector_replays:
     - { file: app-ios/VelaWallet/VelaWalletTests/RelativeTimeTests.swift }
     - { file: app-ios/VelaWallet/VelaWalletTests/MarksTests.swift }
     - { file: app-ios/VelaWallet/VelaWalletTests/MultisigReviewStateTests.swift, note: 'review-state.json (§12)' }
+    - { file: app-ios/VelaWallet/VelaWalletTests/ProductionWriteGuardTests.swift, note: 'production-writes.json (§28)' }
   web:
     - { file: app-web/vela-wallet/src/lib/signing/surface-route.test.ts }
     - { file: app-web/vela-wallet/src/lib/launch/constants.test.ts }
@@ -565,6 +567,7 @@ vector_replays:
     - { file: app-web/vela-wallet/src/lib/flows/core/fee-plain-send-parity.test.ts }
     - { file: app-web/vela-wallet/src/lib/services/wallet-keys.test.ts }
     - { file: app-web/vela-wallet/src/lib/multisig/core/review-door.test.ts, note: 'review-state.json (§12)' }
+    - { file: app-web/vela-wallet/src/lib/services/production-guard.test.ts, note: 'production-writes.json (§28)' }
   # cargo test has no machine-readable report on stable: checked for
   # existence only. None of these is #[ignore]d (the only ignored vela-core
   # tests are the fork test and three that WRITE or PRINT vectors).
@@ -575,3 +578,4 @@ vector_replays:
     - { file: app-desktop/vela-wallet/src/wallet/page/multisig.rs }
     - { file: app-desktop/vela-wallet/src/executor/balance_dashboard.rs }
     - { file: app-desktop/vela-wallet/src/multisig/sheet.rs, note: 'review-state.json (§12)' }
+    - { file: app-desktop/vela-wallet/src/executor/production_guard.rs, note: 'production-writes.json (§28)' }

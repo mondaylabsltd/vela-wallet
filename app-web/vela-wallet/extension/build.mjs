@@ -69,6 +69,8 @@ import { fileURLToPath } from 'node:url';
 import { DEV_PAGES, DEV_SCRIPTS, safariManifest } from './lib/safari-manifest.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+/** The development package's test-build marker (§28, `production-guard.ts`). */
+const TEST_BUILD_MARKER = 'vela-test-build.json';
 const APP = join(HERE, '..');
 /**
  * The Safari package (native AUDIT §6.5): `--safari`, or
@@ -331,6 +333,19 @@ if (SAFARI) {
 } else {
 	cpSync(join(HERE, 'manifest.json'), join(DIST, 'manifest.json'));
 }
+// §28: the development package is a TEST build — it never writes to a
+// production service (`src/lib/services/production-guard.ts` reads this
+// marker). `VELA_ALLOW_PRODUCTION_WRITES=1` at build time is its opt-in, off
+// by default. The release and store packages are derived without it.
+writeFileSync(
+	join(DIST, TEST_BUILD_MARKER),
+	JSON.stringify({
+		testBuild: true,
+		allowProductionWrites: ['1', 'true'].includes(
+			(process.env.VELA_ALLOW_PRODUCTION_WRITES ?? '').trim().toLowerCase()
+		)
+	}) + '\n'
+);
 
 // ---------------------------------------------------------------------------
 // 5. The budget
@@ -357,6 +372,8 @@ const manifest = JSON.parse(readFileSync(join(DIST, 'manifest.json'), 'utf8'));
 function deriveReleasePackage(target, { keepKey }) {
 	rmSync(target, { recursive: true, force: true });
 	cpSync(DIST, target, { recursive: true });
+	// §28: a release package is no test build — the marker stays behind.
+	rmSync(join(target, TEST_BUILD_MARKER), { force: true });
 	let bytes = 0;
 	for (const entry of readdirSync(target)) {
 		const localeDir = join(target, entry);
