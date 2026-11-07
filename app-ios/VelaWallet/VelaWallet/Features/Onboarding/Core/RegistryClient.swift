@@ -85,8 +85,9 @@ struct ProvenMember {
 
 actor RegistryClient {
 
-    /// The v2 registry. Overridable so a self-hosted stack is a setting, not a fork.
-    static let defaultURL = "https://p256-index-v2.getvela.app"
+    /// The v2 registry: the core's default (`service_defaults`, §28 — no copy
+    /// here). Overridable so a self-hosted stack is a setting, not a fork.
+    static let defaultURL = CoreServiceDefaults.value.passkeyIndexUrl
 
     /// The health identities this endpoint accepts — the legacy index and the
     /// v2 registry, so a wallet can point at either during the migration.
@@ -586,6 +587,13 @@ actor RegistryClient {
         do {
             (data, response) = try await transport(urlRequest)
         } catch {
+            #if DEBUG
+            // §28: this test build would not ask the live index — the index
+            // did not fail, and the network did not either.
+            if ProductionWriteRefused.matches(error) {
+                throw RegistryFailure(message: "\(label): \(error.localizedDescription)", network: false)
+            }
+            #endif
             // The request never arrived. This is the ONE line that separates the
             // two failure worlds, and it is why the classification is delegated
             // to the shell at all.

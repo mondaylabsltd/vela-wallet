@@ -418,13 +418,12 @@ final class NetworkAdminExecutor {
     }
 }
 
-/// The core's own defaults, mirrored for the one case the shell needs before it
-/// has read the store. Kept next to their consumer and named after their source
-/// (`network_admin.rs:157-160`) so a drift is visible.
+/// The core's own defaults (`service_defaults`, §28), for the one case the
+/// shell needs before it has read the store — read, never copied.
 enum NetDefaults {
-    static let ethereumDataURL = "https://ethereum-data.getvela.app"
+    static let ethereumDataURL = CoreServiceDefaults.value.ethereumDataUrl
     /// Vela's own relay. The bundler tier has one entry because Vela runs it.
-    static let bundlerServiceURL = "https://vela-relay-cf.getvela.app"
+    static let bundlerServiceURL = CoreServiceDefaults.value.bundlerServiceUrl
 }
 
 // MARK: - Probes

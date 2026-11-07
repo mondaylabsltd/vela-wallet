@@ -13152,6 +13152,99 @@ public func FfiConverterTypeSafeAddressInfo_lower(_ value: SafeAddressInfo) -> R
 
 
 /**
+ * Every production service default.
+ */
+public struct ServiceDefaults: Equatable, Hashable {
+    public var ethereumDataUrl: String
+    public var passkeyIndexUrl: String
+    public var bundlerServiceUrl: String
+    public var fiatRatesUrl: String
+    public var genesisServiceUrl: String
+    public var aaguidDirectoryUrl: String
+    public var peerconnectRelayUrl: String
+    public var peerconnectTokenUrl: String
+    public var peerconnectTrialUrl: String
+    public var bugReportUrl: String
+    public var signingPageUrl: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(ethereumDataUrl: String, passkeyIndexUrl: String, bundlerServiceUrl: String, fiatRatesUrl: String, genesisServiceUrl: String, aaguidDirectoryUrl: String, peerconnectRelayUrl: String, peerconnectTokenUrl: String, peerconnectTrialUrl: String, bugReportUrl: String, signingPageUrl: String) {
+        self.ethereumDataUrl = ethereumDataUrl
+        self.passkeyIndexUrl = passkeyIndexUrl
+        self.bundlerServiceUrl = bundlerServiceUrl
+        self.fiatRatesUrl = fiatRatesUrl
+        self.genesisServiceUrl = genesisServiceUrl
+        self.aaguidDirectoryUrl = aaguidDirectoryUrl
+        self.peerconnectRelayUrl = peerconnectRelayUrl
+        self.peerconnectTokenUrl = peerconnectTokenUrl
+        self.peerconnectTrialUrl = peerconnectTrialUrl
+        self.bugReportUrl = bugReportUrl
+        self.signingPageUrl = signingPageUrl
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ServiceDefaults: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeServiceDefaults: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ServiceDefaults {
+        return
+            try ServiceDefaults(
+                ethereumDataUrl: FfiConverterString.read(from: &buf), 
+                passkeyIndexUrl: FfiConverterString.read(from: &buf), 
+                bundlerServiceUrl: FfiConverterString.read(from: &buf), 
+                fiatRatesUrl: FfiConverterString.read(from: &buf), 
+                genesisServiceUrl: FfiConverterString.read(from: &buf), 
+                aaguidDirectoryUrl: FfiConverterString.read(from: &buf), 
+                peerconnectRelayUrl: FfiConverterString.read(from: &buf), 
+                peerconnectTokenUrl: FfiConverterString.read(from: &buf), 
+                peerconnectTrialUrl: FfiConverterString.read(from: &buf), 
+                bugReportUrl: FfiConverterString.read(from: &buf), 
+                signingPageUrl: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ServiceDefaults, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.ethereumDataUrl, into: &buf)
+        FfiConverterString.write(value.passkeyIndexUrl, into: &buf)
+        FfiConverterString.write(value.bundlerServiceUrl, into: &buf)
+        FfiConverterString.write(value.fiatRatesUrl, into: &buf)
+        FfiConverterString.write(value.genesisServiceUrl, into: &buf)
+        FfiConverterString.write(value.aaguidDirectoryUrl, into: &buf)
+        FfiConverterString.write(value.peerconnectRelayUrl, into: &buf)
+        FfiConverterString.write(value.peerconnectTokenUrl, into: &buf)
+        FfiConverterString.write(value.peerconnectTrialUrl, into: &buf)
+        FfiConverterString.write(value.bugReportUrl, into: &buf)
+        FfiConverterString.write(value.signingPageUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeServiceDefaults_lift(_ buf: RustBuffer) throws -> ServiceDefaults {
+    return try FfiConverterTypeServiceDefaults.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeServiceDefaults_lower(_ value: ServiceDefaults) -> RustBuffer {
+    return FfiConverterTypeServiceDefaults.lower(value)
+}
+
+
+/**
  * One request header.
  */
 public struct SignerHttpHeader: Equatable, Hashable {
@@ -22178,6 +22271,90 @@ public func tokenProvenance(chainId: UInt32, token: String, symbol: String, nati
 })
 }
 /**
+ * Is `host` a production service host.
+ */
+public func isProductionHost(host: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_is_production_host(
+        FfiConverterString.lower(host),uniffiCallStatus
+    )
+})
+}
+/**
+ * Is a build with these facts a test build (`BuildFacts::is_test_build`):
+ * dev-fixtures, the device-test flavour, or any debug build.
+ */
+public func isTestBuild(devFixtures: Bool, deviceTest: Bool, debug: Bool) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_is_test_build(
+        FfiConverterBool.lower(devFixtures),
+        FfiConverterBool.lower(deviceTest),
+        FfiConverterBool.lower(debug),uniffiCallStatus
+    )
+})
+}
+/**
+ * The rule (`service_defaults::write_verdict`): the production host a test
+ * build's write is refused for, or `None` — the request may leave. A
+ * release build answers `None` for everything (and never asks).
+ */
+public func productionWriteRefusal(testBuild: Bool, allowProductionWrites: Bool, method: String, url: String, body: String?) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_production_write_refusal(
+        FfiConverterBool.lower(testBuild),
+        FfiConverterBool.lower(allowProductionWrites),
+        FfiConverterString.lower(method),
+        FfiConverterString.lower(url),
+        FfiConverterOptionString.lower(body),uniffiCallStatus
+    )
+})
+}
+/**
+ * The same words in English, for a log line or a transport error.
+ */
+public func productionWriteRefusedEnglish() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_production_write_refused_english(uniffiCallStatus
+    )
+})
+}
+/**
+ * The catalog key a refused write is said with.
+ */
+public func productionWriteRefusedKey() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_production_write_refused_key(uniffiCallStatus
+    )
+})
+}
+/**
+ * Does this value of the opt-in (a launch input or a build flag) opt in:
+ * `1` or `true`.
+ */
+public func productionWritesOptIn(value: String?) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_production_writes_opt_in(
+        FfiConverterOptionString.lower(value),uniffiCallStatus
+    )
+})
+}
+/**
+ * The core's service defaults (`service_defaults::service_defaults`).
+ */
+public func serviceDefaults() -> ServiceDefaults  {
+    return try!  FfiConverterTypeServiceDefaults_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_service_defaults(uniffiCallStatus
+    )
+})
+}
+/**
  * Settings' debug mode in force on this build (spec 091): `hidden` (no
  * switch — and debug mode is off), `off` or `on`. `developer_build` is the
  * shell's build fact — Android `BuildConfig.DEBUG`, iOS `#if DEBUG`, the
@@ -23831,6 +24008,27 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_token_provenance() != 26831) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_is_production_host() != 56528) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_is_test_build() != 2503) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_production_write_refusal() != 51824) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_production_write_refused_english() != 18542) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_production_write_refused_key() != 59926) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_production_writes_opt_in() != 1203) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_service_defaults() != 64319) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_prefs_debug_mode() != 14685) {
