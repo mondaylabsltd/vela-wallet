@@ -427,6 +427,34 @@ class MultisigWords(
         else -> t("external.stillWaiting", "wallet" to wallet)
     }
 
+    /**
+     * r17-17: a link whose lookup failed (`MultisigLinkStand::Failed`'s
+     * `reason`, an `AddOutcome`), each kind mapped to a sentence the catalog
+     * has — never `add.<kind>` built from the kind (`add.refused`,
+     * `add.highRisk`, `add.unverified` are no keys: their key was drawn).
+     * iOS's mapping.
+     */
+    fun linkFailed(reason: JsonElement?): String = when (reason.kind) {
+        null, "notFound" -> t("proposal.notFound")
+        "busy" -> t("add.busy", "network" to network(reason["chain_id"].int ?: 0))
+        "unverified" -> t("authority.unverified", "network" to network(reason["chain_id"].int ?: 0))
+        "refused" -> t("authority.refusedTitle")
+        "highRisk" -> t("authority.riskTitle")
+        "unavailable", "unsupported", "notMultisig", "unchecked", "chooseNetwork" -> t("add.${reason.kind}")
+        else -> t("add.unavailable")
+    }
+
+    /**
+     * r17-17: a damaged link (`MultisigLinkStand::Broken`) in words — an
+     * invite by what is wrong with it (its checksum, else damaged), a
+     * transaction's link as damaged. The link's own text is never drawn.
+     */
+    fun linkBroken(stand: app.getvela.wallet.feature.multisig.core.MsLinkStand): String = when {
+        stand.link.str == "add" && stand.fault == "checksum" -> t("add.badChecksum")
+        stand.link.str == "add" -> t("add.badInvite")
+        else -> t("proposal.badLink")
+    }
+
     /** r11-9: an execution its look stopped, in the look's own words (`MultisigPreview` kind). */
     fun stoppedLine(preview: JsonElement?, chainId: Int): String = when (preview.kind) {
         "unpriced" -> t("proposal.feeUnpriced")

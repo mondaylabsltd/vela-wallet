@@ -62,14 +62,26 @@ class MsProposalModel(
         // fell back to today's count and read "1/2 approved" over an
         // execution that counted 2 of 2. Finished: what the heading says.
         get() = when {
-            isDone -> approvalsCount
             // r16-8 (iOS's finding, Android parity): executed from here — the
             // press's passkey and send, before the chain has it — is
             // "Executing…", never the mailbox's "1/2 approved" (the one press
-            // carries the last approval itself).
-            executeState.kind == "working" || item.executing -> words.t("status.executing")
+            // carries the last approval itself). r17-6: and whenever the body
+            // says "Executing…" (the execution followed here is `waiting`),
+            // checked BEFORE a finished one's count: the mailbox may say done
+            // while the chain has not answered yet, and the chip read nothing
+            // (or a count) over "Executing…".
+            chipSaysExecuting -> words.t("status.executing")
+            isDone -> approvalsCount
             else -> words.standingLine(standing, item)
         }
+
+    /**
+     * r17-6: the chip says "Executing…" — the body does (the execution's
+     * verdict is `waiting`), or this device's press is out (its `execute:`
+     * action works, or the item is executing).
+     */
+    val chipSaysExecuting: Boolean
+        get() = execution.kind == "waiting" || executeState.kind == "working" || item.executing
 
     /** r10-7: the execution's own line is said once — the notes' line, else the chain's word for it. */
     val executedSaidInNotes: Boolean get() = executionLine?.id == "executed"
@@ -79,7 +91,13 @@ class MsProposalModel(
      * own word again (an executed one's chip says "Executed"; the green
      * "Executed" box under it said it a second time).
      */
-    val sheetNotes: List<MsLine> get() = notes.filterNot { isDone && it.text == statusLine }
+    val sheetNotes: List<MsLine>
+        get() = notes.filterNot {
+            (isDone && it.text == statusLine) ||
+                // r17-6: the chip says "Executing…"; the execution's own
+                // "Executing…" note beside it said it a second time.
+                (chipSaysExecuting && it.id == "waiting")
+        }
 
     /** r12 S4: the sheet's own "Executed" line, for an execution neither the chip nor the notes say. */
     val saysExecuted: Boolean get() = !executedSaidInNotes && statusLine != words.t("proposal.executed")
@@ -161,10 +179,12 @@ class MsProposalModel(
             if (item.status == "queued") out += MsLine(queuedNote(), MsTone.Neutral, "queued")
             if (item.renameUndeployed) out += MsLine(words.t("proposal.renameUndeployed", "network" to words.network(chainId)), MsTone.Warning, "renameUndeployed")
             if (standing.kind == "blocked") out += MsLine(words.t("status.cannotRun", "reason" to words.blockReason(standing["block"], chainId)), MsTone.Warning, "blocked")
+            // r17-16: an approval signed here and not in the mailbox is always
+            // worded, never a bare Send again — its outbox entry's state, else
+            // (none kept) "Not sent yet". On its way now is no warning.
             if (item.unsent) {
-                view.outbox.entries.firstOrNull { it.key.lowercase().endsWith(hash.lowercase()) }?.value?.let {
-                    out += MsLine(outboxLine(it), MsTone.Warning, "outbox")
-                }
+                val entry = outboxEntry
+                out += MsLine(entry?.let(::outboxLine) ?: words.t("proposal.outboxNotSent"), if (outboxSending) MsTone.Neutral else MsTone.Warning, "outbox")
             }
             executionLine?.let { out += it }
             // r9-9: "none is signed in on this device" only when the core says no
@@ -185,8 +205,25 @@ class MsProposalModel(
      * never only at the top of a sheet scrolled to its buttons). `null`
      * while it works, once done, or for the person's own cancel.
      */
-    val approveFailure: MsLine? get() = words.actionFailure(approveState, chainId)?.let { MsLine(it, MsTone.Danger, "approveFailed") }
-    val executeFailure: MsLine? get() = words.actionFailure(executeState, chainId)?.let { MsLine(it, words.actionFailureTone(executeState), "executeFailed") }
+    val approveFailure: MsLine?
+        get() = if (staleAfter("approve", "execute")) null else words.actionFailure(approveState, chainId)?.let { MsLine(it, MsTone.Danger, "approveFailed") }
+    val executeFailure: MsLine?
+        get() = if (staleAfter("execute", "approve")) null else words.actionFailure(executeState, chainId)?.let { MsLine(it, words.actionFailureTone(executeState), "executeFailed") }
+
+    /**
+     * r17-16: [what]'s failure is stale — a press of [other] on this same
+     * transaction came after it and went through (`done`). The core keeps
+     * each action's last state apart (`approve:` / `execute:`), with no order
+     * between them; the order is the shell's, from when each went to
+     * `working` ([MsProposalsView.pressOrder]). Not known: drawn, never
+     * hidden on a guess.
+     */
+    private fun staleAfter(what: String, other: String): Boolean {
+        if (view.action("$other:$hash").kind != "done") return false
+        val mine = view.pressOrder["$what:${hash.lowercase()}"] ?: return false
+        val theirs = view.pressOrder["$other:${hash.lowercase()}"] ?: return false
+        return theirs > mine
+    }
 
     /**
      * r11-9: the fee line under the button, unless the action's own state
@@ -212,10 +249,37 @@ class MsProposalModel(
     /** r4D-13: proposed from a member on this device — withdrawn, not rejected (the web's `ownProposal`). */
     val ownProposal: Boolean get() = item.proposer.isNotEmpty() && words.localName(item.proposer) != null
 
+    /**
+     * This transaction's entry in the machine's outbox (signed here, not in
+     * the mailbox yet). The core keys it `chainId:safe:safeTxHash:owner`
+     * (`outbox_key`) — r17-16: it was matched as ENDING in the hash, so no
+     * entry was ever found and a kept approval was never worded.
+     */
+    val outboxEntry: JsonElement?
+        get() {
+            if (!item.unsent) return null
+            val marker = ":${hash.lowercase()}:"
+            return view.outbox.entries.firstOrNull { (key, _) ->
+                val k = key.lowercase()
+                k.startsWith("$chainId:") && k.contains(marker)
+            }?.value
+        }
+
     /** r8-16: this one's outbox entry is being sent now (the core's `sending`): no Send again. */
     val outboxSending: Boolean
-        get() = view.outbox.entries.firstOrNull { it.key.lowercase().endsWith(hash.lowercase()) }?.value
-            ?.let { it["sending"].bool == true || it["why"].str == "sending" } ?: false
+        get() = outboxEntry?.let { it["sending"].bool == true || it["why"].str == "sending" } ?: false
+
+    /**
+     * "Send again" only when nothing is on its way and no retry is due (the
+     * web's and iOS's r8-16): a kept approval the core sends again on its
+     * own is said with its countdown, never offered a second way.
+     */
+    val offersSendAgain: Boolean
+        get() {
+            if (!item.unsent) return false
+            val entry = outboxEntry ?: return true
+            return !outboxSending && entry["retryAt"].long == null
+        }
 
     private val previousNonce: String get() = ((item.nonce.toLongOrNull() ?: 1L) - 1).coerceAtLeast(0).toString()
 
@@ -231,9 +295,11 @@ class MsProposalModel(
     }
 
     private fun outboxLine(entry: JsonElement): String {
-        val seconds = entry["retryAt"].long?.let { ((it - nowMs()) / 1000).coerceAtLeast(0) } ?: 0
         // r8-16: on its way to the service right now — said so, and no Send again.
         if (entry["sending"].bool == true || entry["why"].str == "sending") return words.t("proposal.outboxSending")
+        // Sent again only on the person's word: "Not sent yet" (with Send again).
+        val retryAt = entry["retryAt"].long ?: return words.t("proposal.outboxNotSent")
+        val seconds = ((retryAt - nowMs() + 999) / 1000).coerceAtLeast(1)
         return when (entry["why"].str) {
             "busy" -> words.t("proposal.outboxBusy", "seconds" to seconds.toString())
             "away", "unreachable" -> words.t("proposal.outboxAway", "seconds" to seconds.toString())
@@ -346,7 +412,7 @@ class MsProposalModel(
      * again"), not a read of the list.
      */
     val failureChecksFee: Boolean
-        get() = executeState.kind == "stopped" && executeState["preview"].kind in setOf("unpriced", "unchecked")
+        get() = executeFailure != null && executeState.kind == "stopped" && executeState["preview"].kind in setOf("unpriced", "unchecked")
 
     /**
      * r14-6 + r16-4: "Check again" under the one press — a look that could

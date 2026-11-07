@@ -206,7 +206,7 @@ fun MultisigSettingsSheet(
                 if ((backup == "notBackedUp" || backup == "failed") && from != null) {
                     VelaPrimaryButton(words.t("settings.backupTitle"), { hub.send(ev("save_to_ethereum", "address" to address, "from" to from)) }, Modifier.fillMaxWidth())
                 }
-                if (backup == "couldNotCheck") MsTextButton(words.t("service.retry")) { hub.send(ev("check_backup", "address" to address)) }
+                if (backup == "couldNotCheck") MsTextButton(words.t("review.state.tryAgain")) { hub.send(ev("check_backup", "address" to address)) }
             }
         }
 

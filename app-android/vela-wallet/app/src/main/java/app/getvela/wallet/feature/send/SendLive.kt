@@ -624,7 +624,8 @@ object SendLive {
             badgeLogoUrl = mark.badgeLogoUrl,
             badgeHidden = mark.badgeHidden,
             balance = "${trim(token.balance)} ${token.symbol}",
-            fiat = token.price_usd?.takeIf { it.isFinite() }?.let { price ->
+            // r17-14: the testnet space has no worth line (the home's rows).
+            fiat = if (ctx.money.noValue) AssetFiatModel.None else token.price_usd?.takeIf { it.isFinite() }?.let { price ->
                 // As the home's holdings: no worth in a currency that is not
                 // the person's yet — the one helper withholds it.
                 ctx.money.fiat(amount(token.balance) * price)?.let { AssetFiatModel.Value(it) } ?: AssetFiatModel.Loading
@@ -762,7 +763,8 @@ object SendLive {
             unitSuffix = suffix,
             // Issue 197: ⇄ exists only where the core offers it, and is live
             // only where pressing it would change something.
-            denomShown = view.denom_toggle_shown,
+            // r17-14: and none in the testnet space, where nothing has a worth to type.
+            denomShown = view.denom_toggle_shown && !ctx.money.noValue,
             // ⇄ swaps to typing a figure IN the display currency: not while
             // that currency is not the person's yet (it would be the
             // placeholder's dollars). The control keeps its place, dimmed.

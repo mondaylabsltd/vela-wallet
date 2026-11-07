@@ -53,6 +53,13 @@ sealed class MultisigShellFailure {
     data class Passkey(val failure: String, val timedOut: Boolean = false, val message: String? = null) : MultisigShellFailure()
     data object NotSent : MultisigShellFailure()
     data class CannotPay(val need: String, val have: String) : MultisigShellFailure()
+
+    /**
+     * r17-12 (the desktop's r16-18): a read before the passkey — the
+     * deployment, the nonce — failed on a network that is failing: nothing
+     * was signed or sent, said as that network out of reach.
+     */
+    data class ChainUnreachable(val chainId: Int) : MultisigShellFailure()
     data class Unknown(val message: String) : MultisigShellFailure()
 
     val detail: String
@@ -63,7 +70,8 @@ sealed class MultisigShellFailure {
             is Passkey -> JSONObject().put("kind", "passkey").put("failure", failure).put("timedOut", timedOut).put("message", message ?: JSONObject.NULL)
             NotSent -> JSONObject().put("kind", "not_sent")
             is CannotPay -> JSONObject().put("kind", "cannot_pay").put("need", need).put("have", have)
-            is Unknown -> JSONObject().put("kind", "unknown").put("message", message)
+            is ChainUnreachable -> JSONObject().put("kind", "chain_unreachable").put("chainId", chainId)
+            is Unknown ->JSONObject().put("kind", "unknown").put("message", message)
         }.toString()
 
     companion object {
@@ -72,6 +80,27 @@ sealed class MultisigShellFailure {
             if (detail == null || !detail.startsWith("{")) return null
             val parsed = runCatching { Wire.json.parseToJsonElement(detail) as? JsonObject }.getOrNull() ?: return null
             return parsed.takeIf { it["kind"].str != null }
+        }
+
+        /**
+         * r17-12: an execution's submit refused, as the core is told it —
+         * the desktop's rule (`execute_failure`): the relay that never took
+         * it (or could not be reached) is "not sent"; a failure before the
+         * passkey that is a chain read nobody answered ([chainRead]), or on
+         * a network the pool finds failing ([chainFailing]), is that network
+         * out of reach. Anything else by [of]. Never "Something went wrong"
+         * for what has a kind.
+         */
+        fun ofSubmit(
+            failure: UserOpSpine.Failure,
+            chainRead: Boolean,
+            signing: Boolean,
+            chainFailing: Boolean,
+            chainId: Int,
+        ): MultisigShellFailure = when {
+            failure == UserOpSpine.Failure.NotSent || failure == UserOpSpine.Failure.RelayerUnavailable -> NotSent
+            failure is UserOpSpine.Failure.Other && !signing && (chainRead || chainFailing) -> ChainUnreachable(chainId)
+            else -> of(failure)
         }
 
         /** A spine refusal in the shell's failure words. */
@@ -355,6 +384,9 @@ class MultisigLive(
             paramsJson = executeParams(purpose).toString(),
             origin = "",
         )
+        // r17-12: whether the passkey was asked — a failure before it may be
+        // the network's alone; after it, it is not.
+        var signing = false
         return try {
             val submitted = spine.submit(
                 chainId = op.chain_id.toInt(),
@@ -362,6 +394,7 @@ class MultisigLive(
                 calls = calls,
                 gasFeeToken = fee?.get("token").str,
                 quotedFee = quoted,
+                signingStarted = { signing = true },
                 intent = intent,
             )
             // The proposals machine follows the execution itself (its
@@ -374,7 +407,13 @@ class MultisigLive(
         } catch (refused: UserOpSpine.Refused) {
             when (refused.failure) {
                 UserOpSpine.Failure.PasskeyCancelled, UserOpSpine.Failure.PageDeclined -> MultisigShellResult.CallsCancelled
-                else -> MultisigShellResult.CallsFailed(MultisigShellFailure.of(refused.failure).detail, maybe_sent = false)
+                else -> {
+                    val chain = op.chain_id.toInt()
+                    val failing = pool.view.value.let { v -> chain in v.failed_chains || chain in v.unreached_chains || chain in v.rate_limited_chains }
+                    val said = MultisigShellFailure.ofSubmit(refused.failure, refused.chainRead, signing, failing, chain)
+                    VelaLog.event("multisig.execute", "refused", "chain" to chain, "kind" to said::class.simpleName, "signing" to signing)
+                    MultisigShellResult.CallsFailed(said.detail, maybe_sent = false)
+                }
             }
         }
     }

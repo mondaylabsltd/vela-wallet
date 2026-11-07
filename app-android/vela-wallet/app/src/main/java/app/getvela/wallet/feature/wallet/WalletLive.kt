@@ -1015,16 +1015,27 @@ object WalletLive {
          * (`CurrencyView.pending`); nothing at all before either is known.
          */
         val label: String = code,
+        /**
+         * r17-14 (spec 105): the testnet space — nothing in it has a worth.
+         * Every figure is NONE ([fiat] `null` while [settled]): no line, no
+         * room kept, never "withheld".
+         */
+        val noValue: Boolean = false,
     ) {
         private fun convert(usd: Double): Double = rate?.let { usd * it } ?: usd
+
+        /** r17-14: this money in a space with no worth — every figure none. */
+        fun withoutValue(): Money = Money(code, symbol, rate, settled = true, label = label, noValue = true)
 
         /**
          * A fiat figure in this money, drawn with the person's number format
          * (spec 047 D2) — or `null`: WITHHELD, the currency is not the
          * person's yet. A caller draws the figure's room and nothing in it.
+         * In the testnet space ([noValue]) `null` too, with [settled] true:
+         * no figure, and no room for one.
          */
         fun fiat(usd: Double): String? {
-            if (!settled) return null
+            if (noValue || !settled) return null
             // r8-3: a worth that is not a number (a NaN or infinite price or
             // amount upstream) is unknown — said as such, with no currency
             // sign dressing it up as a figure, and never a crash.
@@ -1049,7 +1060,7 @@ object WalletLive {
          * `BigDecimal(12.34)` is 12.3399…, and cutting that printed $12.33.
          */
         fun parts(usd: Double): Parts? {
-            if (!settled) return null
+            if (noValue || !settled) return null
             // r8-3: not a number is no figure — the hero's "not a number yet"
             // state (its own notice says why), never `BigDecimal(NaN)`'s throw.
             val value = convert(usd)

@@ -242,6 +242,39 @@ data class MsKindChoice(val kind: String?, val suggested: String?, val locked: B
     }
 }
 
+/**
+ * r17-16: when each press on this device went out — an action key
+ * (`approve:<hash>`, `execute:<hash>`, lowercased) numbered each time it goes
+ * to `working` from anything else. Settling (failed, done) is no new press.
+ * Pure: the hub keeps the map and the counter.
+ */
+object MsPressOrder {
+    fun advance(
+        order: Map<String, Long>,
+        before: Map<String, JsonElement>,
+        after: Map<String, JsonElement>,
+        next: () -> Long,
+    ): Map<String, Long> {
+        val was = before.mapKeys { it.key.lowercase() }
+        var out = order
+        for ((key, state) in after) {
+            val k = key.lowercase()
+            val prior = was[k]
+            val pressed = when {
+                // Out now, and it was not: a press.
+                state.kind == "working" -> prior.kind != "working"
+                // Settled from working: the same press ending.
+                prior.kind == "working" -> false
+                // Settled to another state with no `working` seen between (a
+                // press that ended before a view showed it): a press too.
+                else -> prior != state
+            }
+            if (pressed) out = out + (k to next())
+        }
+        return out
+    }
+}
+
 /** Where a link opened here stands (`MultisigLinkStand`). */
 data class MsLinkStand(
     val kind: String,
@@ -603,6 +636,13 @@ data class MsProposalsView(
     val banner: JsonElement? = null,
     /** core-ms-2: the followed multisig is deployed on a network read. */
     val setUp: Boolean = false,
+    /**
+     * r17-16 (the shell's, never the core's): the order presses were made on
+     * this device — each action key (lowercased) and when it last went to
+     * `working`, counted by the hub ([MsPressOrder]). A failure an action
+     * keeps is stale once a later press on the same transaction went through.
+     */
+    val pressOrder: Map<String, Long> = emptyMap(),
 ) {
     /** The members here whose one press approves and executes [item] (the machine's `approve_execute`). */
     fun approveExecuteBy(item: MsProposalItem): List<String> = lookup(approveExecute, item.chainId, item.safeTxHash) ?: emptyList()
