@@ -72,7 +72,7 @@ struct MultisigHomeCard: View {
                 HStack(alignment: .top) {
                     MsNote(text: note.text, tone: .warning, identifier: "multisig.home.note")
                     if note.retry {
-                        Button(words.t("service.retry")) { hub.sendProposal(["type": "retry"]) }
+                        Button(words.t("review.state.tryAgain")) { hub.sendProposal(["type": "retry"]) }
                             .font(Typography.actionLabel.scaled(textScale).font)
                             .foregroundStyle(theme.fgBase)
                             .accessibilityIdentifier("multisig.home.retry")

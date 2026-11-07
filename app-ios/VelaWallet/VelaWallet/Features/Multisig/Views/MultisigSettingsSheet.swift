@@ -257,7 +257,7 @@ struct MultisigSettingsSheet: View {
                     }
                 }
                 if state == "couldNotCheck" {
-                    Button(words.t("service.retry")) { hub.send(["type": "check_backup", "address": address]) }
+                    Button(words.t("review.state.tryAgain")) { hub.send(["type": "check_backup", "address": address]) }
                         .font(Typography.actionLabel.scaled(textScale).font)
                         .foregroundStyle(theme.fgBase)
                 }

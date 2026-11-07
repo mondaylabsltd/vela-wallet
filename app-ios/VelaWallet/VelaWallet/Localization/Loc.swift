@@ -126,7 +126,7 @@ final class Loc {
         _ = resolvedLanguage
         guard let engine else { return key }
         if vars.isEmpty, let words = plain[key] { return words }
-        return (try? engine.t(key: key, opts: Self.options(vars))) ?? key
+        return echoed(key, (try? engine.t(key: key, opts: Self.options(vars))) ?? key)
     }
 
     /// Many keys with the same variables, in ONE crossing (`I18n.t_many`):
@@ -139,7 +139,28 @@ final class Loc {
         if vars.isEmpty, let words = Self.all(keys, in: plain) { return words }
         guard let words = try? engine.tMany(keys: keys, opts: Self.options(vars)), words.count == keys.count
         else { return keys }
+        for (key, word) in zip(keys, words) { _ = echoed(key, word) }
         return words
+    }
+
+    // MARK: - The missing-translation fallback, caught (r17-17)
+
+    #if DEBUG
+    @ObservationIgnored private let missLock = NSLock()
+    @ObservationIgnored private var missedKeys: Set<String> = []
+    /// r17-17: every key this instance answered with itself — the FR-005
+    /// fallback, which draws the raw key (`home.multisig.add.refused`) on a
+    /// screen. Tests read it: no raw catalog key can be drawn unnoticed.
+    var missed: Set<String> { missLock.withLock { missedKeys } }
+    #endif
+
+    /// `answer` as it is; an answer that is its own key is recorded (DEBUG).
+    @inline(__always)
+    private func echoed(_ key: String, _ answer: String) -> String {
+        #if DEBUG
+        if answer == key { missLock.withLock { _ = missedKeys.insert(key) } }
+        #endif
+        return answer
     }
 
     private static func all(_ keys: [String], in plain: [String: String]) -> [String]? {
@@ -182,7 +203,7 @@ final class Loc {
             ordinal: false,
             vars: vars.map { TVar(name: $0.key, value: $0.value) }
         )
-        return (try? engine.t(key: key, opts: opts)) ?? key
+        return echoed(key, (try? engine.t(key: key, opts: opts)) ?? key)
     }
 
     // MARK: - How long ago (the core's rule, issue 462)

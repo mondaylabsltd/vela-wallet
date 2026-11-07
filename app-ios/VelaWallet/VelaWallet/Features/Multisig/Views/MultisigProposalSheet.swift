@@ -108,17 +108,24 @@ struct MsProposalModel {
     var statusLine: String {
         if isDone, executedTx != nil { return words.t("proposal.executed") }
         if isDone, replaced { return words.t("proposal.voided") }
-        // r16-8: being executed from here — the press's passkey and its send,
-        // before the chain has it — is "Executing…", never the mailbox's
-        // "1/2 approved": the one press carries the last approval itself.
+        // r16-8 / r17-6: being executed — the press's passkey and its send,
+        // and the flight until the chain's receipt is judged — is
+        // "Executing…", never the mailbox's "1/2 approved": the one press
+        // carries the last approval itself, and the mailbox may already call
+        // it done (its nonce used) while the body still says "Executing…".
         if executingHere { return words.t("status.executing") }
         return words.standing(standing, item: item)
     }
 
-    /// r16-8: this device is executing it now (its Execute or one press is
-    /// out, or the core follows its flight).
+    /// r16-8 / r17-6: it is being executed — this device's Execute or one
+    /// press is out, the core follows its flight, or the flight's verdict is
+    /// still `waiting` (the body's "Executing…"). Not gated on `isDone`: the
+    /// mailbox marks it done as soon as the nonce is used, ~1 s before the
+    /// receipt is judged, and the chip read "1/2 approved" over "Executing…".
     var executingHere: Bool {
-        !isDone && (executeState?.kind == "working" || item.executing)
+        guard executedTx == nil, !replaced else { return false }
+        if execution?.kind == "waiting" { return true }
+        return !isDone && (executeState?.kind == "working" || item.executing)
     }
 
     /// Who approved, by address (lowercased).
@@ -349,6 +356,18 @@ struct MsProposalModel {
         return (failure, ["unread", "mailboxUnreadable"].contains(state.kind) ? .warning : .danger)
     }
 
+    /// r17-18 (Android's §26 r16-14 rule): something about executing is said
+    /// — the one press's label, a fee line, setup, Check again, why not the
+    /// one press — only while a press can sign (the core's door is open).
+    /// While the review is unread the button reads Approve, held still, and
+    /// the review's reason with Try again is the one note: never a shut
+    /// "Approve and execute" over "Couldn't check whether it would run".
+    var saysExecution: Bool { signable }
+
+    /// The one press is drawn: the core offers it to a member here and a
+    /// press can sign.
+    func oneTouchShown(_ executors: [String]) -> Bool { saysExecution && !executors.isEmpty }
+
     /// r15-14: "The network fee is paid by the executing member's account."
     /// is said once — under the one press when it is offered, else where
     /// Execute would be while it is not ready.
@@ -410,7 +429,9 @@ struct MsProposalModel {
         case "notSent": return (words.t("proposal.notSent"), .danger, "notSent")
         case "unknown": return (words.t("proposal.cantCheckUsed", ["network": words.network(chainId)]), .warning, "unknown")
         case "timedOut": return (words.t("proposal.notLanded"), .warning, "timedOut")
-        case "waiting": return (words.t("proposal.executing"), .neutral, "waiting")
+        // r17-6: "Executing…" is the chip's word while it waits
+        // (`executingHere`) — said there, once, never again under it.
+        case "waiting": return nil
         default: return nil
         }
     }
@@ -889,8 +910,9 @@ struct MultisigProposalSheet: View {
             // core offers it); never "Opening the transaction…" for ever,
             // never "it hasn't been shared".
             MsNote(text: failure, tone: .warning, identifier: "multisig.proposal.openFailed")
-            VelaButton(title: words.t("review.state.tryAgain"), kind: .secondary) { hub.retryLinked() }
-                .accessibilityIdentifier("multisig.proposal.openRetry")
+            // r17-20: busy the moment it is pressed, until the read answers.
+            MsRetryButton(title: words.t("review.state.tryAgain"), said: failure,
+                          identifier: "multisig.proposal.openRetry") { hub.retryLinked() }
         } else if linked?.stand == "notInMailbox" {
             MsNote(text: words.t("proposal.notInMailbox"), tone: .warning, identifier: "multisig.proposal.notInMailbox")
         } else if linked == nil, let missing = missingSaid, missing.key != MsRules.missingOpening {
@@ -902,8 +924,8 @@ struct MultisigProposalSheet: View {
                 tone: .warning, identifier: "multisig.proposal.missing"
             )
             if missing.retry {
-                VelaButton(title: words.t("review.state.tryAgain"), kind: .secondary) { hub.retryLinked() }
-                    .accessibilityIdentifier("multisig.proposal.missingRetry")
+                MsRetryButton(title: words.t("review.state.tryAgain"), said: missing.key,
+                              identifier: "multisig.proposal.missingRetry") { hub.retryLinked() }
             }
         } else {
             HStack(spacing: Tokens.Space.s8) {
@@ -1056,7 +1078,11 @@ struct MultisigProposalSheet: View {
                     // executes it (`approve_execute`) — the machine's word, with
                     // its look at the fee; executing pays it, approving does not.
                     let oneTouch = model.view.approveExecute(model.item)
-                    let completes = !oneTouch.isEmpty
+                    // r17-18 (Android's r16-14 rule, §26): while the door is
+                    // shut nothing about executing is drawn — the button reads
+                    // Approve, held still; the review's reason with Try again
+                    // is the one note.
+                    let completes = model.oneTouchShown(oneTouch)
                     if completes {
                         // r9 S4: the fee before the passkey — the machine's
                         // look for the member whose press executes (the web
@@ -1083,7 +1109,7 @@ struct MultisigProposalSheet: View {
                         }
                         .accessibilityIdentifier("multisig.proposal.approveExecute")
                         MsNote(text: words.t("proposal.feeNote"))
-                    } else if let why = model.approveOnlyReason(chosen: member) {
+                    } else if model.saysExecution, let why = model.approveOnlyReason(chosen: member) {
                         // r10 S4: Approve alone, where theirs completes it —
                         // said why (cannot pay, would fail), never silently.
                         MsNote(text: why.text, tone: why.tone, identifier: "multisig.proposal.approveOnly")
@@ -1120,11 +1146,13 @@ struct MultisigProposalSheet: View {
                     if model.canExecute.count > 1 {
                         memberPicker(model.canExecute, selection: Binding(get: { chosen }, set: { executor = $0 }))
                     }
-                    if !model.executeStopped, let line = model.feeLine(for: chosen) {
-                        MsNote(text: line.text, tone: line.tone, identifier: "multisig.proposal.fee")
-                    }
-                    ForEach(model.setupLines(for: chosen), id: \.self) { line in
-                        MsNote(text: line)
+                    if model.saysExecution {
+                        if !model.executeStopped, let line = model.feeLine(for: chosen) {
+                            MsNote(text: line.text, tone: line.tone, identifier: "multisig.proposal.fee")
+                        }
+                        ForEach(model.setupLines(for: chosen), id: \.self) { line in
+                            MsNote(text: line)
+                        }
                     }
                     VelaButton(
                         title: model.signLabel("proposal.execute", anyway: "review.executeAnyway"),
@@ -1137,12 +1165,13 @@ struct MultisigProposalSheet: View {
                     }
                     .accessibilityIdentifier("multisig.proposal.execute")
                     pressFailures(model, at: .execute)
-                    if ["unpriced", "unchecked", "unverified"].contains(model.preview(for: chosen)?.kind ?? "") {
+                    if model.saysExecution, ["unpriced", "unchecked", "unverified"].contains(model.preview(for: chosen)?.kind ?? "") {
                         Button(words.t("proposal.feeRetry")) { askPreviews(force: true) }
                             .font(Typography.actionLabel.scaled(textScale).font)
                             .foregroundStyle(theme.fgBase)
                     }
-                } else if model.feeNoteUnderExecute(oneTouchOffered: !model.canApprove.isEmpty && !model.view.approveExecute(model.item).isEmpty) {
+                } else if model.saysExecution,
+                          model.feeNoteUnderExecute(oneTouchOffered: !model.canApprove.isEmpty && model.oneTouchShown(model.view.approveExecute(model.item))) {
                     // r15-14: said once — the one press says it under itself.
                     MsNote(text: words.t("proposal.feeNote"))
                 }

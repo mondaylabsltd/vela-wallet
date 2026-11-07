@@ -52,7 +52,11 @@ struct MsSheet<Content: View>: View {
                             .padding(.horizontal, Tokens.Layout.screenPaddingX)
                             .padding(.vertical, Tokens.Space.s12)
                     }
-                    .background(theme.bgRaised)
+                    // r17-20: the foot is attached to the keyboard — its
+                    // ground runs down behind the keyboard's own bar (the
+                    // floating "Done"), so no body field shows between the
+                    // action and the keys.
+                    .background(theme.bgRaised.ignoresSafeArea(.all, edges: .bottom))
                 }
             }
             .background(theme.bgRaised)
@@ -79,6 +83,42 @@ struct MsSheet<Content: View>: View {
         .presentationDetents(tall ? [.large] : [.medium, .large])
         .presentationDragIndicator(.visible)
         .presentationBackground(theme.bgRaised)
+    }
+}
+
+/// r17-20: a Try again for a read that failed, busy the moment it is
+/// pressed. The machine's answer can take seconds to change what is said
+/// (the open path's re-read: ~3 s of a Try again that looked dead); the
+/// press shows busy at once, until what is said changes (`said`), the
+/// button leaves, or `MsRetryButton.holdSeconds` pass.
+struct MsRetryButton: View {
+    let title: String
+    /// What the failure says now; a change means the machine answered.
+    let said: String
+    var kind: VelaButton.Kind = .secondary
+    var identifier: String?
+    let action: () -> Void
+    @State private var pressedOn: String?
+
+    /// The longest the press alone holds the busy state.
+    static let holdSeconds: Double = 15
+
+    /// Busy: pressed on what is still said.
+    static func busy(pressedOn: String?, said: String) -> Bool { pressedOn != nil && pressedOn == said }
+
+    var body: some View {
+        VelaButton(title: title, kind: kind, loading: Self.busy(pressedOn: pressedOn, said: said)) {
+            guard !Self.busy(pressedOn: pressedOn, said: said) else { return }
+            pressedOn = said
+            action()
+        }
+        .accessibilityIdentifier(identifier ?? "")
+        .onChange(of: said) { _, _ in pressedOn = nil }
+        .task(id: pressedOn) {
+            guard pressedOn != nil else { return }
+            try? await Task.sleep(for: .seconds(Self.holdSeconds))
+            if !Task.isCancelled { pressedOn = nil }
+        }
     }
 }
 

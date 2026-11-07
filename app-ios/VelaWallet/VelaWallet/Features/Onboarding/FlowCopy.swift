@@ -193,6 +193,15 @@ func promptCopy(_ kind: PromptKind, loc: Loc) -> PromptCopy {
     // The platform's own words. Opaque by nature — they go straight into the
     // bug report, and inventing friendlier text here would lose the detail that
     // makes the report worth filing.
+    // ob-4 / r17-20: the key is made and kept on the list; only its
+    // confirmation did not reach the index (or never left the device). What
+    // happened, and the way on — its row's Confirm — never the index's raw
+    // words, never a silent drop back to the list.
+    case "create_failed" where kind.keyKept:
+        PromptCopy(
+            title: loc.t(I18nKeys.Create.keyKeptTitle),
+            message: loc.t(kind.local ? I18nKeys.Create.keyKeptBodyNetwork : I18nKeys.Create.keyKeptBodyIndex)
+        )
     case "create_failed":
         PromptCopy(
             title: loc.t(I18nKeys.Create.alertErrorTitle),

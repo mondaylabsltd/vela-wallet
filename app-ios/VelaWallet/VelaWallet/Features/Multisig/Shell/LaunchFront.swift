@@ -35,3 +35,25 @@ enum LaunchFront {
         storedMultisig != nil && !hubLoaded && !expired
     }
 }
+
+/// r17-7: what the root draws for the session's route. Welcome ("Create
+/// Wallet / I already have a wallet", live buttons) says this device holds
+/// no account, so it is drawn only once the core has READ the account store
+/// and found it empty (`onboarding`). While the store is still being read
+/// (`loading`: the session's `booting` view until its first answer) the root
+/// draws the page's own ground — nothing of any screen, nothing to press.
+/// The weekly launch lockup covered that frame; on every other cold start
+/// Welcome flashed for 0.3–1 s before the wallet.
+enum RootScreen: Equatable {
+    case wallet
+    case welcome
+    case ground
+
+    static func of(_ route: SessionRoute) -> RootScreen {
+        switch route {
+        case .wallet: .wallet
+        case .onboarding: .welcome
+        case .loading: .ground
+        }
+    }
+}

@@ -372,7 +372,8 @@ struct FiatWithholdTests {
         let before = try accounts(waiting)
         let after = try accounts(committed)
         // The count alone, on the same line; the total joins it.
-        #expect(before.summary == loc.t("home.switcherAccountCount", count: 1))
+        // r17-20: the count alone, without the separator the total would follow.
+        #expect(before.summary == SettingsLive.accountsSummary(count: loc.t("home.switcherAccountCount", count: 1), total: nil))
         #expect(!before.summary.contains("switcherAccountCount"), "the count's key echoed: \(before.summary)")
         #expect(after.summary.hasPrefix(before.summary))
         #expect(after.summary.contains("¥9,821.29"))

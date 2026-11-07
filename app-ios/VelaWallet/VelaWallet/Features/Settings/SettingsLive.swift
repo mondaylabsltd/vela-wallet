@@ -622,18 +622,32 @@ enum SettingsLive {
         // §18 item 2 (the desktop's DESKTOP-1): a stored account this device
         // cannot read is said under the list, never left out in silence.
         copy.accountsSheet.unreadable = unreadable > 0 ? loc.t(I18nKeys.Storage.deviceUnreadableTitle) : nil
-        copy.accountsSheet.summary =
+        copy.accountsSheet.summary = accountsSummary(
             // A plural family (final note F15): the count chooses the form,
             // in the core — "1 account · ", "2 accounts · ". Passed as a
             // plain variable it read "1 accounts · Total".
-            loc.t(k.accountsCount, count: session.accounts.count)
+            count: loc.t(k.accountsCount, count: session.accounts.count),
             // No total while the currency is not known: the count alone
             // (Settings' total is one of the withheld surfaces).
-            + ((hidden
+            total: (hidden
                 ? WalletFixtures.mask
                 : noValue ? nil : accountsTotal(session.accounts.map { total(for: $0.account.address) }).flatMap(display.fiat)
-            ).map { loc.t(k.accountsTotal, vars: ["amount": $0]) } ?? "")
+            ).map { loc.t(k.accountsTotal, vars: ["amount": $0]) }
+        )
         return copy
+    }
+
+    /// r17-20: the switcher's line. The catalog's count carries the
+    /// separator before the total ("1 account · "); with no total (the
+    /// testnet space, a figure not known yet) the count stands alone —
+    /// never "1 account ·" with a separator leading nowhere.
+    static func accountsSummary(count: String, total: String?) -> String {
+        if let total, !total.isEmpty { return count + total }
+        var alone = count.trimmingCharacters(in: .whitespaces)
+        for separator in ["·", "•", "|", "-"] where alone.hasSuffix(separator) {
+            alone = String(alone.dropLast(separator.count)).trimmingCharacters(in: .whitespaces)
+        }
+        return alone
     }
 
     /// r16-10: the switcher's total is the sum of the balance core's figure

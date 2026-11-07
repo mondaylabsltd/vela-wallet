@@ -1178,6 +1178,8 @@ struct RootView: View {
             // …and it hears the display currency commit or change while its
             // journey is open (final note F25).
             .onChange(of: settings.currency) { _, _ in sendDisplayStands() }
+            // r17-14: …and the space in front (the testnet space prices nothing).
+            .onChange(of: space.current) { _, _ in sendDisplayStands() }
         }
     }
 
@@ -1191,7 +1193,14 @@ struct RootView: View {
     /// they were signed in as somebody else (device-found 2026-08-26).
     @ViewBuilder
     private var signedInOrWelcome: some View {
-        if session.view.allowedRoute == .wallet {
+        let screen = RootScreen.of(session.view.allowedRoute)
+        if screen == .ground {
+            // r17-7: the account store is still being read — the page's own
+            // ground, never Welcome's claim that there is no account.
+            Color.clear
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityIdentifier("root.ground")
+        } else if screen == .wallet {
             // Spec 021: Receive / Send / Activity / Assets, as pushed screens
             // over this one. A stack rather than NavigationStack destinations
             // because these are still fixtures — and because the flows push
@@ -2930,7 +2939,9 @@ struct RootView: View {
         // already found; SD2 and SD3 are the core's figures, its refusals and
         // its gates.
         if let view = send.view {
+            // r17-14: no fiat in the testnet space, for amounts or fees.
             let display = WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage)
+                .inSpace(testnet: space.testnet)
             if case .sendPick(let pick) = model.base {
                 model.base = .sendPick(
                     SendLive.pick(
@@ -3276,7 +3287,7 @@ struct RootView: View {
         }
         // The display currency as the machine is told it — the same rule
         // again at every change while the journey is open (`sendDisplayStands`).
-        let told = SendStore.displayContext(settings.currency)
+        let told = SendStore.displayContext(settings.currency, testnet: space.testnet)
         // A new send starts at the stored default: the one-shot pick, a free
         // upgrade and the fold all die with the send before it (spec 068).
         fees.resetSpeed()
@@ -3318,7 +3329,7 @@ struct RootView: View {
     /// The display currency committed, or changed (final note F25): an open
     /// Send journey hears it, and re-denominates by its own rule.
     private func sendDisplayStands() {
-        let told = SendStore.displayContext(settings.currency)
+        let told = SendStore.displayContext(settings.currency, testnet: space.testnet)
         send.displayStands(code: told.code, rate: told.rate, fiatDecimals: Self.sendFiatDecimals)
     }
 
@@ -3495,7 +3506,9 @@ struct RootView: View {
             walletName: session.view.activeName,
             walletAddress: session.view.address,
             chainId: chain,
-            display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage),
+            // r17-14: a testnet's fee is never priced in fiat.
+            display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage)
+                .inSpace(testnet: space.testnet),
             origin: live?.request?.origin,
             // What the chain said THIS request would do, and how far the
             // asking got. The judgment is the CORE's; this only carries it —

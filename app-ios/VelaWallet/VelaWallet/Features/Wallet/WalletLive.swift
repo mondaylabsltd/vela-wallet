@@ -153,6 +153,16 @@ enum WalletLive {
             view.map { from($0, language: language) } ?? .waiting(for: nil)
         }
 
+        /// r17-14: the display for a surface of the space in front. The
+        /// testnet space says its assets have no real value (its bar, its
+        /// home), so no fiat figure is drawn there — not under an amount,
+        /// not beside a fee ("≈ CN¥1.41" contradicted the bar). Every fiat
+        /// figure comes through `fiat(_:)`, which withholds it here.
+        func inSpace(testnet: Bool) -> Display {
+            guard testnet else { return self }
+            return Display(code: code, rate: rate, settled: false, pendingCode: nil, language: language)
+        }
+
         /// The display currency as the SEND MACHINE is told it — ONE rule,
         /// for its `open` and for every change after it (PR 3 final note
         /// F25), and the one place outside the formatter where the rate is
@@ -168,8 +178,12 @@ enum WalletLive {
         ///   be flipped to typing dollars at rate 1. `rate: nil` is the state
         ///   the machine keeps for exactly this: the ⇄ toggle will not enter
         ///   fiat, and sending in the token's own units is untouched.
-        static func sendContext(_ view: CurrencyViewWire?) -> (code: String, rate: Double?) {
+        static func sendContext(_ view: CurrencyViewWire?, testnet: Bool = false) -> (code: String, rate: Double?) {
             guard let view else { return ("USD", nil) }
+            // r17-14: the testnet space's coins have no real value — the
+            // machine is told no rate, so it prices nothing and ⇄ never
+            // enters fiat.
+            if testnet { return (view.committed ? view.code : (view.pending ?? view.code), nil) }
             guard view.committed else { return (view.pending ?? view.code, nil) }
             let display = from(view)
             return (display.code, display.rate)
