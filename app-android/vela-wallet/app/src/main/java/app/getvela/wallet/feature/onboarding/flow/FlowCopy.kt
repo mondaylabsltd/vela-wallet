@@ -130,7 +130,12 @@ data class PromptCopy(
     val confirmable: Boolean get() = confirmLabel != null
 }
 
-fun promptCopy(kind: PromptKind, strings: VelaStrings): PromptCopy = keyUnavailableCopy(kind, strings) ?: when (kind.type) {
+fun promptCopy(
+    kind: PromptKind,
+    strings: VelaStrings,
+    /** r18-18: whether the device has a network now (`NetHealth.online`). */
+    online: Boolean = app.getvela.wallet.core.net.NetHealth.online.value,
+): PromptCopy = keyUnavailableCopy(kind, strings) ?: when (kind.type) {
     "not_supported_create" -> PromptCopy(
         title = strings.t(I18nKeys.Create.ALERT_NOT_SUPPORTED_TITLE),
         message = strings.t(I18nKeys.Create.ALERT_NOT_SUPPORTED_BODY),
@@ -165,7 +170,10 @@ fun promptCopy(kind: PromptKind, strings: VelaStrings): PromptCopy = keyUnavaila
         message = when {
             kind.phoneLink -> strings.t(I18nKeys.Flow.PHONE_LINK_FAILED)
             kind.wordsKey != null -> strings.t(kind.wordsKey)
-            kind.keyKept -> strings.t(if (kind.local) I18nKeys.Create.KEY_KEPT_BODY_NETWORK else I18nKeys.Create.KEY_KEPT_BODY_INDEX)
+            // "This device is offline" only when it is (the r14-3 rule,
+            // `NetHealth`): a request that never arrived on a device that is
+            // online is the index's silence, never the device's.
+            kind.keyKept -> strings.t(if (kind.local && !online) I18nKeys.Create.KEY_KEPT_BODY_NETWORK else I18nKeys.Create.KEY_KEPT_BODY_INDEX)
             else -> kind.detail.orEmpty()
         },
     )

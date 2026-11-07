@@ -72,8 +72,15 @@ private val ADDRESS = Regex("^0x[0-9a-fA-F]{40}$")
  * account is over with none of its networks unread (a failure, a silence or
  * a 429 is never a read). Said for every distinct word, the first included.
  */
-internal fun feedFollowsBalance(scope: CoroutineScope, balance: Flow<BalanceView>, dispatch: (FeedEvent.BalanceRead) -> Unit) = scope.launch {
-    balance.map(::balanceRead).distinctUntilChanged().collect(dispatch)
+internal fun feedFollowsBalance(scope: CoroutineScope, balance: StateFlow<BalanceView>, dispatch: (FeedEvent.BalanceRead) -> Unit): kotlinx.coroutines.Job {
+    // Said at once, before anything else reaches the feed: from here on the
+    // feed waits for the balance's word (a feed told nothing settles on the
+    // scan alone — a race the collector's first emission would leave open).
+    val first = balanceRead(balance.value)
+    dispatch(first)
+    return scope.launch {
+        balance.map(::balanceRead).distinctUntilChanged().dropWhile { it == first }.collect(dispatch)
+    }
 }
 
 /** The feed's word for [view]: whose reads, whether the first ended, which networks were not read. */

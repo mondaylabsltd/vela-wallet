@@ -528,10 +528,12 @@ class R19NativeFixesTest {
 
     @Test
     fun `r18-18 a kept key is said by its one cause - offline, the index's silence, the test build's refusal`() {
-        fun copy(json: String) = app.getvela.wallet.feature.onboarding.flow.promptCopy(
-            app.getvela.wallet.feature.onboarding.core.PromptKind.from(org.json.JSONObject(json)), strings,
+        fun copy(json: String, online: Boolean = true) = app.getvela.wallet.feature.onboarding.flow.promptCopy(
+            app.getvela.wallet.feature.onboarding.core.PromptKind.from(org.json.JSONObject(json)), strings, online,
         )
-        val offline = copy("""{"type":"create_failed","detail":"x","key_kept":true,"local":true}""")
+        val offline = copy("""{"type":"create_failed","detail":"x","key_kept":true,"local":true}""", online = false)
+        // A request that never arrived while the device is online: the index's silence, never "offline".
+        assertEquals(strings.t("onboarding.create.keyKeptBodyIndex"), copy("""{"type":"create_failed","detail":"x","key_kept":true,"local":true}""", online = true).message)
         val index = copy("""{"type":"create_failed","detail":"x","key_kept":true,"local":false}""")
         val refused = copy("""{"type":"create_failed","detail":"x","key_kept":true,"local":false,"words_key":"common.testBuild.productionWriteRefused"}""")
         assertEquals(strings.t("onboarding.create.keyKeptBodyNetwork"), offline.message)
@@ -539,9 +541,7 @@ class R19NativeFixesTest {
         assertEquals(refusedWords, refused.message)
         assertEquals("three causes, three sentences", 3, setOf(offline.message, index.message, refused.message).size)
         assertEquals(strings.t("onboarding.create.keyKeptTitle"), index.title)
-        // The executor: a hung index on a device that is online is the index's silence, and a refusal is said.
-        app.getvela.wallet.core.net.NetHealth.reset()
-        assertTrue(app.getvela.wallet.core.net.NetHealth.online.value)
+        // The executor: a refusal is told to the core as one.
         assertTrue(app.getvela.wallet.core.net.Refusals.of(app.getvela.wallet.feature.onboarding.core.RegistryFailure("challenge: refused", network = false, refused = true)))
         assertTrue(app.getvela.wallet.core.net.Refusals.of(RuntimeException("wrapped", app.getvela.wallet.core.net.ProductionWriteRefused("p256-index-v2.getvela.app"))))
         assertTrue(!app.getvela.wallet.core.net.Refusals.of(app.getvela.wallet.feature.onboarding.core.RegistryFailure("challenge failed: timeout", network = true)))

@@ -368,7 +368,10 @@ class FeeFailureViewTest {
         val internal = body(SendEstimateFailure.Fee(board(FeeBoards.Case.Internal).failed!!))
         assertEquals(strings.t(I18nKeys.Flows.FEE_REASON_INTERNAL), internal)
         assertFalse(internal.contains("Gnosis"))
-        for (other in listOf(SendEstimateFailure.Fee(FeeFailure.QuoteUnavailable), SendEstimateFailure.Fee(FeeFailure.WouldFail), SendEstimateFailure.Timeout, SendEstimateFailure.Other)) {
+        // r18-14 (core §32): the relay that gave no quote is said as the relay's —
+        // "Vela's relay didn't answer, so nothing was sent." — never the generic sentence.
+        assertEquals(strings.t("send.alertEstimateRelayBody"), body(SendEstimateFailure.Fee(FeeFailure.QuoteUnavailable)))
+        for (other in listOf(SendEstimateFailure.Fee(FeeFailure.WouldFail), SendEstimateFailure.Timeout, SendEstimateFailure.Other)) {
             assertEquals(strings.t(I18nKeys.Flows.ALERT_ESTIMATE_BODY), body(other))
         }
         assertEquals(strings.t(I18nKeys.Flows.ALERT_ESTIMATE_TITLE), SendLive.alertText(SendAlertKind.EstimateFailed(SendEstimateFailure.Other), strings).first)
