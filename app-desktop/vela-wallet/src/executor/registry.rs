@@ -25,9 +25,9 @@ use vela_core::trusted_signer::ceremony::RegistryDeployment;
 
 use super::passkey::{self, Ceremony, RELYING_PARTY};
 
-/// The v2 registry. Overridable so a self-hosted stack is a setting, not a
-/// fork.
-pub const DEFAULT_REGISTRY_URL: &str = "https://p256-index-v2.getvela.app";
+/// The v2 registry: the core's default (§28 — the one spelling every shell
+/// reads). Overridable so a self-hosted stack is a setting, not a fork.
+pub use vela_core::service_defaults::PASSKEY_INDEX_URL as DEFAULT_REGISTRY_URL;
 
 /// The health identities this endpoint accepts — the legacy index and the v2
 /// registry, so a wallet can point at either during the migration.
@@ -126,6 +126,11 @@ fn classify(label: &str, failure: Transport) -> RegistryError {
     match failure.error {
         ureq::Error::StatusCode(status) => {
             RegistryError::answered(format!("{label} failed: {status}"))
+        }
+        // §28: this test build would not ask the live index — the index did
+        // not fail, and the network did not either.
+        refused if super::production_guard::is_refusal(&refused) => {
+            RegistryError::answered(format!("{label}: {refused}"))
         }
         other => RegistryError::network(format!("{label} failed: {other}"), failure.local),
     }

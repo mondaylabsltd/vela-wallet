@@ -66,6 +66,9 @@ mod platform_macos;
 pub mod pool;
 pub mod preferences;
 pub mod prepare_bound;
+/// §28: a test build never writes to production — the guard every agent
+/// of a test build carries.
+pub mod production_guard;
 pub mod proxy;
 #[cfg(target_os = "macos")]
 pub mod proxy_macos;

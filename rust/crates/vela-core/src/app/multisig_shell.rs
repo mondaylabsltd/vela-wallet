@@ -1107,7 +1107,7 @@ impl Outage {
 // ---------------------------------------------------------------------------
 
 /// The default multisig service (`DEFAULT_SERVICE_ENDPOINTS.genesisServiceURL`).
-pub const DEFAULT_GENESIS_SERVICE_URL: &str = "https://safe-genesis.getvela.app";
+pub const DEFAULT_GENESIS_SERVICE_URL: &str = crate::service_defaults::GENESIS_SERVICE_URL;
 
 const TIMEOUT_MS: u32 = 15_000;
 const ATTEMPTS: u32 = 3;

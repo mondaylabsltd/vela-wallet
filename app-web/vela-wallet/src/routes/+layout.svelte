@@ -42,6 +42,11 @@
 	import cjkFontsHref from '$lib/fonts/cjk.css?url';
 	import { setPageLanguage } from '$lib/i18n/page-language.svelte';
 	import { trackPageview } from '$lib/analytics';
+	import { installProductionWriteGuard } from '$lib/services/production-guard';
+
+	// §28: a test build (the dev server, the extension's development package)
+	// never writes to production — in front of `fetch` before any request.
+	installProductionWriteGuard();
 
 	let { children } = $props();
 

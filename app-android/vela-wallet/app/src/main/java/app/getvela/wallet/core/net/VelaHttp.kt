@@ -68,6 +68,9 @@ object VelaHttp {
 
     val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
+            // §28: a test build never writes to production — every client
+            // derived from this one carries the guard; a release build none.
+            .apply { if (ProductionWriteGuard.installed) addInterceptor(ProductionWriteGuard) }
             .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             // A backstop only: the core sends a per-call timeout and the
             // executor applies it to the call itself.

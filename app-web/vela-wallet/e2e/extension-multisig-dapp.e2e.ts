@@ -63,7 +63,14 @@ function serveDApp(): Promise<Server> {
 async function walletHolding(context: BrowserContext, ms: Multisig): Promise<Page> {
 	const id = extensionId();
 	const wallet = await context.newPage();
-	await wallet.addInitScript(() => localStorage.setItem('vela.intro.seen', String(Date.now())));
+	await wallet.addInitScript(() => {
+		localStorage.setItem('vela.intro.seen', String(Date.now()));
+		// §28: the development package refuses writes to production hosts. This
+		// world answers the multisig service itself and denies every other host
+		// (`MultisigWorld`'s default-deny net), so nothing leaves the machine:
+		// the suite opts in, and the stub sees what the wallet sends.
+		localStorage.setItem('vela.dev.allowProductionWrites', '1');
+	});
 	await wallet.goto(`chrome-extension://${id}/en/parallel.html`);
 	await useWorldNetworks(wallet);
 	await wallet.locator('li code').first().waitFor({ timeout: 60_000 });

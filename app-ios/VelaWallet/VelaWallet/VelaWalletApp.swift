@@ -24,6 +24,8 @@ struct VelaWalletApp: App {
         // builds by the build configuration, so this call has nothing to
         // install there and the symbols are not in the binary at all.
         #if DEBUG
+        // §28: a test build never writes to production — before any request.
+        ProductionWriteGuard.install()
         ParallelSpaceBinding.install()
         // `VELA_DEV_PROXY` (spec 082): the browser's store, before any tab.
         DevProxy.install()

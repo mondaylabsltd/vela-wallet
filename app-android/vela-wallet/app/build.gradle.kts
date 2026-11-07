@@ -169,6 +169,18 @@ android {
             .orElse("https://clientmcp.dev")
             .get()
         buildConfigField("String", "CLIENTMCP_SITE", "\"$clientmcpSite\"")
+        // §28: a test build never writes to production. The device-test
+        // flavour is a test build whatever its build type (an unsigned
+        // release for a device pass included); debug builds are too
+        // (`BuildConfig.DEBUG`). `-PvelaAllowProductionWrites` is the opt-in,
+        // off by default and meaningless in a store build
+        // (`ProductionWriteGuard`).
+        buildConfigField("boolean", "DEVICE_TEST", "$velaDeviceTest")
+        buildConfigField(
+            "boolean",
+            "ALLOW_PRODUCTION_WRITES",
+            "${providers.gradleProperty("velaAllowProductionWrites").isPresent}",
+        )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

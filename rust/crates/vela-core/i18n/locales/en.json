@@ -7,7 +7,10 @@
     "somethingWrong": "Something went wrong",
     "tryAgain": "Try again",
     "done": "Done",
-    "gotIt": "Got it"
+    "gotIt": "Got it",
+    "testBuild": {
+      "productionWriteRefused": "This test build won't write to the live service; point it at a local one."
+    }
   },
   "language": {
     "title": "Language",

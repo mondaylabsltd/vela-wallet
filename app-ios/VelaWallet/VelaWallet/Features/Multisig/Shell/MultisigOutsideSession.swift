@@ -153,8 +153,8 @@ final class MultisigScopedPorts: MultisigPorts {
 
 /// The multisig service in use, as the machines are told it.
 enum MultisigServiceURL {
-    /// The core's default (`DEFAULT_GENESIS_SERVICE_URL`).
-    static let defaultURL = "https://safe-genesis.getvela.app"
+    /// The core's default (`service_defaults`, §28).
+    static let defaultURL = CoreServiceDefaults.value.genesisServiceUrl
 
     static func current(defaults: UserDefaults = .standard) -> String {
         guard let raw = defaults.string(forKey: VelaStore.Key.serviceEndpoints),

@@ -21,6 +21,7 @@ import { loadShownNetworks, settleShownNetworks } from './shown-networks';
 import { allowedOrNull } from './url-policy';
 import { onWalletSyncElsewhere } from '$lib/wallet/core/wallet-sync';
 import type { NetShownNetworks } from '$lib/core/generated/NetShownNetworks';
+import { SERVICE_DEFAULTS } from '$lib/core/generated/serviceDefaults';
 
 /**
  * A network as the services know it. Its logo is not a field: it lives on the
@@ -43,8 +44,8 @@ export interface Network {
 	isTestnet: boolean;
 }
 
-/** Base URL of Vela's per-chain ERC-4337 bundler. */
-const BUNDLER_BASE = 'https://vela-relay-cf.getvela.app';
+/** Base URL of Vela's per-chain ERC-4337 bundler — the core's (§28). */
+const BUNDLER_BASE = SERVICE_DEFAULTS.bundlerServiceUrl;
 
 /** Built-in networks, derived from the canonical CHAINS table. */
 export const DEFAULT_NETWORKS: Network[] = CHAINS.map((c) => ({

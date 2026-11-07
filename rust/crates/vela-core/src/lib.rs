@@ -76,6 +76,9 @@ pub mod registry_metadata;
 pub mod registry_proof;
 pub mod registry_resolve;
 pub mod safe;
+/// Every production service default, and the rule that a test build never
+/// writes to one (docs/multisig-machines.md §28).
+pub mod service_defaults;
 pub mod sign_message;
 /// Where a person reviews and signs — in Vela, or on a page they trust — and
 /// the rules that keep that choice able to reach the account's keys (spec 102).

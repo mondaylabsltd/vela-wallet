@@ -7,7 +7,10 @@
     "somethingWrong": "Etwas ist schiefgelaufen",
     "tryAgain": "Erneut versuchen",
     "done": "Fertig",
-    "gotIt": "Verstanden"
+    "gotIt": "Verstanden",
+    "testBuild": {
+      "productionWriteRefused": "Dieser Test-Build schreibt nicht in den Live-Dienst. Richten Sie ihn auf einen lokalen Dienst aus."
+    }
   },
   "language": {
     "title": "Sprache",

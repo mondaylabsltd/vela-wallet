@@ -24,6 +24,12 @@ export const GENESIS = `http://127.0.0.1:${port('GENESIS_PORT', 8787)}`;
 export const RELAY = `http://127.0.0.1:${port('RELAY_PORT', 8790)}`;
 /** The PeerConnect relay (up.sh): Vela and an outside owner's wallet page meet through it. */
 export const PEERCONNECT = `ws://127.0.0.1:${port('PEERCONNECT_PORT', 8792)}`;
+/**
+ * The key index (up.sh, `scripts/onchain/key-index/server.mjs`): every
+ * service is local, so a run that creates an account never writes it to the
+ * production index (§28).
+ */
+export const KEY_INDEX = `http://127.0.0.1:${port('KEY_INDEX_PORT', 8793)}`;
 
 /** anvil's unlocked dev account #1: an outside owner whose wallet signs through anvil. */
 export const EOA_ONE = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
@@ -58,16 +64,20 @@ export async function balanceOf(address: string, chainId = 100): Promise<bigint>
 /** Point the profile at the harness before any page runs. */
 export async function useHarness(context: BrowserContext): Promise<void> {
 	await context.addInitScript(
-		([genesis, relay, peerconnect]) => {
+		([genesis, relay, peerconnect, keyIndex]) => {
 			localStorage.setItem('vela.intro.seen', String(Date.now()));
 			localStorage.setItem('vela.genesisServiceURL', genesis);
 			localStorage.setItem(
 				'vela.serviceEndpoints',
-				JSON.stringify({ bundlerServiceURL: relay, genesisServiceURL: genesis })
+				JSON.stringify({
+					bundlerServiceURL: relay,
+					genesisServiceURL: genesis,
+					passkeyIndexURL: keyIndex
+				})
 			);
 			localStorage.setItem('vela.peerconnectRelay', peerconnect);
 		},
-		[GENESIS, RELAY, PEERCONNECT]
+		[GENESIS, RELAY, PEERCONNECT, KEY_INDEX]
 	);
 }
 

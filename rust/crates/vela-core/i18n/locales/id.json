@@ -7,7 +7,10 @@
     "somethingWrong": "Terjadi kesalahan",
     "tryAgain": "Coba Lagi",
     "done": "Selesai",
-    "gotIt": "Mengerti"
+    "gotIt": "Mengerti",
+    "testBuild": {
+      "productionWriteRefused": "Build uji ini tidak akan menulis ke layanan langsung; arahkan ke layanan lokal."
+    }
   },
   "language": {
     "title": "Bahasa",

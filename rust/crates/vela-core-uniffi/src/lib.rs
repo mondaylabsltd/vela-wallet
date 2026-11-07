@@ -29,6 +29,9 @@ mod peer_bridge;
 /// Small core rules the web reads over wasm (F0.2): RPC clocks, fee figures,
 /// dApp RPC answers, provenance, names, currencies.
 mod rules_bridge;
+/// §28: the core's service defaults, and the rule that a test build never
+/// writes to production.
+mod service_defaults_bridge;
 mod settings_bridge;
 /// The launch animation's replay rule and the ENS nodes (perf lanes).
 mod shell_rules_bridge;
