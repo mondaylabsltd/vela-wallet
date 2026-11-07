@@ -4136,12 +4136,16 @@ pub fn risk_check_line(send: &SendView, s: &FlowStrings) -> Option<(SharedString
 /// re-ask so the line does not flip to "…" and back.
 pub(crate) fn confirm_fee_fact(i: &SendInputs<'_>) -> FactRow {
     let (send, s) = (i.send, i.s);
-    let failure = send_fee_failure(i);
+    // §34: while the person's press is out the core serves the fee it was
+    // made on (`fee_signing_key`) — the fee being signed. Neither the fee
+    // machine's failure nor its re-ask stands in its place then.
+    let pressed = send.fee_signing_key.is_some();
+    let failure = send_fee_failure(i).filter(|_| !pressed);
     FactRow {
         label: s.est_fee.clone(),
         value: if let Some(failure) = failure.as_ref() {
             failure.figure.clone()
-        } else if send.fee_busy || i.fee.busy {
+        } else if !pressed && (send.fee_busy || i.fee.busy) {
             s.fee_pending.clone()
         } else {
             fee_line(
@@ -4156,10 +4160,47 @@ pub(crate) fn confirm_fee_fact(i: &SendInputs<'_>) -> FactRow {
         lead: FactLead::None,
         mono: false,
         copy: None,
-        note: failure.and_then(|failure| failure.reason),
+        note: failure.and_then(|failure| failure.reason).or_else(|| {
+            // §34: the fee and amount drawn are the ones being signed,
+            // frozen until the signature, a cancel or a stop.
+            pressed.then(|| s.fee_signing.clone())
+        }),
         danger: false,
         detail: None,
     }
+}
+
+/// §34: the last press signed nothing — the quote at the signature was not
+/// the one shown (`SendView::fee_moved`). Said calmly beside the confirm, in
+/// the core's words, a Max's new figure with them; the page draws the new
+/// figures and the next press signs exactly those.
+pub(crate) fn fee_moved_notice(send: &SendView, s: &FlowStrings) -> Option<SendNotice> {
+    let moved = send.fee_moved.as_ref()?;
+    let symbol = send
+        .selected_token
+        .as_ref()
+        .map(|token| token.symbol.as_str())
+        .unwrap_or_default();
+    let body = match &moved.max {
+        Some(max) => fill(
+            &fill(&fill(&s.fee_moved_max, "to", &max.to), "from", &max.from),
+            "symbol",
+            symbol,
+        ),
+        None => s.fee_moved.clone(),
+    };
+    Some(SendNotice {
+        dismiss: None,
+        title: None,
+        body: body.into(),
+        detail: None,
+        action: None,
+        copy: None,
+        report: None,
+        link: None,
+        error: false,
+        calm: true,
+    })
 }
 
 /// Whether the confirm's fee line is a control (PR 2 polish): the fee
@@ -4339,7 +4380,9 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
         if refused_for_previous && send.previous_pending.is_some() {
             return None;
         }
-        tx_error_notice(send, s).or_else(|| passkey_note_notice(send, s))
+        tx_error_notice(send, s)
+            .or_else(|| fee_moved_notice(send, s))
+            .or_else(|| passkey_note_notice(send, s))
     });
     SendConfirm {
         // A sweep moves several coins; one mark would name the wrong one.
@@ -10804,5 +10847,252 @@ mod payee_tests {
                 assert!(shown.breakdown_title.is_none());
             });
         });
+    }
+}
+
+/// §34 (R20 S1): charged = shown, frozen at the press — the REAL send
+/// machine, drawn by this shell's own `send_confirm`. The R20 figures: a
+/// never-deployed account holding 0.3 USDC on Arc Testnet, Max on the confirm
+/// 0.0675 with a 0.2325 fee, and a 0.2941125 quote landing between the press
+/// and the signature.
+#[cfg(test)]
+mod press_freeze_tests {
+    use super::*;
+    use crate::core_host::{CoreHost, Pending};
+    use vela_core::app::send::{
+        Event as SendEvent, Send as SendMachine, SendAccountRef, SendChainInfo, SendDisplayContext,
+        SendFeeOutcome, SendOpenParams, SendOperation, SendShellResult, SendToken,
+        SendTreasuryProbe, SendView,
+    };
+
+    const ACCOUNT: &str = "0x8275e99B9c20f1dA503492D37f6832ea0104f2eC";
+    const PAYEE: &str = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141";
+
+    fn fee(wei: &str) -> FeeEstimateView {
+        FeeEstimateView {
+            chain_id: 5_042_002,
+            total_wei: wei.to_owned(),
+            max_fee_per_gas: "0".to_owned(),
+            network_fee_per_gas: "20000000000".to_owned(),
+            relayer_fee_per_gas: "0".to_owned(),
+            bundler_gas_price: "20000000000".to_owned(),
+            in_band_gas_basis: "20000000000".to_owned(),
+            effective_gas_price: None,
+            max_gas_price: None,
+            total_gas: "450000".to_owned(),
+            // The account's first send deploys it: the fee carries that.
+            deployed: false,
+            tier: FeeTier::Fast,
+            quoted: true,
+            fee_asset: FeeAssetView::Native,
+            fee_recipient: Some("0x5c3D966577b66a12B815119f1af452Ed7adf260c".to_owned()),
+            prepared: None,
+        }
+    }
+
+    struct Drive {
+        host: CoreHost<SendMachine>,
+        pending: Vec<Pending<SendOperation>>,
+        quote: FeeEstimateView,
+        holding: bool,
+    }
+
+    impl Drive {
+        fn answer(&self, op: &SendOperation) -> Option<SendShellResult> {
+            Some(match op {
+                SendOperation::FetchTokens { .. } => SendShellResult::TokensLoaded {
+                    tokens: Some(vec![SendToken {
+                        network: "arc-testnet".to_owned(),
+                        chain_id: 5_042_002,
+                        symbol: "USDC".to_owned(),
+                        balance: "0.3".to_owned(),
+                        decimals: 18,
+                        token_address: None,
+                        price_usd: Some(1.0),
+                        logo_urls: vec![],
+                        spam: false,
+                    }]),
+                    chains: vec![SendChainInfo {
+                        chain_id: 5_042_002,
+                        network: "arc-testnet".to_owned(),
+                        native_symbol: "USDC".to_owned(),
+                    }],
+                },
+                SendOperation::PrewarmFees { .. } => SendShellResult::FeesPrewarmed,
+                SendOperation::EstimateFee { .. } => SendShellResult::FeeEstimated {
+                    outcome: SendFeeOutcome::Ok {
+                        estimate: self.quote.clone(),
+                    },
+                },
+                SendOperation::LoadAccountCredential { .. } if !self.holding => {
+                    SendShellResult::AccountCredential {
+                        public_key_hex: Some("04deadbeef".to_owned()),
+                    }
+                }
+                SendOperation::ProbeTreasury { .. } if !self.holding => {
+                    SendShellResult::TreasuryProbed {
+                        probe: SendTreasuryProbe::Covered,
+                    }
+                }
+                SendOperation::ResolveRisk { .. } => SendShellResult::RiskResolved { risk: None },
+                SendOperation::ResolveIdentity { .. } => {
+                    SendShellResult::IdentityResolved { identity: None }
+                }
+                SendOperation::SimulateCalls { .. } => {
+                    SendShellResult::SimResolved { sim_json: None }
+                }
+                _ => return None,
+            })
+        }
+
+        fn settle(&mut self, fresh: Vec<Pending<SendOperation>>) {
+            self.pending.extend(fresh);
+            for _ in 0..64 {
+                let Some(index) = self
+                    .pending
+                    .iter()
+                    .position(|p| self.answer(&p.operation).is_some())
+                else {
+                    return;
+                };
+                let p = self.pending.remove(index);
+                let answer = self.answer(&p.operation).unwrap_or_else(|| unreachable!());
+                let more = self.host.resolve(p.id, answer);
+                self.pending.extend(more);
+            }
+        }
+
+        fn dispatch(&mut self, event: SendEvent) {
+            let fresh = self.host.dispatch(event);
+            self.settle(fresh);
+        }
+
+        fn submit(&self) -> Option<&SendOperation> {
+            self.pending
+                .iter()
+                .map(|p| &p.operation)
+                .find(|op| matches!(op, SendOperation::SubmitUserOp { .. }))
+        }
+    }
+
+    fn inputs<'a>(
+        send: &'a SendView,
+        fee: &'a FeeView,
+        s: &'a FlowStrings,
+        wallet: &'a crate::wallet::WalletStrings,
+    ) -> SendInputs<'a> {
+        SendInputs {
+            send,
+            fee,
+            s,
+            wallet,
+            locale: "en-US",
+            money: crate::wallet::live::Money::usd(),
+            identity_name: "R20",
+            identity_address: ACCOUNT,
+            speed: None,
+            relay_sent_at_ms: None,
+        }
+    }
+
+    #[test]
+    fn a_quote_moved_under_the_press_signs_nothing_and_the_stop_is_said_beside_the_confirm() {
+        let loc = crate::loc::Loc::from_env();
+        let s = FlowStrings::resolve(&loc);
+        let wallet = crate::wallet::WalletStrings::resolve(&loc);
+        let fee_view = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+        let mut drive = Drive {
+            host: CoreHost::new(),
+            pending: Vec::new(),
+            quote: fee("267375000000000000"),
+            holding: false,
+        };
+        drive.dispatch(SendEvent::Open {
+            account: Some(SendAccountRef {
+                id: "cred".to_owned(),
+                address: ACCOUNT.to_owned(),
+                name: None,
+                multisig: None,
+            }),
+            params: SendOpenParams::default(),
+            display: SendDisplayContext {
+                code: "USD".to_owned(),
+                rate: Some(1.0),
+                fiat_decimals: 2,
+                space: Default::default(),
+            },
+        });
+        let id = drive.host.view().tokens[0].id();
+        drive.dispatch(SendEvent::SelectToken { token_id: id });
+        drive.dispatch(SendEvent::SetRecipient {
+            recipient: PAYEE.to_owned(),
+        });
+        drive.dispatch(SendEvent::FeeUpdated {
+            estimate: fee("267375000000000000"),
+        });
+        drive.dispatch(SendEvent::TapMax);
+        drive.quote = fee("232500000000000000");
+        drive.dispatch(SendEvent::Continue);
+        let view = drive.host.view();
+        assert_eq!(view.confirm_amount, "0.0675");
+        assert!(view.can_confirm);
+
+        // The press; the fee card's next quote lands while its reads are out.
+        drive.holding = true;
+        drive.dispatch(SendEvent::SlideConfirm {
+            review: view.review_digest.clone(),
+        });
+        drive.dispatch(SendEvent::FeeUpdated {
+            estimate: fee("294112500000000000"),
+        });
+        let view = drive.host.view();
+        assert_eq!(view.confirm_amount, "0.0675", "the amount pressed stays");
+        assert_eq!(
+            view.fee.as_ref().map(|f| f.total_wei.as_str()),
+            Some("232500000000000000"),
+            "the fee pressed stays"
+        );
+        let shown = send_confirm(&inputs(&view, &fee_view, &s, &wallet));
+        let fee_row = shown
+            .facts
+            .iter()
+            .find(|row| row.label == s.est_fee)
+            .unwrap_or_else(|| unreachable!("a fee row"));
+        assert_eq!(fee_row.note.as_ref(), Some(&s.fee_signing));
+        assert!(matches!(shown.cta_state, CtaState::Busy));
+
+        // The signature's moment: the quote moved — nothing signed.
+        drive.holding = false;
+        drive.settle(Vec::new());
+        assert!(drive.submit().is_none(), "nothing is signed");
+        let view = drive.host.view();
+        assert_eq!(view.confirm_amount, "0.0058875");
+        let shown = send_confirm(&inputs(&view, &fee_view, &s, &wallet));
+        let notice = shown
+            .notice
+            .unwrap_or_else(|| unreachable!("the stop is said"));
+        assert!(notice.calm);
+        assert_eq!(
+            notice.body.as_ref(),
+            fill(
+                &fill(&fill(&s.fee_moved_max, "to", "0.005888"), "from", "0.0675"),
+                "symbol",
+                "USDC"
+            )
+        );
+        assert!(matches!(shown.cta_state, CtaState::Enabled));
+
+        // The next press signs exactly what is drawn: 0.0058875 + 0.2941125.
+        drive.dispatch(SendEvent::SlideConfirm {
+            review: view.review_digest.clone(),
+        });
+        let Some(SendOperation::SubmitUserOp { review, .. }) = drive.submit() else {
+            unreachable!("the next press is signed")
+        };
+        assert_eq!(review.transfers[0].amount, "5887500000000000");
+        assert_eq!(
+            review.fee.as_ref().map(|f| f.amount.as_str()),
+            Some("294112500000000000")
+        );
     }
 }
