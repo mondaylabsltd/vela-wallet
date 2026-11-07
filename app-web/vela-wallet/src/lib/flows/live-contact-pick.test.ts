@@ -101,6 +101,8 @@ describe('the live picker before the book is read', () => {
 		refreshing: false,
 		last_refreshed_at_ms: null,
 		updated_at_ms: null,
+		networks_read: true,
+		unread_chain_ids: [],
 		tokens: [],
 		unpriced_tokens: [],
 		failed_chain_ids: [],

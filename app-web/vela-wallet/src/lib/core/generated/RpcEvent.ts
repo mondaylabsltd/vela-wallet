@@ -2,4 +2,13 @@
 import type { RpcBanEntry } from "./RpcBanEntry";
 import type { RpcKind } from "./RpcKind";
 
-export type RpcEvent = { "type": "bans_loaded", entries: Array<RpcBanEntry>, } | { "type": "call_requested", call_id: string, chain_id: number, kind: RpcKind, method: string, now_ms: number, } | { "type": "bundler_base_requested", call_id: string, chain_id: number, now_ms: number, } | { "type": "best_rpc_url_requested", call_id: string, chain_id: number, now_ms: number, } | { "type": "invalidate_all" } | { "type": "refresh_chain", chain_id: number, };
+export type RpcEvent = { "type": "bans_loaded", entries: Array<RpcBanEntry>, } | { "type": "call_requested", call_id: string, chain_id: number, kind: RpcKind, method: string, now_ms: number, 
+/**
+ * r17-1 / r17-10: a read the person asked for themselves (their Try
+ * again, their press). It is always actually sent: its chain's
+ * failure cooldowns are lifted (the person's word is newer than any
+ * of them), it sweeps the whole pool even while the chain is out of
+ * reach (never the outage's two-node probe), and every POST of it
+ * is [`RpcOperation::JsonRpcPost::must_send`]. Absent: `false`.
+ */
+person: boolean, } | { "type": "bundler_base_requested", call_id: string, chain_id: number, now_ms: number, } | { "type": "best_rpc_url_requested", call_id: string, chain_id: number, now_ms: number, } | { "type": "invalidate_all" } | { "type": "refresh_chain", chain_id: number, };

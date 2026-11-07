@@ -266,10 +266,17 @@ export function networkRank(chainId: number): number {
 }
 
 export function chainName(chainId: number): string {
+	return namedChain(chainId) ?? `Chain ${chainId}`;
+}
+
+/**
+ * r17-4: the network's name, or `undefined` when this device has none — for
+ * a line that must never say a network by its raw chain id.
+ */
+export function namedChain(chainId: number): string | undefined {
 	return (
 		DEFAULT_NETWORKS.find((n) => n.chainId === chainId)?.displayName ??
-		_customNetworkCache.find((n) => n.chainId === chainId)?.displayName ??
-		`Chain ${chainId}`
+		_customNetworkCache.find((n) => n.chainId === chainId)?.displayName
 	);
 }
 

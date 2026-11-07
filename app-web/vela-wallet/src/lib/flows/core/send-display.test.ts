@@ -26,15 +26,40 @@ const UNPRICED: CurrencyView = { code: 'VND', rate: null, committed: true, pendi
 
 describe('sendDisplayContext', () => {
 	it('not committed: no rate — the placeholder’s "1" is never handed over as a price', () => {
-		expect(sendDisplayContext(FIRST)).toEqual({ code: 'USD', rate: null, fiat_decimals: 2 });
+		expect(sendDisplayContext(FIRST)).toEqual({
+			code: 'USD',
+			rate: null,
+			fiat_decimals: 2,
+			space: 'mainnet'
+		});
 		// The stored choice on its way names the code; still nothing to divide by.
-		expect(sendDisplayContext(ON_ITS_WAY)).toEqual({ code: 'CNY', rate: null, fiat_decimals: 2 });
+		expect(sendDisplayContext(ON_ITS_WAY)).toEqual({
+			code: 'CNY',
+			rate: null,
+			fiat_decimals: 2,
+			space: 'mainnet'
+		});
 	});
 
 	it('committed: the pair as it is — a real 1 for USD, and "cannot price" kept as that', () => {
-		expect(sendDisplayContext(CNY)).toEqual({ code: 'CNY', rate: 7.1, fiat_decimals: 2 });
-		expect(sendDisplayContext(USD)).toEqual({ code: 'USD', rate: 1, fiat_decimals: 2 });
-		expect(sendDisplayContext(UNPRICED)).toEqual({ code: 'VND', rate: null, fiat_decimals: 2 });
+		expect(sendDisplayContext(CNY)).toEqual({
+			code: 'CNY',
+			rate: 7.1,
+			fiat_decimals: 2,
+			space: 'mainnet'
+		});
+		expect(sendDisplayContext(USD)).toEqual({
+			code: 'USD',
+			rate: 1,
+			fiat_decimals: 2,
+			space: 'mainnet'
+		});
+		expect(sendDisplayContext(UNPRICED)).toEqual({
+			code: 'VND',
+			rate: null,
+			fiat_decimals: 2,
+			space: 'mainnet'
+		});
 	});
 
 	it('the code a typed figure is counted in is the person’s, never the placeholder’s', () => {
@@ -138,7 +163,7 @@ describe('the send machine, opened before the currency commits', () => {
 		send.dispatch({ type: 'select_token', token_id: sendTokenId(token) });
 		send.dispatch({
 			type: 'display_changed',
-			display: { code: 'USD', rate: 1, fiat_decimals: 2 }
+			display: { code: 'USD', rate: 1, fiat_decimals: 2, space: 'mainnet' }
 		});
 		send.dispatch({ type: 'toggle_fiat_input' });
 		expect(send.view().amount_fiat_code).toBe('USD');

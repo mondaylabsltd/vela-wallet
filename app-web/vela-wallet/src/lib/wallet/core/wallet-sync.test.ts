@@ -89,6 +89,8 @@ function view(at: number | null, address: string | null = ADDRESS): BalanceView 
 		address,
 		last_refreshed_at_ms: at,
 		updated_at_ms: at,
+		networks_read: true,
+		unread_chain_ids: [],
 		tokens: []
 	} as BalanceView;
 }

@@ -52,6 +52,8 @@ describe('logo URLs', () => {
 				refreshing: false,
 				last_refreshed_at_ms: null,
 				updated_at_ms: null,
+				networks_read: true,
+				unread_chain_ids: [],
 				tokens: [
 					{
 						chain_id: 137,

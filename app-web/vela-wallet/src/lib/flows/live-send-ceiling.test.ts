@@ -215,7 +215,7 @@ function opened(): Drive {
 			locked: false,
 			preselected_multi: null
 		},
-		display: { code: 'USD', rate: 1, fiat_decimals: 2 }
+		display: { code: 'USD', rate: 1, fiat_decimals: 2, space: 'mainnet' }
 	});
 	drive.dispatch({ type: 'select_token', token_id: sendTokenId(ARC_USDC) });
 	drive.dispatch({ type: 'set_recipient', recipient: RECIPIENT });

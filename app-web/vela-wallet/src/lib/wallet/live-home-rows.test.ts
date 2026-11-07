@@ -72,6 +72,8 @@ const BALANCE: BalanceView = {
 	refreshing: false,
 	last_refreshed_at_ms: 0,
 	updated_at_ms: 0,
+	networks_read: true,
+	unread_chain_ids: [],
 	tokens: [],
 	unpriced_tokens: [],
 	failed_chain_ids: [],

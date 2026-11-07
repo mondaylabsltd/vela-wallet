@@ -155,6 +155,16 @@ const faultRateLimitedChains = new Set<number>();
 const faultHardFailedChains = new Set<number>();
 
 /** Chains whose RPC endpoints are all currently failing. */
+/**
+ * r17-12: whether the pool finds `chainId` failing — failed or out of reach,
+ * not merely rate limited (the desktop's `failed_chains ∪ unreached_chains`).
+ */
+export function chainFailing(chainId: number): boolean {
+	const view = latestView;
+	if (!view) return false;
+	return view.failed_chains.includes(chainId) || (view.out_of_reach_chains ?? []).includes(chainId);
+}
+
 export function getFailedRpcChains(): ReadonlySet<number> {
 	return new Set([...coreFailedChains, ...faultFailedChains]);
 }
@@ -372,7 +382,8 @@ async function route(
 	kind: RpcKind,
 	method: string,
 	params: unknown[],
-	chainId: number
+	chainId: number,
+	person = false
 ): Promise<RPCResponse> {
 	await ensureReady();
 	const callId = `${kind}:${chainId}:${(sequence += 1)}`;
@@ -385,7 +396,11 @@ async function route(
 			chain_id: chainId,
 			kind,
 			method,
-			now_ms: Date.now()
+			now_ms: Date.now(),
+			// r17-10: the person's own ask (their Try again, their press) —
+			// the core sweeps every node, past cooldowns, and marks each POST
+			// `must_send` so the skipper never answers it locally.
+			person
 		});
 	});
 }
@@ -409,12 +424,17 @@ async function endpointsFor(
 // Public API
 // ---------------------------------------------------------------------------
 
-/** An RPC call with core-decided balancing and failover. */
+/**
+ * An RPC call with core-decided balancing and failover. `options.person`:
+ * the person asked for this read themselves (r17-10, the core's
+ * `CallRequested.person`) — it is always actually sent.
+ */
 export async function poolRpcCall(
 	method: string,
 	params: unknown[],
 	chainId: number,
-	attempt = 0
+	attempt = 0,
+	options: { person?: boolean } = {}
 ): Promise<RPCResponse> {
 	void attempt; // signature compatibility; passes are the core's now
 	const injectedLatency = rpcLatencyMs();
@@ -440,7 +460,7 @@ export async function poolRpcCall(
 		throw new Error(`[fault] RPC rate-limited for chain ${chainId}`);
 	}
 
-	return route('rpc', method, params, chainId);
+	return route('rpc', method, params, chainId, options.person ?? false);
 }
 
 /** A bundler call. Since spec 081 the pick is never sent to the relay. */

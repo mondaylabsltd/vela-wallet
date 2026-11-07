@@ -326,7 +326,7 @@ describe('a picker opened while the home’s round is still out', () => {
 				locked: false,
 				preselected_multi: null
 			},
-			display: { code: 'USD', rate: 1, fiat_decimals: 2 }
+			display: { code: 'USD', rate: 1, fiat_decimals: 2, space: 'mainnet' }
 		});
 		await vi.waitFor(() => expect(view?.tokens).toHaveLength(1));
 		const shown = view as unknown as SendView;

@@ -7,7 +7,15 @@ import type { MultisigSendPurpose } from "./MultisigSendPurpose";
  * An operation a multisig machine asks of its shell. Every one is answered
  * by exactly one [`MultisigShellResult`].
  */
-export type MultisigOperation = { "type": "http", method: string, url: string, body: string | null, timeout_ms: number, } | { "type": "rpc", chain_id: number, method: string, params: unknown, bound_ms: number | null, } | { "type": "load_store", keys: Array<string>, } | { "type": "write_store", key: string, value: string | null, } | { "type": "wait", ms: number, } | { "type": "now" } | { "type": "random", bytes: number, } | { "type": "passkey", owner: string, chain_id: number, challenge: string, purpose: MultisigPasskeyPurpose, } | { "type": "ask_risk", chain_id: number, safe: string, findings: unknown[], } | { "type": "send_calls", chain_id: number, from: string, calls: unknown[], fee: unknown, 
+export type MultisigOperation = { "type": "http", method: string, url: string, body: string | null, timeout_ms: number, } | { "type": "rpc", chain_id: number, method: string, params: unknown, bound_ms: number | null, 
+/**
+ * r17-1 / r17-10: asked on the person's own word (their Try again,
+ * their press): the shell hands it to its pool as the person's ask
+ * (`rpc_pool::Event::CallRequested::person`), which always puts it
+ * on the wire — never answered from a cooldown or a skip window.
+ * Absent: `false`.
+ */
+person: boolean, } | { "type": "load_store", keys: Array<string>, } | { "type": "write_store", key: string, value: string | null, } | { "type": "wait", ms: number, } | { "type": "now" } | { "type": "random", bytes: number, } | { "type": "passkey", owner: string, chain_id: number, challenge: string, purpose: MultisigPasskeyPurpose, } | { "type": "ask_risk", chain_id: number, safe: string, findings: unknown[], } | { "type": "send_calls", chain_id: number, from: string, calls: unknown[], fee: unknown, 
 /**
  * What it is for ([`SendPurpose`]); absent from an older machine.
  */

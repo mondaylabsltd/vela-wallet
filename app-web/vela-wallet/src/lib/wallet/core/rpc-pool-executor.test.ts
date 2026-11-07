@@ -112,7 +112,8 @@ describe('json_rpc_post outcomes are transport facts', () => {
 				url: 'https://rpc.one',
 				method: 'eth_blockNumber',
 				x_rpc_url: null,
-				timeout_ms: 1000
+				timeout_ms: 1000,
+				must_send: false
 			})
 		);
 		expect(result).toMatchObject({
@@ -135,7 +136,8 @@ describe('json_rpc_post outcomes are transport facts', () => {
 				url: 'https://rpc.one',
 				method: 'x',
 				x_rpc_url: null,
-				timeout_ms: 1000
+				timeout_ms: 1000,
+				must_send: false
 			})
 		);
 		expect(result).toMatchObject({ outcome: { type: 'http_error', status: 429 } });
@@ -154,7 +156,8 @@ describe('json_rpc_post outcomes are transport facts', () => {
 			url: 'https://relay.example/1',
 			method: 'eth_sendUserOperation',
 			x_rpc_url: null,
-			timeout_ms: 1000
+			timeout_ms: 1000,
+			must_send: false
 		});
 		const refusal = { jsonrpc: '2.0', id: 1, error: { code: -32603, message: 'not accepted' } };
 		const answers = [
@@ -202,7 +205,8 @@ describe('json_rpc_post outcomes are transport facts', () => {
 			url: 'https://relay.example/1',
 			method: 'eth_sendUserOperation',
 			x_rpc_url: null,
-			timeout_ms: 1000
+			timeout_ms: 1000,
+			must_send: false
 		});
 		vi.stubGlobal('navigator', { onLine: true });
 		await expect(executor.execute(post)).resolves.toMatchObject({
@@ -225,7 +229,8 @@ describe('json_rpc_post outcomes are transport facts', () => {
 				url: 'https://rpc.one',
 				method: 'x',
 				x_rpc_url: null,
-				timeout_ms: 1000
+				timeout_ms: 1000,
+				must_send: false
 			})
 		);
 		expect(fetchSpy).not.toHaveBeenCalled();
@@ -254,7 +259,8 @@ describe('json_rpc_post outcomes are transport facts', () => {
 				url: 'https://relay.example',
 				method: 'eth_sendUserOperation',
 				x_rpc_url: 'https://rpc.one/v2/KEY',
-				timeout_ms: 1000
+				timeout_ms: 1000,
+				must_send: false
 			})
 		);
 		// Key included — ruled (098 §0.1), and said where it is set.
@@ -274,7 +280,8 @@ describe('json_rpc_post outcomes are transport facts', () => {
 				url: 'https://rpc.two',
 				method: 'eth_call',
 				x_rpc_url: null,
-				timeout_ms: 1000
+				timeout_ms: 1000,
+				must_send: false
 			})
 		);
 		expect(Object.keys(headersOf(fetchSpy))).not.toContain('x-vela-rpc-url');
@@ -307,7 +314,8 @@ describe('conclude and the failure twin', () => {
 					url: 'https://rpc.one',
 					method: 'x',
 					x_rpc_url: null,
-					timeout_ms: 1000
+					timeout_ms: 1000,
+					must_send: false
 				}),
 				new Error('boom')
 			)
@@ -343,7 +351,8 @@ describe('an endpoint that is not answering is skipped a while (home-17)', () =>
 			url,
 			method,
 			x_rpc_url: null,
-			timeout_ms: 1000
+			timeout_ms: 1000,
+			must_send: false
 		});
 
 	it('three refusals, then reads go nowhere until the window ends; an answer ends it', async () => {
@@ -371,6 +380,43 @@ describe('an endpoint that is not answering is skipped a while (home-17)', () =>
 		// A write to the dead one still goes on the wire.
 		await executor.execute(read('https://dead.rpc', 'eth_sendRawTransaction'));
 		expect(fetchSpy).toHaveBeenCalledTimes(SKIP_AFTER_FAILURES + 2);
+	});
+
+	it('r17-1 / r17-10: the person’s own ask (`must_send`) is never answered without the wire', async () => {
+		let up = false;
+		const fetchSpy = vi.fn(async () => {
+			if (!up) throw new TypeError('Failed to fetch');
+			return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x1' }), {
+				status: 200,
+				headers: { 'content-type': 'application/json' }
+			});
+		});
+		vi.stubGlobal('fetch', fetchSpy);
+		vi.stubGlobal('navigator', { onLine: true });
+		const executor = createRpcPoolExecutor(makeRegistry());
+		for (let i = 0; i < SKIP_AFTER_FAILURES; i++) await executor.execute(read());
+		// The outage lifts; a background read is still skipped…
+		up = true;
+		await expect(executor.execute(read())).resolves.toMatchObject({
+			outcome: { type: 'not_connected' }
+		});
+		const before = fetchSpy.mock.calls.length;
+		// …but the person's Try again reaches the node, and its answer ends the window.
+		const theirs = effect({
+			type: 'json_rpc_post',
+			call_id: 'c1',
+			url: 'https://dead.rpc',
+			method: 'eth_getCode',
+			x_rpc_url: null,
+			timeout_ms: 1000,
+			must_send: true
+		});
+		await expect(executor.execute(theirs)).resolves.toMatchObject({
+			outcome: { type: 'response' }
+		});
+		expect(fetchSpy.mock.calls.length).toBe(before + 1);
+		await executor.execute(read());
+		expect(fetchSpy.mock.calls.length).toBe(before + 2);
 	});
 
 	it('the window doubles while it keeps failing, caps, and closes on any answer', () => {
@@ -445,7 +491,8 @@ describe('hedged reads (perf-6)', () => {
 			url,
 			method: 'eth_getBalance',
 			x_rpc_url: null,
-			timeout_ms: 8000
+			timeout_ms: 8000,
+			must_send: false
 		});
 
 	function hedgeRegistry() {
