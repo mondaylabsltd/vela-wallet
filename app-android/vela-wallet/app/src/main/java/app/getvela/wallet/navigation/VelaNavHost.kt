@@ -2353,6 +2353,8 @@ fun VelaNavHost(
                                 noValue = strings.t(I18nKeys.NetworkSpace.NO_VALUE).takeIf { noValue },
                                 // r15-1: the feed's rows only under their own account.
                                 shownAccount = shownAddress,
+                                // r17-4: a network the space does not list is named from the whole list.
+                                allChainNames = allNetworks.networks.associate { it.chain_id.toInt() to it.display_name },
                             ).let { home ->
                                 // Spec 047 D9: no network at all is said on the hero, not guessed from a slow pool.
                                 // S4 (r9): its "Updated" is the core's stamp, which a round

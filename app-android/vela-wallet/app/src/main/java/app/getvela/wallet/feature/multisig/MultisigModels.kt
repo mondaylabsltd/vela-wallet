@@ -216,7 +216,9 @@ class MsProposalModel(
      * each action's last state apart (`approve:` / `execute:`), with no order
      * between them; the order is the shell's, from when each went to
      * `working` ([MsProposalsView.pressOrder]). Not known: drawn, never
-     * hidden on a guess.
+     * hidden on a guess. The core now ends the one press's stop itself when
+     * an approval goes through (r17-16, `Approve` drops a settled
+     * `execute:` failure): this stays as a guard, a no-op over that core.
      */
     private fun staleAfter(what: String, other: String): Boolean {
         if (view.action("$other:$hash").kind != "done") return false

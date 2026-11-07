@@ -298,6 +298,21 @@ class R17NativeFixesTest {
         assertTrue(app.substringAfter("onHoldingsFirstRead =").substringBefore("\n").contains("startNetworks()"))
     }
 
+    // -- r17-4 (the shell's half) -------------------------------------------------------------
+
+    @Test
+    fun `a network Activity could not read is named, never by its raw id`() {
+        val feed = app.getvela.wallet.feature.wallet.core.FeedView(unread_chains = listOf(5042002), unread_key = "home.activityUnreadOne", account = alice)
+        val mainnetNames = mapOf(1 to "Ethereum")
+        // The whole list names it.
+        val fromAll = WalletLive.unreadLine(feed, strings, mainnetNames, allNames = mapOf(5042002 to "Arc Testnet"))!!
+        assertEquals(strings.t("home.activityUnreadOne", mapOf("network" to "Arc Testnet")), fromAll)
+        // Neither list names it: the core's catalog does.
+        val fromCatalog = WalletLive.unreadLine(feed, strings, mainnetNames)!!
+        assertFalse(fromCatalog, fromCatalog.contains("5042002"))
+        assertTrue(source("navigation/VelaNavHost.kt").contains("allChainNames = allNetworks.networks"))
+    }
+
     // -- r17-21 -----------------------------------------------------------------------------
 
     @Test
