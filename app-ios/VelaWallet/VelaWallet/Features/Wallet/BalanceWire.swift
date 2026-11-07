@@ -180,6 +180,17 @@ struct BalanceViewWire: Decodable, Equatable {
     /// balance"), never a freshness claim over a network that was not read.
     /// The hero's "Updated" is drawn from this alone. Absent reads `nil`.
     var updatedAtMs: Double? = nil
+    /// r17-3 / r18-1: the first read of this account has ended — every
+    /// network said for it was asked (its answer, or its failure, is in).
+    /// Handed on to the Activity feed (`balance_read`), with
+    /// `unreadChainIds`: "No activity yet" is a claim about every network of
+    /// the space, never made while the balance has one unread. Absent (an
+    /// older core, a hand-written view) reads `nil`: not said.
+    var networksRead: Bool? = nil
+    /// r17-3 / r18-1: the networks said for this account that were NOT read
+    /// now — failed, refused, silent or rate limited — ascending. A failure
+    /// or a 429 is never a read.
+    var unreadChainIds: [Int]? = nil
     var tokens: [BalanceTokenWire]
     /// Held but unpriceable — listed separately so the total stays honest.
     var unpricedTokens: [BalanceTokenWire]

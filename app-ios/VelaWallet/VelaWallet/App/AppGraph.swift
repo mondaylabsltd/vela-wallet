@@ -237,6 +237,8 @@ final class AppGraph {
         self.wallet = wallet
         // An incoming transfer the feed just found: the hero follows (#188).
         activityStore.onNewItem = { [weak wallet] in wallet?.refresh(pull: false) }
+        // r18-1: the feed hears what the balance read (`balance_read`).
+        Self.feedFollowsBalance(wallet: wallet, activity: activityStore)
         self.tokens = ManageTokensStore(
             store: shelf, pool: pool,
             onInvalidate: { [weak wallet] in wallet?.refresh(pull: false) }
@@ -570,5 +572,13 @@ final class AppGraph {
         // The multisig machines read their stores now, so a link that opened
         // the app, the switcher and the notifications find them loaded.
         Task { [multisig] in await multisig.boot() }
+    }
+
+    /// r17-3 / r18-1: the Activity feed follows the balance's reads — every
+    /// view the balance core writes (its own, unfiltered) is said to the
+    /// feed as `balance_read`, so "No activity yet" is never claimed while a
+    /// network of the space is unread (the web's `feed.svelte.ts`).
+    static func feedFollowsBalance(wallet: WalletStore, activity: ActivityStore) {
+        wallet.onView = { [weak activity] view in activity?.balanceRead(view) }
     }
 }

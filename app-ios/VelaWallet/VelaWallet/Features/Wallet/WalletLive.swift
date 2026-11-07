@@ -385,12 +385,21 @@ enum WalletLive {
         _ feed: FeedViewWire, loc: Loc, networks: WalletNetworks = .builtin
     ) -> String? {
         guard let key = feed.unreadKey, !key.isEmpty else { return nil }
-        let name = feed.unreadChains.first.map { chainId in
-            networks.meta(chainId)?.displayName
-                ?? loc.t(I18nKeys.SettingsUi.chainId, vars: ["chainId": String(chainId)])
-        } ?? ""
-        return loc.t(key, vars: ["network": name, "n": String(feed.unreadChains.count)])
+        // r17-4 / r18-1 (the web's `activityUnreadLine`): the one network by
+        // its name — this shell's list, else the core's (`unread_network`)
+        // — and never its raw chain id: with no name, the many-networks
+        // words.
+        let name = feed.unreadChains.count == 1
+            ? feed.unreadChains.first.flatMap { networks.meta($0)?.displayName } ?? feed.unreadNetwork
+            : nil
+        if key == Self.unreadOneKey, let name, !name.isEmpty {
+            return loc.t(Self.unreadOneKey, vars: ["network": name])
+        }
+        return loc.t(Self.unreadManyKey, vars: ["n": String(max(1, feed.unreadChains.count))])
     }
+
+    static let unreadOneKey = "home.activityUnreadOne"
+    static let unreadManyKey = "home.activityUnreadMany"
 
     /// The home Activity's empty line, as the core chose it (spec 082 RG5):
     /// "nothing yet" with its caption, or — the feed narrowed to one chain —
