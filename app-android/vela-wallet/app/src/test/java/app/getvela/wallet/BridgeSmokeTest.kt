@@ -149,6 +149,7 @@ class BridgeSmokeTest {
                 is SignOperation.DeleteRecord -> SignShellResult.RecordUpdated
                 is SignOperation.SwitchActiveAccount -> SignShellResult.AccountSwitched
                 is SignOperation.SimVerdictTimer -> SignShellResult.SimVerdictTimerFired(op.id, op.round)
+                is SignOperation.ReadSafeOwner -> SignShellResult.SafeOwnerRead(op.id, op.chain_id, op.safe, app.getvela.wallet.feature.signing.core.SafeOwnerAnswer.Unreachable("stub"))
             }
         }
         sign.dispatch(SignEvent.NetworksChanged(listOf(1, 100)), SignEvent.serializer())

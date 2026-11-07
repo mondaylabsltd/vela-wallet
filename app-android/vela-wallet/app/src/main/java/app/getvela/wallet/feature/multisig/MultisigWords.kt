@@ -365,6 +365,21 @@ class MultisigWords(
     }
 
     /**
+     * §31: a site's request to a multisig the core refused because it would
+     * have made the multisig act for a Safe it owns (`refusal.data.reason ==
+     * "parent_safe"`) — said in the core's sentence for it (`data.key`:
+     * `componentsUi.signing.parentSafeBlocked` / `parentSafeUnchecked`) with
+     * the function and that Safe. `null` for any other refusal.
+     */
+    fun dappRefusal(refusal: JsonElement?): String? {
+        val data = refusal["data"]
+        if (data["reason"].str != "parent_safe") return null
+        val key = data["key"].str?.takeIf { it == PARENT_BLOCKED_KEY || it == PARENT_UNCHECKED_KEY }
+            ?: if (data["why"].str == "unchecked") PARENT_UNCHECKED_KEY else PARENT_BLOCKED_KEY
+        return raw(key, "function" to data["function"].str.orEmpty(), "safe" to data["safe"].str?.let(::short).orEmpty())
+    }
+
+    /**
      * Round 16 leftover 4: a draft the core refused to build (`refused`'s
      * `reason`). A member change's refusal is the core's JSON
      * (`MemberRefusal`, `{kind, …}`) and is worded by its kind; anything
@@ -543,6 +558,10 @@ class MultisigWords(
         fun short(address: String): String =
             // r11-6: THE short form is the core's (`names.short`, 6+6 EIP-55).
             app.getvela.wallet.core.format.ShortAddress.of(address)
+
+        /** §31: the core's two sentences for a parent-Safe refusal (`multisig_dapp::PARENT_*_KEY`). */
+        private const val PARENT_BLOCKED_KEY = "componentsUi.signing.parentSafeBlocked"
+        private const val PARENT_UNCHECKED_KEY = "componentsUi.signing.parentSafeUnchecked"
 
         /** The core's member-change refusals (`MemberRefusal`'s kinds) worded by [memberRefusal]. */
         private val MEMBER_REFUSALS = setOf(

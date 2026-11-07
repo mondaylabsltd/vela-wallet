@@ -1606,6 +1606,12 @@ class CoreWireDriftTest {
         assertStringUnion<SignSwipeAction>("SignSwipeAction")
         assertStringUnion<SignMethodKind>("SignMethodKind")
         assertStringUnion<SignErrorKind>("SignErrorKind")
+        // §31: the parent-Safe guard — the refusal's view, why, and the
+        // `isOwner` read's answer, each as the core's mirror names them.
+        assertFieldsExist<SignBlockedView>("SignBlockedView")
+        assertStringUnion<ParentReason>("ParentReason")
+        assertVariantFieldsExhaustive(SafeOwnerAnswer.serializer(), "SafeOwnerAnswer")
+        assertVariantsExhaustive<SafeOwnerAnswer>("SafeOwnerAnswer")
         // Round 7: why the trusted signing page did not sign (r7-2, r7-7).
         assertStringUnion<PageFailure>("PageFailure")
         assertStringUnion<SignFundingPresentation>("SignFundingPresentation")

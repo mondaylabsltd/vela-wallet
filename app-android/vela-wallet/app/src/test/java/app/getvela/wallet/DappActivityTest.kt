@@ -812,6 +812,7 @@ class DappActivityTest {
         is SignOperation.DeleteRecord -> SignShellResult.RecordUpdated
         is SignOperation.SwitchActiveAccount -> SignShellResult.AccountSwitched
         is SignOperation.SimVerdictTimer -> SignShellResult.SimVerdictTimerFired(op.id, op.round)
+        is SignOperation.ReadSafeOwner -> SignShellResult.SafeOwnerRead(op.id, op.chain_id, op.safe, app.getvela.wallet.feature.signing.core.SafeOwnerAnswer.Unreachable("stub"))
     }
 
     private companion object {

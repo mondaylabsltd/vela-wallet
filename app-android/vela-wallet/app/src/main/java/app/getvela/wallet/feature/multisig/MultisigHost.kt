@@ -161,7 +161,13 @@ fun MultisigDappSheet(hub: MultisigHub, id: String, context: MultisigHostContext
         )
         held["stage"].str == "refused" -> MsSheet(words.t("proposal.title"), words.raw("common.done"), onClose = leave, tag = "multisig.dapp") {
             MsNote(words.t("proposal.siteAsks", "host" to host))
-            MsNote(held["refusal"]["message"].str ?: words.t("action.unsupported"), tone = MsTone.Warning, tag = "multisig.dapp.refused")
+            // §31: a request that would act for a Safe the multisig owns is
+            // said in the core's sentence for it, never its English message.
+            MsNote(
+                words.dappRefusal(held["refusal"]) ?: held["refusal"]["message"].str ?: words.t("action.unsupported"),
+                tone = MsTone.Warning,
+                tag = "multisig.dapp.refused",
+            )
         }
         held != null && view.draft != null -> MultisigDraftReviewSheet(hub, words, context.tokenInfo, siteNote = words.t("proposal.siteAsks", "host" to host), onWithdraw = leave, fromSite = true)
         else -> MsSheet(words.t("proposal.title"), words.raw("common.done"), onClose = leave, tag = "multisig.dapp") {

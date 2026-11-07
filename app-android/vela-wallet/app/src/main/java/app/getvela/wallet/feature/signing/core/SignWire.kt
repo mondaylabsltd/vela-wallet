@@ -64,6 +64,13 @@ enum class SignErrorKind {
     /** The request would have changed who controls the account (spec 081). */
     @SerialName("self_call_blocked") SelfCallBlocked,
 
+    /**
+     * §31: the request would have made this account act for a Safe it owns —
+     * a multisig on this device, or one whose `isOwner` read true (or could
+     * not be read). Refused, never signed; `-32603`, never "anyway".
+     */
+    @SerialName("parent_safe_blocked") ParentSafeBlocked,
+
     @SerialName("funding_cancelled") FundingCancelled,
 
     @SerialName("submit_failed") SubmitFailed,
@@ -263,7 +270,49 @@ data class SignBlockedView(
     val selector: String = "",
     val leg_index: Int? = null,
     val nested: Boolean = false,
+    /**
+     * §31: the Safe this account owns that the request would have acted for
+     * (a multisig it is a member of). `null`: the account itself (spec 081).
+     */
+    val parent: String? = null,
+    /** §31: why — `member`, `owner` or `unchecked`; `null` with [parent]. */
+    val reason: ParentReason? = null,
 )
+
+/** §31: why a request that would act for a Safe this account owns was refused. */
+@Serializable
+enum class ParentReason {
+    /** The Safe is one of this device's multisigs. */
+    @SerialName("member") Member,
+
+    /** The chain says this account is one of its owners. */
+    @SerialName("owner") Owner,
+
+    /** Whether this account owns it could not be read — refused all the same. */
+    @SerialName("unchecked") Unchecked,
+}
+
+/**
+ * §31: what the shell's `eth_call` of `isOwner(account)` came back as — the
+ * node's answer, verbatim. The shell decides nothing from it; the core reads it.
+ */
+@Serializable
+sealed class SafeOwnerAnswer {
+    /** The node answered `result` (hex), as it came. */
+    @Serializable
+    @SerialName("returned")
+    data class Returned(val data: String) : SafeOwnerAnswer()
+
+    /** The node answered a JSON-RPC error object. `code` is `i64`. */
+    @Serializable
+    @SerialName("rpc_error")
+    data class RpcError(val code: Long? = null, val message: String = "") : SafeOwnerAnswer()
+
+    /** No node answered (offline, timed out, every endpoint failed). */
+    @Serializable
+    @SerialName("unreachable")
+    data class Unreachable(val detail: String = "") : SafeOwnerAnswer()
+}
 
 @Serializable
 data class SignFundingNeeded(
@@ -746,6 +795,23 @@ sealed class SignOperation {
     @Serializable
     @SerialName("sim_verdict_timer")
     data class SimVerdictTimer(val id: String, val round: Int, val ms: Int) : SignOperation()
+
+    /**
+     * §31: read whether [account] owns [safe] — an `eth_call` of [data]
+     * (`isOwner(account)`, built by the core) to [safe] at `latest` on
+     * [chain_id], through the pool, bounded. Answered
+     * [SignShellResult.SafeOwnerRead] with the same [id], [chain_id] and
+     * [safe]; until it is, the confirm stays shut (`reading`).
+     */
+    @Serializable
+    @SerialName("read_safe_owner")
+    data class ReadSafeOwner(
+        val id: String,
+        val chain_id: Int,
+        val safe: String,
+        val account: String,
+        val data: String,
+    ) : SignOperation()
 }
 
 @Serializable
@@ -782,6 +848,16 @@ sealed class SignShellResult {
     @Serializable
     @SerialName("sim_verdict_timer_fired")
     data class SimVerdictTimerFired(val id: String, val round: Int) : SignShellResult()
+
+    /** §31: the answer to [SignOperation.ReadSafeOwner] — its id, chain and Safe echoed as given. */
+    @Serializable
+    @SerialName("safe_owner_read")
+    data class SafeOwnerRead(
+        val id: String,
+        val chain_id: Int,
+        val safe: String,
+        val answer: SafeOwnerAnswer,
+    ) : SignShellResult()
 }
 
 @Serializable
@@ -803,6 +879,15 @@ sealed class SignEvent {
     @Serializable
     @SerialName("accounts_changed")
     data class AccountsChanged(val accounts: List<SignAccountRef>, val active_index: Int) : SignEvent()
+
+    /**
+     * §31: every multisig on this device (the multisig list, any member) —
+     * sent with the accounts and again whenever the list changes. A site's
+     * request that would act for one of them is refused at once.
+     */
+    @Serializable
+    @SerialName("multisigs_changed")
+    data class MultisigsChanged(val addresses: List<String>) : SignEvent()
 
     @Serializable
     @SerialName("request_arrived")

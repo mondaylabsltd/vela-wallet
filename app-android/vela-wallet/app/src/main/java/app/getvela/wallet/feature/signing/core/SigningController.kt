@@ -55,7 +55,28 @@ data class IncomingRequest(
      * sheet says so once. `null` for every other request.
      */
     val spaceNoteChainId: Int? = null,
-)
+) {
+    companion object {
+        /**
+         * The in-app browser's forwarded request (`dapp_browser`'s
+         * `forward_to_signing`), as the signing machines are opened for it —
+         * the one translation the app and its entry-point tests share.
+         */
+        fun fromBrowser(
+            operation: app.getvela.wallet.feature.browser.core.DbrOperation.ForwardToSigning,
+            spaceNoteChainId: Int? = null,
+        ) = IncomingRequest(
+            id = operation.id,
+            method = operation.method,
+            paramsJson = operation.params_json,
+            origin = operation.origin,
+            transportId = operation.tab,
+            chainId = operation.chain_id,
+            grantedAddress = operation.granted_address,
+            spaceNoteChainId = spaceNoteChainId,
+        )
+    }
+}
 
 /**
  * The signing sheet's journey — four machines, one sheet (spec 044 T032;
@@ -304,6 +325,15 @@ class SigningController(
          * account with one on its chain waits for it. `null` = no tracker.
          */
         fun inFlightOps(): StateFlow<List<app.getvela.wallet.feature.send.core.InFlightOp>>? = null
+
+        /**
+         * §31: every multisig on this device (the multisig accounts list, any
+         * member), live — told to this request's machine at boot beside the
+         * accounts and on every change: a site's request that would act for
+         * one is refused at once. `null` = no list here; the core then reads
+         * every such Safe on chain (`read_safe_owner`) — slower, never laxer.
+         */
+        fun multisigs(): StateFlow<List<String>>? = null
 
         /** The descriptor endpoint base. */
         fun dataBase(): String
@@ -578,6 +608,13 @@ class SigningController(
         }
         dispatchSign(SignEvent.NetworksChanged(knownChains()))
         dispatchSign(SignEvent.AccountsChanged(signers, 0))
+        // §31: the device's multisigs, before the request lands — so one on
+        // the list is refused at arrival, never read first — and every change
+        // after (the machine re-judges the request on the sheet).
+        ports.multisigs()?.let { list ->
+            dispatchSign(SignEvent.MultisigsChanged(list.value))
+            multisigWatch = scope.launch { list.collect { dispatchSign(SignEvent.MultisigsChanged(it)) } }
+        }
         dispatchSign(
             SignEvent.RequestArrived(
                 id = request.id, method = request.method, params_json = request.paramsJson, origin = request.origin,
@@ -827,11 +864,15 @@ class SigningController(
         _closed.value = true
     }
 
+    /** §31: this request's ear on the device's multisig list ([Ports.multisigs]); ends with it. */
+    @Volatile
+    private var multisigWatch: kotlinx.coroutines.Job? = null
+
     init {
         // One request, one controller: its fee sessions end with it — their
         // re-pricing and the core's re-asks after a failure — and so does its
         // ear on the tracker.
-        scope.launch { closed.first { it }; speedControl.dispose(); following?.cancel(); nodeWatch?.cancel() }
+        scope.launch { closed.first { it }; speedControl.dispose(); following?.cancel(); nodeWatch?.cancel(); multisigWatch?.cancel() }
     }
 
     fun approve() = dispatchSign(SignEvent.ApproveTapped(approveOpts(fee.value, clear.value, guard.value, _sim.value)))
