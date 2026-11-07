@@ -773,7 +773,8 @@ fun VelaNavHost(
                 val networks by application.container.spaceNetworks.collectAsStateWithLifecycle()
                 // r11-3: both spaces' networks — where a multisig shown lives, when not here.
                 val allNetworks by application.container.settings.networks.collectAsStateWithLifecycle()
-                val noValue = space.testnet
+                // r18-9: the core's word for whether the space in front shows fiat.
+                val noValue = !space.showsFiat
                 val chainNames = remember(networks.networks) {
                     networks.networks.associate { it.chain_id.toInt() to it.display_name }
                 }
@@ -968,6 +969,8 @@ fun VelaNavHost(
                 fun sendDisplay(): SendDisplayContext {
                     val money = WalletLive.Money.of(currency, strings.language)
                     return SendDisplayContext(
+                        // r18-9 (§29 adoption): the Send machine applies the space itself.
+                        space = space.wire,
                         code = money.code,
                         rate = currency.rate?.takeIf { currency.committed && it.isFinite() && it > 0.0 },
                         fiat_decimals = 2,
@@ -1248,7 +1251,7 @@ fun VelaNavHost(
                         walletName = activeLabel,
                         walletAddress = session.address,
                         // r17-14: the testnet space prices no fee on the signing sheet either.
-                        money = WalletLive.Money.of(currency, strings.language).let { if (space.testnet) it.withoutValue() else it },
+                        money = WalletLive.Money.of(currency, strings.language).inSpace(space),
                         origin = signRequest?.origin?.substringAfter("://")?.substringBefore('/'),
                         chainId = signChain,
                         feeOpen = feeOpen,
@@ -1603,7 +1606,7 @@ fun VelaNavHost(
                     // move; a keystroke rebuilds only the live form over them.
                     val drawnFrame = remember(liveState, strings, i18nNamespaces) { FlowFixtures.build(liveState, strings) }
                     // r17-14: the testnet space prices nothing — amounts, fees, receipts (spec 105).
-                    val sendMoney = remember(currency, strings.language, space.testnet) { WalletLive.Money.of(currency, strings.language).let { if (space.testnet) it.withoutValue() else it } }
+                    val sendMoney = remember(currency, strings.language, space) { WalletLive.Money.of(currency, strings.language).inSpace(space) }
                     LaunchedEffect(liveState, drawnFrame.base::class) {
                         VelaLog.event("send.base", drawnFrame.base::class.simpleName ?: "?", "state" to liveState.name, "top" to flowState.name)
                     }
@@ -1868,7 +1871,7 @@ fun VelaNavHost(
                                 }
                             },
                             onExplorer = {
-                                val ctx = SendLive.Context(strings, chainNames, explorers, WalletLive.Money.of(currency, strings.language), shownName, shownAddress)
+                                val ctx = SendLive.Context(strings, chainNames, explorers, WalletLive.Money.of(currency, strings.language).inSpace(space), shownName, shownAddress)
                                 SendLive.explorerUrl(sendView, ctx)?.let { url ->
                                     runCatching {
                                         activity.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
@@ -2179,7 +2182,7 @@ fun VelaNavHost(
                                 names = chainNames,
                                 siteChain = siteChain,
                                 balances = application.container.wallet.balances.value,
-                                fiat = WalletLive.Money.of(currency, strings.language)::fiat,
+                                fiat = WalletLive.Money.of(currency, strings.language).inSpace(space)::fiat,
                             ),
                             onPickNetwork = { id -> id.toIntOrNull()?.let(browser::pickSiteChain) },
                             accountOptions = app.getvela.wallet.feature.browser.ExploreLive.accountOptions(session.accounts, session.address),
@@ -3347,6 +3350,15 @@ fun VelaNavHost(
         )
     }
 
+    // r18-3 (§33): until the session has read the account store, and — a
+    // multisig in front at the last run — until the hub has loaded it, the
+    // root draws the page's own ground over the NavHost: no Welcome with
+    // live buttons, no other account's home. Bounded (LaunchFront.HOLD_MS
+    // from the session's Wallet); the developer routes are exempt.
+    if (startDestination !in DEVELOPER_ROUTES) {
+        LaunchGround(navController = navController, route = session.allowedRoute)
+    }
+
     // Hosted OUTSIDE the NavHost, deliberately. A prompt can be raised by either
     // machine, and the login machine runs while Welcome is on screen — so a
     // sheet nested in one route's composable would vanish the moment the route
@@ -3445,7 +3457,7 @@ fun VelaNavHost(
                         strings = csStrings,
                         chainNames = handoffNetworks.networks.associate { it.chain_id.toInt() to it.display_name },
                         explorers = emptyMap(),
-                        money = WalletLive.Money.of(handoffCurrency, strings.language),
+                        money = WalletLive.Money.of(handoffCurrency, strings.language).inSpace(space),
                         fromName = "",
                         fromAddress = "",
                     ),
@@ -3769,7 +3781,9 @@ private fun liveFlow(
         // authoritative, and only one of them is wrong.
         is FlowSheet.TxDetail ->
             FlowLive.txDetail(
-                sheet.model, feed, selected, strings, chainNames, explorers, WalletLive.Money.of(currency, strings.language),
+                sheet.model, feed, selected, strings, chainNames, explorers,
+                // r18-9: the testnet space's Activity detail says no "≈ $0.30".
+                WalletLive.Money.of(currency, strings.language).let { if (noValue) it.withoutValue() else it },
                 nativeSymbols = networks.networks.associate { it.chain_id.toInt() to it.native_symbol },
             )?.let(FlowSheet::TxDetail)
         is FlowSheet.TokenDetail -> FlowLive.tokenDetail(

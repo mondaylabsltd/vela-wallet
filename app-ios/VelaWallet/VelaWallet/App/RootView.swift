@@ -881,7 +881,7 @@ struct RootView: View {
         )
         let hero = WalletLive.balance(
             view, display: display, fallback: fallback, loc: loc, networks: walletNetworks,
-            noValue: space.testnet ? loc.t("networkSpace.noValue") : nil
+            noValue: spaceNoValue
         )
         return WidgetPublisher.snapshot(
             balance: hero, asOfMs: view.lastRefreshedAtMs,
@@ -1630,7 +1630,7 @@ struct RootView: View {
                                        address: session.view.address),
                             chainIds: browser.chainIds,
                             holdings: WalletLive.networkHoldings(
-                                wallet.balance, display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage)
+                                wallet.balance, display: spaceDisplay
                             ),
                             snapshot: { [browser] tab in browser.snapshot(of: tab) },
                             networks: walletNetworks,
@@ -2630,7 +2630,7 @@ struct RootView: View {
     private func rescueModel(_ overlay: SettingsOverlay) -> SettingsScreenModel {
         var model = settingsModel(overlay == .rpcFix ? .sr2 : .sr3)
         if let balance = wallet.balance {
-            let display = WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage)
+            let display = spaceDisplay
             model = SettingsLive.withBalanceDetail(balance, display: display, on: model, loc: loc,
                                                    networks: walletNetworks)
             model = SettingsLive.withUnreachable(balance, display: display, on: model, loc: loc,
@@ -2800,7 +2800,7 @@ struct RootView: View {
                                    feedRead: activity.settled(for: shownAddress), on: base, loc: loc,
                                    now: Date(), spinning: wallet.spin.spinning,
                                    networks: walletNetworks,
-                                   noValue: space.testnet ? loc.t("networkSpace.noValue") : nil,
+                                   noValue: spaceNoValue,
                                    // r15-1: the feed's rows only under their own account.
                                    shownAccount: shownAddress)
         // r13-7: a multisig's Activity says what its history is — being read,
@@ -2815,6 +2815,19 @@ struct RootView: View {
         // before the balance machine has heard of it — never the previous
         // account's total under its name.
         return WalletLive.isFor(view, address: shownAddress) ? applied : WalletLive.awaitingAccount(applied)
+    }
+
+    /// r18-9: the display every money surface draws fiat with — the
+    /// person's currency, withheld in a space that shows no fiat (the core's
+    /// `network_space_shows_fiat`): no total, no worth, no "≈ …" beside an
+    /// amount or a fee, no currency code.
+    private var spaceDisplay: WalletLive.Display {
+        WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage).inSpace(space.current)
+    }
+
+    /// r18-9: the words in the total's place where the space shows no fiat.
+    private var spaceNoValue: String? {
+        space.showsFiat ? nil : loc.t("networkSpace.noValue")
     }
 
     /// The networks this wallet has, as the core lists them — the built-ins
@@ -2893,7 +2906,7 @@ struct RootView: View {
         if case .assets(let assets) = model.base, let balance = wallet.balance {
             model.base = .assets(FlowsLive.assets(
                 balance, currency: settings.currency ?? .unread, selected: chainFilter,
-                on: assets, loc: loc, networks: walletNetworks
+                on: assets, loc: loc, networks: walletNetworks, noValue: !space.showsFiat
             ))
         }
         // The history screen the home's 全部 opens — the same feed, not a
@@ -2914,8 +2927,9 @@ struct RootView: View {
                 record: feed.transactions.first { $0.id == item.id },
                 on: detail, loc: loc,
                 hidden: feed.hidden,
-                // No fiat before the person's currency is known (PR 3).
-                display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage),
+                // No fiat before the person's currency is known (PR 3), nor
+                // in a space that shows none (r18-9).
+                display: spaceDisplay,
                 // The request a dApp record kept, read only when its
                 // technical details are opened (spec 093).
                 readRequest: { [shelf] id in TxRecords.storedRequest(id: id, store: shelf) },
@@ -2927,7 +2941,7 @@ struct RootView: View {
             model.sheet = .tokenDetail(FlowsLive.tokenDetail(
                 balance.tokens[assetRow],
                 feed: activity.feed,
-                display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage),
+                display: spaceDisplay,
                 on: detail, loc: loc,
                 hidden: balance.hidden || (activity.feed?.hidden ?? false),
                 networks: walletNetworks
@@ -2937,9 +2951,8 @@ struct RootView: View {
         // already found; SD2 and SD3 are the core's figures, its refusals and
         // its gates.
         if let view = send.view {
-            // r17-14: no fiat in the testnet space, for amounts or fees.
-            let display = WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage)
-                .inSpace(testnet: space.testnet)
+            // r17-14 / r18-9: no fiat in the testnet space, for amounts or fees.
+            let display = spaceDisplay
             if case .sendPick(let pick) = model.base {
                 model.base = .sendPick(
                     SendLive.pick(
@@ -3285,7 +3298,7 @@ struct RootView: View {
         }
         // The display currency as the machine is told it — the same rule
         // again at every change while the journey is open (`sendDisplayStands`).
-        let told = SendStore.displayContext(settings.currency, testnet: space.testnet)
+        let told = SendStore.displayContext(settings.currency, space: space.current)
         // A new send starts at the stored default: the one-shot pick, a free
         // upgrade and the fold all die with the send before it (spec 068).
         fees.resetSpeed()
@@ -3327,7 +3340,7 @@ struct RootView: View {
     /// The display currency committed, or changed (final note F25): an open
     /// Send journey hears it, and re-denominates by its own rule.
     private func sendDisplayStands() {
-        let told = SendStore.displayContext(settings.currency, testnet: space.testnet)
+        let told = SendStore.displayContext(settings.currency, space: space.current)
         send.displayStands(code: told.code, rate: told.rate, fiatDecimals: Self.sendFiatDecimals)
     }
 
@@ -3504,9 +3517,8 @@ struct RootView: View {
             walletName: session.view.activeName,
             walletAddress: session.view.address,
             chainId: chain,
-            // r17-14: a testnet's fee is never priced in fiat.
-            display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage)
-                .inSpace(testnet: space.testnet),
+            // r17-14 / r18-9: a testnet's fee is never priced in fiat.
+            display: spaceDisplay,
             origin: live?.request?.origin,
             // What the chain said THIS request would do, and how far the
             // asking got. The judgment is the CORE's; this only carries it —
@@ -4328,7 +4340,7 @@ struct RootView: View {
             // PR 2: hidden, the core withholds the figures — every row and
             // the total draw the mask instead of summing nothing to $0.00.
             hidden: wallet.balance?.switcher.hidden ?? false,
-            display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage),
+            display: spaceDisplay,
             on: model,
             loc: loc,
             // §18 item 2: stored records this device cannot read, said under the list.
@@ -4336,7 +4348,7 @@ struct RootView: View {
             // r15-9: one check — the account shown's.
             multisigShown: shownMultisig != nil,
             // r16-10: the testnet space shows no worth anywhere, as its home.
-            noValue: space.current == .testnet
+            noValue: !space.showsFiat
         )
         // Asked of the chain for THIS wallet, or still being asked (spec 062).
         let backedUp = backupCheck.flatMap {

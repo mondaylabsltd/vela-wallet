@@ -66,7 +66,7 @@ class MultisigExecutor(private val ports: MultisigPorts) {
             // build's words, never "can't be reached".
             MultisigShellResult.HttpUnreachable(describe(refused), refused = true)
         } catch (error: Throwable) {
-            MultisigShellResult.HttpUnreachable(describe(error))
+            MultisigShellResult.HttpUnreachable(describe(error), refused = true.takeIf { app.getvela.wallet.core.net.Refusals.of(error) })
         }
 
         is MultisigOperation.Rpc -> {

@@ -19,6 +19,9 @@ import app.getvela.wallet.feature.multisig.core.str
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
+/** r18-16: the execution verdicts that end "Executing…" — it ran, or another of its number did. */
+private val RESOLVED = setOf("executed", "executedByOther", "replaced")
+
 /** One line a sheet says, with how it reads and a stable tag. */
 data class MsLine(val text: String, val tone: MsTone, val id: String)
 
@@ -81,7 +84,24 @@ class MsProposalModel(
      * action works, or the item is executing).
      */
     val chipSaysExecuting: Boolean
-        get() = execution.kind == "waiting" || executeState.kind == "working" || item.executing
+        get() = when {
+            // r18-16 (§33): a receipt judged — it ran (here or elsewhere) or
+            // another of the same number did — is the verdict, whatever this
+            // device's press still reports: the chip and the body move on in
+            // the same frame (the chip said "Executing…" for ~2.2 s over an
+            // "Executed" body).
+            execution.kind in RESOLVED -> false
+            else -> execution.kind == "waiting" || executeState.kind == "working" || item.executing
+        }
+
+    /**
+     * r18-4 / r18-16 (§33): ONE answer for the chip and the body — while
+     * the execution from here is out ([chipSaysExecuting]), the body is the
+     * press's, not the finished one's: no "Executed", no count "Executed",
+     * no "which counted isn't recorded", the members listed as before. Both
+     * change when the receipt resolves.
+     */
+    private val doneShown: Boolean get() = isDone && !chipSaysExecuting
 
     /** r10-7: the execution's own line is said once — the notes' line, else the chain's word for it. */
     val executedSaidInNotes: Boolean get() = executionLine?.id == "executed"
@@ -94,13 +114,15 @@ class MsProposalModel(
     val sheetNotes: List<MsLine>
         get() = notes.filterNot {
             (isDone && it.text == statusLine) ||
+                // r18-16: nothing finished is said under "Executing…".
+                (chipSaysExecuting && it.id == "executed") ||
                 // r17-6: the chip says "Executing…"; the execution's own
                 // "Executing…" note beside it said it a second time.
                 (chipSaysExecuting && it.id == "waiting")
         }
 
     /** r12 S4: the sheet's own "Executed" line, for an execution neither the chip nor the notes say. */
-    val saysExecuted: Boolean get() = !executedSaidInNotes && statusLine != words.t("proposal.executed")
+    val saysExecuted: Boolean get() = !chipSaysExecuting && !executedSaidInNotes && statusLine != words.t("proposal.executed")
 
     /** Who approved, by address (lowercased). */
     val approvedBy: Set<String> get() = item.approvers.map { it.lowercase() }.toSet()
@@ -370,6 +392,9 @@ class MsProposalModel(
         }
     }
 
+    /** r18-5 (core §32): the core serves the pressed look `signing` — its fee is the one being signed. */
+    fun feeSigning(executor: String): Boolean = preview(executor)?.let { it.kind == "priced" && it["signing"].bool == true } == true
+
     /** The setup an execution carries (deploying the multisig, activating accounts). */
     fun setupLines(executor: String): List<String> {
         val preview = preview(executor) ?: return emptyList()
@@ -450,7 +475,13 @@ class MsProposalModel(
      * Execute draw the same lines.
      */
     fun executionLines(executor: String, failure: MsLine?): List<MsLine> = buildList {
-        feeLineBeside(executor, failure)?.let { (text, tone) -> add(MsLine(text, tone, "fee")) }
+        feeLineBeside(executor, failure)?.let { (text, tone) ->
+            add(MsLine(text, tone, "fee"))
+            // r18-5 (core §32): a press is out on this look — its figure is the
+            // one being signed, held still until the signature, the cancel or
+            // the stop (`signing`, never re-quoted under the passkey).
+            if (feeSigning(executor)) add(MsLine(words.t("proposal.feeSigning"), MsTone.Neutral, "feeSigning"))
+        }
         setupLines(executor).forEachIndexed { i, line -> add(MsLine(line, MsTone.Neutral, "setup$i")) }
     }
 
@@ -524,6 +555,9 @@ class MsProposalModel(
      */
     val approvalsCount: String
         get() = when {
+            // r18-4 / r18-16: while it is being executed here, no count — not
+            // "1/2" (the one press carries the last approval), not "Executed".
+            chipSaysExecuting -> ""
             isDone && (frozen != null || timeline.any { it.kind == "executed" }) -> words.t("proposal.executed")
             isDone -> ""
             else -> "${item.approved}/${item.threshold}"
@@ -536,7 +570,7 @@ class MsProposalModel(
      */
     val listedMembers: List<String>
         get() = frozen?.get("approvers").arr.mapNotNull { it.str }.takeIf { it.isNotEmpty() }
-            ?: if (isDone) item.approvers else members
+            ?: if (doneShown) item.approvers else members
 
     /** A listed member's one word: Executed (its press approved and sent it), Approved, Not needed, Waiting, or nothing. */
     fun memberState(member: String): MemberState {
@@ -546,7 +580,8 @@ class MsProposalModel(
         }
         if (f != null || member.lowercase() in approvedBy) return MemberState(words.t("proposal.approved"), done = true)
         return when {
-            isDone -> MemberState("", done = false)
+            // r18-4: being executed — nobody is "Waiting" or "Not needed" now.
+            isDone || chipSaysExecuting -> MemberState("", done = false)
             item.approved >= item.threshold -> MemberState(words.t("proposal.notNeeded"), done = false)
             else -> MemberState(words.t("proposal.waiting"), done = false)
         }
@@ -555,9 +590,12 @@ class MsProposalModel(
     /** Under the list of an executed one: who sent it and what counted then; or that this device does not know which counted. */
     val executedFacts: String?
         get() {
-            if (!isDone) return null
+            if (!doneShown) return null
             val f = frozen
-            if (f == null) return if (timeline.any { it.kind == "executed" }) words.t("proposal.approvalsSigned") else null
+            // r18-16: "which counted isn't recorded on this device" is never
+            // said of an execution this device followed — its facts are on
+            // their way (they land with the receipt), not unknown.
+            if (f == null) return if (execution == null && timeline.any { it.kind == "executed" }) words.t("proposal.approvalsSigned") else null
             return listOfNotNull(
                 f["executor"].str?.takeIf { it.isNotBlank() }?.let { words.t("proposal.executedBy", "name" to words.label(it)) },
                 words.t(

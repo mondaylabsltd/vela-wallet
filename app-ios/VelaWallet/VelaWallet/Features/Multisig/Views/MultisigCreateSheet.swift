@@ -594,6 +594,11 @@ struct MultisigCreateSheet: View {
         return working ? words.t("create.savedSharing") : words.t("create.savedLater")
     }
 
+    /// The same line from the core's word as it stands (`create.refused`).
+    static func sharedLine(shared: Bool, solo: Bool, refused: String?, working: Bool, words: MsWords) -> String {
+        sharedLine(shared: shared, solo: solo, refused: refused != nil, working: working, words: words, refusedWord: refused)
+    }
+
     private func close() {
         if step == .created, let created { onCreated(created) } else { onClose() }
     }

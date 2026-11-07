@@ -70,6 +70,11 @@ final class BalanceExecutor {
     /// none (Tempo) as not read (`notRead`, PR 2 polish).
     var chainDocument: @MainActor (Int) async -> ChainTokens.Document = { _ in .absent }
 
+    /// One chain's read of the home round in place of the pool's — a test's
+    /// network (r18-1: a chain whose read is held open), still bounded by
+    /// the per-chain deadline like the real one. `nil` in the app.
+    var chainReader: (@Sendable (_ address: String, _ chainId: Int) async -> TokenReads.ChainResult)?
+
     private let store: VelaStore
     private let pool: RpcPool
     /// The Chainlink map, cached across refreshes. One instance, because twelve
@@ -216,6 +221,7 @@ final class BalanceExecutor {
         // r10-1: every network this round asks — said as such, failed ones
         // included (`read_chain_ids`), whatever comes back.
         let asked = chainIds()
+        let reader = chainReader
         let results = await withTaskGroup(of: TokenReads.ChainResult.self) { group in
             for chainId in asked {
                 let tokens = customTokens(chainId: chainId)
@@ -227,6 +233,7 @@ final class BalanceExecutor {
                     // round, and it can no longer keep the round — and Home —
                     // from settling.
                     await TokenReads.bounded(chainId: chainId, deadlineMs: deadline) {
+                        if let reader { return await reader(address, chainId) }
                         // The registry's stablecoins and wrapped coin join the
                         // plan (spec 082 RE9) — USDC on Base is counted.
                         let document = await documentOf(chainId)

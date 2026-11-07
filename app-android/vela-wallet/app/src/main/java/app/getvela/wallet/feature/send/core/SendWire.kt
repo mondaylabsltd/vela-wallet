@@ -872,7 +872,13 @@ data class SendOpenParams(
 
 /** The display currency the figures are typed and shown in. */
 @Serializable
-data class SendDisplayContext(val code: String, val rate: Double? = null, val fiat_decimals: Int)
+data class SendDisplayContext(
+    val code: String,
+    val rate: Double? = null,
+    val fiat_decimals: Int,
+    /** r17-14 / r18-9 (core §29): the space in front (`mainnet` / `testnet`) — the Send machine prices nothing in the testnet space. */
+    val space: String = "mainnet",
+)
 
 /**
  * `SendView` — every field the core renders. Android reads a subset per

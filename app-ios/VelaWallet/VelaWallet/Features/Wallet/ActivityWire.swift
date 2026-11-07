@@ -556,6 +556,11 @@ struct FeedViewWire: Decodable, Equatable {
     /// when there are rows, in the empty state's place when there are none.
     /// `nil` when every network was read.
     var unreadKey: String? = nil
+    /// r17-4 / r18-1: the one unread network's name, as the core's built-in
+    /// table has it; `nil` for none, for several, or for a network the
+    /// table cannot name. A shell names it from its own list first, then
+    /// this — never a raw chain id.
+    var unreadNetwork: String? = nil
 
     /// r15-1: these rows are `address`'s (addresses compare without case).
     func isFor(_ address: String) -> Bool {
@@ -564,7 +569,7 @@ struct FeedViewWire: Decodable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case rows, homeRows, transactions, newItemId, toast, historyEmptyKey, homeEmptyKey, contactRows, hidden, nextScan
-        case account, settled, unreadChains, unreadKey
+        case account, settled, unreadChains, unreadKey, unreadNetwork
     }
 }
 
@@ -593,7 +598,8 @@ extension FeedViewWire {
             account: try c.decodeIfPresent(String.self, forKey: .account) ?? "",
             settled: try c.decodeIfPresent(Bool.self, forKey: .settled) ?? false,
             unreadChains: try c.decodeIfPresent([Int].self, forKey: .unreadChains) ?? [],
-            unreadKey: try c.decodeIfPresent(String.self, forKey: .unreadKey)
+            unreadKey: try c.decodeIfPresent(String.self, forKey: .unreadKey),
+            unreadNetwork: try c.decodeIfPresent(String.self, forKey: .unreadNetwork)
         )
     }
 }

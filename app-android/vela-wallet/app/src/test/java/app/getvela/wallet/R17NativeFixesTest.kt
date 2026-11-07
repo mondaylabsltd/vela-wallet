@@ -262,9 +262,9 @@ class R17NativeFixesTest {
 
         val parts = SendLive.FeeParts(coin = "0.2 USDC", mark = WalletLive.mark(5042002, "USDC", null), units = 0.2, contract = null)
         assertEquals("0.2 USDC", SendLive.feeLine(parts, 1.0, testnet))
-        // The flow's money is the space's.
+        // The flow's money is the space's (r18-9: by the core's word, `inSpace`).
         val host = source("navigation/VelaNavHost.kt")
-        assertTrue(host.substringAfter("val sendMoney = ").substringBefore("\n").contains("withoutValue()"))
+        assertTrue(host.substringAfter("val sendMoney = ").substringBefore("\n").contains("inSpace(space)"))
     }
 
     // -- r17-15 -----------------------------------------------------------------------------

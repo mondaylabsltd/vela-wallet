@@ -117,16 +117,23 @@ struct MsProposalModel {
         return words.standing(standing, item: item)
     }
 
-    /// r16-8 / r17-6: it is being executed — this device's Execute or one
-    /// press is out, the core follows its flight, or the flight's verdict is
-    /// still `waiting` (the body's "Executing…"). Not gated on `isDone`: the
-    /// mailbox marks it done as soon as the nonce is used, ~1 s before the
-    /// receipt is judged, and the chip read "1/2 approved" over "Executing…".
+    /// r16-8 / r17-6 / r18-4: it is being executed — ONE answer for the
+    /// chip and the body (Android's `chipSaysExecuting`, §33): the flight's
+    /// verdict is still `waiting`, this device's Execute or one press is out
+    /// (`execute:` working), or the core follows its flight — until the
+    /// receipt is resolved (executed, executed by another, replaced). Never
+    /// gated on `isDone`: the mailbox marks it done as soon as the nonce is
+    /// used, and before this device's flight has its first verdict the chip
+    /// read "1/2 approved" over a body listing only the mailbox's approvals
+    /// (r18-4, ~1.2 s).
     var executingHere: Bool {
         guard executedTx == nil, !replaced else { return false }
-        if execution?.kind == "waiting" { return true }
-        return !isDone && (executeState?.kind == "working" || item.executing)
+        if let verdict = execution?.kind, Self.resolved.contains(verdict) { return false }
+        return execution?.kind == "waiting" || executeState?.kind == "working" || item.executing
     }
+
+    /// The verdicts that resolve an execution: the receipt was judged.
+    static let resolved: Set<String> = ["executed", "executedByOther", "replaced"]
 
     /// Who approved, by address (lowercased).
     var approvedBy: Set<String> { Set(item.approvals.map { $0.owner.lowercased() }) }
@@ -194,21 +201,28 @@ struct MsProposalModel {
     /// move); else this network's members now. The web's `listed`.
     var listed: [String] {
         if let frozen { return frozen["approvers"]?.array.compactMap(\.string) ?? [] }
+        // r18-4: while it executes, every member — never the mailbox's
+        // stripped list of the approvals it counted once it called it done.
+        if executingHere { return members }
         if isDone { return item.approvals.filter(\.counts).map(\.owner) }
         return members
     }
 
     /// One member's line on the list.
     enum MemberWord: Equatable {
-        case executed, approved, notNeeded, waiting
+        /// r18-4: nothing said of the member — while an execution is out a
+        /// member is Approved or nothing (never "Waiting" or "Not needed":
+        /// the one press carries the last approval itself).
+        case executed, approved, notNeeded, waiting, blank
 
-        /// Its corpus key (`home.multisig.*`).
+        /// Its corpus key (`home.multisig.*`); empty for `blank`.
         var key: String {
             switch self {
             case .executed: "proposal.executed"
             case .approved: "proposal.approved"
             case .notNeeded: "proposal.notNeeded"
             case .waiting: "proposal.waiting"
+            case .blank: ""
             }
         }
     }
@@ -218,16 +232,21 @@ struct MsProposalModel {
            frozen["executor"]?.string?.caseInsensitiveCompare(owner) == .orderedSame {
             return .executed
         }
-        if frozen != nil || isDone { return .approved }
-        if item.approvals.contains(where: { $0.counts && $0.owner.caseInsensitiveCompare(owner) == .orderedSame }) {
-            return .approved
+        if frozen != nil { return .approved }
+        let approved = item.approvals.contains {
+            $0.counts && $0.owner.caseInsensitiveCompare(owner) == .orderedSame
         }
+        // r18-4: while it executes a member is Approved or nothing.
+        if executingHere { return approved ? .approved : .blank }
+        if isDone || approved { return .approved }
         return item.approved >= item.threshold ? .notNeeded : .waiting
     }
 
     /// The approvals heading's count: "Executed" for one that ran (never
     /// "1/2" against today's rule), nothing for one otherwise finished.
     var approvalsCount: String {
+        // r18-4: no count while it executes (not "1/2", not "Executed").
+        if executingHere { return "" }
         if executedTx != nil { return words.t("proposal.executed") }
         if isDone { return replaced ? words.t("proposal.voided") : "" }
         return "\(item.approved)/\(item.threshold)"
@@ -236,8 +255,10 @@ struct MsProposalModel {
     /// "Executed by Eve · 2 of 2 approvals counted when it was executed" —
     /// or, with no facts read, that which approvals counted isn't recorded.
     var executedFacts: String? {
-        guard executedTx != nil else { return nil }
-        guard let frozen else { return words.t("proposal.approvalsSigned") }
+        guard executedTx != nil, !executingHere else { return nil }
+        // "Which approvals counted isn't recorded" only for an execution this
+        // device did not follow (r18-4, Android's r18-16).
+        guard let frozen else { return execution == nil ? words.t("proposal.approvalsSigned") : nil }
         var parts: [String] = []
         if let executor = frozen["executor"]?.string {
             parts.append(words.t("proposal.executedBy", ["name": words.label(executor)]))
@@ -484,6 +505,18 @@ struct MsProposalModel {
         case "spent": return (words.t("proposal.doneNote"), .neutral)
         default: return nil
         }
+    }
+
+    /// r18-5 (§32): the press out carries this look's figure (`shown_fee`)
+    /// and the core no longer re-quotes it until the press resolves — it
+    /// serves it `signing: true`. Its fee line is drawn as usual, marked as
+    /// the figure being signed ("Signing at this fee — it stays fixed until
+    /// you confirm or cancel."); `nil` for any other look.
+    func feeSigning(for executor: String) -> String? {
+        guard !executeStopped, let look = preview(for: executor), look.kind == "priced",
+              look["signing"]?.bool == true
+        else { return nil }
+        return words.t("proposal.feeSigning")
     }
 
     /// §24: the fee figure this sheet draws for `executor`'s execution (base
@@ -1047,9 +1080,11 @@ struct MultisigProposalSheet: View {
                             }
                         }
                         Spacer(minLength: Tokens.Space.s8)
-                        Text(prose: words.t(word.key))
-                            .typeRole(Typography.rowSub.scaled(textScale))
-                            .foregroundStyle(done ? theme.successBase : theme.fgSubtle)
+                        if word != .blank {
+                            Text(prose: words.t(word.key))
+                                .typeRole(Typography.rowSub.scaled(textScale))
+                                .foregroundStyle(done ? theme.successBase : theme.fgSubtle)
+                        }
                     }
                     .padding(.vertical, Tokens.Space.s8)
                     .accessibilityElement(children: .combine)
@@ -1095,6 +1130,9 @@ struct MultisigProposalSheet: View {
                         let presser = model.oneTouchExecutor(chosen: member) ?? oneTouch[0]
                         if !model.executeStopped, let line = model.feeLine(for: presser) {
                             MsNote(text: line.text, tone: line.tone, identifier: "multisig.proposal.approveExecuteFee")
+                        }
+                        if let signing = model.feeSigning(for: presser) {
+                            MsNote(text: signing, identifier: "multisig.proposal.feeSigning")
                         }
                         ForEach(model.setupLines(for: presser), id: \.self) { line in
                             MsNote(text: line)
@@ -1154,6 +1192,9 @@ struct MultisigProposalSheet: View {
                     if model.saysExecution {
                         if !model.executeStopped, let line = model.feeLine(for: chosen) {
                             MsNote(text: line.text, tone: line.tone, identifier: "multisig.proposal.fee")
+                        }
+                        if let signing = model.feeSigning(for: chosen) {
+                            MsNote(text: signing, identifier: "multisig.proposal.feeSigning")
                         }
                         ForEach(model.setupLines(for: chosen), id: \.self) { line in
                             MsNote(text: line)

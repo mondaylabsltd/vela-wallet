@@ -284,12 +284,12 @@ struct MultisigR17NativeTests {
     // MARK: - r17-19: a refused record, said as refused
 
     @Test func aRecordTheServiceRefusedIsNeverSaidAsUnreachable() {
-        let refused = MultisigCreateSheet.sharedLine(shared: false, solo: false, refused: true, working: false, words: words)
+        let refused = MultisigCreateSheet.sharedLine(shared: false, solo: false, refused: "refused", working: false, words: words)
         #expect(refused == words.t("settings.shareAgainNote"))
         #expect(refused != words.t("create.savedLater"))
-        #expect(MultisigCreateSheet.sharedLine(shared: false, solo: false, refused: false, working: false, words: words)
+        #expect(MultisigCreateSheet.sharedLine(shared: false, solo: false, refused: nil, working: false, words: words)
             == words.t("create.savedLater"), "a service that did not answer")
-        #expect(MultisigCreateSheet.sharedLine(shared: true, solo: false, refused: true, working: false, words: words)
+        #expect(MultisigCreateSheet.sharedLine(shared: true, solo: false, refused: "refused", working: false, words: words)
             == words.t("create.shared"))
     }
 
@@ -416,8 +416,9 @@ struct MultisigR17NativeTests {
         #expect(WalletLive.Display.sendContext(view, testnet: true).rate == nil, "the send machine prices nothing")
         #expect(WalletLive.Display.sendContext(view).rate == 7.1)
         let root = try source("VelaWallet/App/RootView.swift")
-        #expect(root.contains(".inSpace(testnet: space.testnet)"))
-        #expect(root.contains("SendStore.displayContext(settings.currency, testnet: space.testnet)"))
+        // r18-9: the space's own word on fiat, the core's (`spaceDisplay`).
+        #expect(root.contains(".inSpace(space.current)"))
+        #expect(root.contains("SendStore.displayContext(settings.currency, space: space.current)"))
     }
 
     // MARK: - r17-21: one word per action

@@ -1,6 +1,8 @@
 package app.getvela.wallet
 
 import app.getvela.wallet.feature.send.SendLive
+import app.getvela.wallet.navigation.LaunchFront
+import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.multisig.MultisigWiring
 import app.getvela.wallet.feature.multisig.MultisigNotifier
 import app.getvela.wallet.feature.multisig.MultisigWords
@@ -569,6 +571,15 @@ class AppContainer(private val app: Application) {
      * once a wallet is signed in (the wallet route), so a link that opened the
      * app, the switcher and the notifications find it loaded.
      */
+    /**
+     * r18-3 (§33): the account in front when the app last ran — a multisig's
+     * address under `vela.activeMultisig`, read once at launch. Until the hub
+     * has loaded that multisig the root holds its ground ([LaunchFront]).
+     */
+    val launchFront = kotlinx.coroutines.flow.MutableStateFlow<LaunchFront.Stored>(
+        LaunchFront.Stored.Unread,
+    )
+
     val multisig: MultisigHub by lazy { MultisigWiring.build(this, app).also { MultisigWiring.attachNotifier(this, app, it); multisigBuilt = true } }
 
     @Volatile
@@ -1301,6 +1312,12 @@ class AppContainer(private val app: Application) {
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
             networkSpace.space.drop(1).collect { if (walletOnce.isInitialized()) wallet.spaceChanged() }
         }
+        // r18-9 (§33): every money surface is handed money in the space in
+        // front (`WalletLive.Money.of`), so the testnet space draws no fiat and
+        // names no currency anywhere — said before the screens recompose.
+        CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+            networkSpace.space.collect { WalletLive.Money.space = it }
+        }
         // Debug trace of the pool's chain verdicts (spec 043 phase 4).
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
             pool.view.collect { view ->
@@ -1320,10 +1337,14 @@ class AppContainer(private val app: Application) {
             // session reads (see DebugSeed). Release builds boot straight away.
             CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.IO).launch {
                 DebugSeed.apply(app, VelaStore(app))
+                launchFront.value = LaunchFront.read(VelaStore(app))
                 session.boot()
                 startAgent()
             }
         } else {
+            CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.IO).launch {
+                launchFront.value = LaunchFront.read(VelaStore(app))
+            }
             session.boot()
             startAgent()
         }

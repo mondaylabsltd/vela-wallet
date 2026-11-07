@@ -157,15 +157,17 @@ final class SessionExecutor {
         }
     }
 
-    /// The landing not confirmed: the record stays. r18-8 (§28, §32): a
-    /// publish this test build refused before it left says so (`refused`),
-    /// so the session never asks again by itself. Absent otherwise.
+    /// The landing not confirmed, and — r18-8 (§28) — whether this test
+    /// build refused the publish before it left (the session then never asks
+    /// again by itself).
     static func landingUnconfirmed(_ error: Error) -> [String: Any] {
+        let failure = error as? RegistryFailure
         var result: [String: Any] = [
             "type": "registry_landing_unconfirmed",
-            "message": (error as? RegistryFailure)?.message ?? error.localizedDescription,
+            "message": failure?.message ?? error.localizedDescription,
         ]
-        if (error as? RegistryFailure)?.refused == true { result["refused"] = true }
+        // `refused` only when it was (§32: absent otherwise).
+        if failure?.refused ?? TestBuildRefusal.matches(error) { result["refused"] = true }
         return result
     }
 

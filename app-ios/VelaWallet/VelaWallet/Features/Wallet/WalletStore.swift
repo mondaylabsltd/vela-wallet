@@ -59,9 +59,12 @@ final class WalletStore {
     /// `registry`: the token registry the balance read plan takes its
     /// stablecoins and wrapped coin from (spec 082 RE9); `nil` reads the
     /// native coin and the person's own tokens only (tests, a gallery).
-    init(store: VelaStore, pool: RpcPool, held: HeldTokens, registry: ChainTokens? = nil) {
+    /// `executor`: a test's (its chains' reads and per-chain deadline); the
+    /// app's reads the pool.
+    init(store: VelaStore, pool: RpcPool, held: HeldTokens, registry: ChainTokens? = nil,
+         executor custom: BalanceExecutor? = nil) {
         self.shelf = store
-        self.executor = BalanceExecutor(store: store, pool: pool, held: held)
+        self.executor = custom ?? BalanceExecutor(store: store, pool: pool, held: held)
         if let registry {
             executor.chainDocument = { [registry] chainId in await registry.document(chainId: chainId) }
         }
@@ -157,9 +160,15 @@ final class WalletStore {
         return out
     }
 
+    /// r18-1: every view the core writes, as it came — before the space's
+    /// filter — for the machines that follow the balance's reads (the
+    /// Activity feed's `balance_read`, `AppGraph.feedFollowsBalance`).
+    @ObservationIgnored var onView: (BalanceViewWire) -> Void = { _ in }
+
     private func viewArrived(_ view: BalanceViewWire) {
         unfiltered = view
         balance = inSpace(view)
+        onView(view)
         let held = spin.core(busy: view.refreshing, now: Self.uptimeMs())
         if held != spin {
             spin = held

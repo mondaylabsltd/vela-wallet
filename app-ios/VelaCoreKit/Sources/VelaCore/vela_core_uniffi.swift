@@ -20206,6 +20206,21 @@ public func networkSpaceRead(stored: String?) -> String  {
 })
 }
 /**
+ * r18-9 (§33): whether `space` (as stored: `mainnet` / `testnet`; anything
+ * else is the mainnet space) shows fiat at all — the core's
+ * `network_space::shows_fiat`. `false` in the testnet space: no total, no
+ * currency code, no worth on a row, no "≈ $…" beside an amount or a fee.
+ * The natives ask this instead of keeping their own copy of the rule.
+ */
+public func networkSpaceShowsFiat(space: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_network_space_shows_fiat(
+        FfiConverterString.lower(space),uniffiCallStatus
+    )
+})
+}
+/**
  * A shipped network's usual time to include an operation, in seconds; `None`
  * for a network Vela does not ship (the receipt then circles instead of
  * drawing a promise). The dApp signing sheet's wait reads the same number as
@@ -23582,6 +23597,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_network_space_read() != 23345) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_network_space_shows_fiat() != 44298) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_network_typical_inclusion_s() != 781) {

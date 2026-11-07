@@ -118,6 +118,11 @@ struct CreateView: Equatable {
     let canGoBack: Bool
     let address: String?
     let syncErrorDetail: String?
+    /// r18-8 / r18-18 (§32): the sync-failed screen's sentence when the
+    /// failure has its own words — this test build refused to write to the
+    /// live index (`common.testBuild.productionWriteRefused`). `nil`: the
+    /// screen's own.
+    var syncErrorKey: String? = nil
     /// The places a key may be minted in — always the three (spec 102).
     let addMethods: [KeyMethod]
     /// Spec 102: the domain this wallet's keys are minted for — `getvela.app`,
@@ -150,7 +155,7 @@ extension CreateView: Decodable {
     private enum CodingKeys: String, CodingKey {
         case stage, name, nameEditable, nameTooLong, acks, canSubmit, submitLabel
         case showStartOver, busy, status, keys, canAddKey, canFinish, needsSecondKey
-        case canGoBack, address, syncErrorDetail, addMethods
+        case canGoBack, address, syncErrorDetail, syncErrorKey, addMethods
         case signingDomain, signingPage, canChoosePage
         case addHeadingKey, methodsPinned, keyCountShown
     }
@@ -179,6 +184,7 @@ extension CreateView: Decodable {
         canGoBack = try values.decode(Bool.self, forKey: .canGoBack)
         address = try values.decodeIfPresent(String.self, forKey: .address)
         syncErrorDetail = try values.decodeIfPresent(String.self, forKey: .syncErrorDetail)
+        syncErrorKey = try values.decodeIfPresent(String.self, forKey: .syncErrorKey).flatMap { $0.isEmpty ? nil : $0 }
         addMethods = try values.decodeIfPresent([KeyMethod].self, forKey: .addMethods) ?? KeyMethod.allCases
         signingDomain = try values.decodeIfPresent(String.self, forKey: .signingDomain) ?? "getvela.app"
         signingPage = try values.decodeIfPresent(String.self, forKey: .signingPage)

@@ -3148,6 +3148,17 @@ pub fn network_space_read(stored: Option<String>) -> String {
         .to_owned()
 }
 
+/// r18-9 (§33): whether `space` (as stored: `mainnet` / `testnet`; anything
+/// else is the mainnet space) shows fiat at all — the core's
+/// `network_space::shows_fiat`. `false` in the testnet space: no total, no
+/// currency code, no worth on a row, no "≈ $…" beside an amount or a fee.
+/// The natives ask this instead of keeping their own copy of the rule.
+#[uniffi::export]
+#[must_use]
+pub fn network_space_shows_fiat(space: String) -> bool {
+    vela_core::app::network_space::shows_fiat_str(&space)
+}
+
 /// The chain ids of `space`'s networks (spec 105), from the network
 /// machine's rows as JSON: what the balances read, and send, receive and the
 /// dApps offer. A JSON array.
@@ -3966,5 +3977,21 @@ mod tests_102_core_round {
             .vars
             .is_empty());
         assert!(venue_block_line("{}".to_owned()).is_none());
+    }
+}
+
+#[cfg(test)]
+mod tests_r19_native {
+    use super::*;
+
+    /// r18-9 (§33): the natives ask the core whether the space in front shows
+    /// fiat — the testnet space never does; anything unknown is the mainnet
+    /// space, which shows what is priced.
+    #[test]
+    fn the_testnet_space_shows_no_fiat_by_the_cores_word() {
+        assert!(network_space_shows_fiat("mainnet".to_owned()));
+        assert!(!network_space_shows_fiat("testnet".to_owned()));
+        assert!(network_space_shows_fiat(String::new()));
+        assert!(network_space_shows_fiat("nonsense".to_owned()));
     }
 }

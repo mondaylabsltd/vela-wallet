@@ -767,9 +767,8 @@ class OnboardingExecutor(
             // The one bit of classification only a shell can supply: a request
             // that never arrived is not the same as one the server refused.
             put("network", (error as? RegistryFailure)?.network ?: true)
-            // r18-8 (§28, §32): this test build refused the write before it
-            // left — the core says it in the test build's words. Absent otherwise.
-            if ((error as? RegistryFailure)?.refused == true) put("refused", true)
+            // r18-8 (§32): this test build's guard refused the write — its own words.
+            if (app.getvela.wallet.core.net.Refusals.of(error)) put("refused", true)
         }
 
         private fun describe(error: Throwable): String =

@@ -89,7 +89,11 @@ final class ActivityStore {
         accounts: AccountStore,
         held: HeldTokens,
         trust: TokenTrustStore,
-        identity: RecipientIdentity? = nil
+        identity: RecipientIdentity? = nil,
+        /// A test's answers to the core's operations (its store and its
+        /// scan); the app's are the executor's. A scan answered here counts
+        /// as one that looked.
+        perform scripted: (@MainActor ([String: Any]) async -> String)? = nil
     ) {
         self.executor = ActivityExecutor(
             store: store, accounts: accounts, held: held, trust: trust, identity: identity
@@ -97,12 +101,12 @@ final class ActivityStore {
         self.core = CoreStore(
             bridge: ActivityFeedCore(),
             perform: { [weak self, executor] operation in
-                let answer = await executor.perform(operation)
+                let answer = if let scripted { await scripted(operation) } else { await executor.perform(operation) }
                 switch operation["type"] as? String {
                 case "read_tx_store": self?.hasRead = true
                 case "scan_incoming_transfers":
                     if let address = operation["address"] as? String,
-                       executor.looked.contains(address.lowercased()) {
+                       scripted != nil || executor.looked.contains(address.lowercased()) {
                         self?.scanned.insert(address.lowercased())
                     }
                 default: break
@@ -210,6 +214,8 @@ final class ActivityStore {
         privacyChanged(hidden: hidden)
         // A core booted just now has not heard the space: say it again.
         if let spaceChainIds { spaceChains(spaceChainIds) }
+        // …nor the balance's reads (r18-1): said again, as the space is.
+        if let saidBalance { core.dispatch(saidBalance) }
         // r9-17: follow the core's cadence from now on — the account hand-off
         // scanned already; this arms the next one.
         if !following {
@@ -288,6 +294,36 @@ final class ActivityStore {
     }
 
     private var spaceChainIds: [Int]?
+
+    /// r17-3 / r18-1 (the web's `balance_read`, `feed.svelte.ts`): what the
+    /// balance has read of its account — its first read over
+    /// (`networks_read`) and the networks it could not read now
+    /// (`unread_chain_ids`). "No activity yet" is a claim about every
+    /// network of the space: the scan reads where the account holds or
+    /// lives, the balance reads the rest, and the core claims nothing empty
+    /// while either has one unread. `view` is the balance core's own, for
+    /// its own address, before any filter; said whenever it moves (the core
+    /// drops a repeat), and again after this core boots.
+    func balanceRead(_ view: BalanceViewWire) {
+        guard let event = Self.balanceReadEvent(view) else { return }
+        saidBalance = event
+        core.dispatch(event)
+    }
+
+    /// The `balance_read` event for `view`, as the core reads it — `nil`
+    /// before the balance names an account. Pure.
+    static func balanceReadEvent(_ view: BalanceViewWire) -> String? {
+        guard let account = view.address, !account.isEmpty else { return nil }
+        return CoreJSON.string([
+            "type": "balance_read",
+            "account": account,
+            "read": view.networksRead ?? false,
+            "unread_chain_ids": view.unreadChainIds ?? [],
+        ])
+    }
+
+    /// The last `balance_read` said, for a core booted after it.
+    private var saidBalance: String?
 
     func chainFilter(_ chainId: Int?) {
         core.dispatch(CoreJSON.string([

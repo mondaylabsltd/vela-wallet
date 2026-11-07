@@ -158,10 +158,15 @@ enum WalletLive {
         /// home), so no fiat figure is drawn there — not under an amount,
         /// not beside a fee ("≈ CN¥1.41" contradicted the bar). Every fiat
         /// figure comes through `fiat(_:)`, which withholds it here.
-        func inSpace(testnet: Bool) -> Display {
-            guard testnet else { return self }
+        ///
+        /// r18-9: whether the space shows fiat is the core's
+        /// (`NetworkSpaceKind.showsFiat`), never this shell's own test.
+        func inSpace(_ space: NetworkSpaceKind) -> Display {
+            guard !space.showsFiat else { return self }
             return Display(code: code, rate: rate, settled: false, pendingCode: nil, language: language)
         }
+
+        func inSpace(testnet: Bool) -> Display { inSpace(testnet ? .testnet : .mainnet) }
 
         /// The display currency as the SEND MACHINE is told it — ONE rule,
         /// for its `open` and for every change after it (PR 3 final note
@@ -179,11 +184,15 @@ enum WalletLive {
         ///   the machine keeps for exactly this: the ⇄ toggle will not enter
         ///   fiat, and sending in the token's own units is untouched.
         static func sendContext(_ view: CurrencyViewWire?, testnet: Bool = false) -> (code: String, rate: Double?) {
+            sendContext(view, space: testnet ? .testnet : .mainnet)
+        }
+
+        static func sendContext(_ view: CurrencyViewWire?, space: NetworkSpaceKind) -> (code: String, rate: Double?) {
             guard let view else { return ("USD", nil) }
-            // r17-14: the testnet space's coins have no real value — the
-            // machine is told no rate, so it prices nothing and ⇄ never
+            // r17-14 / r18-9: a space that shows no fiat (the core's rule) —
+            // the machine is told no rate, so it prices nothing and ⇄ never
             // enters fiat.
-            if testnet { return (view.committed ? view.code : (view.pending ?? view.code), nil) }
+            if !space.showsFiat { return (view.committed ? view.code : (view.pending ?? view.code), nil) }
             guard view.committed else { return (view.pending ?? view.code, nil) }
             let display = from(view)
             return (display.code, display.rate)
@@ -385,12 +394,21 @@ enum WalletLive {
         _ feed: FeedViewWire, loc: Loc, networks: WalletNetworks = .builtin
     ) -> String? {
         guard let key = feed.unreadKey, !key.isEmpty else { return nil }
-        let name = feed.unreadChains.first.map { chainId in
-            networks.meta(chainId)?.displayName
-                ?? loc.t(I18nKeys.SettingsUi.chainId, vars: ["chainId": String(chainId)])
-        } ?? ""
-        return loc.t(key, vars: ["network": name, "n": String(feed.unreadChains.count)])
+        // r17-4 / r18-1 (the web's `activityUnreadLine`): the one network by
+        // its name — this shell's list, else the core's (`unread_network`)
+        // — and never its raw chain id: with no name, the many-networks
+        // words.
+        let name = feed.unreadChains.count == 1
+            ? feed.unreadChains.first.flatMap { networks.meta($0)?.displayName } ?? feed.unreadNetwork
+            : nil
+        if key == Self.unreadOneKey, let name, !name.isEmpty {
+            return loc.t(Self.unreadOneKey, vars: ["network": name])
+        }
+        return loc.t(Self.unreadManyKey, vars: ["n": String(max(1, feed.unreadChains.count))])
     }
+
+    static let unreadOneKey = "home.activityUnreadOne"
+    static let unreadManyKey = "home.activityUnreadMany"
 
     /// The home Activity's empty line, as the core chose it (spec 082 RG5):
     /// "nothing yet" with its caption, or — the feed narrowed to one chain —
@@ -476,8 +494,10 @@ enum WalletLive {
             label: fallback.label,
             // Named apart from the figure: the stored choice while it is on
             // its way ("CNY" over the waiting figure, never "USD" first), and
-            // nothing while no choice is known.
-            currency: display.settled ? display.code : (display.pendingCode ?? ""),
+            // nothing while no choice is known. r18-9: and nothing in a space
+            // that shows no fiat ("Total balance · CNY" over "Test assets ·
+            // no real value").
+            currency: noValue != nil ? "" : (display.settled ? display.code : (display.pendingCode ?? "")),
             state: kind,
             integer: nil,
             decimals: nil,

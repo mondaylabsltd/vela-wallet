@@ -197,9 +197,12 @@ func promptCopy(_ kind: PromptKind, loc: Loc) -> PromptCopy {
     // confirmation did not reach the index (or never left the device). What
     // happened, and the way on — its row's Confirm — never the index's raw
     // words, never a silent drop back to the list.
-    // r18-8 (§28, §32): a confirmation this test build refused to send to
-    // the live index is the core's own sentence (`words_key`), never the
-    // index's or the network's.
+    //
+    // r18-18: three causes, three sentences — the index did not answer
+    // (`keyKeptBodyIndex`), this device is offline (`local`,
+    // `keyKeptBodyNetwork`), or this test build refused to write to the live
+    // index (§28: the core's `words_key`, `common.testBuild.productionWriteRefused`,
+    // which no Confirm can help).
     case "create_failed" where kind.keyKept:
         PromptCopy(
             title: loc.t(I18nKeys.Create.keyKeptTitle),
@@ -230,7 +233,8 @@ func promptCopy(_ kind: PromptKind, loc: Loc) -> PromptCopy {
     case "registry_unreachable":
         PromptCopy(
             title: loc.t(kind.local ? I18nKeys.Login.networkTitle : I18nKeys.Login.registryUnreachableTitle),
-            message: loc.t(kind.local ? I18nKeys.Login.networkBody : I18nKeys.Login.registryUnreachableBody),
+            message: kind.wordsKey.map { loc.t($0) }
+                ?? loc.t(kind.local ? I18nKeys.Login.networkBody : I18nKeys.Login.registryUnreachableBody),
             confirmLabel: loc.t(I18nKeys.Login.tryAgain),
             cancelLabel: loc.t(I18nKeys.Login.cancel)
         )
