@@ -59,19 +59,13 @@ pub fn is_test_build(dev_fixtures: bool, device_test: bool, debug: bool) -> bool
     .is_test_build()
 }
 
-/// Does this `VELA_ALLOW_PRODUCTION_WRITES` value opt in (`1` or `true`).
+/// Does this value of the opt-in (a launch input or a build flag) opt in:
+/// `1` or `true`.
 #[uniffi::export]
 #[must_use]
 #[allow(clippy::needless_pass_by_value)]
 pub fn production_writes_opt_in(value: Option<String>) -> bool {
     rule::opt_in(value.as_deref())
-}
-
-/// The opt-in's name: `VELA_ALLOW_PRODUCTION_WRITES`.
-#[uniffi::export]
-#[must_use]
-pub fn production_writes_opt_in_name() -> String {
-    rule::ALLOW_PRODUCTION_WRITES.to_owned()
 }
 
 /// The catalog key a refused write is said with.
