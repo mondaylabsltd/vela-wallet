@@ -36,8 +36,8 @@ import uniffi.vela_core_uniffi.multisigApprovalRoute
  */
 object MultisigWiring {
 
-    /** The core's default multisig service (`DEFAULT_GENESIS_SERVICE_URL`). */
-    const val DEFAULT_SERVICE = "https://safe-genesis.getvela.app"
+    /** The core's default multisig service (`service_defaults`, §28 — no copy here). */
+    val DEFAULT_SERVICE: String get() = app.getvela.wallet.core.net.CoreServiceDefaults.value.genesisServiceUrl
 
     /** The relay key a debug profile may point at (`vela.peerconnectRelay`). */
     const val RELAY_KEY = "vela.peerconnectRelay"

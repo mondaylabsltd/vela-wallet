@@ -5,6 +5,7 @@ import android.content.Intent
 import app.getvela.wallet.core.data.KeyValueStore
 import app.getvela.wallet.core.data.VelaStore
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.core.net.ProductionWriteGuard
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
@@ -34,6 +35,13 @@ object ServiceLaunchInputs {
     const val SERVICE_ENDPOINTS = "vela.serviceEndpoints"
     const val RPC_OVERRIDES = "vela.rpcOverrides"
     const val PEERCONNECT_RELAY = "vela.peerconnectRelay"
+
+    /**
+     * §28: `1` lets this test build write to production services
+     * (`VELA_ALLOW_PRODUCTION_WRITES`, off by default). Read on every launch
+     * and kept on the restarted one; never stored.
+     */
+    const val ALLOW_PRODUCTION_WRITES = "vela.allowProductionWrites"
 
     /** The stored key the relay URL goes under (the web harness's). */
     const val PEERCONNECT_KEY = "vela.peerconnectRelay"
@@ -118,6 +126,7 @@ object ServiceLaunchInputs {
      */
     fun apply(activity: Activity): Boolean {
         val intent = activity.intent ?: return false
+        ProductionWriteGuard.optIn(intent.getStringExtra(ALLOW_PRODUCTION_WRITES))
         if (listOf(SERVICE_ENDPOINTS, RPC_OVERRIDES, PEERCONNECT_RELAY).none { intent.hasExtra(it) }) return false
         val store = VelaStore(activity.applicationContext)
         val changed = runBlocking {

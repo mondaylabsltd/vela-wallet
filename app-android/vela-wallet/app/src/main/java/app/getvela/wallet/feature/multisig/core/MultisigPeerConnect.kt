@@ -3,6 +3,7 @@ package app.getvela.wallet.feature.multisig.core
 import app.getvela.wallet.core.crux.Wire
 import app.getvela.wallet.core.data.KeyValueStore
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.core.net.CoreServiceDefaults
 import app.getvela.wallet.core.net.VelaHttp
 import java.security.SecureRandom
 import java.util.concurrent.ConcurrentHashMap
@@ -579,9 +580,9 @@ class MultisigPeerConnect(
         const val TOKEN_KEY = "vela.peerconnectToken.v1"
 
         private val constants by lazy { MsRules.call("relay.constants") }
-        val DEFAULT_RELAY: String get() = constants["defaultRelay"].str ?: "wss://relay.peerconnect.dev"
-        val TOKEN_ENDPOINT: String get() = constants["tokenEndpoint"].str ?: "https://getvela.app/api/peerconnect-token"
-        val TRIAL_ENDPOINT: String get() = constants["trialEndpoint"].str ?: "https://peerconnect.dev/api/trial"
+        val DEFAULT_RELAY: String get() = constants["defaultRelay"].str ?: CoreServiceDefaults.value.peerconnectRelayUrl
+        val TOKEN_ENDPOINT: String get() = constants["tokenEndpoint"].str ?: CoreServiceDefaults.value.peerconnectTokenUrl
+        val TRIAL_ENDPOINT: String get() = constants["trialEndpoint"].str ?: CoreServiceDefaults.value.peerconnectTrialUrl
         val UNREACHABLE_AFTER_MS: Double get() = constants["unreachableAfterMs"].long?.toDouble() ?: 10_000.0
     }
 }

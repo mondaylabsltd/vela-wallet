@@ -519,6 +519,8 @@ class OkHttpTransport : RpcTransport {
          *   connection ever made, a refused connect.
          */
         fun failureClass(failure: IOException, stages: CallStages?): String = when (failure) {
+            // §28: a test build's write to production, refused before it left.
+            is app.getvela.wallet.core.net.ProductionWriteRefused -> "refused"
             is java.net.UnknownHostException -> "dns"
             is javax.net.ssl.SSLHandshakeException, is javax.net.ssl.SSLPeerUnverifiedException -> "tls"
             is java.net.ConnectException, is java.net.NoRouteToHostException, is java.net.PortUnreachableException -> "connect_refused"
