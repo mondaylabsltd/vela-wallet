@@ -7,7 +7,10 @@
     "somethingWrong": "發生問題",
     "tryAgain": "重試",
     "done": "完成",
-    "gotIt": "知道了"
+    "gotIt": "知道了",
+    "testBuild": {
+      "productionWriteRefused": "這是測試版本，不會寫入正式服務；請將它指向本機服務。"
+    }
   },
   "language": {
     "title": "語言",

@@ -7,7 +7,10 @@
   "somethingWrong": "문제가 발생했습니다",
   "tryAgain": "다시 시도",
   "done": "완료",
-  "gotIt": "확인"
+  "gotIt": "확인",
+  "testBuild": {
+   "productionWriteRefused": "이 테스트 빌드는 실제 서비스에 기록하지 않습니다. 로컬 서비스를 지정하세요."
+  }
  },
  "language": {
   "title": "언어",

@@ -512,3 +512,4 @@ export * from './UnreachableCause';
 export * from './UnreachableNetwork';
 export * from './VenueBlock';
 export * from './VenueChoice';
+export * from './serviceDefaults';

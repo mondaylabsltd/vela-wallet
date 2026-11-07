@@ -7,7 +7,10 @@
     "somethingWrong": "Bir şeyler ters gitti",
     "tryAgain": "Tekrar Dene",
     "done": "Bitti",
-    "gotIt": "Anladım"
+    "gotIt": "Anladım",
+    "testBuild": {
+      "productionWriteRefused": "Bu test sürümü canlı hizmete yazmaz; onu yerel bir hizmete yönlendirin."
+    }
   },
   "language": {
     "title": "Dil",

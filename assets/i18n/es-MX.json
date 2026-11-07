@@ -7,7 +7,10 @@
   "somethingWrong": "Algo salió mal",
   "tryAgain": "Intentar de nuevo",
   "done": "Listo",
-  "gotIt": "Entendido"
+  "gotIt": "Entendido",
+  "testBuild": {
+   "productionWriteRefused": "Esta compilación de prueba no escribirá en el servicio real; apúntala a uno local."
+  }
  },
  "language": {
   "title": "Idioma",

@@ -1,0 +1,368 @@
+{
+  "about": "§28 (docs/multisig-machines.md): a test build never writes to production. `defaults` are vela_core::service_defaults::service_defaults() — the one source every shell reads (uniffi service_defaults_json, wasm serviceDefaults, the web's generated serviceDefaults.ts). `builds`: a build is a test build when any fact holds (BuildFacts::is_test_build). `optIn`: a VELA_ALLOW_PRODUCTION_WRITES value and whether it opts in (service_defaults::opt_in). `cases`: service_defaults::write_verdict(testBuild, allowProductionWrites, method, url, body); `refused` names the production host. A write is any method but GET/HEAD/OPTIONS, unless a POST's body is JSON-RPC asking only READ_RPC_METHODS. Replayed by rust/crates/vela-core/tests/production_writes.rs and by each shell's guard test.",
+  "refusedKey": "common.testBuild.productionWriteRefused",
+  "optInName": "VELA_ALLOW_PRODUCTION_WRITES",
+  "defaults": {
+    "ethereumDataUrl": "https://ethereum-data.getvela.app",
+    "passkeyIndexUrl": "https://p256-index-v2.getvela.app",
+    "bundlerServiceUrl": "https://vela-relay-cf.getvela.app",
+    "fiatRatesUrl": "https://vela-currency.getvela.app/v2/rates?base=USD",
+    "genesisServiceUrl": "https://safe-genesis.getvela.app",
+    "aaguidDirectoryUrl": "https://aaguid-explorer.awesometools.dev",
+    "peerconnectRelayUrl": "wss://relay.peerconnect.dev",
+    "peerconnectTokenUrl": "https://getvela.app/api/peerconnect-token",
+    "peerconnectTrialUrl": "https://peerconnect.dev/api/trial",
+    "bugReportUrl": "https://getvela.app/api/bug-report",
+    "signingPageUrl": "https://sign.getvela.app/"
+  },
+  "builds": [
+    {
+      "about": "a release build: none of the facts",
+      "facts": {},
+      "testBuild": false
+    },
+    {
+      "about": "dev-fixtures (the parallel space's fixed keys)",
+      "facts": {
+        "devFixtures": true
+      },
+      "testBuild": true
+    },
+    {
+      "about": "Android's devicetest flavour, iOS's Vela Test build",
+      "facts": {
+        "deviceTest": true
+      },
+      "testBuild": true
+    },
+    {
+      "about": "any debug build",
+      "facts": {
+        "debug": true
+      },
+      "testBuild": true
+    },
+    {
+      "about": "the web's dev server",
+      "facts": {
+        "devServer": true
+      },
+      "testBuild": true
+    },
+    {
+      "about": "a development package (the web extension's extension/dist)",
+      "facts": {
+        "devPackage": true
+      },
+      "testBuild": true
+    }
+  ],
+  "optIn": [
+    [
+      "1",
+      true
+    ],
+    [
+      "true",
+      true
+    ],
+    [
+      " 1 ",
+      true
+    ],
+    [
+      "0",
+      false
+    ],
+    [
+      "",
+      false
+    ],
+    [
+      "yes",
+      false
+    ],
+    [
+      null,
+      false
+    ]
+  ],
+  "cases": [
+    {
+      "about": "the key index: a test build's registration (round 17)",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "POST",
+      "url": "https://p256-index-v2.getvela.app/api/register",
+      "body": "{\"members\":[]}",
+      "verdict": "refused",
+      "host": "p256-index-v2.getvela.app"
+    },
+    {
+      "about": "the key index: a test build's challenge, the first step of a registration",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "POST",
+      "url": "https://p256-index-v2.getvela.app/api/challenge",
+      "body": "{\"publicKey\":\"0x04\"}",
+      "verdict": "refused",
+      "host": "p256-index-v2.getvela.app"
+    },
+    {
+      "about": "the key index: a lookup is a read",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "GET",
+      "url": "https://p256-index-v2.getvela.app/api/query?publicKey=0x04",
+      "verdict": "allowed"
+    },
+    {
+      "about": "the key index: its health is a read",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "GET",
+      "url": "https://p256-index-v2.getvela.app/api/health",
+      "verdict": "allowed"
+    },
+    {
+      "about": "the multisig service: recording a genesis (real-device pass 1)",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "POST",
+      "url": "https://safe-genesis.getvela.app/api/genesis",
+      "body": "{}",
+      "verdict": "refused",
+      "host": "safe-genesis.getvela.app"
+    },
+    {
+      "about": "the mailbox: an approval",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "POST",
+      "url": "https://safe-genesis.getvela.app/api/proposals",
+      "body": "{}",
+      "verdict": "refused",
+      "host": "safe-genesis.getvela.app"
+    },
+    {
+      "about": "the mailbox: withdrawing a proposal",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "DELETE",
+      "url": "https://safe-genesis.getvela.app/api/proposals/0xabc",
+      "verdict": "refused",
+      "host": "safe-genesis.getvela.app"
+    },
+    {
+      "about": "the mailbox: reading proposals",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "GET",
+      "url": "https://safe-genesis.getvela.app/api/proposals?safe=0xabc",
+      "verdict": "allowed"
+    },
+    {
+      "about": "the relay: a gas estimate is a read",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "POST",
+      "url": "https://vela-relay-cf.getvela.app/100",
+      "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_estimateUserOperationGas\",\"params\":[]}",
+      "verdict": "allowed"
+    },
+    {
+      "about": "the relay: an in-band gas quote is a read",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "POST",
+      "url": "https://vela-relay-cf.getvela.app/100",
+      "body": "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"vela_getInBandGasQuote\",\"params\":[]}",
+      "verdict": "allowed"
+    },
+    {
+      "about": "the relay: submitting a user operation",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "POST",
+      "url": "https://vela-relay-cf.getvela.app/100",
+      "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"eth_sendUserOperation\",\"params\":[]}",
+      "verdict": "refused",
+      "host": "vela-relay-cf.getvela.app"
+    },
+    {
+      "about": "the relay: a batch with one submit in it is a write",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "POST",
+      "url": "https://vela-relay-cf.getvela.app/100",
+      "body": "[{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_estimateUserOperationGas\",\"params\":[]},{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"eth_sendUserOperation\",\"params\":[]}]",
+      "verdict": "refused",
+      "host": "vela-relay-cf.getvela.app"
+    },
+    {
+      "about": "the relay: an empty batch asks nothing it may",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "POST",
+      "url": "https://vela-relay-cf.getvela.app/100",
+      "body": "[]",
+      "verdict": "refused",
+      "host": "vela-relay-cf.getvela.app"
+    },
+    {
+      "about": "the sponsor: asking for sponsorship",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "POST",
+      "url": "https://vela-relay-cf.getvela.app/v1/sponsor/100",
+      "body": "{\"sender\":\"0xabc\"}",
+      "verdict": "refused",
+      "host": "vela-relay-cf.getvela.app"
+    },
+    {
+      "about": "the sponsor: its treasury is a read",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "GET",
+      "url": "https://vela-relay-cf.getvela.app/v1/treasury/100",
+      "verdict": "allowed"
+    },
+    {
+      "about": "PeerConnect: a relay token is a write",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "POST",
+      "url": "https://getvela.app/api/peerconnect-token",
+      "body": "{}",
+      "verdict": "refused",
+      "host": "getvela.app"
+    },
+    {
+      "about": "PeerConnect: a trial token is a write",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "POST",
+      "url": "https://peerconnect.dev/api/trial",
+      "body": "{}",
+      "verdict": "refused",
+      "host": "peerconnect.dev"
+    },
+    {
+      "about": "PeerConnect: opening the relay is a read (a WebSocket's GET)",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "GET",
+      "url": "wss://relay.peerconnect.dev/",
+      "verdict": "allowed"
+    },
+    {
+      "about": "a bug report",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "POST",
+      "url": "https://getvela.app/api/bug-report",
+      "body": "{}",
+      "verdict": "refused",
+      "host": "getvela.app"
+    },
+    {
+      "about": "fiat rates are a read",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "GET",
+      "url": "https://vela-currency.getvela.app/v2/rates?base=USD",
+      "verdict": "allowed"
+    },
+    {
+      "about": "any host under getvela.app is production, named or not",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "PUT",
+      "url": "https://new-service.getvela.app/x",
+      "body": "{}",
+      "verdict": "refused",
+      "host": "new-service.getvela.app"
+    },
+    {
+      "about": "the host is read case-blind, with its port and trailing dot gone",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "POST",
+      "url": "https://P256-INDEX-V2.GetVela.App.:443/api/register",
+      "body": "{}",
+      "verdict": "refused",
+      "host": "p256-index-v2.getvela.app"
+    },
+    {
+      "about": "a look-alike host is not production",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "POST",
+      "url": "https://notgetvela.app/api/register",
+      "body": "{}",
+      "verdict": "allowed"
+    },
+    {
+      "about": "a host that only begins with the domain is not production",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "POST",
+      "url": "https://getvela.app.evil.test/api/register",
+      "body": "{}",
+      "verdict": "allowed"
+    },
+    {
+      "about": "a local key index stand-in",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "POST",
+      "url": "http://127.0.0.1:9566/api/register",
+      "body": "{}",
+      "verdict": "allowed"
+    },
+    {
+      "about": "a local multisig service",
+      "testBuild": true,
+      "allowProductionWrites": false,
+      "method": "POST",
+      "url": "http://localhost:8787/api/genesis",
+      "body": "{}",
+      "verdict": "allowed"
+    },
+    {
+      "about": "a test build with the opt-in writes",
+      "testBuild": true,
+      "allowProductionWrites": true,
+      "method": "POST",
+      "url": "https://p256-index-v2.getvela.app/api/register",
+      "body": "{}",
+      "verdict": "allowed"
+    },
+    {
+      "about": "a release build is never refused: the key index",
+      "testBuild": false,
+      "allowProductionWrites": false,
+      "method": "POST",
+      "url": "https://p256-index-v2.getvela.app/api/register",
+      "body": "{}",
+      "verdict": "allowed"
+    },
+    {
+      "about": "a release build is never refused: a submit",
+      "testBuild": false,
+      "allowProductionWrites": false,
+      "method": "POST",
+      "url": "https://vela-relay-cf.getvela.app/100",
+      "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"eth_sendUserOperation\",\"params\":[]}",
+      "verdict": "allowed"
+    },
+    {
+      "about": "a release build is never refused: the mailbox",
+      "testBuild": false,
+      "allowProductionWrites": false,
+      "method": "DELETE",
+      "url": "https://safe-genesis.getvela.app/api/proposals/0xabc",
+      "verdict": "allowed"
+    }
+  ]
+}
