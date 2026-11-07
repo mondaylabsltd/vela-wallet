@@ -47,6 +47,9 @@ extension URLSession {
     ) -> URLSession {
         #if DEBUG
         if let proxy = DevProxy.configuration { configuration.proxyConfigurations = [proxy] }
+        // §28: a test build never writes to production — every session this
+        // app opens carries the guard (`ProductionWriteGuard`, Debug only).
+        ProductionWriteGuard.guarding(configuration)
         #endif
         return URLSession(configuration: configuration, delegate: delegate, delegateQueue: delegateQueue)
     }

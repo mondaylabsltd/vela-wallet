@@ -30,15 +30,17 @@
  */
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
 import { connect, type Room } from '$lib/vendor/peerconnect/index.js';
+import { SERVICE_DEFAULTS } from '$lib/core/generated/serviceDefaults';
 
 /** Ask one of the core's relay rules. */
 function rule<T>(name: string, args: Record<string, unknown> = {}): T {
 	return JSON.parse(wasm.multisigLinkCall(`relay.${name}`, JSON.stringify(args))) as T;
 }
 
-export const DEFAULT_RELAY = 'wss://relay.peerconnect.dev';
-export const TOKEN_ENDPOINT = 'https://getvela.app/api/peerconnect-token';
-export const TRIAL_ENDPOINT = 'https://peerconnect.dev/api/trial';
+// The core's defaults (`service_defaults`, §28 — generated, never copied).
+export const DEFAULT_RELAY = SERVICE_DEFAULTS.peerconnectRelayUrl;
+export const TOKEN_ENDPOINT = SERVICE_DEFAULTS.peerconnectTokenUrl;
+export const TRIAL_ENDPOINT = SERVICE_DEFAULTS.peerconnectTrialUrl;
 
 const RELAY_KEY = 'vela.peerconnectRelay';
 const ENDPOINT_KEY = 'vela.peerconnectTokenEndpoint';

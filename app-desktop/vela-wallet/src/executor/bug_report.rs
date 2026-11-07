@@ -41,7 +41,7 @@
 use std::time::Duration;
 
 /// The site's proxy. The token lives there; nothing here has one.
-pub const BUG_REPORT_ENDPOINT: &str = "https://getvela.app/api/bug-report";
+pub const BUG_REPORT_ENDPOINT: &str = vela_core::service_defaults::BUG_REPORT_URL;
 
 /// The repository's issue form, for the fallback road.
 pub const GITHUB_ISSUE_FORM: &str = "https://github.com/mondaylabsltd/vela-wallet/issues/new";

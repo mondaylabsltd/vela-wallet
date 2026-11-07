@@ -9,6 +9,17 @@ genesis service (`safe-genesis-registry`'s docker shell) and a local relay.
 | genesis service | `127.0.0.1:8787` | `genesis-server`: the registry (v4, deployed on the fork at start at `0xF412…945d`, the address the wallet knows — up.sh stops if the build lands elsewhere), sponsored records, the proposal mailbox |
 | second anvil | `127.0.0.1:8546` | the same Gnosis state answering as Base (8453): a network the wallet has and the service is NOT configured to read |
 | relay | `127.0.0.1:8790` | `relay.py`: the ERC-4337 methods and REST endpoints the wallet asks the Vela relay; bundles each operation with `EntryPoint.handleOps` |
+| PeerConnect relay | `127.0.0.1:8792` | an outside owner's wallet page and Vela meet through it |
+| key index | `127.0.0.1:8793` | `../key-index/server.mjs`: the p256-index v2 protocol, in memory — a run's throwaway accounts are recorded HERE, never in the production index (§28) |
+
+Every service the wallet writes to is local: a test build never writes to
+production (docs/multisig-machines.md §28 — and the test builds refuse to).
+`.state/harness.env` names them all in the launch inputs the shells read
+(`VELA_SERVICE_ENDPOINTS` with `passkeyIndexURL`, `genesisServiceURL` and
+`bundlerServiceURL`; `VELA_RPC_OVERRIDES`; `VELA_PEERCONNECT_RELAY`):
+`. .state/harness.env` before launching iOS (simctl / XCUITest env) or the
+desktop; Android takes `$(cat .state/android-launch-args)` on its
+`am start` line.
 
 The relay pays from a fresh key, not anvil's defaults: on Gnosis those
 addresses carry EIP-7702 delegations, and a fee paid to one reverts the whole
@@ -35,11 +46,11 @@ core test's create is not recorded.
 
 A second harness beside a running one takes other ports — up.sh and the
 Playwright harness read the same names (`FORK_PORT`, `UNREAD_PORT`,
-`GENESIS_PORT`, `RELAY_PORT`, `PEERCONNECT_PORT`), with its own `STATE`;
+`GENESIS_PORT`, `RELAY_PORT`, `PEERCONNECT_PORT`, `KEY_INDEX_PORT`), with its own `STATE`;
 `PEERCONNECT_BIN` runs a relay already built instead of building one:
 
 ```shell
-export FORK_PORT=8645 UNREAD_PORT=8646 GENESIS_PORT=8887 RELAY_PORT=8890 PEERCONNECT_PORT=8892
+export FORK_PORT=8645 UNREAD_PORT=8646 GENESIS_PORT=8887 RELAY_PORT=8890 PEERCONNECT_PORT=8892 KEY_INDEX_PORT=8893
 STATE=/tmp/harness-2 scripts/onchain/multisig-fork/up.sh
 VELA_ONCHAIN_URL=http://127.0.0.1:5291 npx playwright test -c playwright.onchain.config.ts
 STATE=/tmp/harness-2 scripts/onchain/multisig-fork/down.sh
@@ -67,7 +78,7 @@ To use the harness by hand, point a browser profile at it:
 
 ```js
 localStorage['vela.genesisServiceURL'] = 'http://127.0.0.1:8787'
-localStorage['vela.serviceEndpoints'] = '{"bundlerServiceURL":"http://127.0.0.1:8790"}'
+localStorage['vela.serviceEndpoints'] = '{"bundlerServiceURL":"http://127.0.0.1:8790","passkeyIndexURL":"http://127.0.0.1:8793"}'
 // IndexedDB vela/kv 'vela.networkConfig' =
 //   '[{"chainId":100,"rpcURL":"http://127.0.0.1:8545"},{"chainId":8453,"rpcURL":"http://127.0.0.1:8546"}]'
 ```

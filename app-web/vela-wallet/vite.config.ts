@@ -128,6 +128,14 @@ export default defineConfig({
 		// own origin in one, and only from `chrome-extension:` pages in the
 		// other (`$lib/analytics/gate.ts`).
 		__VELA_EXTENSION__: JSON.stringify(EXTENSION_TARGET),
+		// §28: a TEST build's opt-in to production writes (the dev server's;
+		// a development package's comes from its marker, extension/build.mjs).
+		// Meaningless in any other build: only a test build installs the guard.
+		__VELA_ALLOW_PRODUCTION_WRITES__: JSON.stringify(
+			process.env.VELA_TARGET === 'extension'
+				? ''
+				: (process.env.VELA_ALLOW_PRODUCTION_WRITES ?? '')
+		),
 		// Which browser's package this is, by the scheme its pages load from
 		// (`$lib/extension/page-url.ts`, `$lib/dapp/transport.ts`).
 		__VELA_EXTENSION_PROTOCOL__: JSON.stringify(EXTENSION_PROTOCOL)

@@ -9,10 +9,20 @@
 #                  worktree of the wallet, however deep, finds the same repos.
 #   PEERCONNECT_BIN   a peerconnect-relay already built: run it instead of building PEERCONNECT_REPO
 #   STATE          where logs and the service's database go (default ./.state)
-#   FORK_PORT UNREAD_PORT GENESIS_PORT RELAY_PORT PEERCONNECT_PORT
-#                  the ports (default 8545 8546 8787 8790 8792). A second
+#   FORK_PORT UNREAD_PORT GENESIS_PORT RELAY_PORT PEERCONNECT_PORT KEY_INDEX_PORT
+#                  the ports (default 8545 8546 8787 8790 8792 8793). A second
 #                  harness beside a running one takes others; the Playwright
 #                  harness reads the same names (e2e/onchain/harness.ts).
+#
+# EVERY service the wallet writes to has a local stand-in here — the genesis
+# service and its mailbox, the relay (bundler and sponsor), PeerConnect's
+# relay, and a key index (`../key-index/server.mjs`, in memory): a test build
+# never writes to production (§28, docs/multisig-machines.md), and a run that
+# creates an account creates it HERE. `$STATE/harness.env` names them all, in
+# the launch inputs every shell reads (`VELA_SERVICE_ENDPOINTS`,
+# `VELA_RPC_OVERRIDES`, `VELA_PEERCONNECT_RELAY` — iOS's DevLaunchInputs, the
+# desktop's dev env; Android's `--es vela.serviceEndpoints …` from
+# `$STATE/android-launch-args`): source it, and nothing points at production.
 #
 # A second fork answers as Base (8453) on :8546: Gnosis's state under another
 # chain id, which the genesis service is NOT configured to read — a network the
@@ -24,7 +34,7 @@
 #
 # Then point the browser at it (the dev console, or the Playwright harness):
 #   localStorage['vela.genesisServiceURL'] = 'http://127.0.0.1:8787'
-#   localStorage['vela.serviceEndpoints']  = '{"bundlerServiceURL":"http://127.0.0.1:8790"}'
+#   localStorage['vela.serviceEndpoints']  = '{"bundlerServiceURL":"http://127.0.0.1:8790","passkeyIndexURL":"http://127.0.0.1:8793"}'
 #   IndexedDB vela/kv 'vela.networkConfig' = '[{"chainId":100,"rpcURL":"http://127.0.0.1:8545"},
 #                                              {"chainId":8453,"rpcURL":"http://127.0.0.1:8546"}]'
 set -eu
@@ -45,6 +55,7 @@ UNREAD_PORT=${UNREAD_PORT:-8546}
 GENESIS_PORT=${GENESIS_PORT:-8787}
 RELAY_PORT=${RELAY_PORT:-8790}
 PEERCONNECT_PORT=${PEERCONNECT_PORT:-8792}
+KEY_INDEX_PORT=${KEY_INDEX_PORT:-8793}
 RPC=http://127.0.0.1:$FORK_PORT
 UNREAD=http://127.0.0.1:$UNREAD_PORT
 mkdir -p "$STATE"
@@ -130,9 +141,32 @@ RPCS="{\"100\":\"$RPC\",\"8453\":\"$UNREAD\"}" RELAY_PORT=$RELAY_PORT NO_PROXY=1
   python3 "$here/relay.py" >"$STATE/relay.log" 2>&1 &
 echo $! >"$STATE/relay.pid"
 
+# The key index: where a run's throwaway accounts are recorded (§28 — never
+# the production index). In memory; `down.sh && up.sh` empties it.
+[ -d "$here/../../node_modules/@noble/hashes" ] || npm --prefix "$here/../.." ci --silent >/dev/null
+KEY_INDEX_PORT=$KEY_INDEX_PORT node "$here/../key-index/server.mjs" >"$STATE/key-index.log" 2>&1 &
+echo $! >"$STATE/key-index.pid"
+KEY_INDEX=http://127.0.0.1:$KEY_INDEX_PORT
+i=0; until curl -s --noproxy '*' "$KEY_INDEX/api/health" >/dev/null 2>&1; do i=$((i+1)); [ $i -gt 30 ] && { echo "the key index did not start"; exit 1; }; sleep 1; done
+
+# Every service, local — what a shell is launched with (§28).
+ENDPOINTS="{\"passkeyIndexURL\":\"$KEY_INDEX\",\"genesisServiceURL\":\"http://127.0.0.1:$GENESIS_PORT\",\"bundlerServiceURL\":\"http://127.0.0.1:$RELAY_PORT\"}"
+RPC_OVERRIDES="{\"100\":\"$RPC\",\"8453\":\"$UNREAD\"}"
+PEER=ws://127.0.0.1:$PEERCONNECT_PORT
+cat >"$STATE/harness.env" <<EOF
+# Written by scripts/onchain/multisig-fork/up.sh: every service local (§28).
+VELA_SERVICE_ENDPOINTS='$ENDPOINTS'
+VELA_RPC_OVERRIDES='$RPC_OVERRIDES'
+VELA_PEERCONNECT_RELAY='$PEER'
+export VELA_SERVICE_ENDPOINTS VELA_RPC_OVERRIDES VELA_PEERCONNECT_RELAY
+EOF
+printf "%s\n" "--es vela.serviceEndpoints '$ENDPOINTS' --es vela.rpcOverrides '$RPC_OVERRIDES' --es vela.peerconnectRelay $PEER" \
+  >"$STATE/android-launch-args"
+
 health=http://127.0.0.1:$GENESIS_PORT/api/health
 i=0; until curl -s --noproxy '*' "$health" >/dev/null 2>&1; do i=$((i+1)); [ $i -gt 60 ] && { echo "genesis service did not start"; exit 1; }; sleep 1; done
 # The service reads only its own version of the registry: said now, not at the first lookup.
 curl -s --noproxy '*' "$health" | grep -q '"status":"ok"' || {
   echo "the genesis service does not read the registry at $REGISTRY:"; curl -s --noproxy '*' "$health"; exit 1; }
-echo "registry $REGISTRY · peerconnect ws://127.0.0.1:$PEERCONNECT_PORT · fork $RPC · unread fork (8453) $UNREAD · genesis http://127.0.0.1:$GENESIS_PORT · relay http://127.0.0.1:$RELAY_PORT · logs $STATE"
+echo "registry $REGISTRY · peerconnect ws://127.0.0.1:$PEERCONNECT_PORT · fork $RPC · unread fork (8453) $UNREAD · genesis http://127.0.0.1:$GENESIS_PORT · relay http://127.0.0.1:$RELAY_PORT · key index $KEY_INDEX · logs $STATE"
+echo "launch inputs: . $STATE/harness.env (iOS, desktop) · adb … am start … \$(cat $STATE/android-launch-args)"

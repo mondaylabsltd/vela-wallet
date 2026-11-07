@@ -12,14 +12,18 @@
  */
 
 import { loadCore, registryResolveKeyStep, registryResolveUnitStep } from '$lib/core/client';
+import { SERVICE_DEFAULTS } from '$lib/core/generated/serviceDefaults';
 import { getPasskeyIndexURL } from '$lib/services/endpoints';
 import { publicRpcs } from '$lib/services/rpc-pool-endpoints';
 import type { RegistryProof } from '../generated/RegistryProof';
 import type { RegistryUnitMember } from '../generated/RegistryUnitMember';
 import type { VerifiedBy } from '../generated/VerifiedBy';
 
-/** The v2 registry. Overridable so a self-hosted stack is a setting, not a fork. */
-export const DEFAULT_REGISTRY_URL = 'https://p256-index-v2.getvela.app';
+/**
+ * The v2 registry: the core's default (`service_defaults`, §28 — generated,
+ * never copied). Overridable so a self-hosted stack is a setting, not a fork.
+ */
+export const DEFAULT_REGISTRY_URL = SERVICE_DEFAULTS.passkeyIndexUrl;
 
 /** The health identities this endpoint accepts — the legacy index and the v2
  *  registry, so a wallet can point at either during the migration. */

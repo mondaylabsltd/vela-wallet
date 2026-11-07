@@ -43,6 +43,8 @@ cd app-web/vela-wallet
 pnpm exec playwright test --project=chromium e2e/extension-site-start.e2e.ts
 ```
 
+**Test builds never write to production (§28):** every test build — dev-fixtures, the device-test builds, any debug build, the web's dev server and the extension's development package — refuses a write to a production host before it leaves (`vela_core::service_defaults`, `docs/multisig-machines.md` §28); local harnesses point every service at a stand-in (`scripts/onchain/multisig-fork/up.sh`, its key index included), and only `VELA_ALLOW_PRODUCTION_WRITES=1` lets a test build write to production.
+
 ### The shared core vectors are never silently skipped
 
 The core's vectors (`rust/crates/vela-core/tests/vectors`) are replayed inside

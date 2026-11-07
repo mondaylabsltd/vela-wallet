@@ -24,6 +24,9 @@ mod intents;
 /// The multisig machines (F0.4).
 mod multisig_machines;
 mod onboarding;
+/// §28: the core's service defaults, and the rule that a test build never
+/// writes to production.
+mod service_defaults;
 mod settings;
 /// The launch animation's replay rule and the ENS nodes.
 mod shell_rules;

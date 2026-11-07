@@ -806,9 +806,9 @@ pub mod relay {
     #[cfg(feature = "bindings")]
     use ts_rs::TS;
 
-    pub const DEFAULT_RELAY: &str = "wss://relay.peerconnect.dev";
-    pub const TOKEN_ENDPOINT: &str = "https://getvela.app/api/peerconnect-token";
-    pub const TRIAL_ENDPOINT: &str = "https://peerconnect.dev/api/trial";
+    pub const DEFAULT_RELAY: &str = crate::service_defaults::PEERCONNECT_RELAY_URL;
+    pub const TOKEN_ENDPOINT: &str = crate::service_defaults::PEERCONNECT_TOKEN_URL;
+    pub const TRIAL_ENDPOINT: &str = crate::service_defaults::PEERCONNECT_TRIAL_URL;
     /// A token this close to expiring (seconds) is replaced before it is used.
     pub const MARGIN_S: f64 = 600.0;
     /// Waits between tokens, refused or not given: each longer, at most 30 s.

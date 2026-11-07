@@ -1978,3 +1978,79 @@ link door), `app_token_trust.rs` (`the_scan_names_the_networks_it_could_not_read
 `token-trust-resident.test.ts`, `ProposalSheet.svelte.test.ts` (busy on the sheet,
 the one press approves nothing). Android, iOS and desktop: their own unit tests
 for each item (see the commits).
+
+## 28. Test builds never write to production
+
+Twice a test build wrote to a production service by default: real-device
+pass 1's Android build recorded a genesis in the production multisig service
+(fixed for that one service in ab5aad2a2), and Round 17's iOS dev-fixtures
+simulator build, creating a throwaway passkey account, wrote it to the
+production key index (`https://p256-index-v2.getvela.app`, "Writing the key
+index") because nobody had pointed `passkeyIndexURL` at a local stand-in. The
+owner's rule is absolute — no production writes during testing, local
+stand-ins only — and a tester's checklist did not keep it. The build does now.
+
+**One source of service defaults.** `vela_core::service_defaults` holds every
+production service default: the key index, ethereum-data, the relay (bundler
+and sponsor), fiat rates, the multisig service and its mailbox, the passkey
+model directory, PeerConnect's relay, token and trial, the bug report and the
+signing page. The names the core used before (`network_admin::DEFAULT_*`,
+`multisig_shell::DEFAULT_GENESIS_SERVICE_URL`, `multisig_outside::relay::*`,
+`trusted_signer::DEFAULT_SIGNER_URL`, `passkey::AAGUID_DIRECTORY_ORIGIN`) are
+aliases of it. The shells keep no copy: Android and iOS read uniffi
+`service_defaults()` (`CoreServiceDefaults`), the desktop reads the core by
+path, and the web imports `serviceDefaults.ts`, generated from the core by
+`generate_wallet_state_bindings` and drift-gated by `gen-core-types --check`
+(`pnpm check`) — the web needs its defaults before the wasm can load.
+
+**The rule** (`service_defaults::write_verdict`, uniffi
+`production_write_refusal`, wasm `productionWriteVerdict`):
+
+| | |
+| --- | --- |
+| Test build (`BuildFacts::is_test_build`) | dev-fixtures; Android's `devicetest` flavour (`app.getvela.wallet.devicetest`) or iOS's "Vela Test" build (`….devicetest`); any debug build (Android `BuildConfig.DEBUG`, iOS `DEBUG`, Rust `debug_assertions`); the web's dev server or the extension's development package (`extension/dist`, marked by `vela-test-build.json`, which its release and store packages are derived without). |
+| Production host | `getvela.app` and every host under it, and every default's host (`relay.peerconnect.dev`, `peerconnect.dev`, the passkey directory's). A look-alike (`notgetvela.app`, `getvela.app.evil.test`) is not. |
+| Write | Any method but GET, HEAD and OPTIONS — unless a POST is JSON-RPC (one call or a batch) asking only `READ_RPC_METHODS` (an estimate, a receipt, a gas quote). A submit, a sponsor request, a registration, a challenge, a token, a bug report, a REST body, an unknown method: a write. Allowlisted, so it fails closed. |
+| Verdict | In a test build without the opt-in, a write to a production host is refused before it leaves the device; everything else is allowed. A release build is never refused. |
+| Said | `common.testBuild.productionWriteRefused` (15 locales): "This test build won't write to the live service; point it at a local one." The refused request fails as never sent (the transports' `refused` / not-connected class, never "may have been sent"); the key index's clients say it as an answer, not as the network. Logged on every shell (`guard`). |
+| Opt-in | `VELA_ALLOW_PRODUCTION_WRITES=1` — off by default. Android: `-PvelaAllowProductionWrites` (build) or the debug launch extra `vela.allowProductionWrites=1`; iOS and desktop: the launch environment; web: the variable when the dev server starts or the package is built, or `localStorage['vela.dev.allowProductionWrites'] = '1'`. A real-device pass keeps its production reads without it. |
+
+**Where each shell enforces it.** Android: `ProductionWriteGuard`, an okhttp
+interceptor on `VelaHttp.client` (every derived client inherits it) in a test
+build only, and `RegistryClient`'s own connection asks it before it writes.
+iOS: `ProductionWriteGuard`, a URL protocol registered with the loading system
+and first in every `URLSession.vela(_:)` session — it takes a POST to a
+production host, reads its body, asks the core, and fails it or sends it on;
+it is in `Dev/`, excluded from Release (`EXCLUDED_SOURCE_FILE_NAMES`). Desktop:
+a ureq middleware on every agent `proxy` builds (`production_guard.rs`), only
+when `debug_assertions` or `dev-fixtures`; `proxy::walk` reports the refusal as
+`local` (not sent). Web: `production-guard.ts` wraps `fetch` from the root
+layout — only in the dev server or the extension build, and only active when
+the extension's marker says it is the development package.
+
+**Release builds are unaffected**, by construction and by test: the guard is
+installed only in a test build (iOS: not even compiled into Release; desktop:
+`guard_for(false, _)` is `None`; Android: `ProductionWriteGuard.installed` is
+the core's `is_test_build`; web: not installed outside the dev server and the
+extension, and the release packages carry no marker), and each shell's test
+sends a release build's write to a production host name mapped to a local
+stand-in and sees it arrive. `check-release-apk.sh`, `check-ios-store-binary.sh`
+and `check-store-binary.sh` hold the release binaries to it.
+
+**The harness.** `scripts/onchain/multisig-fork/up.sh` starts a local stand-in
+for every service the wallet writes to — the genesis service and mailbox, the
+relay, PeerConnect's relay, and now a key index
+(`scripts/onchain/key-index/server.mjs`: the p256-index v2 protocol as the
+clients use it, in memory, with the registry's honest member challenge) — and
+writes `.state/harness.env` (`VELA_SERVICE_ENDPOINTS` with `passkeyIndexURL`,
+`genesisServiceURL`, `bundlerServiceURL`; `VELA_RPC_OVERRIDES`;
+`VELA_PEERCONNECT_RELAY`) and `.state/android-launch-args` for the shells. The
+web's onchain harness (`e2e/onchain/harness.ts`) points `passkeyIndexURL` at it.
+
+Vector: `rust/crates/vela-core/tests/vectors/rules/production-writes.json`
+(defaults, build facts, opt-in values, and 30 requests), replayed by
+`tests/production_writes.rs`, the uniffi bridge's test, Android
+`ProductionWriteGuardTest`, iOS `ProductionWriteGuardTests`, the desktop's
+`production_guard` tests and the web's `production-guard.test.ts` — each of
+which also proves a test build's write refused before it leaves and a release
+build's write delivered, with the production names answered on this machine.

@@ -53,8 +53,8 @@ import org.json.JSONObject
  */
 object BugReport {
 
-    /** The site's proxy. The token lives there; nothing here has one. */
-    const val ENDPOINT: String = "https://getvela.app/api/bug-report"
+    /** The site's proxy — the core's default (`service_defaults`, §28). The token lives there; nothing here has one. */
+    val ENDPOINT: String get() = app.getvela.wallet.core.net.CoreServiceDefaults.value.bugReportUrl
 
     /** The endpoint's own cap, honoured before the request leaves. */
     const val MAX_REPORT_CHARS: Int = 16_000

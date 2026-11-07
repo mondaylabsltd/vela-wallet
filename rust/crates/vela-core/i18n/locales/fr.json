@@ -7,7 +7,10 @@
     "somethingWrong": "Une erreur s'est produite",
     "tryAgain": "Réessayer",
     "done": "Terminé",
-    "gotIt": "Compris"
+    "gotIt": "Compris",
+    "testBuild": {
+      "productionWriteRefused": "Cette version de test n'écrit pas sur le service réel. Pointez-la vers un service local."
+    }
   },
   "language": {
     "title": "Langue",

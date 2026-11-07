@@ -7,7 +7,10 @@
   "somethingWrong": "Đã xảy ra sự cố",
   "tryAgain": "Thử lại",
   "done": "Xong",
-  "gotIt": "Đã hiểu"
+  "gotIt": "Đã hiểu",
+  "testBuild": {
+   "productionWriteRefused": "Bản dựng thử nghiệm này sẽ không ghi vào dịch vụ thật; hãy trỏ nó tới một dịch vụ cục bộ."
+  }
  },
  "language": {
   "title": "Ngôn ngữ",

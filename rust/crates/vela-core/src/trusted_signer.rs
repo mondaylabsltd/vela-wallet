@@ -65,7 +65,7 @@ pub mod ws;
 /// The official signing page (spec 071 [D]) — the host PROTOCOL.md names. It
 /// is always the first of the saved signing pages (spec 102), and a person
 /// may add their own deployments beside it.
-pub const DEFAULT_SIGNER_URL: &str = "https://sign.getvela.app/";
+pub const DEFAULT_SIGNER_URL: &str = crate::service_defaults::SIGNING_PAGE_URL;
 
 /// Where the page sends a signature back to (spec 076, owner 2026-09-23:
 /// 「我们在 android ios desktop(win linux mac) 都使用 custom schema」).

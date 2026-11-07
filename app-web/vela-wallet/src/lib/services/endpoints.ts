@@ -8,23 +8,29 @@
  * async executor operation, so the Expo in-memory cache has nothing to feed.
  */
 
+import { SERVICE_DEFAULTS } from '$lib/core/generated/serviceDefaults';
 import { loadServiceEndpoints } from '$lib/onboarding/core/storage';
 import { allowedOrNull } from './url-policy';
 
+/**
+ * The defaults are the CORE's (`vela_core::service_defaults`, §28), generated
+ * into `serviceDefaults.ts` and drift-gated — the web keeps no copy of its
+ * own. Named as the stored record names them.
+ */
 export const DEFAULT_SERVICE_ENDPOINTS = {
-	ethereumDataURL: 'https://ethereum-data.getvela.app',
-	passkeyIndexURL: 'https://p256-index-v2.getvela.app',
-	bundlerServiceURL: 'https://vela-relay-cf.getvela.app',
+	ethereumDataURL: SERVICE_DEFAULTS.ethereumDataUrl,
+	passkeyIndexURL: SERVICE_DEFAULTS.passkeyIndexUrl,
+	bundlerServiceURL: SERVICE_DEFAULTS.bundlerServiceUrl,
 	// Vela's self-hosted Frankfurter instance (github.com/mondaylabsltd/vela-currency):
 	// FOSS, no key, ~160 currencies incl. VND. base=USD is required (default base is EUR).
-	fiatRatesURL: 'https://vela-currency.getvela.app/v2/rates?base=USD',
+	fiatRatesURL: SERVICE_DEFAULTS.fiatRatesUrl,
 	// Spec 038 #E4: the AAGUID directory is meant to be OUR node; until it
 	// exists the default is the one the core's catalog names, and the field
 	// is what moves the lookup the day it does — no build in between.
-	aaguidDirectoryURL: 'https://aaguid-explorer.awesometools.dev',
+	aaguidDirectoryURL: SERVICE_DEFAULTS.aaguidDirectoryUrl,
 	// The multisig service (Safe Genesis Registry): records multisigs and
-	// carries their proposals. The core's `DEFAULT_GENESIS_SERVICE_URL`.
-	genesisServiceURL: 'https://safe-genesis.getvela.app'
+	// carries their proposals.
+	genesisServiceURL: SERVICE_DEFAULTS.genesisServiceUrl
 } as const;
 
 /**

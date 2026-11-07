@@ -40,11 +40,13 @@
 //
 
 import Foundation
+import VelaCore
 
 enum BugReport {
 
-    /// The site's proxy. The token lives there; nothing here has one.
-    static let endpoint = "https://getvela.app/api/bug-report"
+    /// The site's proxy — the core's default (`service_defaults`, §28). The
+    /// token lives there; nothing here has one.
+    static let endpoint = CoreServiceDefaults.value.bugReportUrl
     /// The repository's issue form, for the fallback road and the sheet's link.
     static let issueForm = "https://github.com/mondaylabsltd/vela-wallet/issues/new"
     /// The endpoint's own cap (`MAX_BODY_CHARS`), honoured before the request.

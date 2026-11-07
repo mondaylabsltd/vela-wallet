@@ -541,9 +541,9 @@ final class MultisigRelayTokens {
     private static var constants: [String: Any] {
         MsRules.call("relay.constants") as? [String: Any] ?? [:]
     }
-    static var defaultRelay: String { constants["defaultRelay"] as? String ?? "wss://relay.peerconnect.dev" }
-    static var tokenEndpoint: String { constants["tokenEndpoint"] as? String ?? "https://getvela.app/api/peerconnect-token" }
-    static var trialEndpoint: String { constants["trialEndpoint"] as? String ?? "https://peerconnect.dev/api/trial" }
+    static var defaultRelay: String { constants["defaultRelay"] as? String ?? CoreServiceDefaults.value.peerconnectRelayUrl }
+    static var tokenEndpoint: String { constants["tokenEndpoint"] as? String ?? CoreServiceDefaults.value.peerconnectTokenUrl }
+    static var trialEndpoint: String { constants["trialEndpoint"] as? String ?? CoreServiceDefaults.value.peerconnectTrialUrl }
     static var unreachableAfterMs: Int { MultisigPeerRoom.int(constants["unreachableAfterMs"]) ?? 10_000 }
 
     static func needsToken(_ relay: String) -> Bool {
