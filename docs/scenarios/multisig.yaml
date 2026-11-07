@@ -523,6 +523,39 @@ scenarios:
         - { file: app-desktop/vela-wallet/src/multisig/activity.rs, test: a_transfer_is_one_send_row_in_its_tokens_units, ci: required }
       trusted-signer: { gap: 'the page signs; Activity is the wallet''s' }
 
+  - id: parent-safe-guard
+    title: "A site never makes the account act for a multisig it is a member of — execTransaction (v = 1), approveHash, admin calls, MultiSend-nested, SafeTx / SafeMessage under its domain; isOwner read for an unknown Safe, unreadable refused (§31, disclosure 2026-09-29)"
+    covers:
+      core:
+        - { file: rust/crates/vela-core/tests/app_parent_safe_guard.rs, test: every_vector_case_is_the_cores_verdict, ci: required }
+        - { file: rust/crates/vela-core/tests/app_parent_safe_guard.rs, test: a_takeover_exec_transaction_on_a_multisig_on_the_list_opens_refused, ci: required }
+        - { file: rust/crates/vela-core/tests/app_parent_safe_guard.rs, test: an_unreadable_owner_check_refuses_it_never_allows, ci: required }
+        - { file: rust/crates/vela-core/tests/app_parent_safe_guard.rs, test: a_rewrite_toward_an_unread_safe_is_refused_at_submit, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_dapp.rs, test: a_safe_the_chain_says_the_multisig_owns_is_refused_after_the_read, ci: required }
+        - { file: rust/crates/vela-core/tests/multisig_fork.rs, test: parent_safe_takeover_is_refused_while_the_multisigs_own_flow_runs, ci: opt-in, note: 'against the fork harness; #[ignore] without VELA_MULTISIG_FORK; the takeover proved on a snapshot, refused through the sign machine' }
+      web-unit:
+        - { file: app-web/vela-wallet/src/lib/signing/core/parent-safe-guard.test.ts, test: 'case (a) is refused at once — named, unsignable, answered -32603 parent_safe_blocked', ci: required }
+        - { file: app-web/vela-wallet/src/lib/signing/core/parent-safe-guard.test.ts, test: 'unreachable: refused `unchecked`, in the unchecked words', ci: required }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/parent-safe-guard.e2e.ts, test: 'case (a) on a multisig of this device is refused, names it, and answers -32603', ci: required }
+        - { file: app-web/vela-wallet/e2e/parent-safe-guard.e2e.ts, test: 'case (a) on a multisig of this device is refused in the window, and the site hears -32603', ci: required, note: 'the Chrome extension' }
+      android-jvm:
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/ParentSafeEntryPointsTest.kt, test: "the browser's takeover of a multisig on the list is refused at once, never signed, answered -32603", ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/ParentSafeEntryPointsTest.kt, test: "an owner read nobody could answer refuses the request as couldn't check", ci: required }
+      android-instrumented:
+        - { file: app-android/vela-wallet/app/src/androidTest/java/app/getvela/wallet/ParentSafeGuardDeviceTest.kt, test: the_takeover_of_a_multisig_on_the_list_is_refused_by_this_phones_core, ci: opt-in }
+      ios-unit:
+        - { file: app-ios/VelaWallet/VelaWalletTests/ParentSafeGuardTests.swift, test: aTakeoverOfAMultisigOnTheListIsRefusedAtOnce, suite: ParentSafeSheetTests, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/ParentSafeGuardTests.swift, test: anUnreadableSafeIsRefusedUnchecked, suite: ParentSafeSheetTests, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/ParentSafeGuardTests.swift, test: aPagesTakeoverRequestIsRefusedAndThePageToldSo, suite: ParentSafeBrowserEntryTests, ci: required }
+      ios-ui: { gap: 'a parent case needs a seeded multisig or a chain read; unit tests drive the browser path end to end' }
+      desktop:
+        - { file: app-desktop/vela-wallet/src/wallet/signing_host.rs, test: the_takeover_of_a_multisig_on_the_list_is_refused_at_once, ci: required }
+        - { file: app-desktop/vela-wallet/src/multisig/scenarios.rs, test: a_site_cannot_make_a_multisig_act_for_a_safe_it_owns_or_that_cannot_be_read, ci: required }
+      trusted-signer:
+        - { file: app-web/trusted-signer/samples/takeover-test.mjs, test: 'execTransaction(swapOwner) on another Safe is refused', ci: nightly }
+        - { file: app-web/trusted-signer/samples/takeover-test.mjs, test: 'approveHash on another Safe, one multiSend down, is refused', ci: nightly }
+
 # The suites that replay the core's shared vectors
 # (rust/crates/vela-core/tests/vectors). Each must exist, and on the three
 # shells with a machine-readable report (android, ios, web) each must RUN in
@@ -544,6 +577,7 @@ vector_replays:
     - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/LaunchGateTest.kt }
     - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, note: 'review-state.json (§12)' }
     - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/ProductionWriteGuardTest.kt, note: 'production-writes.json (§28)' }
+    - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/ParentSafeGuardVectorTest.kt, note: 'parent-safe-guard.json (§31)' }
   ios:
     - { file: app-ios/VelaWallet/VelaWalletTests/CoreWireDriftTests.swift, note: 'not a vector file: the wire drift gate, required to run' }
     - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR8FixTests.swift }
@@ -556,6 +590,7 @@ vector_replays:
     - { file: app-ios/VelaWallet/VelaWalletTests/MarksTests.swift }
     - { file: app-ios/VelaWallet/VelaWalletTests/MultisigReviewStateTests.swift, note: 'review-state.json (§12)' }
     - { file: app-ios/VelaWallet/VelaWalletTests/ProductionWriteGuardTests.swift, note: 'production-writes.json (§28)' }
+    - { file: app-ios/VelaWallet/VelaWalletTests/ParentSafeGuardTests.swift, suite: ParentSafeGuardVectorTests, note: 'parent-safe-guard.json (§31)' }
   web:
     - { file: app-web/vela-wallet/src/lib/signing/surface-route.test.ts }
     - { file: app-web/vela-wallet/src/lib/launch/constants.test.ts }
@@ -568,6 +603,7 @@ vector_replays:
     - { file: app-web/vela-wallet/src/lib/services/wallet-keys.test.ts }
     - { file: app-web/vela-wallet/src/lib/multisig/core/review-door.test.ts, note: 'review-state.json (§12)' }
     - { file: app-web/vela-wallet/src/lib/services/production-guard.test.ts, note: 'production-writes.json (§28)' }
+    - { file: app-web/vela-wallet/src/lib/signing/core/parent-safe-guard.test.ts, note: 'parent-safe-guard.json (§31)' }
   # cargo test has no machine-readable report on stable: checked for
   # existence only. None of these is #[ignore]d (the only ignored vela-core
   # tests are the fork test and three that WRITE or PRINT vectors).
@@ -579,3 +615,4 @@ vector_replays:
     - { file: app-desktop/vela-wallet/src/executor/balance_dashboard.rs }
     - { file: app-desktop/vela-wallet/src/multisig/sheet.rs, note: 'review-state.json (§12)' }
     - { file: app-desktop/vela-wallet/src/executor/production_guard.rs, note: 'production-writes.json (§28)' }
+    - { file: app-desktop/vela-wallet/src/executor/sign_request.rs, note: 'parent-safe-guard.json (§31)' }

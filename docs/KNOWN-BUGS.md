@@ -1,5 +1,20 @@
 # Known bugs
 
+## SEC-PARENT-1 (✅ FIXED 2026-11-07, §31; reported 2026-09-29) — a site could make the account act for a multisig it is a member of
+
+**Reported** in the 2026-09-29 disclosure package (`APPENDIX-PARENT.md`): the
+self-call guard refused Safe-admin calls only when their target was the signing
+account, so a connected site could make the account act for a Safe it owns — a
+Vela multisig it belongs to — through `parent.execTransaction(… v = 1)` (a
+1-of-N takeover), `parent.approveHash(h)`, owner/module/guard changes (nested in
+a MultiSend too), or a `SafeMessage` / `SafeTx` signature under the parent's
+domain (a blind "Sign anyway"). **Fix:** the parent-Safe guard
+(`vela_core::app::parent_safe_guard`, docs/multisig-machines.md §31): refused
+with no "anyway" for this device's multisigs and for any Safe whose
+`isOwner(account)` reads true, "couldn't check" when that read cannot be made;
+again at submit; independently on the signing page (2c649b76). Proved on the
+fork harness (`multisig_fork.rs` `parent::…`).
+
 ## ANDROID-1 (open, 2026-09-12, spec 047) — the parallel-space flag was found off at 047's first launch
 
 **Symptom:** after 046's last device run (badge on, fixture account active), 047's first

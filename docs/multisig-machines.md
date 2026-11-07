@@ -2173,3 +2173,153 @@ Left open:
 - r17-20 (d): only the creation-time member challenge is bounded; the publish's task poll keeps its own 120 s budget (the index accepted the task; its failure is the sync-failed screen, which is said). RegistryClient was left to the `no-prod-writes` lane.
 - `home.balanceDetailRetry` ("Retry now", the hero's stalled sync) is a read's retry outside the multisig surfaces; aligning it with "Try again" is for the core lane's §29 wording table, on every shell at once.
 - A refused create record keeps its proof for the background retry, so Settings says "not shared" with the share-again note, as before.
+
+## 31. Parent-Safe guard
+
+Reported 2026-09-29 (disclosure package, `APPENDIX-PARENT.md`); fixed here
+(P0, treated as S1). The self-call guard (spec 081, `self_call_guard.rs`)
+refused the Safe-admin selectors only when the call's `to` was the signing
+account itself. A Vela account is also an owner of every Vela multisig it is a
+member of — its **parent** Safes — and a connected site could make the account
+act for one of those without ever pointing at the account:
+
+- **(a)** `parent.execTransaction(… swapOwner / addOwnerWithThreshold /
+  changeThreshold / enableModule / setGuard / setFallbackHandler …, sig {r =
+  account, v = 1})` — the "approved by `msg.sender`" signature. For a 1-of-N
+  parent: an immediate takeover (proved on the fork, below).
+- **(b)** `parent.approveHash(h)` — not listed anywhere: one counting approval.
+- **(c)** EIP-712 `SafeMessage` (or `SafeTx`) under the parent's domain
+  (`verifyingContract` = the parent). The wallet wraps it in the account's own
+  `SafeMessage`, which is exactly a nested EIP-1271 approval the parent counts
+  as this owner's. The sheet offered only a blind "Sign anyway".
+
+The appendix's own PoC — a zero-amount Permit2 message at `params[0]` and the
+parent's `SafeTx` at `params[1]` — is already refused -32602 by the
+one-document reader (WYSIWYS audit 2026-10-01); the parent's `SafeTx` alone is
+now refused in the parent's words.
+
+**Decision (one core rule, every surface).** A request that reaches the dApp
+signing machine (`sign_request`), or a site's request to a multisig
+(proposals `DappRequest`), is refused — with no "anyway" — when any of these
+targets **a Safe this account owns**: `execTransaction` (any inner call),
+`approveHash`, any owner / threshold / module / guard / fallback-handler /
+setup call (the self-call list), any of those inside a MultiSend /
+MultiSendCallOnly or `execTransaction` payload (recursively, depth 4), or typed
+data with `primaryType` `SafeTx` / `SafeMessage` whose domain's
+`verifyingContract` is that Safe (every document of the request is read).
+
+"A Safe this account owns" is:
+
+1. any multisig on this device's list (`Event::MultisigsChanged`, every
+   multisig any local account is a member of — no site has a reason to drive
+   one, whoever its members are), refused at arrival with no read; or
+2. any other target with one of those shapes: the core asks
+   `SignOperation::ReadSafeOwner` — `eth_call isOwner(account)` on the
+   target, on the request's chain (the typed data's own chain for a
+   signature) — and keeps the confirm shut (`ConfirmBlock::Reading`) until it
+   is answered. `true` refuses (`owner`). A clean `false`, an empty answer (no
+   code) or a revert (no `isOwner`: not a Safe) clears it. Anything else — no
+   node answered, a non-revert error, an answer that is not one ABI `bool` —
+   refuses "couldn't check" (`unchecked`), never allows.
+
+The submit chokepoint (`proceed_submit`) checks the FINAL params again
+(`parent_safe_guard::enforce`): a target on the list, a read that said owner or
+could not be read, or a target nobody read (a rewrite after arrival) refuses.
+
+**Vela's own multisig flows are not dApp requests.** Approve, execute,
+propose and the owner proof run in the multisig machines: the approval is a
+`passkey` operation with purpose `approve` (the page's
+`vela_multisigApprove`), the execution a `send_calls` with purpose `execute`
+(the page's `vela_multisigExecute`, read by `lib/multisig.js` `execution`),
+the proof a `passkey` with purpose `record` (`vela_multisigCreate`). None of
+them enters `sign_request` or the multisig `DappRequest`, so none passes this
+rule; the distinction is the path a request enters by, decided in the core,
+never a field a site can write. The wallet's own first-party requests (the
+passkey-registry backup, the Ethereum record call) are held to the rule all
+the same — they never target a Safe, so nothing of Vela's is refused.
+
+**Words.** `componentsUi.signing.parentSafeBlocked` — "This site asked your
+account to change or approve something for a multisig you're a member of
+({{function}} on {{safe}}). Vela never lets a site do that — use the
+multisig's own screen. Nothing was signed." — and `parentSafeUnchecked` for a
+read that could not be made; fifteen locales, zh included. Title:
+`selfCallBlockedTitle`. The site is answered `-32603`
+(`SignErrorKind::ParentSafeBlocked`, the call and the Safe in the detail) when
+the person closes the sheet — never 4001. A multisig's site request is held
+`HeldStage::Refused` with `multisig_dapp::parent_refusal` (`data.reason =
+"parent_safe"`, `data.key` the sentence, `data.why`, `data.safe`,
+`data.function`).
+
+**Wire** (`sign_request`, generated TS in `src/lib/core/generated`):
+
+| | |
+| --- | --- |
+| Event | `multisigs_changed {addresses}` — at boot beside `accounts_changed`, and whenever the list changes |
+| Operation | `read_safe_owner {id, chain_id, safe, account, data}` — `eth_call [{to: safe, data}, "latest"]` on `chain_id` through the shell's RPC pool, bounded; the shell decides nothing |
+| Result | `safe_owner_read {id, chain_id, safe, answer}`, `answer` = `returned {data}` / `rpc_error {code, message}` / `unreachable {detail}` |
+| View | `SignBlockedView.parent` (the Safe) and `.reason` (`member` / `owner` / `unchecked`); `confirm_block` `reading` while a read is out, `refused` once refused |
+| Error kind | `parent_safe_blocked` (-32603) |
+
+**The page.** `resolve.js` refuses the same shapes independently
+(`refuse.parentSafe` with the function, `refuse.parentSafeMessage`), in every
+leg of the operation the app assembled. It cannot read the chain (no
+`connect-src`) and does not take the app's word for which Safes are the
+account's, so it refuses them on ANY Safe but the account — stricter than the
+core, which clears a Safe the account does not own. Vela's own multisig
+execution (no origin, read whole by `lib/multisig.js`) is skipped exactly as
+the takeover rule skips it. Page **2c649b76** is first in `BUILD_ALLOWED`;
+`LAUNCH` is unchanged; it reaches users once `dist/` is deployed.
+
+**Every surface.**
+
+| Surface | Site entry points | Ownership read | List fed | Words |
+| --- | --- | --- | --- | --- |
+| Core | `sign_request` (arrival + submit), proposals `DappRequest` (its own `rpc`) | — | — | catalog keys |
+| Web wallet, Chrome extension, Safari package | the web wallet's requester, `DappRequestHost` (panel, request window); the Safari package is the same code | `sign-executor.ts`, `poolRpcCall`, 8 s | `signRequest.syncMultisigs()` at boot, on change, before each request | `live.ts`; a multisig's refusal by `dapp/multisig-refusal.ts` |
+| Android | in-app browser → a Vela account (`SigningController`) or a multisig (proposals); the Ethereum backup shares the controller | `SignExecutor.kt`, the RPC pool, 15 s backstop | `VelaWalletApplication.multisigAddresses`, after `accounts_changed` and on change | `SigningLive.kt`, `MultisigWords.dappRefusal` |
+| iOS | in-app browser → a Vela account (`SigningController.Incoming(browser:)`) or a multisig (`MultisigHub.dappRequest`); the Safari Web Extension is the web package | `SignExecutor.swift`, the RPC pool, 16 s cap | `MultisigHub.multisigAddresses`, after `accounts_changed`; `RootView` on change | `SigningLive.swift`, `MultisigDappSheet` |
+| Desktop | in-app browser → a Vela account (`signing_host`) or a multisig (proposals) | `executor/sign_request.rs`, `pool::call_within`, 8 s | with the accounts; again on change while a sheet is up | `signing/mod.rs`, `wallet/page/multisig_dapp.rs` |
+| Signing page | every request handed to it | cannot read: refuses the shapes on any Safe | — | `refuse.parentSafe`, `refuse.parentSafeMessage` |
+
+WalletConnect: no shell takes a site's request over it (Android and iOS
+refuse a `wc:` link as unsupported); PeerConnect carries only a multisig's
+outside-owner session, Vela asking a wallet — never a site asking Vela.
+
+**Tests.**
+
+- Core: `tests/vectors/rules/parent-safe-guard.json` (39 cases: (a) and every
+  admin selector, (b), (c) `SafeMessage` and `SafeTx`, the appendix's
+  two-document PoC, MultiSend-nested and batch legs, unknown Safe with isOwner
+  true / false / reverted / empty / unreadable / junk, the submit form, a
+  read on the typed data's own chain, clear cases) replayed by
+  `tests/app_parent_safe_guard.rs` (and the machine: refused at arrival, after
+  the read, at submit; a late list; first-party requests held to it; the
+  answer) and the uniffi bridge; `tests/app_multisig_dapp.rs` §31 (a
+  multisig's site request: list, isOwner true, false, unreadable).
+- Fork (`tests/multisig_fork.rs`
+  `parent::parent_safe_takeover_is_refused_while_the_multisigs_own_flow_runs`):
+  a 1-of-2 multisig P of A and B on the Gnosis fork; Vela proposes, A approves
+  and executes a transfer (lands); the site's `execTransaction(swapOwner)` with
+  `v = 1` sent from A's address hands P over (proved on a snapshot, reverted);
+  through the sign machine the same request is refused — after the real isOwner
+  read (owner), from the list (member), `approveHash`, `SafeMessage` — and a
+  node that does not answer refuses `unchecked`.
+- Page: `samples/takeover-test.mjs` replays the core vector (every case with a
+  target refused, none without) plus direct cases; 67/67.
+- Shells: web `signing/core/parent-safe-guard.test.ts`, `dapp/multisig-refusal.test.ts`,
+  `multisig/shell/dapp-requests.test.ts`, the Safari package test and
+  `e2e/parent-safe-guard.e2e.ts` (web wallet and Chrome extension), wasm
+  `verify-web.mjs` (39/39); Android `ParentSafeGuardVectorTest`,
+  `ParentSafeEntryPointsTest`, instrumented `ParentSafeGuardDeviceTest`; iOS
+  `ParentSafeGuardTests` (vector, read mapping, the browser path end to end)
+  and `MultisigFlowTests`; desktop the vector, the executor's read over a
+  loopback node, the browser entry end to end and the multisig scenarios.
+
+**Left open.** The page is stricter than the core: a site's `execTransaction` /
+`approveHash` / admin call on a Safe the account does NOT own (which the core
+clears after the read) is still refused there, because the page cannot read the
+chain. A multisig connected to a site is held to the parent rule but not to
+the self-call list for its own address (members review every proposal; out of
+this lane). The ownership read trusts the RPC answer for an unknown Safe (the
+list does not depend on it); a Safe on another chain is read on the request's
+chain only.
