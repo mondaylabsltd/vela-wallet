@@ -139,6 +139,7 @@ fn account_switcher(currency: &CurrencyView) -> Vec<String> {
         ],
         Some(currency),
         "en",
+        vela_core::app::network_space::NetworkSpace::Mainnet,
     );
     // A row with no figure is still a row: its place is there either way.
     let mut out = vec![total.to_string()];

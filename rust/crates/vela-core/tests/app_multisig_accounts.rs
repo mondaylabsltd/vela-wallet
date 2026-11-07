@@ -2031,14 +2031,32 @@ fn a_network_is_checked_on_demand_once_a_session() {
     let check = || Event::CheckOn {
         address: g.address.clone(),
         chain_id: 8453,
+        person: false,
     };
     run(&mut sut, &mut world, check());
     let row = &sut.view().accounts[0];
     assert!(world.reads_on(8453) > 0, "read, though not used there yet");
     assert!(row.checked_on.is_empty(), "no answer is no verdict");
     assert!(row.checking_on.is_empty());
+    assert!(
+        world.rpc_person.iter().all(|(_, person)| !person),
+        "a shell's own check is not the person's ask"
+    );
     world.silent.clear();
-    run(&mut sut, &mut world, check());
+    // r17-10: the person's Try again on that network: its reads are the
+    // person's own asks — always sent.
+    world.rpc_person.clear();
+    run(
+        &mut sut,
+        &mut world,
+        Event::CheckOn {
+            address: g.address.clone(),
+            chain_id: 8453,
+            person: true,
+        },
+    );
+    assert!(!world.rpc_person.is_empty());
+    assert!(world.rpc_person.iter().all(|(_, person)| *person));
     let row = sut.view().accounts[0].clone();
     assert_eq!(row.checked_on, vec![8453], "asked again, and answered");
     assert_eq!(row.refused_on, vec![8453], "the same verdict rule");
@@ -2062,6 +2080,7 @@ fn a_network_is_checked_on_demand_once_a_session() {
         Event::CheckOn {
             address: g.address.clone(),
             chain_id: 42161,
+            person: false,
         },
     );
     assert_eq!(world.reads_on(42161), before);

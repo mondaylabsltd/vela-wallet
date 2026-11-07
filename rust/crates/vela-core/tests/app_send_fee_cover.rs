@@ -150,6 +150,7 @@ fn picked(case: &Value) -> (Sut, SendToken) {
             code: "USD".to_owned(),
             rate: Some(1.0),
             fiat_decimals: 2,
+            space: Default::default(),
         },
     });
     sut.resolve(Res::TokensLoaded {

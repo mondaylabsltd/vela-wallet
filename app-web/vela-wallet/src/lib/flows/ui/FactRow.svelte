@@ -12,6 +12,7 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
+	import AddressText from '$lib/ui/AddressText.svelte';
 	import type { FactRowModel } from '../model';
 
 	interface Props {
@@ -59,7 +60,9 @@
 {/snippet}
 
 {#snippet value()}
-	<span class="value" class:mono={fact.mono} data-tone={fact.tone}>{fact.value}</span>
+	<span class="value" class:mono={fact.mono} data-tone={fact.tone}
+		><AddressText text={fact.value} /></span
+	>
 {/snippet}
 
 {#if pressable && fact.tap !== undefined}
@@ -94,13 +97,15 @@
 				<span class="lines">
 					<span class="first">
 						{@render lead()}
-						<span class="value" class:mono={fact.mono} data-tone={fact.tone}>{fact.value}</span>
+						<span class="value" class:mono={fact.mono} data-tone={fact.tone}
+							><AddressText text={fact.value} /></span
+						>
 					</span>
 					<span class="detail">{fact.detail}</span>
 				</span>
 			{:else}
 				{@render lead()}
-				<span class="value" class:mono={fact.mono} data-tone={fact.tone}>{fact.value}</span>
+				{@render value()}
 			{/if}
 			{#if fact.copy !== undefined}
 				<button type="button" aria-label={fact.copy} class:copied onclick={oncopy}>
@@ -164,7 +169,10 @@
 
 	/* vis-9 / vis-10: a value that does not fit WRAPS, it is never cut — a
 	   fee's fiat half and a shortened address's tail are the parts a person
-	   checks. Only a name over its address (`.first`, below) may be cut. */
+	   checks. Only a name over its address (`.first`, below) may be cut.
+	   r17-11: a full address (a single Send's To, beside its "First time"
+	   chip) breaks only between its two halves — `AddressText` draws them
+	   unbreakable — never "…80d0a / af59…ab31 / 692D". */
 	.value {
 		min-width: 0;
 		font-size: calc(var(--text-base) * var(--text-scale, 1));

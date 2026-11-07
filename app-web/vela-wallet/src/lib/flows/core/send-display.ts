@@ -25,16 +25,27 @@
  * it changes, so the pair landing opens the toggle in the right money.
  */
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
+import type { NetworkSpace } from '$lib/core/generated/NetworkSpace';
 import type { SendDisplayContext } from '$lib/core/generated/SendDisplayContext';
 
 /** Every currency the wallet lists is entered to two places here, as before. */
 const FIAT_DECIMALS = 2;
 
-export function sendDisplayContext(currency: CurrencyView): SendDisplayContext {
+export function sendDisplayContext(
+	currency: CurrencyView,
+	space: NetworkSpace = 'mainnet'
+): SendDisplayContext {
+	// r17-14: the space in front — in the testnet space the core prices no
+	// token on Send (`network_space::shows_fiat`): no fiat anywhere there.
 	if (!currency.committed) {
-		return { code: currency.pending ?? currency.code, rate: null, fiat_decimals: FIAT_DECIMALS };
+		return {
+			code: currency.pending ?? currency.code,
+			rate: null,
+			fiat_decimals: FIAT_DECIMALS,
+			space
+		};
 	}
-	return { code: currency.code, rate: currency.rate, fiat_decimals: FIAT_DECIMALS };
+	return { code: currency.code, rate: currency.rate, fiat_decimals: FIAT_DECIMALS, space };
 }
 
 /**

@@ -225,7 +225,8 @@ class MultisigStore {
 	 * {@link verdictOn}.
 	 */
 	checkOn(address: string, chainId: number): void {
-		this.send({ type: 'check_on', address, chain_id: chainId });
+		// The sheet's own ask (r17-10: a person's Try again would say `person`).
+		this.send({ type: 'check_on', address, chain_id: chainId, person: false });
 	}
 
 	/**

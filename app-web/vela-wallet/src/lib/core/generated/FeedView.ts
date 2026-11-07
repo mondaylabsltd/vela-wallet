@@ -98,4 +98,11 @@ unread_chains: Array<number>,
  * the rows when there are rows, in the empty state's place when there
  * are none. `None` when every network was read.
  */
-unread_key: string | null, };
+unread_key: string | null, 
+/**
+ * r17-4: the one unread network's name, as the core knows it (a
+ * built-in network's); `None` for several, or a network the person
+ * added (the shell names it from its own list). A shell never says a
+ * network by its raw chain id: with no name, the many-networks words.
+ */
+unread_network: string | null, };

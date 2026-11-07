@@ -69,6 +69,8 @@ const PRISTINE: BalanceView = {
 	refreshing: false,
 	last_refreshed_at_ms: null,
 	updated_at_ms: null,
+	networks_read: true,
+	unread_chain_ids: [],
 	tokens: [],
 	unpriced_tokens: [],
 	failed_chain_ids: [],
@@ -816,6 +818,7 @@ describe('empty activity, chosen by the core', () => {
 		settled: true,
 		unread_chains: [],
 		unread_key: null,
+		unread_network: null,
 		hidden: false,
 		contact_rows: []
 	};

@@ -116,12 +116,14 @@ impl Deps for Shared {
         method: &str,
         params: &Value,
         bound: Option<Duration>,
+        person: bool,
     ) -> Result<RpcReply, String> {
         match self.ask(&Op::Rpc {
             chain_id,
             method: method.to_owned(),
             params: params.clone(),
             bound_ms: bound.map(|b| b.as_millis() as u32),
+            person,
         }) {
             Res::RpcResult { result } => Ok(RpcReply::Result(result)),
             Res::RpcError {
@@ -942,6 +944,7 @@ fn a_declined_risk_signs_nothing() {
     sim.accounts(AccountsEvent::CheckOn {
         address: address.clone(),
         chain_id: 100,
+        person: false,
     });
     sim.proposals(ProposalsEvent::Draft {
         chain_id: 100,

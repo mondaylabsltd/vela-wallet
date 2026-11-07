@@ -34,7 +34,7 @@ import {
 	numberSeparators,
 	resolvedFormatKeys
 } from '$lib/services/locale-format';
-import { chainName, explorerAddressURL, explorerBaseURL } from '$lib/services/networks';
+import { chainName, explorerAddressURL, explorerBaseURL, namedChain } from '$lib/services/networks';
 import { balanceTokenMark, chainLogoURL } from '$lib/flows/marks';
 import { provenanceNote, type ProvenanceNote } from '$lib/services/token-provenance';
 import { shortenAddress } from './identity';
@@ -1332,14 +1332,18 @@ export function activityUnreadLine(
 ): string | undefined {
 	const chains = feed?.unread_chains ?? [];
 	const first = chains[0];
-	if (
-		feed?.unread_key === 'home.activityUnreadOne' &&
-		first !== undefined &&
-		m.activity.unreadOne
-	) {
-		return fill(m.activity.unreadOne, { network: chainName(first) });
+	// r17-4: the network by its name — the core's, else this shell's — and
+	// never its raw chain id: with no name, the many-networks words.
+	const name =
+		feed?.unread_network ?? (first !== undefined ? namedChain(first) : undefined) ?? undefined;
+	if (feed?.unread_key === 'home.activityUnreadOne' && name && m.activity.unreadOne) {
+		return fill(m.activity.unreadOne, { network: name });
 	}
-	if (feed?.unread_key === 'home.activityUnreadMany' && m.activity.unreadMany) {
+	if (
+		(feed?.unread_key === 'home.activityUnreadMany' ||
+			feed?.unread_key === 'home.activityUnreadOne') &&
+		m.activity.unreadMany
+	) {
 		return fill(m.activity.unreadMany, { n: String(chains.length) });
 	}
 	return undefined;

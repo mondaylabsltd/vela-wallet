@@ -527,8 +527,55 @@ pub fn press_failure_lines(
     lines
 }
 
+/// r17-21 (§26 r16-4's way on): an Execute — plain, or the one press —
+/// the look stopped because the fee could not be worked out or checked
+/// (`stopped {unpriced | unchecked}`) offers **Check again** beside its
+/// stop line: a new look of the execution (`proposal.feeRetry`), never
+/// "Try again" (that re-asks a read that failed). The stop replaces the fee
+/// line, whose own Check again is then not drawn, so this is the one. A
+/// stop for any other reason (would fail, a setup refused) has no look to
+/// take again.
+#[must_use]
+pub fn stop_offers_check_again(
+    actions: &std::collections::BTreeMap<String, ms_proposals::ActionState>,
+    hash: &str,
+) -> bool {
+    matches!(
+        actions.get(&format!("execute:{}", hash.to_ascii_lowercase())),
+        Some(ms_proposals::ActionState::Stopped { preview })
+            if matches!(
+                preview.get("kind").and_then(Value::as_str),
+                Some("unpriced" | "unchecked")
+            )
+    )
+}
+
 #[cfg(test)]
 mod tests {
+    /// r17-21: a fee stop of an Execute (plain or the one press — both keep
+    /// it on `execute:`) offers Check again; no stop, or a stop with no
+    /// look to take again, does not.
+    #[test]
+    fn a_fee_stop_offers_check_again_and_nothing_else_does() {
+        use vela_core::app::multisig_proposals::ActionState;
+        let stop = |kind: &str| ActionState::Stopped {
+            preview: json!({ "kind": kind }),
+        };
+        let at = |state: ActionState| {
+            let mut actions = BTreeMap::new();
+            actions.insert("execute:0xabc".to_owned(), state);
+            actions
+        };
+        assert!(stop_offers_check_again(&at(stop("unpriced")), "0xABC"));
+        assert!(stop_offers_check_again(&at(stop("unchecked")), "0xabc"));
+        assert!(!stop_offers_check_again(&at(stop("fails")), "0xabc"));
+        assert!(!stop_offers_check_again(&at(stop("refused")), "0xabc"));
+        assert!(!stop_offers_check_again(&BTreeMap::new(), "0xabc"));
+        let mut approve = BTreeMap::new();
+        approve.insert("approve:0xabc".to_owned(), stop("unpriced"));
+        assert!(!stop_offers_check_again(&approve, "0xabc"));
+    }
+
     use std::collections::BTreeMap;
 
     use serde_json::json;
@@ -760,6 +807,47 @@ mod tests {
             let out = review_state::door_json(args).expect("review.door");
             assert_eq!(out, case["expect"], "{name}: the link door");
         }
+    }
+
+    /// r17-8 (seen once, zh): during a press with Arc refused, the sheet
+    /// briefly showed enabled "仍然批准 / 仍然批准并执行" under "Vela 未能
+    /// 检查这笔交易的结果". Nothing is signable transiently: a review kept
+    /// from before (one that allowed signing, even "… anyway") opens no
+    /// press while the core says the review is being read again or failed —
+    /// the door is the core's state AND rule, never the kept review alone,
+    /// and a shut door's press is never worded "… anyway".
+    #[test]
+    fn a_kept_review_opens_nothing_while_the_review_is_loading_or_failed() {
+        let kept = json!({
+            "sign": {"allowed": true, "anyway": true},
+            "reason_key": "home.multisig.review.unchecked",
+        });
+        for state in [
+            ReviewState::Loading,
+            ReviewState::failed(review_state::REASON_UNREADABLE),
+        ] {
+            let door = sign_door(Some(&state), Some(&kept), true);
+            assert!(!door.enabled, "{state:?}");
+            assert!(!door.anyway, "{state:?}");
+            let sign = press_rule(&door);
+            assert!(!sign.allowed && !sign.anyway, "{state:?}");
+            assert_eq!(approve_label(sign), "proposal.approve");
+            assert_eq!(execute_label(true, sign), "proposal.approveAndExecute");
+            for one_tap in [false, true] {
+                for look in [None, Some(Look::Unchecked), Some(Look::Unpriced)] {
+                    assert!(
+                        !execute_enabled(&door, look.as_ref(), true, one_tap),
+                        "{state:?}"
+                    );
+                    assert!(!execute_enabled(&door, look.as_ref(), false, one_tap));
+                }
+            }
+        }
+        // Not asked yet (no state): shut too.
+        assert!(!sign_door(None, Some(&kept), true).enabled);
+        // Read: the rule decides — here, "… anyway".
+        let ready = sign_door(Some(&ReviewState::Ready), Some(&kept), true);
+        assert!(ready.enabled && ready.anyway);
     }
 
     /// A review this sheet cannot draw is never signed on: a `ready` with a

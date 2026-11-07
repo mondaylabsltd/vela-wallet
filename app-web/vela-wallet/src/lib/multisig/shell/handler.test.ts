@@ -111,7 +111,8 @@ describe('the multisig shell', () => {
 			chain_id: 100,
 			method: 'eth_call',
 			params: [],
-			bound_ms: bound
+			bound_ms: bound,
+			person: false
 		});
 		expect(await run(deps({ rpc: async () => ({ result: '0x01' }) }), op(null))).toEqual({
 			type: 'rpc_result',
@@ -243,7 +244,7 @@ describe('the multisig shell', () => {
 		// what the core is handed back must be the number, never a string or a throw.
 		const resolved: string[] = [];
 		const operations: MultisigOperation[] = [
-			{ type: 'rpc', chain_id: 100, method: 'eth_call', params: [], bound_ms: null },
+			{ type: 'rpc', chain_id: 100, method: 'eth_call', params: [], bound_ms: null, person: false },
 			{ type: 'wallet_request', method: 'eth_sign', params: [] }
 		];
 		let next = 0;
@@ -292,7 +293,10 @@ describe('the multisig shell', () => {
 	it('answers every operation’s own failure when its pipeline threw', () => {
 		const cases: [MultisigOperation, MultisigShellResult['type']][] = [
 			[{ type: 'http', method: 'GET', url: 'x', body: null, timeout_ms: 1 }, 'http_unreachable'],
-			[{ type: 'rpc', chain_id: 1, method: 'm', params: [], bound_ms: null }, 'rpc_unanswered'],
+			[
+				{ type: 'rpc', chain_id: 1, method: 'm', params: [], bound_ms: null, person: false },
+				'rpc_unanswered'
+			],
 			[{ type: 'ask_risk', chain_id: 1, safe: 's', findings: [] }, 'risk_answered'],
 			[
 				{ type: 'send_calls', chain_id: 1, from: 'f', calls: [], fee: null, purpose: null },

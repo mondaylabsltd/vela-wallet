@@ -2762,3 +2762,46 @@ describe('round 6: the review’s words and where its actions stand', () => {
 		await phone.unmount();
 	});
 });
+
+describe('a fee stop follows the look the next press signs (r17-2)', () => {
+	it('names the re-quoted figure, and goes when the core withdraws it', async () => {
+		const { machineSeam, stateOf } = await import('./proposal-sheet.testing.svelte');
+		fake.chain.items = [
+			item({
+				approved: 1,
+				canApprove: [],
+				canExecute: [local],
+				approvals: [{ owner: OTHER, counts: true, approval: {}, createdMs: 1 }]
+			})
+		];
+		const stop = (amount: string) =>
+			new Error(JSON.stringify({ kind: 'fee_moved', amount, chainId: 100, executor: ME }));
+		fake.executeThrows = stop('302200000000000000');
+		const m = words();
+		m.proposal.failed = 'Failed: {{reason}}';
+		m.proposal.feeLine = 'Fee {{fee}} by {{name}}';
+		const screen = show({ m });
+		await settle();
+		press('proposal.approveAndExecute');
+		await settle();
+		const said = () =>
+			document.querySelector('[data-testid="proposal-failed"]')?.textContent?.trim() ?? null;
+		expect(said()).toMatch(/^Failed: Fee 0\.3022 xDAI by /);
+		// The fee line re-quotes beside the stop: the core serves the stop with
+		// its look's figure now (`stops_follow_looks`) — the sheet says that.
+		const key = Object.keys(machineSeam.actions).find((k) => k.startsWith('execute:'))!;
+		machineSeam.actions = {
+			...machineSeam.actions,
+			[key]: stateOf(stop('232500000000000000'))
+		};
+		await settle();
+		expect(said()).toMatch(/^Failed: Fee 0\.2325 xDAI by /);
+		// A look with no figure withdraws the stop: nothing is said of it.
+		const rest = { ...machineSeam.actions };
+		delete rest[key];
+		machineSeam.actions = rest;
+		await settle();
+		expect(said()).toBeNull();
+		await screen.unmount();
+	});
+});

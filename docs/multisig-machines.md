@@ -2054,3 +2054,84 @@ Vector: `rust/crates/vela-core/tests/vectors/rules/production-writes.json`
 `production_guard` tests and the web's `production-guard.test.ts` — each of
 which also proves a test build's write refused before it leaves and a release
 build's write delivered, with the production names answered on this machine.
+
+## 29. Round 17 fixes (core, web, desktop)
+
+Decided by best practice under the owner's rules (one core owns the rules and
+every shell draws them; full parity; honest states — never claim emptiness or
+freshness while a network is unread, no signable state appears transiently, a
+press's failure is said beside the button in specific words). Each item was
+written test first. The Android/iOS drawing items (r17-5 … r17-7, r17-12
+Android, r17-14 adoption, r17-15 … r17-20) are the native lane's
+(`r17-fix-native`); this lane's native edits only adopt the core where the
+build needs it.
+
+| Item | Cause | Decision |
+| --- | --- | --- |
+| **r17-1 (S3) "… anyway" right after a refused outage lifts** (r16-3 again, web and extension; desktop r17-8 once) | Not the core's re-ask (§25), which ran; the web shell's endpoint skipper (home-17, `createEndpointSkipper`) answered reads for a node that had just failed on transport with `not_connected`, without the wire. Pressed at once, the review's code read of the multisig's singleton was answered so: its state checks (trace, probe) were never BUILT, no check was "silent", the simulation answered (Arc does not simulate) — so `checks_final` took "unchecked" as final and the door opened "… anyway". | Two core rules. **(a) A local refusal is not the network's answer:** a state check that was never asked because the code it is built from went unanswered counts as a silent check (`multisig_gather`: the silent code reads are read again, the checks built and asked, within the same `RECHECK_MS` bound); only the network's own answer, or the bound, makes "unchecked" final. **(b) The person's ask is always sent:** `Io::person()` — the proposals machine's Try again (`review_again`, both kinds), its `retry`, and every press (Approve, Execute, "Approve and execute"), and the outside page's Try again — marks every read `MultisigOperation::Rpc.person`; the shell hands it to its pool as `rpc_pool::Event::CallRequested.person`, which lifts the chain's failure cooldowns, sweeps the WHOLE pool even while the chain is out of reach (never the outage's two-node probe), and marks each POST `RpcOperation::JsonRpcPost.must_send`. The web skipper never answers a `must_send` POST locally. Tests: core `a_check_never_asked_because_its_code_went_unanswered_is_not_final` (fails on the R16 gather: the review landed after two code reads, no trace or probe), `a_persons_own_ask_is_always_sent_past_the_outage_and_its_cooldowns`; web e2e `multisig-review-recovery.e2e.ts` — the DOM watcher run pressed at the instant a refused outage lifts, on the web and in the extension. |
+| **r17-10 one Try again after a lift said "Couldn't reach Arc" again** | The same skipper: its window (1 s doubling to 30 s) still held the node 3–25 s after the lift; only a second press, after the window, read the network. | Rule (b) above: a person-initiated ask is always actually sent. The e2e asserts one press recovers — no "Couldn't reach Gnosis", no Try again left — without waiting for the app's own reads. |
+| **r17-2 the no-figure stop kept 0.3022 while the fee line said 0.2325** | Not the core: `stops_follow_looks` serves the stop of a plain Execute over no figure (§27 item 1) with its look now (core test `a_no_figure_stop_follows_the_requote_and_the_next_press_signs_it`, passes). The web sheet drew the words it had computed at the press (`phase.reason`), never the machine's action again. | A press's failure on the web is the machine's action (`execute:<hash>` / `approve:<hash>`): its words are read from the view at every render (`failedReason`), so the stop follows the re-quote and goes when the core withdraws it — as desktop (r16-1), iOS and Android already draw `view.actions`. Test: `ProposalSheet.svelte.test.ts` "a fee stop follows the look the next press signs". |
+| **r17-3 / r17-4 / r17-9 "No activity yet", a raw chain id, "Updated now" while unread** | (1) The feed's unread set was the scan's alone, never filtered by the space: Arc's leaked into Mainnet ("5042002" where the shell had no name). (2) `settled` was per account but not per space: a scan asked in the other space settled the new one. (3) The scan reads only where the account holds or lives (an empty testnet account: six networks, Arc is the eighth), so with Arc hung or 429 only the BALANCE knew Arc was unread — "No activity yet" was claimed over it. (4) `updated_at_ms` accepted a round the shell's cache answered (no network asked now). | **Core rules.** "No activity yet" is a claim about every network of the space, per account and per space: `FeedView.unread_chains` = the scan's unread ∪ the balance's unread networks of THIS account, filtered to the space in front (and the chain filter); `settled` also needs the balance's first read of this account over (`activity_feed::Event::BalanceRead {account, read, unread_chain_ids}`, the shell copies `BalanceView.networks_read` / `unread_chain_ids` — failed, silent or rate limited: a failure or a 429 is never a read); a space switch (`SpaceChainsChanged` to another set) unsettles the feed and scans at once, and a scan asked in the other space settles nothing (`space_epoch`). `FeedView.unread_network` names the one network (the built-in table's name); a shell never says a raw chain id — its own name, else the many-networks words. `BalanceView.updated_at_ms` needs a round the networks answered since the switch (`read_live`). Web and desktop hand the balance on (`BalanceRead`) and draw the core's `settled` / `unread_chains` alone (the desktop's own r16-2 reading of the balance view is gone). Tests: `no_activity_is_claimed_per_space_and_account_only_over_networks_really_read`, `updated_and_the_networks_read_are_claimed_only_from_a_live_read`; web `live-activity-unread.test.ts` (no raw id). |
+| **r17-11 the To address broke anywhere beside "First time sending here"** | `PartyRow` drew the whole address (and an unnamed party's name, which is that address) with `overflow-wrap: anywhere` in a row shared with the chip. | `PartyRow` and `FactRow` draw values through `AddressText` (r16-21's halves, 22 + 20, each unbreakable); the chip wraps under the halves when both do not fit. Test: `PartyRow.svelte.test.ts` at 300–430 px. |
+| **r17-12 (web) "Something went wrong" for a fee not priced at the press, or a refused relay** | The web's `sendCalls` classified only the passkey's and `UserOpNotSentError`; a relay that refused its estimate (`EstimateGasError`) or a pool failure before the passkey went out as `unknown`. | The desktop's r16-18 rule on the web: stopped before the passkey was asked, a read on a network the pool finds failing (`chainFailing`: failed or out of reach) is `chain_unreachable`; the relay refusing or not reached is `not_sent`; a failure inside the app stays `unknown`. The sheet words each kind from the catalog (`review.failure`). Test: `live-send-failure.test.ts`. Android parity is the native lane's. |
+| **r17-13 / r17-14 fiat in the testnet space** | Desktop summed "Total $0.00" for the testnet space; Android/iOS priced testnet Send amounts and fees in CNY. The rule (spec 105) lived in each shell. | **One core rule:** `network_space::shows_fiat(space)` (and `priced_in`, `shows_fiat_str`): the testnet space shows no fiat anywhere — no total, no worth on a row, no fiat beside a Send amount or a fee. The Send machine applies it itself: `SendDisplayContext.space` (default mainnet); in the testnet space no token is priced on the screen whatever the shell handed in (no fiat line, no ⇄ into fiat). Web passes the space; desktop applies it to its totals and fiat lines (below); Android/iOS adopt it (native lane). Tests: `the_testnet_space_prices_nothing_on_send`, `the_testnet_space_shows_no_fiat_anywhere`. |
+| **r17-21 wording drift** | "Check again" (the one press) vs "Retry" (plain Execute); "Retry" on the home's busy note vs "Try again" on the sheet. | **One wording per action, in the catalog:** re-asking a read that failed — the busy or unreachable service, an unread review, a failed list or history, a Safe-contracts check — is **"Try again"** (`home.multisig.service.retry` now carries `home.multisig.review.state.tryAgain`'s words in every locale: en, es-MX and pt-BR changed; the others already matched); a new look of an execution — a fee or check stop, whether of the one press or a plain Execute — is **"Check again"** (`home.multisig.proposal.feeRetry`). For the native lane: Android's plain Execute stop must draw `proposal.feeRetry` (not `service.retry`); iOS likewise. |
+| **Outside page: no Reject on deep4 / delegate** | `OutsideTxView::can_reject` required `open()` — the gate of the transaction itself — so a transaction Vela refuses to sign (`Blocked`) could not be rejected there, where the member's sheet offers Reject. | Parity: Reject is offered on a read review whose gate is Open, Risk or **Blocked** (a rejection is its own transaction, the same number's cancellation, reviewed and gated on its own before the wallet is asked); never while the review is unread, never for a multisig whose own setup Vela refuses (`Refused`), never once done. The connect page draws `canReject` as before. The trusted signing page is unchanged (no rebuild, `BUILD_ALLOWED` untouched). Test: `a_transaction_the_core_does_not_sign_is_blocked` now rejects it. |
+| **r17-8 (desktop, once) "仍然批准" enabled under a refused Arc** | Not reproduced; the desktop's sign buttons already open only through the core's door. | Covered by r17-1's two core rules (a check never asked is not final; the press's and Try again's reads are always sent — the desktop threads `MultisigOperation::Rpc.person` into its pool's `CallRequested.person`). Desktop test: a kept "… anyway" review opens nothing while the review is loading, failed or not asked, and a shut press is never labelled "… anyway". |
+| **Desktop Settings: "couldn't check the Safe contracts" until Check again** | A `CheckOn` asked while Arc was unread landed no verdict; nothing asked it again but the person. | The desktop asks every unverified network again by itself: at once when the pool no longer lists it out of reach (`pool::out_of_reach_now`), else on a back-off of 3 s doubling to 30 s while Settings is open. The row's button is the person's Try again (`CheckOn.person = true`, a new core field: its reads always sent); the automatic re-asks say `false`. Its words are "Try again" (r17-21). Tests: `an_unverified_network_is_asked_again_once_it_answers`, `the_recheck_back_off_is_bounded`; core `a_network_is_checked_on_demand_once_a_session` now also checks the person's flag. |
+
+**For the native lane (Android, iOS) — adopt:**
+
+- Pass `MultisigOperation::Rpc.person` into the pool's `CallRequested.person`
+  (a person's Try again / press is always sent; the natives have no local skip
+  window, but the outage's two-node probe and the cooldown order apply).
+- Dispatch `activity_feed::Event::BalanceRead { account, read:
+  BalanceView.networks_read, unread_chain_ids: BalanceView.unread_chain_ids }`
+  to the feed whenever the balance view moves; draw the unread line with
+  `FeedView.unread_network`, else the shell's own name, never a raw chain id
+  (no name: `home.activityUnreadMany`). This is r17-3 / r17-4 on Android and
+  iOS, and r17-5 (the line over existing rows) draws from the same fields.
+- Send: set `SendDisplayContext.space`; and apply `network_space::shows_fiat`
+  to every fiat the shell draws itself (fee lines, totals, rows) — r17-14.
+- Wording (r17-21): a stop's way on under the one press OR a plain Execute is
+  `home.multisig.proposal.feeRetry` ("Check again"); every re-ask of a failed
+  read (home busy note, sheet, Settings backup check, unverified network) is
+  "Try again" (`home.multisig.service.retry` now says it).
+- `CheckOn.person` for the person's Try again on an unverified network.
+- r17-12 on Android: the desktop/web kinds for a stop before the passkey
+  (`chain_unreachable` on a failing network, `not_sent` for the relay).
+
+Tests (this lane): core `app_rpc_pool.rs`
+(`a_persons_own_ask_is_always_sent_past_the_outage_and_its_cooldowns`),
+`app_multisig_review_state.rs`
+(`a_check_never_asked_because_its_code_went_unanswered_is_not_final`),
+`app_multisig_proposals.rs`
+(`a_no_figure_stop_follows_the_requote_and_the_next_press_signs_it`),
+`app_activity_feed.rs`
+(`no_activity_is_claimed_per_space_and_account_only_over_networks_really_read`),
+`app_balance_dashboard.rs`
+(`updated_and_the_networks_read_are_claimed_only_from_a_live_read`),
+`app_send.rs` (`the_testnet_space_prices_nothing_on_send`), `network_space`
+(`the_testnet_space_shows_no_fiat_anywhere`), `app_multisig_outside.rs` (the
+blocked transaction rejected), `app_multisig_accounts.rs` (CheckOn's person);
+web `rpc-pool-executor.test.ts` (`must_send` past the skipper),
+`live-send-failure.test.ts`, `ProposalSheet.svelte.test.ts` (r17-2),
+`PartyRow.svelte.test.ts` (r17-11), `live-activity-unread.test.ts` (r17-4),
+e2e `multisig-review-recovery.e2e.ts` (pressed at the lift, web and
+extension); desktop as above.
+
+Left open:
+
+- One unread network nobody can name reads "Activity can't be read on 1
+  networks" (the corpus has no singular for an unnamed one); built-in networks
+  and the person's own are always named.
+- The onchain web suite (fresh harness, 97xx ports, every `*.getvela.app`
+  host resolved to nowhere): 11 passed, 1 flaky (the rename), 2 failed in the
+  suite's order ("two devices…": "Another transaction at #0 ran first"; "an
+  outside owner…": no outside link) — both pass alone on a fresh harness
+  (2/2). The core's `multisig_fork` test passes on its own harness. The
+  ordering failure is not diagnosed further here.
+- The web skipper still answers a background read locally during its window
+  (that is its purpose, home-17); only the person's asks pass it. Moving the
+  skip window into the core pool (one rule for every shell) is a later
+  refactor.

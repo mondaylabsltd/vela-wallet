@@ -31,6 +31,7 @@ use vela_core::app::multisig_signers::{KindNote, MemberKind};
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{FocusHandle, Stateful};
+use std::time::{Duration, Instant};
 
 use super::*;
 use crate::multisig::host::Proposed;
@@ -57,6 +58,12 @@ pub(crate) struct SettingsUi {
     planned: Option<(String, bool, bool)>,
     /// The networks whose authority was asked (`check_on`) this visit.
     checked: Vec<(String, u64)>,
+    /// Each network asked whose authority could not be checked: when it is
+    /// asked again by itself ([`recheck_step`]).
+    rechecks: Vec<((String, u64), Recheck)>,
+    /// When a frame is next due to look at [`Self::rechecks`] (a timer is
+    /// out for it).
+    wake: Option<Instant>,
     /// The new shared name being typed (`None`: not renaming).
     renaming: Option<String>,
     rename_busy: bool,
@@ -69,6 +76,73 @@ pub(crate) struct SettingsUi {
     /// The member entry had the keyboard on the last frame (its blur reads it).
     entry_focused: bool,
     focus: Option<Focus>,
+}
+
+/// The first wait before a network whose authority could not be checked is
+/// asked again by itself; each ask after doubles it, up to [`RECHECK_CAP`].
+const RECHECK_FIRST: Duration = Duration::from_secs(3);
+/// The longest wait between two asks while Settings is open.
+const RECHECK_CAP: Duration = Duration::from_secs(30);
+
+/// One network whose authority could not be checked, asked again by itself
+/// while Settings is open (r17: "Vela couldn't check the Safe contracts on
+/// Arc Testnet yet" stood until the person pressed — the network had long
+/// answered again).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Recheck {
+    /// How many times it was asked again by itself.
+    asked: u32,
+    /// When it is next asked, whatever the pool says.
+    next_at: Instant,
+    /// The pool had the network out of reach on the last look.
+    out: bool,
+}
+
+/// The wait after `asked` asks: [`RECHECK_FIRST`], doubling, at most
+/// [`RECHECK_CAP`] — bounded, so a network that stays away is not asked in
+/// a loop, and one that came back is not left unsaid for long.
+fn recheck_after(asked: u32) -> Duration {
+    RECHECK_FIRST
+        .saturating_mul(1 << asked.min(8))
+        .min(RECHECK_CAP)
+}
+
+/// r17: what one unverified network's re-check does on a frame — `true`
+/// asks `check_on` again now. It is asked as soon as the RPC pool no longer
+/// has the network out of reach (`out_now` after it was), and in any case
+/// on a bounded back-off ([`recheck_after`]). The first frame it is seen
+/// unverified only starts the clock: the ask that just failed is not
+/// repeated at once.
+pub(crate) fn recheck_step(was: Option<Recheck>, out_now: bool, now: Instant) -> (Recheck, bool) {
+    let Some(was) = was else {
+        return (
+            Recheck {
+                asked: 0,
+                next_at: now + recheck_after(0),
+                out: out_now,
+            },
+            false,
+        );
+    };
+    let back = was.out && !out_now;
+    if back || now >= was.next_at {
+        let asked = was.asked.saturating_add(1);
+        return (
+            Recheck {
+                asked,
+                next_at: now + recheck_after(asked),
+                out: out_now,
+            },
+            true,
+        );
+    }
+    (
+        Recheck {
+            out: out_now,
+            ..was
+        },
+        false,
+    )
 }
 
 struct Focus {
@@ -142,6 +216,8 @@ impl WalletPage {
         s.shown = None;
         s.planned = None;
         s.checked.clear();
+        s.rechecks.clear();
+        s.wake = None;
     }
 
     /// Escape on this block: what it has open goes (the confirm, the
@@ -255,11 +331,105 @@ impl WalletPage {
                     ms_accounts::Event::CheckOn {
                         address: address.clone(),
                         chain_id,
+                        person: false,
                     },
                     cx,
                 );
             });
         }
+        self.ms_settings_recheck(row, cx);
+    }
+
+    /// r17: a network asked this visit whose authority could not be checked
+    /// (no verdict, not being read) is asked again by itself once the
+    /// network answers — when the RPC pool no longer has it out of reach,
+    /// and in any case on a bounded back-off ([`recheck_step`]) — rather
+    /// than standing as "couldn't check" until the person presses Try again.
+    fn ms_settings_recheck(&mut self, row: &ms_accounts::AccountRow, cx: &mut Context<Self>) {
+        let key = row.account.address.to_ascii_lowercase();
+        let now = Instant::now();
+        let out_of_reach = crate::executor::pool::out_of_reach_now();
+        let mut ask = Vec::new();
+        let s = &mut self.multisig.settings;
+        let mine: Vec<u64> = s
+            .checked
+            .iter()
+            .filter(|(k, _)| *k == key)
+            .map(|(_, chain_id)| *chain_id)
+            .collect();
+        for chain_id in mine {
+            let at = (key.clone(), chain_id);
+            let unverified =
+                !row.checked_on.contains(&chain_id) && !row.checking_on.contains(&chain_id);
+            let place = s.rechecks.iter().position(|(k, _)| *k == at);
+            if !unverified {
+                // Checked, or being read: nothing to ask. Being read keeps
+                // its clock (the ask out is the one it waits on).
+                if row.checked_on.contains(&chain_id)
+                    && let Some(i) = place
+                {
+                    s.rechecks.remove(i);
+                }
+                continue;
+            }
+            let out_now = u32::try_from(chain_id).is_ok_and(|id| out_of_reach.contains(&id));
+            let (next, due) = recheck_step(place.map(|i| s.rechecks[i].1), out_now, now);
+            match place {
+                Some(i) => s.rechecks[i].1 = next,
+                None => s.rechecks.push((at, next)),
+            }
+            if due {
+                ask.push(chain_id);
+            }
+        }
+        let wake = s
+            .rechecks
+            .iter()
+            .filter(|((k, _), _)| *k == key)
+            .map(|(_, r)| r.next_at)
+            .min();
+        if !ask.is_empty() {
+            let host = self.ms_host(cx);
+            let address = row.account.address.clone();
+            host.update(cx, |host, cx| {
+                for chain_id in ask {
+                    host.accounts(
+                        ms_accounts::Event::CheckOn {
+                            address: address.clone(),
+                            chain_id,
+                            person: false,
+                        },
+                        cx,
+                    );
+                }
+            });
+        }
+        if let Some(at) = wake {
+            self.ms_settings_wake(at, cx);
+        }
+    }
+
+    /// A frame at `at` (once per due time): the re-check looks then even if
+    /// nothing else moves the page.
+    fn ms_settings_wake(&mut self, at: Instant, cx: &mut Context<Self>) {
+        let s = &mut self.multisig.settings;
+        if s.wake.is_some_and(|w| w <= at && w > Instant::now()) {
+            return;
+        }
+        s.wake = Some(at);
+        cx.spawn(async move |page, cx| {
+            cx.background_executor()
+                .timer(at.saturating_duration_since(Instant::now()))
+                .await;
+            page.update(cx, |page, cx| {
+                if page.multisig.settings.wake == Some(at) {
+                    page.multisig.settings.wake = None;
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
     }
 
     fn ms_settings_focus(
@@ -462,8 +632,8 @@ impl WalletPage {
 
     /// §3.5: what the chain says of who can act for it — a genesis refused
     /// on a network (read-only there), a risk where it is deployed — and a
-    /// network whose authority could not be checked yet, with its Check
-    /// again (`check_on`).
+    /// network whose authority could not be checked yet, with its Try
+    /// again (`check_on`; also asked again by itself, `ms_settings_recheck`).
     fn ms_set_authority(
         &mut self,
         theme: &Theme,
@@ -551,13 +721,16 @@ impl WalletPage {
                     ))
                     .child(
                         div().flex().child(
+                            // r17-21: re-asking a read that failed is "Try
+                            // again" — "Check again" is a new look of an
+                            // execution.
                             small_button(
                                 ElementId::from(("ms-set-check", i)),
                                 theme,
-                                words::t(loc, "proposal.feeRetry"),
+                                words::t(loc, "review.state.tryAgain"),
                                 format!(
                                     "{} · {}",
-                                    words::t(loc, "proposal.feeRetry"),
+                                    words::t(loc, "review.state.tryAgain"),
                                     network(chain_id)
                                 ),
                             )
@@ -567,7 +740,12 @@ impl WalletPage {
                                     let address = address.clone();
                                     host.update(cx, |host, cx| {
                                         host.accounts(
-                                            ms_accounts::Event::CheckOn { address, chain_id },
+                                            // The person's Try again: always sent.
+                                            ms_accounts::Event::CheckOn {
+                                                address,
+                                                chain_id,
+                                                person: true,
+                                            },
                                             cx,
                                         );
                                     });
@@ -2225,4 +2403,62 @@ pub(crate) fn name_and_rule_line() -> Div {
         .gap_x(px(8.))
         .gap_y(px(4.))
         .min_w(px(0.))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RECHECK_CAP, RECHECK_FIRST, recheck_after, recheck_step};
+    use std::time::{Duration, Instant};
+
+    /// r17 (seen after launch): "Vela couldn't check the Safe contracts on
+    /// Arc Testnet yet" stood for a deployed multisig until the person
+    /// pressed. The network is now asked again by itself — at once when the
+    /// pool no longer has it out of reach, else on a bounded back-off —
+    /// and never in a loop: the first frame only starts the clock.
+    #[test]
+    fn an_unverified_network_is_asked_again_once_it_answers() {
+        let t0 = Instant::now();
+        // First seen unverified, the network out of reach: not at once.
+        let (r, due) = recheck_step(None, true, t0);
+        assert!(!due, "the ask that just failed is not repeated at once");
+        // Still out, before its time: nothing.
+        let (r, due) = recheck_step(Some(r), true, t0 + Duration::from_secs(1));
+        assert!(!due);
+        // The pool no longer has it out of reach: asked now.
+        let (r, due) = recheck_step(Some(r), false, t0 + Duration::from_secs(2));
+        assert!(due, "back in reach: asked again by itself");
+        // Asked; answered unverified again, the network still in reach:
+        // nothing until the back-off is up.
+        let (r, due) = recheck_step(Some(r), false, t0 + Duration::from_secs(3));
+        assert!(!due);
+        let (_, due) = recheck_step(
+            Some(r),
+            false,
+            t0 + Duration::from_secs(2) + recheck_after(1),
+        );
+        assert!(due, "the back-off asks it in any case");
+    }
+
+    /// The back-off is bounded: it doubles from the first wait and never
+    /// passes the cap, however long the network stays away.
+    #[test]
+    fn the_recheck_back_off_is_bounded() {
+        assert_eq!(recheck_after(0), RECHECK_FIRST);
+        assert_eq!(recheck_after(1), RECHECK_FIRST * 2);
+        assert!((0..100).all(|n| recheck_after(n) <= RECHECK_CAP));
+        assert_eq!(recheck_after(u32::MAX), RECHECK_CAP);
+        // A network that never comes back is asked at most once per cap.
+        let mut now = Instant::now();
+        let (mut r, _) = recheck_step(None, true, now);
+        let mut asks = 0;
+        for _ in 0..600 {
+            now += Duration::from_secs(1);
+            let (next, due) = recheck_step(Some(r), true, now);
+            r = next;
+            asks += u32::from(due);
+        }
+        let per_cap = 600 / u32::try_from(RECHECK_CAP.as_secs()).unwrap_or(1);
+        assert!(asks <= per_cap + 5, "{asks}");
+        assert!(asks >= per_cap, "{asks}");
+    }
 }
