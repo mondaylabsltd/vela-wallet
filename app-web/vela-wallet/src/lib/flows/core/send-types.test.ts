@@ -40,7 +40,9 @@ describe('toSendFeeOutcome', () => {
 			'send.alertEstimateChainDownBody'
 		);
 		expect(sendEstimateFailureBodyKey('internal')).toBe('componentsUi.gas.reasonInternal');
-		for (const other of ['quote_unavailable', 'would_fail', 'timeout', 'other'] as const) {
+		// r18-14 (core §32): the relay that gave no quote is said as the relay's.
+		expect(sendEstimateFailureBodyKey('quote_unavailable')).toBe('send.alertEstimateRelayBody');
+		for (const other of ['would_fail', 'timeout', 'other'] as const) {
 			expect(sendEstimateFailureBodyKey(other), other).toBe('send.alertEstimateFailedBody');
 		}
 	});
