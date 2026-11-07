@@ -635,7 +635,7 @@
         "customNote": "Using a custom multisig service ({{host}})",
         "unreachableNote": "Multisig service unreachable — waiting transactions can't be loaded; retrying.",
         "busyNote": "Multisig service busy — waiting transactions will load shortly; retrying.",
-        "retry": "Retry",
+        "retry": "Try again",
         "offline": "Showing what was loaded before.",
         "offlineSince": "Showing what was loaded at {{time}}.",
         "chainUnreachable": "Can't reach {{network}} — its waiting transactions can't be checked right now."

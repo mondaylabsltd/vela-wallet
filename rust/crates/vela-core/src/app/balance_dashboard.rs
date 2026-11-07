@@ -1286,6 +1286,18 @@ pub struct BalanceView {
     /// alone.
     #[serde(default)]
     pub updated_at_ms: Option<f64>,
+    /// r17-3: the first read of this account has ended — every network said
+    /// for it was asked (its answer, or its failure, is in). Before it,
+    /// nothing may be claimed of the account's networks.
+    #[serde(default)]
+    pub networks_read: bool,
+    /// r17-3: the networks said for this account that were NOT read now —
+    /// failed, refused, silent (the pool's word) or rate limited — ascending.
+    /// A failure or a 429 is never a read. Handed to the Activity feed
+    /// (`activity_feed::Event::BalanceRead`) beside `networks_read`: "No
+    /// activity yet" is a claim about every network of the space.
+    #[serde(default)]
+    pub unread_chain_ids: Vec<u32>,
     /// USD-sorted holdings for the Assets tab.
     pub tokens: Vec<BalanceToken>,
     /// The detail sheet's "couldn't be priced" list — held, no price source,
@@ -1592,14 +1604,20 @@ impl App for BalanceDashboard {
             hidden: model.hidden,
             refreshing: model.pending_pulls > 0,
             last_refreshed_at_ms: model.last_refreshed_at_ms,
+            // r17-9: and only from a round the NETWORKS answered since the
+            // switch: a round the shell's cache answered (`read_live` false)
+            // read nothing now — "Updated now" over a hung network was that.
             updated_at_ms: model.last_refreshed_at_ms.filter(|_| {
                 first_read_ended
+                    && model.read_live
                     && model.pool_said.is_empty()
                     && !unread_said(model)
                     && !model.errored_internally
                     && model.internal_chain_ids.is_empty()
                     && !unreachable
             }),
+            networks_read: model.address.is_some() && first_read_ended,
+            unread_chain_ids: unread_chain_ids(model),
             tokens: model.tokens.clone(),
             unpriced_tokens,
             failed_chain_ids: model.failed_chain_ids.clone(),
@@ -2587,6 +2605,22 @@ fn said_home(model: &Model) -> Option<BTreeSet<u32>> {
 /// inside the app. While one is, nobody knows what it holds: the Assets list
 /// never says "Deposit your first asset" (Dana's 10.53 USDC on an unread
 /// Arc Testnet was claimed empty by the other networks' answers).
+/// r17-3: the networks said for the account shown that were not read now
+/// (failed, rate limited, or found silent by the pool), ascending.
+fn unread_chain_ids(model: &Model) -> Vec<u32> {
+    let home = said_home(model);
+    model
+        .failed_chain_ids
+        .iter()
+        .chain(model.rate_limited_chain_ids.iter())
+        .chain(model.pool_said.iter())
+        .copied()
+        .filter(|id| home.as_ref().is_none_or(|home| home.contains(id)))
+        .collect::<BTreeSet<u32>>()
+        .into_iter()
+        .collect()
+}
+
 fn unread_said(model: &Model) -> bool {
     let home = said_home(model);
     model

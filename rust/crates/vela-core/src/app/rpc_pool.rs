@@ -497,6 +497,13 @@ pub enum RpcOperation {
         /// `None` ⇒ send no header. Never set on a call to an RPC provider.
         x_rpc_url: Option<String>,
         timeout_ms: u32,
+        /// r17-10: this POST is a person's own ask (their Try again, their
+        /// press): it is put on the wire. A shell that answers some reads
+        /// locally — the web's endpoint skipper, which says `not_connected`
+        /// for a node that failed on transport a moment ago — never answers
+        /// this one without asking the node. Absent: `false`.
+        #[serde(default)]
+        must_send: bool,
     },
     /// Lightweight `eth_chainId` ping for the fastest-RPC race.
     ProbeChainId {
@@ -600,6 +607,14 @@ pub enum Event {
         kind: RpcKind,
         method: String,
         now_ms: f64,
+        /// r17-1 / r17-10: a read the person asked for themselves (their Try
+        /// again, their press). It is always actually sent: its chain's
+        /// failure cooldowns are lifted (the person's word is newer than any
+        /// of them), it sweeps the whole pool even while the chain is out of
+        /// reach (never the outage's two-node probe), and every POST of it
+        /// is [`RpcOperation::JsonRpcPost::must_send`]. Absent: `false`.
+        #[serde(default)]
+        person: bool,
     },
     /// Which bundler REST base `/v1/account` and `/v1/sponsor` must use —
     /// the same bundler the pool would submit to (invariant ③,
@@ -1130,6 +1145,8 @@ struct CallSession {
     /// r13-4: this pass is the outage's probe of nodes already silent (none
     /// was left untried): they are asked, at most [`OUTAGE_PROBE_ENDPOINTS`].
     silent_probe: bool,
+    /// r17-10: the person's own ask ([`Event::CallRequested::person`]).
+    person: bool,
 }
 
 /// The fastest-RPC ping race (`pickFastestRpcUrl`), run at most once per
@@ -1320,6 +1337,7 @@ impl App for RpcPool {
                 kind,
                 method,
                 now_ms,
+                person,
             } => {
                 if model.calls.contains_key(&call_id) {
                     // A duplicate correlation id could cross two callers'
@@ -1342,8 +1360,12 @@ impl App for RpcPool {
                         first_pass_tried: 0,
                         first_pass_all_transport: true,
                         silent_probe: false,
+                        person,
                     },
                 );
+                if person && kind == RpcKind::Rpc {
+                    lift_cooldowns(model, chain_id);
+                }
                 ensure_pool_then(model, chain_id, PendingWork::Call { call_id }, now_ms)
             }
             Event::BundlerBaseRequested {
@@ -2134,7 +2156,7 @@ fn next_endpoint(model: &mut Model, call_id: &str, now_ms: f64) -> Command<RpcEf
     if let Some(url) = session.queue.pop_front() {
         session.state = SessionState::WaitingPost { url: url.clone() };
         let method = session.method.clone();
-        let (kind, chain_id) = (session.kind, session.chain_id);
+        let (kind, chain_id, must_send) = (session.kind, session.chain_id, session.person);
         let (x_rpc_url, timeout_ms) = match kind {
             RpcKind::Rpc => (None, RPC_READ_TIMEOUT_MS),
             RpcKind::Bundler => (
@@ -2150,6 +2172,7 @@ fn next_endpoint(model: &mut Model, call_id: &str, now_ms: f64) -> Command<RpcEf
                 method,
                 x_rpc_url,
                 timeout_ms,
+                must_send,
             },
         );
     }
@@ -2592,9 +2615,24 @@ fn outage_read(model: &Model, call_id: &str) -> bool {
     // node refuses with a 500, and that node still answers every other
     // read — a read that skipped it failed where it would have answered.
     model.calls.get(call_id).is_some_and(|session| {
-        is_hedged_read(session.kind, &session.method)
+        // r17-10: never the person's own ask — it sweeps every node.
+        !session.person
+            && is_hedged_read(session.kind, &session.method)
             && model.silent_chains.contains(&session.chain_id)
     })
+}
+
+/// r17-10: a person asked a read of `chain_id` themselves — every node's
+/// failure cooldown on it is lifted, so the sweep goes in the pool's own
+/// order (the person's node, then the defaults) rather than past nodes that
+/// failed while the network was away. Bans stand: they are facts about a
+/// node, not about a moment.
+fn lift_cooldowns(model: &mut Model, chain_id: u32) {
+    if let Some(pool) = model.pools.get_mut(&chain_id) {
+        for endpoint in pool.list_mut(RpcKind::Rpc).iter_mut() {
+            endpoint.consecutive_failures = 0;
+        }
+    }
 }
 
 /// r13-4: what one endpoint's outcome says of its chain. A transport failure
@@ -2635,7 +2673,10 @@ fn note_silence(
     }
     let max_pass = max_passes(RpcKind::Rpc).saturating_sub(1);
     for session in model.calls.values_mut() {
-        if session.chain_id == chain_id && is_hedged_read(session.kind, &session.method) {
+        if session.chain_id == chain_id
+            && !session.person
+            && is_hedged_read(session.kind, &session.method)
+        {
             session.pass = max_pass;
         }
     }

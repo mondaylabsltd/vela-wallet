@@ -2804,3 +2804,83 @@ fn a_failure_the_look_says_is_not_said_again_by_the_review() {
         "a proposal no look says fails keeps its review"
     );
 }
+
+/// Round 17 (r17-2): after a plain Execute over no figure (§27 item 1) the
+/// stop "Network fee ≈ 0.3022" stayed for 20 s on the web while the fee
+/// line beside it re-quoted to 0.2325, and the next press charged 0.2325
+/// with no new stop. The §25 rule covers this path too: the stop the press
+/// over no figure said is its executor's look, and it follows every
+/// re-quote of that look — the figure the next press signs. (The core
+/// served it so; the web drew the words it had kept at the press.)
+#[test]
+fn a_no_figure_stop_follows_the_requote_and_the_next_press_signs_it() {
+    let (mut world, mut sut, _) = setup(&[0, 1]);
+    let hash = hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
+    let a = fixture(0).address;
+    run(
+        &mut sut,
+        &mut world,
+        Event::Approve {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            owner: fixture(1).address,
+        },
+    );
+    let quote = |amount: &str| vela_core::app::multisig_shell::MultisigShellResult::Quoted {
+        quote: json!({"kind": "quoted", "fee": {"token": null, "amount": amount}, "totalGas": "0x1", "executorDeployed": true}),
+    };
+    world.quote_answer = Some(
+        vela_core::app::multisig_shell::MultisigShellResult::Quoted {
+            quote: json!({"kind": "failed"}),
+        },
+    );
+    assert_eq!(
+        preview_of(&mut sut, &mut world, &hash, &a)["kind"],
+        "unpriced"
+    );
+    // Pressed over no figure: the figure priced at the press is said.
+    world.now += 20_000.0;
+    world.quote_answer = Some(quote("0x300"));
+    let press = |shown: Option<&str>| Event::Execute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: a.clone(),
+        shown_fee: shown.map(str::to_owned),
+    };
+    run(&mut sut, &mut world, press(None));
+    let key = format!("execute:{}", hash.to_ascii_lowercase());
+    let stop = |sut: &Sut| -> Value {
+        match sut.view().actions.get(&key) {
+            Some(ActionState::Failed { detail }) => serde_json::from_str(detail).expect("json"),
+            other => panic!("{other:?}"),
+        }
+    };
+    assert_eq!(stop(&sut)["kind"], "fee_moved");
+    assert_eq!(stop(&sut)["amount"], "768");
+    assert!(world.sent.is_empty(), "nothing signed");
+    // The fee line re-quotes beside the stop: the stop follows it.
+    world.now += 20_000.0;
+    world.quote_answer = Some(quote("0x200"));
+    run(
+        &mut sut,
+        &mut world,
+        Event::Preview {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            executor: a.clone(),
+        },
+    );
+    assert_eq!(
+        sut.view().previews[&look_key(&hash, &a)]["fee"]["amount"],
+        json!("0x200"),
+        "the fee line's figure"
+    );
+    assert_eq!(
+        stop(&sut)["amount"],
+        "512",
+        "the stop names the fee line's figure"
+    );
+    // The next press, on that figure, signs exactly it.
+    run(&mut sut, &mut world, press(Some("512")));
+    assert_eq!(world.sent.len(), 1, "signed at the figure the stop named");
+}

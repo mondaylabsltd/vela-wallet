@@ -1237,3 +1237,103 @@ fn the_door_vectors_hold_through_the_link_door() {
             .starts_with("home.multisig.review.state."));
     }
 }
+
+/// Round 17 (r17-1): r16-3 was still not fixed on the web. Right after a
+/// refused outage lifted, one Try again landed on an enabled "Approve
+/// anyway" for up to 6 s: the web's pool answered the code read of the
+/// multisig's singleton locally (a node it had just skipped), so the state
+/// checks built from that code were never asked — no trace, no probe — and
+/// with the simulation answered (Arc does not simulate) no check was
+/// "silent": "unchecked" was taken as final. A check never asked because
+/// the code it is built from went unanswered is a silent check: the code is
+/// read again, the checks are built and asked, and only then is the review
+/// published. And the person's Try again is the person's own ask: every read
+/// it makes says so (`person`), so a shell's pool sends it, never answers it
+/// from a cooldown.
+#[test]
+fn a_check_never_asked_because_its_code_went_unanswered_is_not_final() {
+    let (mut world, mut other, key, hash) = proposed_on_another_device();
+    world.silent.insert(100);
+    run(&mut other, &mut world, review(&hash));
+    assert!(matches!(
+        other.view().review_states[&key],
+        ReviewState::Failed { .. }
+    ));
+    // The outage lifts. The first code read that is not the multisig's own
+    // (the singleton its checks are built from) is answered locally, as
+    // the web's skipper did; the node does not simulate (an answer).
+    world.silent.clear();
+    world.rpc_person.clear();
+    let safe = other.view().followed.expect("followed");
+    let refused = std::sync::Arc::new(std::sync::Mutex::new(0_u32));
+    let count = refused.clone();
+    world.rpc_hooks.push(Box::new(move |_, method, params| {
+        let other_code = method == "eth_getCode"
+            && params[0]
+                .as_str()
+                .is_some_and(|a| !a.eq_ignore_ascii_case(&safe));
+        let mut n = count.lock().unwrap();
+        (other_code && *n < 1).then(|| {
+            *n += 1;
+            vela_core::app::multisig_shell::MultisigShellResult::RpcUnanswered {
+                detail: "not_connected".to_owned(),
+            }
+        })
+    }));
+    world.sim_reply =
+        Some(r#"{"error":{"code":-32601,"message":"eth_simulateV1 does not exist"}}"#.to_owned());
+    let probe = probe_selector();
+    let from = world.rpc_log.len();
+    other.dispatch(Event::ReviewAgain {
+        chain_id: Some(100),
+        safe_tx_hash: Some(hash.clone()),
+    });
+    let mut landed = None;
+    for _ in 0..20_000 {
+        let outstanding = other.outstanding();
+        let Some(op) = outstanding
+            .iter()
+            .find(|op| !matches!(op, Op::Wait { .. }))
+            .or_else(|| world::soonest_wait(&outstanding))
+            .cloned()
+        else {
+            break;
+        };
+        let res = world.answer(&op);
+        other.resolve_matching(|o| *o == op, res);
+        if landed.is_none() && other.view().review_states.get(&key) != Some(&ReviewState::Loading) {
+            landed = Some(world.rpc_log.len());
+        }
+        if landed.is_none() {
+            assert!(
+                !door_at(&other, &key).enabled,
+                "nothing signable while read"
+            );
+        }
+    }
+    assert_eq!(
+        *refused.lock().unwrap(),
+        1,
+        "the code read was refused once"
+    );
+    assert_eq!(other.view().review_states[&key], ReviewState::Ready);
+    // Landed only once the checks built from the code were really asked:
+    // the code read again, then the trace and the probe.
+    let asked = &world.rpc_log[from..landed.expect("landed")];
+    let probed = asked.iter().any(|(_, m, p)| {
+        m == "eth_call"
+            && p[0]["data"]
+                .as_str()
+                .is_some_and(|d| d.to_ascii_lowercase().starts_with(&probe))
+    });
+    let traced = asked.iter().any(|(_, m, _)| m == "debug_traceCall");
+    assert!(
+        probed && traced,
+        "the state checks were asked before the review landed: {:?}",
+        asked.iter().map(|(_, m, _)| m).collect::<Vec<_>>()
+    );
+    // r17-10: every read of the person's Try again was the person's own ask.
+    let theirs: Vec<_> = world.rpc_person.iter().take(asked.len()).collect();
+    assert!(!theirs.is_empty());
+    assert!(theirs.iter().all(|(_, person)| *person), "{theirs:?}");
+}

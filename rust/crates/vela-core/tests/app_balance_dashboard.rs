@@ -4265,3 +4265,86 @@ fn updated_is_one_core_answer_never_claimed_over_an_unread_network() {
     assert!(view.updated_at_ms.is_some());
     assert_eq!(view.updated_at_ms, view.last_refreshed_at_ms);
 }
+
+/// Round 17 (r17-9): after an account switch under a hung Arc, the web said
+/// "Updated now" for 1–18 s: the round the switch got was the shell's cache
+/// (rows read minutes ago, no network asked now), and its stamp was taken
+/// as the networks' word. "Updated" is said only of a round the networks
+/// answered since the switch. And (r17-3) the view says, for the Activity
+/// feed, whether the account's first read has ended and which of its
+/// networks were not read now (failed, silent, rate limited): a failure or
+/// a 429 is never a read.
+#[test]
+fn updated_and_the_networks_read_are_claimed_only_from_a_live_read() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: None,
+    });
+    let view = sut.view();
+    assert!(!view.networks_read, "nothing read yet");
+    // The cache answers the switch: rows held, read 30 s ago.
+    sut.resolve(Res::FetchSettled {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        tokens: vec![token(1, "ETH", "1", Some(2_000.0))],
+        failed_chain_ids: vec![],
+        rate_limited_chain_ids: vec![],
+        read_chain_ids: vec![1, 56, ARC_TESTNET],
+        internal_chain_ids: vec![],
+        registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
+        read_at_ms: Some(NOW - 30_000.0),
+        now_ms: NOW,
+    });
+    let view = sut.view();
+    assert_eq!(view.updated_at_ms, None, "a cache read nothing now");
+    // The live read: Arc did not answer — unread, never "Updated".
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled_read(
+        vec![token(1, "ETH", "1", Some(2_000.0))],
+        vec![ARC_TESTNET],
+        vec![1, 56, ARC_TESTNET],
+    ));
+    let view = sut.view();
+    assert!(view.networks_read);
+    assert_eq!(view.unread_chain_ids, vec![ARC_TESTNET]);
+    assert_eq!(view.updated_at_ms, None);
+    // Rate limited: unread too.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(Res::FetchSettled {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        tokens: vec![token(1, "ETH", "1", Some(2_000.0))],
+        failed_chain_ids: vec![ARC_TESTNET],
+        rate_limited_chain_ids: vec![ARC_TESTNET],
+        read_chain_ids: vec![1, 56, ARC_TESTNET],
+        internal_chain_ids: vec![],
+        registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
+        read_at_ms: None,
+        now_ms: NOW,
+    });
+    assert_eq!(sut.view().unread_chain_ids, vec![ARC_TESTNET]);
+    // Every network answered now: "Updated", nothing unread.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled_read(
+        vec![token(1, "ETH", "1", Some(2_000.0))],
+        vec![],
+        vec![1, 56, ARC_TESTNET],
+    ));
+    let view = sut.view();
+    assert!(view.updated_at_ms.is_some());
+    assert!(view.unread_chain_ids.is_empty());
+}

@@ -73,6 +73,7 @@ use super::fee_policy::{
 };
 use super::manage_tokens::{native_alias_places, native_alias_token, rescale_units, same_balance};
 use super::money::{js_parse_float, Denom, DenominatedAmount, TokenPrice};
+use super::network_space::{self, NetworkSpace};
 use super::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
 use crate::signed_review::{ReviewedFee, ReviewedTransfer, SignedReview};
 
@@ -528,6 +529,12 @@ pub struct SendDisplayContext {
     /// USD → display currency. `null` ⇒ unpriceable; never 1-by-default.
     pub rate: Option<f64>,
     pub fiat_decimals: u32,
+    /// r17-14: the space in front. In the testnet space nothing has a fiat
+    /// worth ([`network_space::shows_fiat`]): no token is priced here — no
+    /// fiat beside an amount, no ⇄ into fiat, no worth to sort or sweep by.
+    /// Absent: the mainnet space.
+    #[serde(default)]
+    pub space: NetworkSpace,
 }
 
 impl Default for SendDisplayContext {
@@ -537,6 +544,7 @@ impl Default for SendDisplayContext {
             code: "USD".to_owned(),
             rate: Some(1.0),
             fiat_decimals: 2,
+            space: NetworkSpace::Mainnet,
         }
     }
 }
@@ -3836,6 +3844,22 @@ fn non_zero_sorted(tokens: &[SendToken]) -> Vec<SendToken> {
 /// network's (issue #312). Every reader of `model.tokens` (the list, a pick,
 /// a sweep, the fee read-ahead) sees the same narrowing.
 fn offered_tokens(model: &Model, tokens: &[SendToken]) -> Vec<SendToken> {
+    // r17-14: the testnet space prices nothing — whatever price a shell
+    // handed in, none is kept, so nothing on this screen says a fiat worth.
+    let unpriced: Vec<SendToken>;
+    let tokens = if network_space::shows_fiat(model.display.space) {
+        tokens
+    } else {
+        unpriced = tokens
+            .iter()
+            .cloned()
+            .map(|mut t| {
+                t.price_usd = None;
+                t
+            })
+            .collect();
+        &unpriced
+    };
     let mut list = non_zero_sorted(tokens);
     if let Some(chain_id) = model.request_chain {
         list.retain(|token| token.chain_id == chain_id);
@@ -4416,7 +4440,11 @@ fn view_recipient_locked(model: &Model) -> bool {
 /// This screen's token price, in the display currency, or `None` when either
 /// factor is missing. Never a defaulted 1 — see [`TokenPrice::new`].
 fn display_price(model: &Model, token: &SendToken) -> Option<TokenPrice> {
-    TokenPrice::new(token.price_usd, model.display.rate, &model.display.code)
+    TokenPrice::new(
+        network_space::priced_in(model.display.space, token.price_usd),
+        model.display.rate,
+        &model.display.code,
+    )
 }
 
 /// The typed figure resolved into token units — the number every gate, every
@@ -4442,7 +4470,8 @@ fn denom_toggle(model: &Model) -> (bool, bool) {
         return (false, false);
     };
     // The ported render condition (`EnterDetailsStep.tsx:170`).
-    let priced = token.price_usd.is_some_and(|p| p > 0.0);
+    let priced =
+        network_space::priced_in(model.display.space, token.price_usd).is_some_and(|p| p > 0.0);
     let in_fiat = model.amount.is_fiat();
     // A door in must have a door out: while the figure is fiat the row is
     // shown even for an unpriced token, because leaving is the only escape

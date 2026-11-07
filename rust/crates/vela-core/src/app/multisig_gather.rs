@@ -164,6 +164,10 @@ pub async fn gather_review<Ev: Send + 'static>(io: &Io<Ev>, subject: &ReviewSubj
         ..ReadsInput::default()
     };
     let mut reads = mr::review_reads(&base).unwrap_or_default();
+    // r17-1: each code read's envelope, by address — a code that went
+    // unanswered leaves the state checks unbuilt (`unavailable`), which is
+    // no answer of the network's about them.
+    let mut code_answers: BTreeMap<String, Value> = BTreeMap::new();
     for _ in 0..CODE_ROUNDS {
         let missing: Vec<String> = reads
             .need_code
@@ -174,48 +178,22 @@ pub async fn gather_review<Ev: Send + 'static>(io: &Io<Ev>, subject: &ReviewSubj
         if missing.is_empty() {
             break;
         }
-        let codes = future::join_all(missing.iter().map(|a| async move {
-            let e = bounded(io, chain_id, "eth_getCode", json!([a, "latest"])).await;
-            let code = e.get("result").and_then(Value::as_str).map(str::to_owned);
-            (a.clone(), code, e)
-        }))
-        .await;
-        for (a, code, e) in codes {
-            base.codes.insert(a, code);
+        for (a, code, e) in read_codes(io, chain_id, &missing).await {
+            base.codes.insert(a.clone(), code);
+            code_answers.insert(a, e.clone());
             answers.push(e);
         }
         reads = mr::review_reads(&base).unwrap_or_default();
     }
-    let sim_asked = !reads.sim_calls.is_empty();
-    let simulate = || async {
-        if reads.sim_calls.is_empty() {
-            return None;
-        }
-        match within(
-            io,
-            io.ask(MultisigOperation::Simulate {
-                chain_id,
-                from: subject.safe.clone(),
-                calls: reads.sim_calls.clone(),
-                state_overrides: reads.sim_state_overrides.clone(),
-            }),
-        )
-        .await
-        {
-            Some(MultisigShellResult::Simulated { reply }) => reply,
-            _ => None,
-        }
-    };
     // r14-13: the multisig's own code — the network's state this review is
     // read against, asked beside the checks (no time added).
     let anchor = bounded(io, chain_id, "eth_getCode", json!([subject.safe, "latest"]));
-    let ask = |r: Option<mr::RpcRequest>| async move {
-        match r {
-            Some(r) => Some(bounded(io, chain_id, &r.method, r.params).await),
-            None => None,
-        }
+    let state = async {
+        futures::join!(
+            ask_read(io, chain_id, reads.trace.clone()),
+            ask_read(io, chain_id, reads.probe.clone())
+        )
     };
-    let state = async { futures::join!(ask(reads.trace.clone()), ask(reads.probe.clone())) };
     let facts = future::join_all(reads.recipients.iter().map(|address| async move {
         match within(
             io,
@@ -261,25 +239,27 @@ pub async fn gather_review<Ev: Send + 'static>(io: &Io<Ev>, subject: &ReviewSubj
         read
     };
     let (anchor, (mut trace, mut probe), mut sim_reply, recipient_facts, tokens) =
-        futures::join!(anchor, state, simulate(), facts, tokens);
+        futures::join!(anchor, state, simulate(io, subject, &reads), facts, tokens);
     let mut known = subject.known.clone();
     known.extend(members_known(
         &subject.members.owners,
         &subject.member_names,
     ));
     let token_facts: Vec<TokenFacts> = tokens.into_values().collect();
-    let input =
-        |trace: &Option<Value>, probe: &Option<Value>, sim_reply: &Option<String>| ReviewInput {
-            reads: base.clone(),
-            sim_reply: sim_reply.clone(),
-            trace: trace.clone(),
-            probe: probe.clone(),
-            recipient_facts: recipient_facts.clone(),
-            known: known.clone(),
-            blind: false,
-            token_facts: token_facts.clone(),
-            origin: subject.origin.clone(),
-        };
+    let input = |base: &ReadsInput,
+                 trace: &Option<Value>,
+                 probe: &Option<Value>,
+                 sim_reply: &Option<String>| ReviewInput {
+        reads: base.clone(),
+        sim_reply: sim_reply.clone(),
+        trace: trace.clone(),
+        probe: probe.clone(),
+        recipient_facts: recipient_facts.clone(),
+        known: known.clone(),
+        blind: false,
+        token_facts: token_facts.clone(),
+        origin: subject.origin.clone(),
+    };
     // r15-12 / r16-3: a network coming back answers its multisig's own
     // state (the pool's outage probe goes first) while the checks asked
     // beside it are still turned away as silent — for 1–5 s on Arc, whose
@@ -290,11 +270,28 @@ pub async fn gather_review<Ev: Send + 'static>(io: &Io<Ev>, subject: &ReviewSubj
     // (`checks_final`): the silent ones are asked again, paced, until one
     // answers or the re-ask reaches its own limit (`RECHECK_MS`) — the
     // review stays Reading (nothing signable) meanwhile.
+    //
+    // r17-1: a state check that was never ASKED because the code it is
+    // built from went unanswered (an undeployed multisig's singleton, read
+    // while the network was still turned away — on the web a node its pool
+    // had just skipped) is not final either: it is a silent check. The code
+    // is read again, the checks are built from it and asked; only a check
+    // the network itself answered, or the re-ask's limit, makes "unchecked"
+    // final.
     let started = io.now().await;
     loop {
-        let review = review_of(&input(&trace, &probe, &sim_reply))
+        let review = review_of(&input(&base, &trace, &probe, &sim_reply))
             .and_then(|r| serde_json::to_value(r).ok());
-        let checks = check_envelopes(trace.as_ref(), probe.as_ref(), sim_asked, &sim_reply);
+        let unasked = silent_codes(&code_answers);
+        let mut checks = check_envelopes(
+            trace.as_ref(),
+            probe.as_ref(),
+            !reads.sim_calls.is_empty(),
+            &sim_reply,
+        );
+        if !unasked.is_empty() {
+            checks.push(json!({ "unreachable": true }));
+        }
         let rechecked = io.now().await - started;
         if review_state::checks_final(review.as_ref(), &anchor, &checks, rechecked) {
             break;
@@ -304,55 +301,150 @@ pub async fn gather_review<Ev: Send + 'static>(io: &Io<Ev>, subject: &ReviewSubj
         let left_ms = left.max(0.0) as u64;
         io.wait(u64::from(review_state::RECHECK_PAUSE_MS).min(left_ms))
             .await;
+        let left = f64::from(review_state::RECHECK_MS) - (io.now().await - started);
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let cap = Box::pin(io.wait(left.max(0.0) as u64));
         let silent = |e: &Option<Value>| e.as_ref().is_some_and(|e| !answered(e));
-        let (t_again, p_again) = (silent(&trace), silent(&probe));
-        let s_again = sim_asked && sim_silent(&sim_reply);
-        let again = async {
+        let silent_now = (
+            silent(&trace),
+            silent(&probe),
+            !reads.sim_calls.is_empty() && sim_silent(&sim_reply),
+        );
+        let (base_now, reads_now) = (base.clone(), reads.clone());
+        let again = async move {
+            // The codes first: the checks are built from them.
+            let mut rebuilt = None;
+            if !unasked.is_empty() {
+                let mut next = base_now;
+                let mut fresh = Vec::new();
+                for (a, code, e) in read_codes(io, chain_id, &unasked).await {
+                    next.codes.insert(a.clone(), code);
+                    fresh.push((a, e));
+                }
+                let next_reads = mr::review_reads(&next).unwrap_or_default();
+                rebuilt = Some((next, next_reads, fresh));
+            }
+            let (t_again, p_again, s_again, asked) = match &rebuilt {
+                // Built now: every check is asked, as on a first read.
+                Some((_, r, _)) => (true, true, !r.sim_calls.is_empty(), r.clone()),
+                None => (silent_now.0, silent_now.1, silent_now.2, reads_now),
+            };
             let ask_if = |again: bool, r: Option<mr::RpcRequest>| async move {
                 if again {
-                    Some(ask(r).await)
+                    Some(ask_read(io, chain_id, r).await)
                 } else {
                     None
                 }
             };
-            futures::join!(
-                ask_if(t_again, reads.trace.clone()),
-                ask_if(p_again, reads.probe.clone()),
+            let (t, p, s) = futures::join!(
+                ask_if(t_again, asked.trace.clone()),
+                ask_if(p_again, asked.probe.clone()),
                 async {
                     if s_again {
-                        Some(simulate().await)
+                        Some(simulate(io, subject, &asked).await)
                     } else {
                         None
                     }
                 }
-            )
+            );
+            (rebuilt, t, p, s)
         };
         // Within what is left of the re-ask's own limit: past it, what is
         // still silent is final.
-        let left = f64::from(review_state::RECHECK_MS) - (io.now().await - started);
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let cap = Box::pin(io.wait(left.max(0.0) as u64));
-        let landed = future::select(Box::pin(again), cap).await;
-        match landed {
-            future::Either::Left(((t, p, s), _)) => {
-                if let Some(t) = t {
-                    trace = t;
-                }
-                if let Some(p) = p {
-                    probe = p;
-                }
-                if let Some(s) = s {
-                    sim_reply = s;
-                }
+        let landed = match future::select(Box::pin(again), cap).await {
+            future::Either::Left((out, _)) => Some(out),
+            future::Either::Right(_) => None,
+        };
+        let Some((rebuilt, t, p, s)) = landed else {
+            break;
+        };
+        if let Some((next, next_reads, fresh)) = rebuilt {
+            for (a, e) in fresh {
+                code_answers.insert(a, e.clone());
+                answers.push(e);
             }
-            future::Either::Right(_) => break,
+            base = next;
+            reads = next_reads;
+        }
+        if let Some(t) = t {
+            trace = t;
+        }
+        if let Some(p) = p {
+            probe = p;
+        }
+        if let Some(s) = s {
+            sim_reply = s;
         }
     }
     answers.push(anchor);
     answers.extend(trace.iter().chain(probe.iter()).cloned());
     Gathered {
-        input: input(&trace, &probe, &sim_reply),
+        input: input(&base, &trace, &probe, &sim_reply),
         answers,
+    }
+}
+
+/// `eth_getCode` of each of `addresses`, together, each bounded: the code
+/// (`None`: not read) and the read's envelope.
+async fn read_codes<Ev: Send + 'static>(
+    io: &Io<Ev>,
+    chain_id: u64,
+    addresses: &[String],
+) -> Vec<(String, Option<String>, Value)> {
+    future::join_all(addresses.iter().map(|a| async move {
+        let e = bounded(io, chain_id, "eth_getCode", json!([a, "latest"])).await;
+        let code = e.get("result").and_then(Value::as_str).map(str::to_owned);
+        (a.clone(), code, e)
+    }))
+    .await
+}
+
+/// r17-1: the codes the network left unanswered (silence, not an error):
+/// the state checks built from them were never asked.
+fn silent_codes(code_answers: &BTreeMap<String, Value>) -> Vec<String> {
+    code_answers
+        .iter()
+        .filter(|(_, e)| !answered(e))
+        .map(|(a, _)| a.clone())
+        .collect()
+}
+
+/// One of the review's state reads (the trace, the probe), bounded; `None`
+/// when the review asks none.
+async fn ask_read<Ev: Send + 'static>(
+    io: &Io<Ev>,
+    chain_id: u64,
+    request: Option<mr::RpcRequest>,
+) -> Option<Value> {
+    match request {
+        Some(r) => Some(bounded(io, chain_id, &r.method, r.params).await),
+        None => None,
+    }
+}
+
+/// The signing sheet's simulation of `reads`' calls from the multisig
+/// (`None`: nothing to simulate, or no reply within its bound).
+async fn simulate<Ev: Send + 'static>(
+    io: &Io<Ev>,
+    subject: &ReviewSubject,
+    reads: &mr::Reads,
+) -> Option<String> {
+    if reads.sim_calls.is_empty() {
+        return None;
+    }
+    match within(
+        io,
+        io.ask(MultisigOperation::Simulate {
+            chain_id: subject.chain_id,
+            from: subject.safe.clone(),
+            calls: reads.sim_calls.clone(),
+            state_overrides: reads.sim_state_overrides.clone(),
+        }),
+    )
+    .await
+    {
+        Some(MultisigShellResult::Simulated { reply }) => reply,
+        _ => None,
     }
 }
 

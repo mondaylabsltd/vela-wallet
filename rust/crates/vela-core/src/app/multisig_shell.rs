@@ -171,6 +171,13 @@ pub enum MultisigOperation {
         #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
         params: Value,
         bound_ms: Option<u32>,
+        /// r17-1 / r17-10: asked on the person's own word (their Try again,
+        /// their press): the shell hands it to its pool as the person's ask
+        /// (`rpc_pool::Event::CallRequested::person`), which always puts it
+        /// on the wire — never answered from a cooldown or a skip window.
+        /// Absent: `false`.
+        #[serde(default)]
+        person: bool,
     },
     /// Read these store keys (the web's `localStorage`).
     LoadStore { keys: Vec<String> },
@@ -625,6 +632,9 @@ pub struct Io<Ev: Send + 'static> {
     /// with "slow down" ([`RpcFail::rate_limited`]) — shared by its clones,
     /// so a flow names the true cause of a read it could not make.
     limited: Shared<BTreeSet<u64>>,
+    /// r17-10: this command runs on the person's own word ([`Io::person`]):
+    /// its reads are the person's asks ([`MultisigOperation::Rpc::person`]).
+    person: bool,
 }
 
 impl<Ev: Send + 'static> Clone for Io<Ev> {
@@ -632,6 +642,7 @@ impl<Ev: Send + 'static> Clone for Io<Ev> {
         Self {
             ctx: self.ctx.clone(),
             limited: self.limited.clone(),
+            person: self.person,
         }
     }
 }
@@ -641,6 +652,19 @@ impl<Ev: Send + 'static> Io<Ev> {
         Self {
             ctx,
             limited: Arc::default(),
+            person: false,
+        }
+    }
+
+    /// r17-1 / r17-10: this command on the person's own word — their Try
+    /// again, their press. Every read it makes is sent as the person's ask
+    /// ([`MultisigOperation::Rpc::person`]): a local refusal (a pool's
+    /// cooldown, a shell's skip window) is never what answers it.
+    #[must_use]
+    pub fn person(&self) -> Self {
+        Self {
+            person: true,
+            ..self.clone()
         }
     }
 
@@ -745,6 +769,7 @@ impl<Ev: Send + 'static> Io<Ev> {
                 method: method.to_owned(),
                 params,
                 bound_ms,
+                person: self.person,
             })
             .await
         {

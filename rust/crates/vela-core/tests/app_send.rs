@@ -64,6 +64,7 @@ fn display() -> SendDisplayContext {
         code: "USD".to_owned(),
         rate: Some(1.0),
         fiat_decimals: 2,
+        space: Default::default(),
     }
 }
 
@@ -74,6 +75,7 @@ fn cny_display() -> SendDisplayContext {
         code: "CNY".to_owned(),
         rate: Some(7.17),
         fiat_decimals: 2,
+        space: Default::default(),
     }
 }
 
@@ -84,6 +86,7 @@ fn unpriced_display() -> SendDisplayContext {
         code: "CNY".to_owned(),
         rate: None,
         fiat_decimals: 2,
+        space: Default::default(),
     }
 }
 
@@ -10822,4 +10825,46 @@ fn a_new_figure_still_goes_back_to_the_person_unsigned() {
         !ops.iter().any(|op| matches!(op, Op::SubmitUserOp { .. })),
         "a figure nobody confirmed is never submitted: {ops:?}"
     );
+}
+
+/// Round 17 (r17-14): Android and iOS priced testnet Send amounts and fees in
+/// CNY ("≈ CN¥1.41") although the testnet space says nothing there has real
+/// value. One core rule (`network_space::shows_fiat`): in the testnet space
+/// no token is priced on this screen — whatever price the shell handed in —
+/// so no fiat beside an amount and no ⇄ into fiat. The mainnet space is
+/// unchanged.
+#[test]
+fn the_testnet_space_prices_nothing_on_send() {
+    use vela_core::app::network_space::NetworkSpace;
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Open {
+        account: Some(acct()),
+        params: SendOpenParams::default(),
+        display: SendDisplayContext {
+            code: "CNY".to_owned(),
+            rate: Some(7.17),
+            fiat_decimals: 2,
+            space: NetworkSpace::Testnet,
+        },
+    });
+    sut.resolve(loaded(vec![eth("2"), usdc("5")]));
+    let view = sut.view();
+    assert!(!view.tokens.is_empty());
+    assert!(
+        view.tokens.iter().all(|t| t.price_usd.is_none()),
+        "no token priced in the testnet space: {:?}",
+        view.tokens
+    );
+    sut.dispatch(Event::SelectToken {
+        token_id: usdc("5").id(),
+    });
+    let view = sut.view();
+    assert!(!view.denom_toggle_shown, "no way into fiat");
+    // The mainnet space: priced as before.
+    let mut main = boot(vec![eth("2"), usdc("5")]);
+    assert!(main.view().tokens.iter().all(|t| t.price_usd.is_some()));
+    main.dispatch(Event::SelectToken {
+        token_id: usdc("5").id(),
+    });
+    assert!(main.view().denom_toggle_shown);
 }

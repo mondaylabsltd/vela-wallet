@@ -356,6 +356,8 @@ pub struct World {
     pub safes: BTreeMap<(u64, String), DeployedSafe>,
     pub tx_counts: BTreeMap<(u64, String), u64>,
     pub rpc_log: Vec<(u64, String, Value)>,
+    /// r17-10: each read's method and whether it was the person's own ask.
+    pub rpc_person: Vec<(String, bool)>,
     pub rpc_hooks: Vec<RpcHook>,
     // The person.
     pub locals: Vec<LocalAccount>,
@@ -422,6 +424,7 @@ impl Default for World {
             safes: BTreeMap::new(),
             tx_counts: BTreeMap::new(),
             rpc_log: Vec::new(),
+            rpc_person: Vec::new(),
             rpc_hooks: Vec::new(),
             locals: Vec::new(),
             cancel_passkey: false,
@@ -882,8 +885,12 @@ impl World {
                 chain_id,
                 method,
                 params,
+                person,
                 ..
-            } => self.rpc(*chain_id, method, params),
+            } => {
+                self.rpc_person.push((method.clone(), *person));
+                self.rpc(*chain_id, method, params)
+            }
             Op::LoadStore { keys } => Res::StoreLoaded {
                 entries: keys
                     .iter()

@@ -4199,3 +4199,111 @@ fn a_batch_closes_on_its_last_answer_and_on_the_next_read() {
         .count();
     assert_eq!(named, 4);
 }
+
+/// Round 17 (r17-3, r17-4): "No activity yet" was said beside "Can't reach
+/// Arc Testnet" (web, desktop under a 429, Android, iOS), and Android in
+/// Mainnet said "Activity can't be read on 5042002": Arc's unread set
+/// leaked into the other space, by raw chain id. The rules, the core's:
+///
+/// - per space: only this space's networks are said unread; another space
+///   in front waits for a scan of this space before anything is claimed,
+///   and a scan asked in the other space settles nothing here;
+/// - per account: the balance's word is for the account it names;
+/// - a network counts as read only after a real answer: the balance's
+///   unread networks (failed, silent, rate limited) and a first read still
+///   out keep the claim back, and an unread network is said by its name.
+#[test]
+fn no_activity_is_claimed_per_space_and_account_only_over_networks_really_read() {
+    use vela_core::app::activity_feed::{ACTIVITY_UNREAD_MANY, ACTIVITY_UNREAD_ONE};
+    const ARC: u32 = 5_042_002;
+    let mut sut = Sut::new();
+    sut.dispatch(Event::SpaceChainsChanged {
+        chain_ids: Some(vec![11_155_111, ARC]),
+    });
+    sut.dispatch(Event::AccountSwitched {
+        address: ADDR.to_owned(),
+    });
+    sut.resolve(loaded(&sut, vec![], T0));
+    // The balance has not read the account yet: nothing claimed.
+    sut.dispatch(Event::BalanceRead {
+        account: ADDR.to_owned(),
+        read: false,
+        unread_chain_ids: vec![],
+    });
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
+    drain_aliases(&mut sut);
+    assert!(!sut.view().settled, "the balance's first read is still out");
+    // Its first read ended with Arc unread (hung, refused or 429): said by
+    // name, never "No activity yet".
+    sut.dispatch(Event::BalanceRead {
+        account: ADDR.to_owned(),
+        read: true,
+        unread_chain_ids: vec![ARC],
+    });
+    let view = sut.view();
+    assert!(!view.settled, "never claimed over an unread network");
+    assert_eq!(view.unread_chains, vec![ARC]);
+    assert_eq!(view.unread_key.as_deref(), Some(ACTIVITY_UNREAD_ONE));
+    assert_eq!(view.unread_network.as_deref(), Some("Arc Testnet"));
+    // Another account's word is not this account's.
+    sut.dispatch(Event::BalanceRead {
+        account: "0x7F3C000000000000000000000000000000De87".to_owned(),
+        read: true,
+        unread_chain_ids: vec![],
+    });
+    assert!(
+        !sut.view().settled,
+        "the balance said nothing of this account"
+    );
+    // Read in full: the claim is the core's.
+    sut.dispatch(Event::BalanceRead {
+        account: ADDR.to_ascii_lowercase(),
+        read: true,
+        unread_chain_ids: vec![],
+    });
+    assert!(sut.view().settled);
+    assert_eq!(sut.view().unread_key, None);
+
+    // A scan of the testnet space is out when the person switches to
+    // Mainnet; it could not read Arc.
+    sut.dispatch(Event::FocusTick);
+    sut.resolve(loaded(&sut, vec![], T0 + 1_000.0));
+    sut.dispatch(Event::SpaceChainsChanged {
+        chain_ids: Some(vec![1, 130]),
+    });
+    sut.resolve(loaded(&sut, vec![], T0 + 1_500.0));
+    let view = sut.view();
+    assert!(!view.settled, "this space is not scanned yet");
+    // The other space's scan lands: it settles nothing here, says nothing.
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![ARC],
+    });
+    let view = sut.view();
+    assert!(view.unread_chains.is_empty(), "Arc is not of this space");
+    assert_eq!(view.unread_key, None);
+    assert!(!view.settled, "a scan of the other space settles nothing");
+    // This space's scan: Unichain unread, by name.
+    sut.dispatch(Event::FocusTick);
+    sut.resolve(loaded(&sut, vec![], T0 + 2_000.0));
+    sut.resolve(Res::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![130, ARC],
+    });
+    let view = sut.view();
+    assert_eq!(view.unread_chains, vec![130], "only this space's network");
+    assert_eq!(view.unread_network.as_deref(), Some("Unichain"));
+    assert!(!view.settled);
+    // Two unread: counted — and named by nobody's chain id.
+    sut.dispatch(Event::BalanceRead {
+        account: ADDR.to_owned(),
+        read: true,
+        unread_chain_ids: vec![1],
+    });
+    let view = sut.view();
+    assert_eq!(view.unread_key.as_deref(), Some(ACTIVITY_UNREAD_MANY));
+    assert_eq!(view.unread_network, None);
+}

@@ -2311,8 +2311,21 @@ pub mod page {
         }
 
         /// An owner, on a transaction that is not a cancellation itself.
+        ///
+        /// Round 17 (outside page parity): also on a transaction Vela will
+        /// not sign (deep4, a delegatecall: the review refuses it, `Blocked`)
+        /// — the member's sheet offers Reject there, and a rejection is its
+        /// own transaction (the same number's cancellation), reviewed and
+        /// gated on its own before the wallet is asked. Never while the
+        /// review is unread, nor for a multisig whose own setup Vela refuses
+        /// (`Refused`: nothing is signed for it at all), nor once done.
         pub fn can_reject(&self, account: &str) -> bool {
-            self.open()
+            self.item.status != ItemStatus::Done
+                && self.review_state.is_ready()
+                && matches!(
+                    self.gate,
+                    PageGate::Open | PageGate::Risk { .. } | PageGate::Blocked
+                )
                 && self.is_owner(account)
                 && !matches!(self.item.review.action, Some(multisig::Action::Cancel))
         }
@@ -2943,11 +2956,25 @@ pub mod page {
         F: FnOnce(Io<Event>, Shared<PageState>) -> Fut + Send + 'static,
         Fut: std::future::Future<Output = ()> + Send + 'static,
     {
+        flow_as(model, false, f)
+    }
+
+    /// [`flow`]; `person`: on the person's own word (their Try again) — its
+    /// reads are the person's asks, always sent (r17-1 / r17-10).
+    fn flow_as<F, Fut>(model: &Model, person: bool, f: F) -> Cmd
+    where
+        F: FnOnce(Io<Event>, Shared<PageState>) -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = ()> + Send + 'static,
+    {
         let state = model.state.clone();
         Command::all([
             render(),
             Command::new(move |ctx| async move {
-                let io = Io::new(ctx);
+                let io = if person {
+                    Io::new(ctx).person()
+                } else {
+                    Io::new(ctx)
+                };
                 let now = io.now().await;
                 lock(&state).clock = now;
                 f(io.clone(), state.clone()).await;
@@ -3071,7 +3098,7 @@ pub mod page {
                             }
                         }
                     }
-                    flow(model, |io, st| async move { refresh(&io, &st).await })
+                    flow_as(model, true, |io, st| async move { refresh(&io, &st).await })
                 }
                 Event::Cancel => {
                     let mut s = lock(&model.state);

@@ -1084,6 +1084,21 @@ pub enum Event {
     /// Records of the other space stay stored and are not drawn: switching
     /// back shows them again.
     SpaceChainsChanged { chain_ids: Option<Vec<u32>> },
+    /// r17-3: where the balance's reads of `account` stand — the core's own
+    /// words for them ([`super::balance_dashboard::BalanceView::networks_read`]
+    /// and [`super::balance_dashboard::BalanceView::unread_chain_ids`]),
+    /// handed on by the shell whenever the balance view moves. "No activity
+    /// yet" is a claim about every network of the space: the scan reads
+    /// where the account holds or lives, the balance reads the rest, and
+    /// nothing may be claimed empty while either has a network unread — a
+    /// failure, a silence or a 429 is never a read. A shell that never says
+    /// it keeps the scan's word alone.
+    BalanceRead {
+        account: String,
+        read: bool,
+        #[serde(default)]
+        unread_chain_ids: Vec<u32>,
+    },
     /// A contact's page opened (`Some`) or closed (`None`): the view then
     /// carries what passed between the account and that address
     /// ([`FeedView::contact_rows`]).
@@ -1213,6 +1228,15 @@ pub struct Model {
     /// Round 16 leftover 5: the networks the last scan of THIS account could
     /// not read.
     unread: BTreeSet<u32>,
+    /// r17-3: the balance's word ([`Event::BalanceRead`]) — for which
+    /// account, whether its first read ended, and its unread networks.
+    /// `None` until a shell says it (then the scan's word alone counts).
+    balance: Option<(String, bool, BTreeSet<u32>)>,
+    /// r17-3: bumped when the space in front changes: a scan asked in
+    /// another space ([`Self::scan_space`]) settles nothing in this one.
+    space_epoch: u64,
+    /// r17-3: the space epoch the scan out (or last asked) was asked in.
+    scan_space: u64,
     /// The next `StoreLoaded` commit is a post-sync re-read that may
     /// celebrate its newest incoming item.
     celebrate_read_id: Option<u32>,
@@ -1382,6 +1406,12 @@ pub struct FeedView {
     /// are none. `None` when every network was read.
     #[serde(default)]
     pub unread_key: Option<String>,
+    /// r17-4: the one unread network's name, as the core knows it (a
+    /// built-in network's); `None` for several, or a network the person
+    /// added (the shell names it from its own list). A shell never says a
+    /// network by its raw chain id: with no name, the many-networks words.
+    #[serde(default)]
+    pub unread_network: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1473,7 +1503,41 @@ impl App for ActivityFeed {
                 render()
             }
             Event::SpaceChainsChanged { chain_ids } => {
-                model.space_chains = chain_ids.map(|ids| ids.into_iter().collect());
+                let chains: Option<BTreeSet<u32>> = chain_ids.map(|ids| ids.into_iter().collect());
+                if chains == model.space_chains {
+                    return render();
+                }
+                let moved = model.space_chains.is_some() && chains.is_some();
+                model.space_chains = chains;
+                if !moved {
+                    // The shell telling the space it starts in (or a shell
+                    // with no spaces): nothing was read in another one.
+                    return render();
+                }
+                // r17-3: another space is in front. What was read, and what
+                // could not be, was of the other space's networks: "No
+                // activity yet" waits for a scan of this space, and the
+                // scan goes out now.
+                model.space_epoch = model.space_epoch.wrapping_add(1);
+                model.scanned = false;
+                model.scan_pending = false;
+                model.unread.clear();
+                load_pipeline(model)
+            }
+            Event::BalanceRead {
+                account,
+                read,
+                unread_chain_ids,
+            } => {
+                let next = Some((
+                    account.to_lowercase(),
+                    read,
+                    unread_chain_ids.into_iter().collect::<BTreeSet<u32>>(),
+                ));
+                if next == model.balance {
+                    return Command::done();
+                }
+                model.balance = next;
                 render()
             }
             Event::ContactFilterChanged { address } => {
@@ -1581,11 +1645,32 @@ impl App for ActivityFeed {
             })
         };
 
+        // r17-3 / r17-4: the networks of THIS account, in THIS space (and
+        // the chain filter), that were not read — by the scan, or by the
+        // balance's reads of every other network — never another space's.
+        let account = model.address.to_lowercase();
+        let balance = model
+            .balance
+            .as_ref()
+            .filter(|(of, _, _)| !account.is_empty() && *of == account);
+        let balance_read = match &model.balance {
+            None => true,
+            Some(_) => balance.is_some_and(|(_, read, _)| *read),
+        };
         let unread_chains: Vec<u32> = model
             .unread
             .iter()
+            .chain(balance.into_iter().flat_map(|(_, _, unread)| unread.iter()))
             .copied()
+            .collect::<BTreeSet<u32>>()
+            .into_iter()
             .filter(|chain| model.chain_filter.is_none_or(|f| f == *chain))
+            .filter(|chain| {
+                model
+                    .space_chains
+                    .as_ref()
+                    .is_none_or(|space| space.contains(chain))
+            })
             .collect();
         FeedView {
             rows,
@@ -1599,7 +1684,12 @@ impl App for ActivityFeed {
             settled: !model.address.is_empty()
                 && model.store_read
                 && model.scanned
+                && balance_read
                 && unread_chains.is_empty(),
+            unread_network: match unread_chains.as_slice() {
+                [one] => super::network_admin::builtin_display_name(*one).map(str::to_owned),
+                _ => None,
+            },
             unread_key: match unread_chains.len() {
                 0 => None,
                 1 => Some(ACTIVITY_UNREAD_ONE.to_owned()),
@@ -1868,14 +1958,22 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
             unread_chains,
         } => {
             model.scan_in_flight = false;
+            // r17-3: a scan asked while another space was in front reads
+            // that space's networks: it settles nothing here, and says
+            // nothing of what this space could not read.
+            let this_space = model.scan_space == model.space_epoch;
             // Round 16 leftover 5: what this scan could not read replaces
             // what the last one could not; a change is drawn.
-            let unread: BTreeSet<u32> = unread_chains.into_iter().collect();
+            let unread: BTreeSet<u32> = if this_space {
+                unread_chains.into_iter().collect()
+            } else {
+                model.unread.clone()
+            };
             let unread_moved = unread != model.unread;
             model.unread = unread;
             // r15-1: the first scan of this account back settles whether
             // "No activity yet" may be said ([`settle_scan`]).
-            let first_scan = !model.scanned;
+            let first_scan = !model.scanned && this_space;
             // `initializedRef.current = true` runs whether or not anything
             // landed — the first pass is spent either way (invariant ③).
             let first_pass = !model.initialized;
@@ -3501,6 +3599,7 @@ fn start_scan(model: &mut Model, again_if_out: bool) -> Option<Command<FeedEffec
         }
     }
     model.scan_in_flight = true;
+    model.scan_space = model.space_epoch;
     if let Some(cadence) = model.cadence.as_mut() {
         cadence.last_scan_ms = Some(cadence.presence.now_ms);
     }
