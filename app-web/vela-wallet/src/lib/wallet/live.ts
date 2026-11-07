@@ -16,6 +16,8 @@
  * the day headers and formats the amounts.
  */
 
+import { showsFiat } from '$lib/network-space/fiat';
+import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
 import type { BalanceToken } from '$lib/core/generated/BalanceToken';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
@@ -85,6 +87,12 @@ export interface WalletLiveInputs {
 	 * a row. Absent, the mainnet space.
 	 */
 	noValue?: string;
+	/**
+	 * r18-9 (spec 105): the space in front, for the surfaces `noValue` does
+	 * not reach (a token's own panel): the testnet space shows no fiat there
+	 * either (`showsFiat`). Absent: the device's space.
+	 */
+	space?: NetworkSpace;
 	/**
 	 * r13-1: the account shown lives in the other space (the core's
 	 * `network_space::lives_elsewhere`): `heading` (that space's) stands in
@@ -1368,11 +1376,14 @@ export function liveAssetDetail(
 	const hidden = view.hidden;
 	const art = balanceTokenMark(token);
 	const held = parseFloat(token.balance) || 0;
+	// r18-9 (spec 105): the testnet space gives a token no worth and no
+	// price — not even "no price": nothing there has real value.
+	const priced = inputs.noValue === undefined && showsFiat(inputs.space);
 	// A worth that exists is masked in place when hidden, never dropped: the
 	// line read "$496.46 · BNB Chain" shown and "BNB Chain" hidden, as if the
 	// token had no price. One with no price has no worth to hide.
 	const fiat =
-		token.price_usd === null
+		token.price_usd === null || !priced
 			? undefined
 			: hidden
 				? MASK
@@ -1398,16 +1409,20 @@ export function liveAssetDetail(
 		},
 		facts: [
 			{ label: m.assetDetail.labelName, value: token.name },
-			{
-				label: m.assetDetail.labelPrice,
-				value:
-					token.price_usd === null
-						? m.balance.noPrice
-						: fill(m.assetDetail.priceValue, {
-								symbol: token.symbol,
-								value: moneyText(token.price_usd, currency)
-							})
-			},
+			...(priced
+				? [
+						{
+							label: m.assetDetail.labelPrice,
+							value:
+								token.price_usd === null
+									? m.balance.noPrice
+									: fill(m.assetDetail.priceValue, {
+											symbol: token.symbol,
+											value: moneyText(token.price_usd, currency)
+										})
+						}
+					]
+				: []),
 			{
 				label: m.assetDetail.labelContract,
 				value:

@@ -50,7 +50,8 @@
 	</div>
 
 	<p class="balance">{model.balance}</p>
-	<p class="fiat">{model.fiat}</p>
+	<!-- r18-9: the testnet space gives a token no worth — no line for one. -->
+	{#if model.fiat}<p class="fiat">{model.fiat}</p>{/if}
 
 	<div class="actions">
 		<Button variant="secondary" onclick={onreceive}>{model.receive}</Button>

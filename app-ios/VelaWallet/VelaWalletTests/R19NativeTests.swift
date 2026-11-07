@@ -454,7 +454,7 @@ struct R19NativeTests {
     }
 
     /// The other places the guard's refusal is handed to the core (§32): the
-    /// publish's sync-failed screen (its sentence, no Retry Upload), the
+    /// publish's sync-failed screen (its sentence; Retry Upload kept), the
     /// session's landing, the multisig service's write, and the multisig
     /// words for a refused record.
     @Test func everyRefusedWriteIsHandedOnAndSaidAsTheTestBuilds() async throws {
@@ -465,7 +465,7 @@ struct R19NativeTests {
             RegistryFailure(message: "Register: refused", network: false, refused: true))
         #expect(landing["type"] as? String == "registry_landing_unconfirmed")
         #expect(landing["refused"] as? Bool == true)
-        #expect(SessionExecutor.landingUnconfirmed(URLError(.timedOut))["refused"] as? Bool == false)
+        #expect(SessionExecutor.landingUnconfirmed(URLError(.timedOut))["refused"] == nil)
         // The create's publish: the screen's sentence is the core's key.
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
@@ -476,7 +476,8 @@ struct R19NativeTests {
         defer { screen.close() }
         let seen = try await screen.read { $0.says(refused) }
         #expect(seen.says(refused), "\(seen.words)")
-        #expect(!seen.says(loc.t(I18nKeys.Create.retryUploadBtn)), "no Retry Upload that cannot help: \(seen.words)")
+        // §32: Retry Upload stays the person's own press.
+        #expect(seen.says(loc.t(I18nKeys.Create.retryUploadBtn)), "\(seen.words)")
         #expect(seen.says(loc.t(I18nKeys.Flow.editIndexEndpoint)), "the way on: a local index")
         try await screen.save("r18-18-sync-failed-refused")
         let views = try String(contentsOf: URL(fileURLWithPath: #filePath)

@@ -819,19 +819,18 @@ struct RetryScreen: View {
             .scrollBounceBehavior(.basedOnSize)
 
             VStack(spacing: Tokens.Space.s12) {
-                // A refusal of this build's: the same publish would be refused
-                // again — the way on is a local index (the address), not Retry.
-                if sentenceKey == nil {
-                    VelaButton(
-                        title: loc.t(I18nKeys.Create.retryUploadBtn),
-                        kind: .primary,
-                        loading: busy,
-                        action: onRetry
-                    )
-                }
+                // r18-8 (§32): a refused publish keeps Retry Upload — the
+                // person's own press, never the core's by itself; the
+                // sentence above (`sync_error_key`) says why it failed.
+                VelaButton(
+                    title: loc.t(I18nKeys.Create.retryUploadBtn),
+                    kind: .primary,
+                    loading: busy,
+                    action: onRetry
+                )
                 VelaButton(
                     title: loc.t(I18nKeys.Flow.editIndexEndpoint),
-                    kind: sentenceKey == nil ? .secondary : .primary,
+                    kind: .secondary,
                     enabled: !busy,
                     action: onEditEndpoint
                 )

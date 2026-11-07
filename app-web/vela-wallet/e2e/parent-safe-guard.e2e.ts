@@ -38,6 +38,7 @@ import {
 } from './extension-helpers';
 import { denyOffOrigin, happyRelay, stubJsonRpc, stubRelay } from './stub-chain';
 import { FIXTURES, multisigOf, storedRow, type Multisig } from './stub-multisig';
+import { eip55 } from '../src/lib/multisig/external/eip55';
 
 const APP_ROOT = join(import.meta.dirname, '..');
 const PORT = 8853;
@@ -76,6 +77,160 @@ function takeover(signer: string, multisig: string): { from: string; to: string;
 const short = (address: string) => `${address.slice(0, 8)}…${address.slice(-6)}`;
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/** A Safe this device does not list — the account's only if `isOwner` says so. */
+const UNKNOWN_SAFE = '0x7777777777777777777777777777777777777777';
+const IS_OWNER = '0x2f54bf6e';
+const ABI_TRUE = '0x' + '0'.repeat(63) + '1';
+/** How long the node takes to answer `isOwner`: long enough for many frames. */
+const READ_DELAY_MS = 800;
+
+/** EIP-712 `SafeMessage` under `safe`'s domain on chain 1 (§31 (c)). */
+function safeMessage(safe: string): string {
+	return JSON.stringify({
+		types: {
+			EIP712Domain: [
+				{ name: 'chainId', type: 'uint256' },
+				{ name: 'verifyingContract', type: 'address' }
+			],
+			SafeMessage: [{ name: 'message', type: 'bytes' }]
+		},
+		primaryType: 'SafeMessage',
+		domain: { chainId: 1, verifyingContract: safe },
+		message: { message: '0x' + 'ab'.repeat(32) }
+	});
+}
+
+/**
+ * Every off-origin POST that is the core's `isOwner` read of
+ * {@link UNKNOWN_SAFE}: answered `true` (the account owns it) after
+ * {@link READ_DELAY_MS}. Anything else is refused (`hermetic`), or — the web
+ * wallet, whose home reads every network in the background — a public node's
+ * JSON-RPC is ANSWERED with "method not available" (a refused request would
+ * have the pool find the network silent and skip it, and the read would
+ * never be asked), while the suite's own stubs answer theirs.
+ */
+async function slowIsOwner(
+	target: Page | BrowserContext,
+	hermetic: boolean,
+	own: RegExp = /stub-rpc\.test|vela-relay/
+): Promise<{ reads: number }> {
+	const seen = { reads: 0 };
+	await target.route(/^https?:\/\/(?!localhost[:/]|127\.0\.0\.1[:/])/, async (route) => {
+		const request = route.request();
+		if (request.method() === 'POST') {
+			let body: unknown;
+			try {
+				body = JSON.parse(request.postData() ?? 'null');
+			} catch {
+				body = null;
+			}
+			const calls = (Array.isArray(body) ? body : [body]) as {
+				id?: number;
+				method?: string;
+				params?: [{ to?: string; data?: string }];
+			}[];
+			const read = calls.find(
+				(c) =>
+					c?.method === 'eth_call' &&
+					String(c.params?.[0]?.to ?? '').toLowerCase() === UNKNOWN_SAFE &&
+					String(c.params?.[0]?.data ?? '').startsWith(IS_OWNER)
+			);
+			if (read && calls.length === 1) {
+				seen.reads += 1;
+				await new Promise((r) => setTimeout(r, READ_DELAY_MS));
+				return route.fulfill({
+					contentType: 'application/json',
+					body: JSON.stringify({ jsonrpc: '2.0', id: read.id ?? 1, result: ABI_TRUE })
+				});
+			}
+		}
+		if (hermetic) return route.abort('blockedbyclient');
+		if (request.method() !== 'POST' || own.test(request.url())) return route.fallback();
+		return route.fulfill({
+			contentType: 'application/json',
+			body: JSON.stringify({
+				jsonrpc: '2.0',
+				id: 1,
+				error: { code: -32601, message: 'the method is not available on this stub' }
+			})
+		});
+	});
+	return seen;
+}
+
+/** One drawn frame of a page: its buttons, and the two lines that matter here. */
+interface Frame {
+	at: number;
+	buttons: { text: string; disabled: boolean }[];
+	confirm: { text: string; disabled: boolean } | null;
+	reading: boolean;
+	refused: boolean;
+}
+
+/**
+ * r18-6: a FRAME WATCHER, from the document's first frame — every mutation
+ * and every animation frame, every button whatever its state (a shut "Sign
+ * anyway" is the bug), recorded each time what is drawn changes.
+ */
+function watchFrames(): void {
+	const w = window as unknown as { __frames: Frame[] };
+	w.__frames = [];
+	const started = performance.now();
+	let last = '';
+	const look = () => {
+		const body = document.body;
+		if (!body) return;
+		const text = body.textContent ?? '';
+		const buttons = [...document.querySelectorAll('button')].map((b) => ({
+			text: (b.textContent ?? '').replace(/\s+/g, ' ').trim(),
+			disabled: b.disabled || b.getAttribute('aria-disabled') === 'true'
+		}));
+		const c = document.querySelector<HTMLButtonElement>('[data-testid="signing-confirm"]');
+		const frame = {
+			buttons,
+			confirm: c
+				? {
+						text: (c.textContent ?? '').replace(/\s+/g, ' ').trim(),
+						disabled: c.disabled || c.getAttribute('aria-disabled') === 'true'
+					}
+				: null,
+			reading: text.includes('Reading the request…'),
+			refused: text.includes('Vela can’t sign this')
+		};
+		const key = JSON.stringify(frame);
+		if (key === last) return;
+		last = key;
+		w.__frames.push({ at: Math.round(performance.now() - started), ...frame });
+	};
+	new MutationObserver(look).observe(document, {
+		subtree: true,
+		childList: true,
+		attributes: true,
+		characterData: true
+	});
+	const tick = () => {
+		look();
+		requestAnimationFrame(tick);
+	};
+	requestAnimationFrame(tick);
+}
+
+/** What every frame from the request's arrival to its refusal drew. */
+function expectNoAnywayFrame(frames: Frame[]): void {
+	const anyway = frames.filter((f) => f.buttons.some((b) => /anyway/i.test(b.text)));
+	expect(
+		anyway.map((f) => `${f.at} ms: ${f.buttons.map((b) => b.text).join(' | ')}`),
+		'a frame drew an "… anyway" button'
+	).toEqual([]);
+	// The read was seen out: "Reading the request…" over a shut, plain "Sign".
+	expect(
+		frames.some((f) => f.reading && f.confirm?.text === 'Sign' && f.confirm.disabled),
+		'no frame said "Reading the request…" over a disabled "Sign"'
+	).toBe(true);
+	// …and then refused, with no confirm at all.
+	expect(frames.some((f) => f.refused && f.confirm === null)).toBe(true);
+}
+
 /** A 1-of-2 multisig fixture one is a member of — the one a takeover needs a single signature for. */
 const memberMultisig = () =>
 	multisigOf([FIXTURES.one, FIXTURES.two], 1, 'Parent guard fund', '0x31');
@@ -84,7 +239,11 @@ test.describe('the web wallet (its requester)', () => {
 	test.use({ viewport: { width: 390, height: 844 } });
 	test.setTimeout(120_000);
 
-	async function openWallet(page: Page, ms: Multisig): Promise<void> {
+	async function openWallet(
+		page: Page,
+		ms: Multisig,
+		routes?: () => Promise<unknown>
+	): Promise<void> {
 		await denyOffOrigin(page);
 		await stubJsonRpc(page, /stub-rpc\.test\/rpc\/(\d+)/, (method) => {
 			if (method === 'eth_chainId') return '0x1';
@@ -93,6 +252,7 @@ test.describe('the web wallet (its requester)', () => {
 			return undefined;
 		});
 		await stubRelay(page, RELAY, happyRelay('0x' + '11'.repeat(32), '0x' + '22'.repeat(32)));
+		await routes?.();
 		await page.addInitScript(
 			({ key, account, row }) => {
 				localStorage.setItem('vela.intro.seen', String(Date.now()));
@@ -151,7 +311,7 @@ test.describe('the web wallet (its requester)', () => {
 		await expect(page.getByText('Vela can’t sign this')).toBeVisible({ timeout: 30_000 });
 		const sentence = page.getByText(/multisig you’re a member of \(execTransaction on/);
 		await expect(sentence).toBeVisible();
-		await expect(sentence).toContainText(new RegExp(escape(short(ms.address)), 'i'));
+		await expect(sentence).toContainText(new RegExp(escape(short(eip55(ms.address)))));
 		await expect(page.getByTestId('signing-confirm')).toHaveCount(0);
 		await expect(page.getByText(/anyway/i)).toHaveCount(0);
 
@@ -165,6 +325,44 @@ test.describe('the web wallet (its requester)', () => {
 		expect(await page.evaluate(() => (window as unknown as { __answer?: unknown }).__answer)).toBe(
 			undefined
 		);
+	});
+
+	/**
+	 * r18-6: a SafeMessage under a Safe this device does not list — the core
+	 * reads `isOwner` first (`confirm_block: reading`). Every frame from its
+	 * arrival to the refusal: "Reading the request…" over a shut "Sign",
+	 * never a "Sign anyway" (shut or not), then the parent's refusal.
+	 */
+	test('a SafeMessage to an unlisted Safe: every frame until the refusal, and none says "anyway"', async ({
+		page
+	}) => {
+		const ms = await memberMultisig();
+		let seen = { reads: 0 };
+		await openWallet(page, ms, async () => (seen = await slowIsOwner(page, false)));
+		await page.evaluate(watchFrames);
+		await page.evaluate(
+			({ signer, data }) => {
+				const w = window as unknown as {
+					vela: { requester: { fire(method: string, params: unknown[]): Promise<unknown> } };
+					__error?: unknown;
+				};
+				void w.vela.requester
+					.fire('eth_signTypedData_v4', [signer, data])
+					.catch((error) => (w.__error = error));
+			},
+			{ signer: FIXTURES.one, data: safeMessage(UNKNOWN_SAFE) }
+		);
+		await expect(page.getByText('Vela can’t sign this')).toBeVisible({ timeout: 30_000 });
+		await expect(page.getByText(/multisig you’re a member of \(SafeMessage on/)).toBeVisible();
+		expect(seen.reads).toBe(1);
+		const frames = await page.evaluate(() => (window as unknown as { __frames: Frame[] }).__frames);
+		expectNoAnywayFrame(frames);
+		await page.getByRole('button', { name: /^close$/i }).click();
+		await expect
+			.poll(() =>
+				page.evaluate(() => (window as unknown as { __error?: { code?: number } }).__error ?? null)
+			)
+			.toMatchObject({ code: -32603, kind: 'parent_safe_blocked' });
 	});
 });
 
@@ -247,7 +445,7 @@ test.describe('the Chrome extension (a real site, its request window)', () => {
 		await expect(win.getByText('Vela can’t sign this')).toBeVisible({ timeout: 30_000 });
 		const sentence = win.getByText(/multisig you’re a member of \(execTransaction on/);
 		await expect(sentence).toBeVisible();
-		await expect(sentence).toContainText(new RegExp(escape(short(ms.address)), 'i'));
+		await expect(sentence).toContainText(new RegExp(escape(short(eip55(ms.address)))));
 		await expect(win.getByTestId('signing-confirm')).toHaveCount(0);
 
 		await win.getByRole('button', { name: /^close$/i }).click();
@@ -255,6 +453,47 @@ test.describe('the Chrome extension (a real site, its request window)', () => {
 		expect(answer.ok).toBe(false);
 		expect(answer.code).toBe(-32603);
 		expect(answer.message).toMatch(/act for a multisig this account is a member of/);
+		await context.close();
+	});
+
+	/**
+	 * r18-6 (seen on Safari's package, the same code): the request window, a
+	 * SafeMessage under a Safe the device does not list — every frame of the
+	 * window from its first: never a "Sign anyway", "Reading the request…"
+	 * over a shut "Sign" while `isOwner` is out, then the refusal.
+	 */
+	test('a SafeMessage to an unlisted Safe: every frame of the window, and none says "anyway"', async () => {
+		const ms = await memberMultisig();
+		const context = await loadExtension();
+		await walletWith(context, ms);
+		const seen = await slowIsOwner(context, true);
+		// Every document of the context from its first frame: the request
+		// window included, which opens with the request.
+		await context.addInitScript(watchFrames);
+		const page = await context.newPage();
+		await page.goto(`http://localhost:${PORT}/`);
+		const connected = page.evaluate(() =>
+			window.__ask('eth_requestAccounts')
+		) as Promise<AskResult>;
+		const consent = await requestWindow(context);
+		await consent.getByRole('button', { name: 'Connect' }).click();
+		expect((await connected).result).toEqual([FIXTURES.one]);
+		await noRequestWindow(context);
+
+		const asked = page.evaluate(
+			({ signer, data }) => window.__ask('eth_signTypedData_v4', [signer, data]),
+			{ signer: FIXTURES.one, data: safeMessage(UNKNOWN_SAFE) }
+		) as Promise<AskResult>;
+		const win = await requestWindow(context);
+		await expect(win.getByText('Vela can’t sign this')).toBeVisible({ timeout: 30_000 });
+		await expect(win.getByText(/multisig you’re a member of \(SafeMessage on/)).toBeVisible();
+		expect(seen.reads).toBe(1);
+		const frames = await win.evaluate(() => (window as unknown as { __frames: Frame[] }).__frames);
+		expectNoAnywayFrame(frames);
+		await win.getByRole('button', { name: /^close$/i }).click();
+		const answer = await asked;
+		expect(answer.ok).toBe(false);
+		expect(answer.code).toBe(-32603);
 		await context.close();
 	});
 });

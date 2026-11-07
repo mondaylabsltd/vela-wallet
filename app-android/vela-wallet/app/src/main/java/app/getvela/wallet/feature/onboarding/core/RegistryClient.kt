@@ -553,7 +553,10 @@ class RegistryClient(
 class RegistryFailure(
     message: String,
     val network: Boolean,
-    /** r18-8 (§28, §32): this test build refused to write to the live index — never sent. */
+    /**
+     * r18-8 (§28, §32): this test build's guard refused the write to the live
+     * index before it left — neither the index nor the network.
+     */
     val refused: Boolean = false,
 ) : Exception(message)
 

@@ -19,6 +19,7 @@
  * rejects for an expected failure. A dependency that throws is answered with
  * that operation's own failure ({@link operationFailure}).
  */
+import { isProductionWriteRefused } from '$lib/services/production-guard';
 import type { MultisigOperation } from '../generated/MultisigOperation';
 import type { MultisigShellResult } from '../generated/MultisigShellResult';
 import type { MultisigNotice } from '../generated/MultisigNotice';
@@ -166,7 +167,10 @@ export function operationFailure(op: MultisigOperation, error: unknown): Multisi
 	const detail = errorText(error);
 	switch (op.type) {
 		case 'http':
-			return { type: 'http_unreachable', detail };
+			// r18-8: a refusal by this test build is its own kind, here too.
+			return isProductionWriteRefused(error)
+				? { type: 'http_unreachable', detail, refused: true }
+				: { type: 'http_unreachable', detail };
 		case 'rpc':
 			return { type: 'rpc_unanswered', detail };
 		case 'load_store':
@@ -248,7 +252,11 @@ export function multisigShell(deps: MultisigShellDeps) {
 						body
 					};
 				} catch (error) {
-					return { type: 'http_unreachable', detail: errorText(error) };
+					// r18-8 (§28, §32): this test build refused the write before it
+					// left — its own kind (asked once, never an outage).
+					return isProductionWriteRefused(error)
+						? { type: 'http_unreachable', detail: errorText(error), refused: true }
+						: { type: 'http_unreachable', detail: errorText(error) };
 				} finally {
 					clearTimeout(timer);
 					signal.removeEventListener('abort', stop);

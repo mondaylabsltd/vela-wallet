@@ -520,7 +520,8 @@ class R19NativeFixesTest {
             unsent = true,
         )
         assertEquals(refusedWords, outbox.notes.single { it.id == "outbox" }.text)
-        assertTrue("no Send again that would be refused again", !outbox.offersSendAgain)
+        // §32: kept with no retry of the core's own (`retry_at: null`) — Send again is the person's.
+        assertTrue("Send again is the person's way on", outbox.offersSendAgain)
         assertEquals(refusedWords, app.getvela.wallet.feature.multisig.createdSharedLine(msWords, shared = false, refused = "production_write_refused", working = false, solo = false).first)
         assertNotEquals(refusedWords, app.getvela.wallet.feature.multisig.createdSharedLine(msWords, shared = false, refused = "refused", working = false, solo = false).first)
         // A failed action of that kind, in the catalog's words.

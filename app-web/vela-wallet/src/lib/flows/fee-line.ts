@@ -17,6 +17,8 @@ import type { FeeEstimateView } from '$lib/core/generated/FeeEstimateView';
 import type { FeeView } from '$lib/core/generated/FeeView';
 import { nativeSymbol } from '$lib/services/networks';
 import { moneyText, trimBalance } from '$lib/wallet/live';
+import { showsFiat } from '$lib/network-space/fiat';
+import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
 
 /**
  * Below this the token amount is the honest primary and the fiat half is left
@@ -144,20 +146,36 @@ export function feeOptionPriceUsd(
 export function feeLineParts(
 	parts: FeeParts,
 	priceUsd: number | null,
-	currency: CurrencyView
+	currency: CurrencyView,
+	space?: NetworkSpace
 ): { coin: string; fiat: string | null } {
-	const money = feeMoney(parts, priceUsd, currency);
+	const money = feeMoney(parts, priceUsd, currency, space);
 	return { coin: parts.coin, fiat: money === null ? null : `≈ ${money}` };
 }
 
 /** "0.0021 ETH · ≈$0.55" — the coin, and what it costs when anything can say. */
-export function feeLine(parts: FeeParts, priceUsd: number | null, currency: CurrencyView): string {
-	const money = feeMoney(parts, priceUsd, currency);
+export function feeLine(
+	parts: FeeParts,
+	priceUsd: number | null,
+	currency: CurrencyView,
+	space?: NetworkSpace
+): string {
+	const money = feeMoney(parts, priceUsd, currency, space);
 	return money === null ? parts.coin : `${parts.coin} · ≈${money}`;
 }
 
-/** The ONE decision both shapes above share: is there a money figure to show. */
-function feeMoney(parts: FeeParts, priceUsd: number | null, currency: CurrencyView): string | null {
+/**
+ * The ONE decision both shapes above share: is there a money figure to show.
+ * r18-9: never in the testnet space (`showsFiat`) — a test coin's fee has no
+ * real value, whatever price a relay published for it.
+ */
+function feeMoney(
+	parts: FeeParts,
+	priceUsd: number | null,
+	currency: CurrencyView,
+	space?: NetworkSpace
+): string | null {
+	if (!showsFiat(space)) return null;
 	if (parts.units === null || priceUsd === null) return null;
 	const usd = parts.units * priceUsd;
 	if (usd < FEE_FIAT_MIN_USD) return null;

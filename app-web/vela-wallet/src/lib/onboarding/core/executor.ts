@@ -16,6 +16,7 @@ import * as Passkey from './passkey';
 import { PasskeyError } from './passkey';
 import * as Registry from './registry';
 import { RegistryError } from './registry';
+import { isProductionWriteRefused } from '$lib/services/production-guard';
 import * as Storage from './storage';
 import { StorageError } from './storage';
 import { publish } from './publish';
@@ -382,6 +383,11 @@ function indexFailure(error: unknown): ShellResult {
 	// `network` is the one bit of classification only a shell can supply: a
 	// request that never arrived is not the same as one the server refused.
 	const network = error instanceof RegistryError ? error.network : true;
+	// r18-8 (§28, §32): this test build refused the write before it left —
+	// its own kind, never the network's or the index's.
+	if ((error instanceof RegistryError && error.refused) || isProductionWriteRefused(error)) {
+		return { type: 'index_failed', message: describe(error), network: false, refused: true };
+	}
 	return { type: 'index_failed', message: describe(error), network };
 }
 

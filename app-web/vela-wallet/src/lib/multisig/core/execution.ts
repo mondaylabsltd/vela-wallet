@@ -53,6 +53,12 @@ export type ExecutionPreview =
 			carries: string[];
 			/** The executor approves by sending it (`msg.sender`). */
 			executorApproves: boolean;
+			/**
+			 * r18-5 (§32): a press is out on this look — its figure is the one
+			 * being signed, fixed (never re-quoted) until the passkey's confirm,
+			 * cancel or stop. The core serves it `signing: true`.
+			 */
+			signing?: boolean;
 			setup: {
 				multisig: boolean;
 				/** Members whose accounts it activates (deploys) for their approvals. */

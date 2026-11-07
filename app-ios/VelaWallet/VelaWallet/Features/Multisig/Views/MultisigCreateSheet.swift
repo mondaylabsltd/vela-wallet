@@ -557,8 +557,8 @@ struct MultisigCreateSheet: View {
     private var createdStep: some View {
         let row = hub.accountsView.row(created)
         let solo = owners.count == 1
-        let shared = Self.sharedLine(shared: row?.shared == true, solo: solo, refused: sheet.refused,
-                                     working: sheet.phase == .working, words: words)
+        let shared = Self.sharedLine(shared: row?.shared == true, solo: solo, refused: sheet.refused != nil,
+                                     working: sheet.phase == .working, words: words, refusedWord: sheet.refused)
         return VStack(alignment: .leading, spacing: Tokens.Space.s16) {
             Text(prose: words.t("create.created"))
                 .typeRole(Typography.title.scaled(textScale))
@@ -585,16 +585,18 @@ struct MultisigCreateSheet: View {
     /// record the service ANSWERED and did not take is the core's `refused`
     /// (§30) — said as what is true and what to do (`settings.shareAgainNote`),
     /// never "the multisig service can't be reached", which only a service
-    /// that did not answer is.
-    ///
-    /// r18-8 (§28, §32): refused by this test build before it left
-    /// (`production_write_refused`) — the test build's sentence, never the
-    /// service's refusal or its silence.
-    static func sharedLine(shared: Bool, solo: Bool, refused: String?, working: Bool, words: MsWords) -> String {
+    /// that did not answer is. r18-8: `production_write_refused` (this test
+    /// build would not write to the live service) is its own sentence.
+    static func sharedLine(shared: Bool, solo: Bool, refused: Bool, working: Bool, words: MsWords,
+                           refusedWord: String? = nil) -> String {
         if shared { return words.t(solo ? "create.sharedSolo" : "create.shared") }
-        if refused == MsWords.productionWriteRefusedKind { return words.loc.t(MsWords.productionWriteRefusedKey) }
-        if refused != nil { return words.createRefused }
+        if refused { return words.createRefused(refusedWord) }
         return working ? words.t("create.savedSharing") : words.t("create.savedLater")
+    }
+
+    /// The same line from the core's word as it stands (`create.refused`).
+    static func sharedLine(shared: Bool, solo: Bool, refused: String?, working: Bool, words: MsWords) -> String {
+        sharedLine(shared: shared, solo: solo, refused: refused != nil, working: working, words: words, refusedWord: refused)
     }
 
     private func close() {

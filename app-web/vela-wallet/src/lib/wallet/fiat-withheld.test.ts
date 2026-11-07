@@ -63,6 +63,29 @@ import {
 	withLiveWalletDesktop
 } from './live';
 import { liveTxDetail } from './live-detail';
+import type { BatchView } from '$lib/core/generated/BatchView';
+import type { ClearSignField } from '$lib/core/generated/ClearSignField';
+import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
+import type { FeeEstimateView } from '$lib/core/generated/FeeEstimateView';
+import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
+import type { FeeView } from '$lib/core/generated/FeeView';
+import type { SendToken } from '$lib/core/generated/SendToken';
+import type { SendView } from '$lib/core/generated/SendView';
+import type { SignView } from '$lib/core/generated/SignView';
+import { resolveSigningMessages } from '$lib/i18n/engine.server';
+import { IDLE_FEE_VIEW } from '$lib/flows/core/fee-quote.svelte';
+import { liveBatchImport } from '$lib/flows/live-batch';
+import {
+	liveSendConfirm,
+	liveSendForm,
+	liveSendPick,
+	type SendLiveInputs
+} from '$lib/flows/live-send';
+import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
+import { buildSigningModel, type SigningLiveInputs } from '$lib/signing/live';
+import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from '$lib/signing/core/sheet.svelte';
+import { INITIAL_SIGN_VIEW } from '$lib/signing/core/sign-resident.svelte';
+import { SEND_BASE } from './testing/send-view';
 import {
 	COMMITTED,
 	expectWithheld,
@@ -122,6 +145,23 @@ const accounts = (currency: CurrencyView): LiveAccountsInput => ({
 	identicon
 });
 
+const flowState = (id: 'sd1' | 'sd2' | 'sd3') => buildFlowState(id, fm, identicon).base;
+const sendPickModel = () => {
+	const base = flowState('sd1');
+	if (base.kind !== 'send-pick') throw new Error('sd1 is the coin list');
+	return base.model;
+};
+const sendFormModel = () => {
+	const base = flowState('sd2');
+	if (base.kind !== 'send-form') throw new Error('sd2 is the form');
+	return base.model;
+};
+const sendConfirmModel = () => {
+	const base = flowState('sd3');
+	if (base.kind !== 'send-confirm') throw new Error('sd3 is the review');
+	return base.model;
+};
+
 // Spec 105: the testnet space has nothing of real value — no total, and no
 // worth on a holding's row, whatever the coins' pegs say.
 describe('the testnet space', () => {
@@ -141,6 +181,324 @@ describe('the testnet space', () => {
 		expect(liveBalance({ ...balance, hidden: true }, COMMITTED, m, undefined, NO_VALUE).state).toBe(
 			'hidden'
 		);
+	});
+
+	/**
+	 * r18-9 (spec 105, `network_space::shows_fiat`): the testnet space shows
+	 * NO fiat anywhere. Every money surface's model, built in the testnet
+	 * space with the person's currency committed (CNY at 7.2 — a figure
+	 * would be drawn in the mainnet space, checked first), names no currency:
+	 * the home, the assets and a token's page and panel, an activity's
+	 * detail, the balance sheets, Send (coins, form, review, a sweep, the
+	 * speeds), the dApp signing sheet (an amount, the fee, the fee's speeds)
+	 * and the batch importer — with a stablecoin priced at 1 and a relay fee
+	 * coin the relay published a `usd_price` for.
+	 */
+	it('r18-9: every money surface in the testnet space names no currency — a stablecoin at 1, a relay fee priced', () => {
+		// A currency's glyph anywhere, or its ISO code beside a figure ("USD Coin",
+		// a contract's name, is not money).
+		const CODES = '(?:USD|CNY|EUR|JPY|VND|KRW|HKD|GBP|IDR)';
+		const NO_MONEY = new RegExp(`[$¥€£₫₩₹₽₺₴₱฿]|\\b${CODES}\\b\\s?\\d|\\d\\s?${CODES}\\b`);
+		const stable = balance.tokens.find((t) => t.symbol === 'USDC')!;
+		expect(stable.price_usd).toBe(1);
+		const usdc: SendToken = {
+			network: 'eth-mainnet',
+			chain_id: 1,
+			symbol: 'USDC',
+			balance: '376.54321',
+			decimals: 6,
+			token_address: stable.token_address,
+			price_usd: 1,
+			logo_urls: [],
+			spam: false
+		};
+		const relayFee = {
+			symbol: 'USDC',
+			contract: stable.token_address,
+			decimals: 6,
+			balance: '376543210',
+			recipient: '0x1',
+			usd_balance: '376.54',
+			usd_price: '1',
+			amount: '210000',
+			insufficient: false,
+			selected: true,
+			spent_by_operation: false,
+			short_with_amount: false,
+			short: null
+		};
+		const quote = {
+			chain_id: 1,
+			total_wei: '2100000000000000',
+			max_fee_per_gas: '1',
+			network_fee_per_gas: '1',
+			relayer_fee_per_gas: '0',
+			bundler_gas_price: '1',
+			in_band_gas_basis: '1',
+			effective_gas_price: null,
+			max_gas_price: null,
+			total_gas: '1',
+			deployed: true,
+			tier: 'standard' as const,
+			quoted: true,
+			// A relay fee paid in the stablecoin, its price published (`usd_price`).
+			fee_asset: {
+				type: 'erc20' as const,
+				token: stable.token_address!,
+				decimals: 6,
+				amount: '210000',
+				symbol: 'USDC'
+			},
+			fee_recipient: '0x1'
+		} satisfies FeeEstimateView;
+		const fee: FeeView = {
+			...IDLE_FEE_VIEW,
+			fee: quote,
+			options: [relayFee],
+			confirm_fee_ready: true
+		};
+		const speed = {
+			view: {
+				tier: 'standard',
+				picked: false,
+				free: false,
+				open: true,
+				free_note: false,
+				single: false,
+				gas_price_line: null,
+				options: [
+					{ tier: 'fast', fee: quote, measuring: false, gas_price: null, selected: false },
+					{ tier: 'standard', fee: quote, measuring: false, gas_price: null, selected: true }
+				]
+			} as unknown as FeeSpeedView,
+			feeOptions: () => [relayFee]
+		};
+		const recipient = '0x' + 'ab'.repeat(20);
+		const sendView = (over: Partial<SendView>): SendView =>
+			({
+				...SEND_BASE,
+				tokens: [usdc],
+				selected_token: usdc,
+				recipient,
+				amount: '25',
+				token_amount: '25',
+				confirm_amount: '25',
+				fee: quote,
+				fee_coin: null,
+				...over
+			}) as SendView;
+		const sendInputs = (space: NetworkSpace, over: Partial<SendView> = {}): SendLiveInputs => ({
+			send: sendView(over),
+			fee,
+			m: fm,
+			currency: COMMITTED,
+			space,
+			identity: { name: 'Main', address: balance.address ?? '', identiconSvg: '<svg/>' },
+			identicon,
+			speed
+		});
+		const sm2 = resolveSigningMessages('en');
+		const amountField = {
+			label: 'Amount',
+			value: '25 USDC',
+			format: 'amount',
+			token_address: stable.token_address,
+			warning: false,
+			unverified: false,
+			role: 'send_amount',
+			detail: false,
+			expired: false,
+			address: null,
+			usd_value: 25,
+			label_term: null,
+			value_term: null
+		} as ClearSignField;
+		const signInputs = (space: NetworkSpace): SigningLiveInputs => ({
+			sign: {
+				...INITIAL_SIGN_VIEW,
+				surface: 'sheet',
+				confirm_gate_open: true,
+				request: {
+					id: 'req-1',
+					method: 'eth_sendTransaction',
+					kind: 'transaction',
+					params_json: '[{"to":"0xdead","data":"0x","value":"0x0"}]',
+					origin: 'https://app.example',
+					dapp: null,
+					chain_id: 1,
+					signer_address: balance.address ?? '',
+					first_party: false
+				}
+			} as SignView,
+			clear: {
+				...INITIAL_CLEAR_VIEW,
+				resolved: true,
+				surface: 'clear_sign',
+				result: {
+					intent: 'Send USDC',
+					intent_term: null,
+					contract_name: 'USD Coin',
+					owner: null,
+					fields: [amountField],
+					risk: 'normal',
+					contract_address: stable.token_address,
+					verified: true,
+					provenance: 'built_in',
+					sign_type: 'transaction',
+					partial: false,
+					best_effort: false,
+					to_own_token: false,
+					terms_off_chain: false,
+					reading: {
+						source: 'vela',
+						descriptor_owner: null,
+						descriptor_path: null,
+						contract_named_by: null,
+						contradictions: [],
+						selector_name: null,
+						goes_elsewhere: false,
+						dust_minimum: false,
+						allowance: false,
+						allowance_adds: false,
+						shape_intent: null,
+						collection_name: null
+					}
+				}
+			} as ClearSigningView,
+			guard: INITIAL_GUARD_VIEW,
+			fee,
+			feeOpen: false,
+			speed,
+			currency: COMMITTED,
+			space,
+			m: sm2,
+			identity: { name: 'Main', address: balance.address ?? '', identiconSvg: '<svg/>' },
+			identicon
+		});
+		const batchInputs = (space: NetworkSpace) => ({
+			batch: {
+				opened: true,
+				unit: 'token' as const,
+				fiat_code: 'CNY',
+				raw_text: '',
+				file_name: null,
+				busy: false,
+				file_error: false,
+				file_failure: null,
+				template_saved: false,
+				priced: true,
+				rate_status: 'ready',
+				rate_input: '',
+				rate_edited: false,
+				preview: [],
+				over_cap: false,
+				errors: [],
+				rejected: 0,
+				recipient_count: 1,
+				total_token: '25',
+				total_fiat: '180',
+				over_balance: false,
+				can_apply: true,
+				recipients: [],
+				applied: false
+			} as unknown as BatchView,
+			m: fm,
+			symbol: 'USDC',
+			balance: '376.54321',
+			identicon,
+			space
+		});
+		const batchModel = () => {
+			const state = buildFlowState('sd2c', fm, identicon);
+			if (state.sheet?.kind !== 'batch-import') throw new Error('sd2c raises the importer');
+			return state.sheet.model;
+		};
+
+		/** Every money surface's model, in `space`. */
+		const surfaces = (space: NetworkSpace): Record<string, unknown> => {
+			const flows = { ...flowInputs(COMMITTED), space };
+			const page = withLiveFlow(buildFlowState('t2', fm, identicon), {
+				...flows,
+				selectedToken: stable
+			}).sheet;
+			const assets = withLiveFlow(buildFlowState('t1', fm, identicon), flows).base;
+			const priced = items.filter((item) => item.priced);
+			const sweep = sendInputs(space, {
+				multi_select_mode: true,
+				multi_selected_ids: ['1:' + stable.token_address],
+				multi_chain_id: 1,
+				multi_specs: [{ chain_id: 1, token_address: stable.token_address, amount: '25' }]
+			} as unknown as Partial<SendView>);
+			const sheet = buildSigningModel(signInputs(space))!;
+			return {
+				panel: liveAssetDetail(
+					stable,
+					{ balance, currency: COMMITTED, m, feed, space },
+					buildDesktopState('d1', m, identicon).panels.assetDetail
+				),
+				tokenPage: page,
+				assets,
+				activityDetail: priced.map((item) =>
+					liveTxDetail(item, {
+						m: fm,
+						wm: m,
+						currency: COMMITTED,
+						space,
+						hidden: false,
+						identicon,
+						now: NOW
+					})
+				),
+				balanceDetail: liveBalanceDetail(balance, COMMITTED, rescue, m.balance.unpriced, space),
+				unreachable: liveUnreachable(balance, COMMITTED, rescue, space),
+				sendCoins: liveSendPick(sendPickModel(), sendInputs(space)).rows,
+				sendForm: (() => {
+					const form = liveSendForm(sendFormModel(), sendInputs(space));
+					return [form.amount, form.fee, form.speed];
+				})(),
+				sendReview: liveSendConfirm(sendConfirmModel(), sendInputs(space)),
+				sendSweep: liveSendConfirm(sendConfirmModel(), sweep),
+				signing: [sheet.fee, sheet.blocks],
+				batch: (() => {
+					const built = liveBatchImport(batchModel(), batchInputs(space));
+					return [built.units, built.total];
+				})()
+			};
+		};
+
+		// The mainnet space draws these figures — the check below is not vacuous.
+		const mainnet = surfaces('mainnet');
+		for (const name of [
+			'panel',
+			'tokenPage',
+			'activityDetail',
+			'balanceDetail',
+			'unreachable',
+			'sendCoins',
+			'sendForm',
+			'sendReview',
+			'signing',
+			'batch'
+		]) {
+			expect(JSON.stringify(mainnet[name]), `${name} draws fiat in the mainnet space`).toMatch(
+				NO_MONEY
+			);
+		}
+		// The testnet space: not one currency, on any of them.
+		const testnet = surfaces('testnet');
+		for (const [name, model] of Object.entries(testnet)) {
+			const text = JSON.stringify(model);
+			expect(
+				text.match(NO_MONEY)?.[0] ?? null,
+				`${name}: ${text.slice(Math.max(0, (text.match(NO_MONEY)?.index ?? 0) - 300), (text.match(NO_MONEY)?.index ?? 0) + 100)}`
+			).toBeNull();
+		}
+		// …and the mainnet space does price the relay's fee coin, on Send and the sheet.
+		expect(JSON.stringify(mainnet.sendForm)).toMatch(/valueFiat":"≈ CN¥/);
+		expect(JSON.stringify(mainnet.signing)).toMatch(/valueFiat":"≈ CN¥/);
+		// The coin figures are still there: a fee in its coin is not money.
+		expect(JSON.stringify(testnet.sendForm)).toContain('0.21 USDC');
+		expect(JSON.stringify(testnet.signing)).toContain('25 USDC');
 	});
 });
 

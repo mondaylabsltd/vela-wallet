@@ -157,23 +157,25 @@ final class SessionExecutor {
         }
     }
 
-    /// The replayed publish (ob-2), under the relying party the create would
-    /// have used: the domain of the page the unit is filed under, else the
-    /// wallet's own. A member without its creation proof cannot be replayed
-    /// without a prompt, so it is refused here rather than signed live — that
-    /// is a sign-in's publish, not this one.
     /// The landing not confirmed, and — r18-8 (§28) — whether this test
     /// build refused the publish before it left (the session then never asks
     /// again by itself).
     static func landingUnconfirmed(_ error: Error) -> [String: Any] {
         let failure = error as? RegistryFailure
-        return [
+        var result: [String: Any] = [
             "type": "registry_landing_unconfirmed",
             "message": failure?.message ?? error.localizedDescription,
-            "refused": failure?.refused ?? TestBuildRefusal.matches(error),
         ]
+        // `refused` only when it was (§32: absent otherwise).
+        if failure?.refused ?? TestBuildRefusal.matches(error) { result["refused"] = true }
+        return result
     }
 
+    /// The replayed publish (ob-2), under the relying party the create would
+    /// have used: the domain of the page the unit is filed under, else the
+    /// wallet's own. A member without its creation proof cannot be replayed
+    /// without a prompt, so it is refused here rather than signed live — that
+    /// is a sign-in's publish, not this one.
     static func replay(
         _ pending: [String: Any],
         registry: RegistryClient,

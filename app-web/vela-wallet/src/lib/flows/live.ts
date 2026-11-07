@@ -11,6 +11,8 @@
  */
 
 import { maskedAmount } from '$lib/core/client';
+import { showsFiat } from '$lib/network-space/fiat';
+import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
 import { feedPositionOf } from '$lib/wallet/live-detail';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { FeedView } from '$lib/core/generated/FeedView';
@@ -96,6 +98,12 @@ import type {
 export interface FlowsLiveInputs {
 	balance: BalanceView;
 	currency: CurrencyView;
+	/**
+	 * r18-9 (spec 105): the space in front — the testnet space gives no asset
+	 * a worth or a price on these screens (`showsFiat`). Absent: the
+	 * device's space.
+	 */
+	space?: NetworkSpace;
 	m: WalletMessages;
 	/** The fixture T4 body, for the empty state's corpus copy. */
 	emptyCopy: AssetsModel['empty'];
@@ -184,7 +192,9 @@ function livePill(model: { header: FlowHeaderModel }, inputs: FlowsLiveInputs): 
 function liveAssets(model: AssetsModel, inputs: FlowsLiveInputs): AssetsModel {
 	const { balance: view, currency, m } = inputs;
 	const tokens = visibleBalanceTokens(view.tokens, inputs.chainFilter);
-	const rows = tokens.map((t) => liveAssetRow(t, currency, m, view.hidden));
+	// r18-9: the testnet space gives no row a worth (`noValue`, the home's rule).
+	const noValue = !showsFiat(inputs.space);
+	const rows = tokens.map((t) => liveAssetRow(t, currency, m, view.hidden, noValue));
 	// Empty only once the core has actually looked (never while unknown/loading)
 	// — or when the chosen chain holds nothing while others do (spec 028 Phase
 	// 10: the pill narrows this screen as the sidebar narrows the home).
@@ -437,11 +447,15 @@ function liveTokenDetail(model: TokenDetailModel, inputs: FlowsLiveInputs): Toke
 	const { balance: view, currency, m } = inputs;
 	const hidden = view.hidden;
 	const held = parseFloat(token.balance) || 0;
+	// r18-9 (spec 105): the testnet space gives a token no worth and no price
+	// — not "No price" either: nothing there has real value.
+	const priced = showsFiat(inputs.space);
 	// Hidden, a worth that exists reads the mask — it read "No price", which
 	// is a claim about the token, and a false one (device walk of 2026-10-11,
 	// item 3). A token with no price has no worth to hide and still says so.
-	const fiat =
-		token.price_usd === null
+	const fiat = !priced
+		? ''
+		: token.price_usd === null
 			? m.balance.noPrice
 			: hidden
 				? MASK
@@ -456,16 +470,20 @@ function liveTokenDetail(model: TokenDetailModel, inputs: FlowsLiveInputs): Toke
 	// so it is the same screen, reached the same way (spec 038 #E2).
 	const rowTargets = items.map((item) => feedPositionOf(inputs.feed, item.id));
 	const facts: FactRowModel[] = [
-		{
-			label: fm['tokenDetail.labelPrice'],
-			value:
-				token.price_usd === null
-					? m.balance.noPrice
-					: fill(fm['tokenDetail.priceValue'], {
-							symbol: token.symbol,
-							value: moneyText(token.price_usd, currency)
-						})
-		},
+		...(priced
+			? [
+					{
+						label: fm['tokenDetail.labelPrice'],
+						value:
+							token.price_usd === null
+								? m.balance.noPrice
+								: fill(fm['tokenDetail.priceValue'], {
+										symbol: token.symbol,
+										value: moneyText(token.price_usd, currency)
+									})
+					}
+				]
+			: []),
 		{
 			label: fm['tokenDetail.labelContract'],
 			value:

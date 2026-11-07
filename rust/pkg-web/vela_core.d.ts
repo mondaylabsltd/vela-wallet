@@ -1640,6 +1640,13 @@ export function networkSpaceChainIds(space: string, rows_json: string): string;
 export function networkSpaceRead(stored?: string | null): string;
 
 /**
+ * r18-9 (spec 105, r17-13): whether `space` ("mainnet" / "testnet", as
+ * stored; anything else is the mainnet space) shows any fiat value
+ * (`network_space::shows_fiat`) — the testnet space shows none anywhere.
+ */
+export function networkSpaceShowsFiat(space: string): boolean;
+
+/**
  * `parent_safe_guard::check` over JSON: a `CheckInput` in, a
  * `ParentVerdict` out (`{ verdict: "clear" | "refuse" | "read", … }`), or
  * `{ "error": … }` for an input that does not read.
@@ -2749,6 +2756,7 @@ export interface InitOutput {
     readonly networkLivesElsewhere: (a: number, b: number) => [number, number];
     readonly networkSpaceChainIds: (a: number, b: number, c: number, d: number) => [number, number];
     readonly networkSpaceRead: (a: number, b: number) => [number, number];
+    readonly networkSpaceShowsFiat: (a: number, b: number) => number;
     readonly networkadmincore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly networkadmincore_new: () => number;
     readonly networkadmincore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

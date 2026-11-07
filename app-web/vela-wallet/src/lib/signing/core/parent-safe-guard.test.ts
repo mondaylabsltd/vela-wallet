@@ -40,9 +40,10 @@ import type { SignShellResult } from '$lib/core/generated/SignShellResult';
 import { signErrorWords } from '$lib/core/kernels';
 import { resolveSigningMessages } from '$lib/i18n/engine.server';
 import { PoolFailedError } from '$lib/services/rpc-pool';
-import { shortenAddress } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
-import { selfCallBlockedText, signingCloseEvent } from '../live';
+import { buildSigningModel, selfCallBlockedText, signingCloseEvent } from '../live';
+import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from './sheet.svelte';
+import { IDLE_FEE_VIEW } from '$lib/flows/core/fee-quote.svelte';
 import { createSignExecutor, readSafeOwner, type SafeOwnerCall } from './sign-executor';
 import { createSignRequestSession } from './sign-session';
 import type { SignEffect, SignShellPorts } from './sign-types';
@@ -73,6 +74,14 @@ const VECTOR = JSON.parse(
 	uncheckedKey: string;
 	cases: VectorCase[];
 };
+
+/**
+ * r18-23: the Safe as the sentence names it — EIP-55, shortened (the
+ * vector's parent `0x5afe…5afe`, checksummed): never the lowercase the
+ * request carried.
+ */
+const PARENT_SHORT = '0x5afe5a…fe5AfE';
+const UNKNOWN_SHORT = '0x777777…777777';
 
 const CASE_A = VECTOR.cases.find(
 	(c) => c.name === 'a: execTransaction(swapOwner) on a multisig on the list, v=1'
@@ -248,7 +257,12 @@ const APPROVE = {
  * The real core and the real executor: this device's multisigs, then a
  * site's request `params` from the vector's signer on the vector's chain.
  */
-async function arrive(params: unknown[], known: string[], ownerCall?: SafeOwnerCall) {
+async function arrive(
+	params: unknown[],
+	known: string[],
+	ownerCall?: SafeOwnerCall,
+	method = 'eth_sendTransaction'
+) {
 	const answers: Answer[] = [];
 	const faults: unknown[] = [];
 	const reads: unknown[] = [];
@@ -273,7 +287,7 @@ async function arrive(params: unknown[], known: string[], ownerCall?: SafeOwnerC
 	session.dispatch({
 		type: 'request_arrived',
 		id: 'rid-31',
-		method: 'eth_sendTransaction',
+		method,
 		params_json: JSON.stringify(params),
 		origin: 'https://evil.example',
 		transport_id: 'ext-31',
@@ -341,7 +355,7 @@ describe('a multisig on this device’s list (multisigs_changed)', () => {
 			expect(selfCallBlockedText(view.blocked!, m), locale).toBe(
 				fill(m.parentSafeBlocked, {
 					function: 'execTransaction',
-					safe: shortenAddress(VECTOR.parent)
+					safe: PARENT_SHORT
 				})
 			);
 			expect(m.parentSafeBlocked, locale).not.toContain('componentsUi.');
@@ -427,7 +441,7 @@ describe('a Safe not on the list: read (isOwner) before it can be signed', () =>
 		expect(selfCallBlockedText(view.blocked!, m)).toBe(
 			fill(m.parentSafeUnchecked, {
 				function: 'approveHash',
-				safe: shortenAddress(VECTOR.unknown)
+				safe: UNKNOWN_SHORT
 			})
 		);
 		await run.approve();
@@ -450,6 +464,55 @@ describe('a Safe not on the list: read (isOwner) before it can be signed', () =>
 		await vi.waitFor(() => expect(run.view().confirm_block).not.toBe('reading'));
 		// Read false: not this account's Safe — no refusal.
 		expect(run.view().blocked).toBeNull();
+		await run.close();
+	});
+
+	/**
+	 * r18-6 (Safari, the shared sheet): a SafeMessage to a Safe not on the
+	 * list drew a shut red "Sign anyway" for the read's ~200 ms before the
+	 * parent refusal — the label followed the clear-signing view alone
+	 * (nobody can read a SafeMessage: `sign_anyway`), while the core's
+	 * `confirm_block` said `reading`. While the read is out the sheet says
+	 * "Reading the request…" over a shut, plain "Sign": no danger, never
+	 * "anyway" — the core may yet refuse it with no way to sign.
+	 */
+	it('while the read is out the confirm is a shut "Sign" — never "anyway", never red', async () => {
+		let answer: (value: { result: string }) => void = () => {};
+		const run = await arrive(
+			caseParams('unknown Safe, SafeMessage, isOwner true: refused'),
+			[],
+			() => new Promise((resolve) => (answer = resolve)),
+			'eth_signTypedData_v4'
+		);
+		await vi.waitFor(() => expect(run.reads).toHaveLength(1));
+		expect(run.view().confirm_block).toBe('reading');
+		const m = resolveSigningMessages('en');
+		const sheet = () =>
+			buildSigningModel({
+				sign: run.view(),
+				// What the clear-signing machine says of a SafeMessage: nobody
+				// can read it — its own confirm would be "Sign anyway".
+				clear: { ...INITIAL_CLEAR_VIEW, resolved: true, sign_anyway: true },
+				guard: INITIAL_GUARD_VIEW,
+				fee: IDLE_FEE_VIEW,
+				currency: { code: 'USD', rate: 1, committed: true, pending: null },
+				m,
+				identity: { name: 'Mine', address: VECTOR.signer, identiconSvg: '<svg/>' },
+				identicon: () => '<svg/>'
+			});
+		const reading = sheet();
+		expect(reading?.confirm.enabled).toBe(false);
+		expect(reading?.confirm.action).toBe(m.signLabel);
+		expect(reading?.confirm.action).toBe('Sign');
+		expect(reading?.confirm.action).not.toMatch(/anyway/i);
+		expect(reading?.confirm.danger).toBeUndefined();
+		expect(reading?.confirm.note).toBe('Reading the request…');
+		// The read says owner: refused in the parent's words, no confirm to press.
+		answer({ result: TRUE });
+		await vi.waitFor(() => expect(run.view().blocked).not.toBeNull());
+		const refused = sheet();
+		expect(refused?.dismissOnly).toBe(m.close);
+		expect(run.view().confirm_block).toBe('refused');
 		await run.close();
 	});
 });

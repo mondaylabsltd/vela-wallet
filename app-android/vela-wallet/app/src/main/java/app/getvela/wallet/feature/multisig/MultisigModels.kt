@@ -302,9 +302,6 @@ class MsProposalModel(
         get() {
             if (!item.unsent) return false
             val entry = outboxEntry ?: return true
-            // r18-8 (§32): refused by this test build — sending it again is
-            // refused again; the way on is a local service (iOS parity).
-            if (entry["why"].str == "production_write_refused") return false
             return !outboxSending && entry["retryAt"].long == null
         }
 
@@ -324,10 +321,10 @@ class MsProposalModel(
     private fun outboxLine(entry: JsonElement): String {
         // r8-16: on its way to the service right now — said so, and no Send again.
         if (entry["sending"].bool == true || entry["why"].str == "sending") return words.t("proposal.outboxSending")
+        // r18-8 (§28, §32): this test build refused to write it to the live
+        // service — kept, sent again only on Send again; said as what it is.
+        if (entry["why"].str == MultisigWords.PRODUCTION_WRITE_REFUSED) return words.productionWriteRefused
         // Sent again only on the person's word: "Not sent yet" (with Send again).
-        // r18-8 (core §32): this test build refused to write it to the live
-        // service — said as that, kept; Send again is the person's.
-        if (entry["why"].str == "production_write_refused") return words.raw("common.testBuild.productionWriteRefused")
         val retryAt = entry["retryAt"].long ?: return words.t("proposal.outboxNotSent")
         val seconds = ((retryAt - nowMs() + 999) / 1000).coerceAtLeast(1)
         return when (entry["why"].str) {

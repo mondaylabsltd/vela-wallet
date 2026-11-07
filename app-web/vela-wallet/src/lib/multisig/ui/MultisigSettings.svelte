@@ -25,7 +25,7 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
-	import type { MultisigMessages } from '../messages';
+	import { testBuildRefused, type MultisigMessages } from '../messages';
 	import { chainName, multisigName, ruleTitle, shortenAddress } from '../core/display';
 	import { sameAddress, validName } from '../core/kernel';
 	import { names } from '../core/names.svelte';
@@ -233,7 +233,9 @@
 		shareFailure =
 			passkey === undefined
 				? m.add.unavailable
-				: fillTemplate(m.proposal.failed, { reason: failureWords(passkey, m.proposal) });
+				: fillTemplate(m.proposal.failed, {
+						reason: failureWords(passkey, m.proposal, '', testBuildRefused(m))
+					});
 	}
 
 	function save() {

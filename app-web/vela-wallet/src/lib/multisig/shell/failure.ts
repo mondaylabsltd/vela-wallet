@@ -8,6 +8,10 @@
  * (`review.failure`), never its text — a `message` here is for a log only.
  */
 import { failureSaid } from '../core/review-door';
+import {
+	PRODUCTION_WRITE_REFUSED_ENGLISH,
+	PRODUCTION_WRITE_REFUSED_KEY
+} from '$lib/core/generated/serviceDefaults';
 
 export type ShellFailure = (
 	| { kind: 'venue_blocked'; block: unknown }
@@ -71,9 +75,14 @@ const PROPOSAL = 'home.multisig.proposal.';
 export function failureWords(
 	detail: string | null | undefined,
 	m: FailureMessages,
-	network = ''
+	network = '',
+	/** r18-8: `common.testBuild.productionWriteRefused` in the page's language. */
+	refused?: string
 ): string {
 	const { key } = failureSaid(detail);
+	// r18-8 (§28, §32): this test build refused the write before it left —
+	// its own sentence, never the network's.
+	if (key === PRODUCTION_WRITE_REFUSED_KEY) return refused || PRODUCTION_WRITE_REFUSED_ENGLISH;
 	const leaf = key?.startsWith(PROPOSAL) ? key.slice(PROPOSAL.length) : '';
 	if (leaf === 'notSent') return m.notSent;
 	if (leaf.startsWith('reason.')) {
