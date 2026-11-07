@@ -61,10 +61,14 @@
  * whose content a person can choose: a custom network's display name reaches
  * `unreachable`, and somebody can name a network after its own RPC URL.
  */
+import { SERVICE_DEFAULTS } from '$lib/core/generated/serviceDefaults';
 import { fetchWithTimeout, NET_TIMEOUTS, isTimeoutError } from './net';
 
-/** The site's proxy. The PAT lives there; nothing here has a token. */
-export const BUG_REPORT_ENDPOINT = 'https://getvela.app/api/bug-report';
+/**
+ * The site's proxy — the core's default (`service_defaults`, §28). The PAT
+ * lives there; nothing here has a token.
+ */
+export const BUG_REPORT_ENDPOINT = SERVICE_DEFAULTS.bugReportUrl;
 
 /** The repository's issue form, for the fallback road. */
 export const GITHUB_ISSUE_FORM = 'https://github.com/mondaylabsltd/vela-wallet/issues/new';

@@ -7,6 +7,11 @@ declare global {
 	/** `true` in the browser extension's build (`VELA_TARGET=extension`). */
 	const __VELA_EXTENSION__: boolean;
 	/**
+	 * `VELA_ALLOW_PRODUCTION_WRITES` as the dev server or the package build
+	 * was started with (§28, `$lib/services/production-guard.ts`); `''` unset.
+	 */
+	const __VELA_ALLOW_PRODUCTION_WRITES__: string;
+	/**
 	 * The scheme the extension's own pages load from: `'chrome-extension:'`,
 	 * or `'safari-web-extension:'` in the Safari package. Every other build
 	 * (the hosted site, the tests) reads `'chrome-extension:'`.
