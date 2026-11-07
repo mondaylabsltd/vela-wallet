@@ -29,6 +29,8 @@ import app.getvela.wallet.feature.wallet.core.RpcPool
 import app.getvela.wallet.feature.wallet.core.RpcSeeds
 import app.getvela.wallet.feature.wallet.core.RpcSource
 import app.getvela.wallet.feature.wallet.core.feedFollowsBalance
+import app.getvela.wallet.navigation.LaunchFront
+import app.getvela.wallet.feature.onboarding.core.SessionRoute
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CoroutineScope
@@ -239,6 +241,76 @@ class R19NativeFixesTest {
         )
         val nameless = WalletLive.unreadLine(feed.copy(unread_network = null), strings, chainNames)!!
         assertTrue(nameless, !nameless.contains("987654321"))
+    }
+
+    // -- r18-3: a cold start with a multisig in front ------------------------
+
+    private val ann = """{"id":"cred-1","name":"Ann","address":"0x88cCA0EeDbF2C4426110bbFc998F048689266894","public_key_hex":"04ab","created_at_iso":"2026-08-25T10:00:00.000Z","keys":[{"credential_id":"cred-1","public_key_hex":"04ab","name":"Ann"}]}"""
+    private val multisig = "0x5afe00000000000000000000000000000000cafe"
+
+    /**
+     * The launch as the app runs it: the real session machine over a real
+     * store, the stored front read before it boots, the hub loading
+     * [hubAfterMs] after the session says Wallet, the NavHost settling on the
+     * wallet [navAfterMs] after it. Every screen the root would draw, in order.
+     */
+    private fun launch(store: FakeStore, hubAfterMs: Long = 400, navAfterMs: Long = 150): List<LaunchFront.Screen> = runBlocking {
+        val session = app.getvela.wallet.feature.onboarding.core.SessionController(
+            app.getvela.wallet.feature.onboarding.core.AccountStore(store),
+            scope(),
+        )
+        val stored = MutableStateFlow<LaunchFront.Stored>(LaunchFront.Stored.Unread)
+        val hubLoaded = MutableStateFlow(false)
+        val settled = MutableStateFlow(false)
+        val screens = CopyOnWriteArrayList<LaunchFront.Screen>()
+        val sampler = scope().launch {
+            combine(session.view, stored, hubLoaded, settled) { s, f, h, n -> LaunchFront.screen(s.allowedRoute, f, h, expired = false, walletSettled = n) }
+                .collect { screens += it }
+        }
+        // The app's order (VelaWalletApplication): the front read, then the boot.
+        stored.value = LaunchFront.read(store)
+        session.boot()
+        withTimeout(10_000) { session.view.first { it.allowedRoute != SessionRoute.Loading } }
+        if (session.view.value.allowedRoute == SessionRoute.Wallet) {
+            scope().launch { kotlinx.coroutines.delay(navAfterMs); settled.value = true }
+            scope().launch { kotlinx.coroutines.delay(hubAfterMs); hubLoaded.value = true }
+        }
+        kotlinx.coroutines.delay(maxOf(hubAfterMs, navAfterMs) + 300)
+        sampler.cancel()
+        screens.toList().distinct()
+    }
+
+    @Test
+    fun `r18-3 a cold start with a multisig in front never draws Welcome or the Vela account's home`() {
+        val store = FakeStore(mapOf("vela.accounts" to "[$ann]", LaunchFront.ACTIVE_KEY to multisig))
+        val screens = launch(store)
+        assertEquals("ground until the hub has the multisig, then the wallet: $screens", listOf(LaunchFront.Screen.Ground, LaunchFront.Screen.Wallet), screens)
+        // Hub loaded before the NavHost settled: still the ground until it has.
+        assertEquals(listOf(LaunchFront.Screen.Ground, LaunchFront.Screen.Wallet), launch(FakeStore(mapOf("vela.accounts" to "[$ann]", LaunchFront.ACTIVE_KEY to multisig)), hubAfterMs = 50, navAfterMs = 300))
+    }
+
+    @Test
+    fun `r18-3 a Vela account in front waits only for the store, and no account is Welcome after the ground`() {
+        assertEquals(listOf(LaunchFront.Screen.Ground, LaunchFront.Screen.Wallet), launch(FakeStore(mapOf("vela.accounts" to "[$ann]")), hubAfterMs = 5_000))
+        assertEquals(listOf(LaunchFront.Screen.Ground, LaunchFront.Screen.Welcome), launch(FakeStore()))
+    }
+
+    @Test
+    fun `r18-3 the rule - Loading is ground, the hold is bounded, a stored value is read as the core wrote it`() {
+        val ms = LaunchFront.Stored.Multisig(multisig)
+        for (stored in listOf(LaunchFront.Stored.Unread, LaunchFront.Stored.Vela, ms)) {
+            assertEquals(LaunchFront.Screen.Ground, LaunchFront.screen(SessionRoute.Loading, stored, hubLoaded = true, expired = true))
+            assertEquals(LaunchFront.Screen.Welcome, LaunchFront.screen(SessionRoute.Onboarding, stored, hubLoaded = false, expired = false))
+        }
+        assertEquals(LaunchFront.Screen.Ground, LaunchFront.screen(SessionRoute.Wallet, ms, hubLoaded = false, expired = false))
+        assertEquals("bounded", LaunchFront.Screen.Wallet, LaunchFront.screen(SessionRoute.Wallet, ms, hubLoaded = false, expired = true))
+        assertEquals(LaunchFront.Screen.Ground, LaunchFront.screen(SessionRoute.Wallet, LaunchFront.Stored.Unread, hubLoaded = true, expired = false))
+        assertEquals(LaunchFront.Screen.Ground, LaunchFront.screen(SessionRoute.Wallet, LaunchFront.Stored.Vela, hubLoaded = true, expired = false, walletSettled = false))
+        assertEquals(ms, LaunchFront.stored(multisig))
+        assertEquals(ms, LaunchFront.stored("\"$multisig\"\n"))
+        assertEquals(LaunchFront.Stored.Vela, LaunchFront.stored(null))
+        assertEquals(LaunchFront.Stored.Vela, LaunchFront.stored("  "))
+        assertEquals(2_000L, LaunchFront.HOLD_MS)
     }
 
     companion object {

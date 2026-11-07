@@ -3347,6 +3347,15 @@ fun VelaNavHost(
         )
     }
 
+    // r18-3 (§33): until the session has read the account store, and — a
+    // multisig in front at the last run — until the hub has loaded it, the
+    // root draws the page's own ground over the NavHost: no Welcome with
+    // live buttons, no other account's home. Bounded (LaunchFront.HOLD_MS
+    // from the session's Wallet); the developer routes are exempt.
+    if (startDestination !in DEVELOPER_ROUTES) {
+        LaunchGround(navController = navController, route = session.allowedRoute)
+    }
+
     // Hosted OUTSIDE the NavHost, deliberately. A prompt can be raised by either
     // machine, and the login machine runs while Welcome is on screen — so a
     // sheet nested in one route's composable would vanish the moment the route
