@@ -4100,4 +4100,145 @@ mod tests {
             assert_eq!(answers(&out)[0]["result"], status, "the machine's status");
         });
     }
+
+    // -- §31: the in-app browser's requests reach the parent-Safe guard ------
+
+    /// The in-app browser, end to end into the signing column: a site
+    /// granted the account asks it to act for a Safe it owns. The browser
+    /// machine forwards the request (the page's `open_dapp_signing` →
+    /// `IncomingRequest::from_forwarded`), the column opens on it with the
+    /// device's multisig list (`opening_events`), the core refuses it, and
+    /// the close's -32603 `parent_safe_blocked` is what the page receives.
+    fn site_asks_for_a_parent(
+        name: &str,
+        chain_id: u32,
+        multisigs: Vec<String>,
+    ) -> (
+        BrowserDriver,
+        crate::wallet::signing_host::parent_safe_tests::Column,
+        String,
+    ) {
+        use crate::wallet::signing_host::IncomingRequest;
+        use crate::wallet::signing_host::parent_safe_tests::{Column, case};
+        let case = case(name);
+        let signer = case["input"]["signer"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        seed_grant(DAPP, &signer, chain_id);
+        let mut driver = BrowserDriver::new();
+        driver.dispatch(Event::AccountsUpdated {
+            addresses: Some(vec![signer.clone()]),
+        });
+        driver.dispatch(Event::AccountSwitched {
+            address: signer.clone(),
+            now_ms: 1_757_000_000_000.0,
+            space: false,
+        });
+        driver.dispatch(Event::NetworksChanged {
+            chain_ids: vec![1, chain_id],
+        });
+        driver.dispatch(Event::Start);
+        page(&mut driver, DAPP, json!({"t":"hello","doc":"d1"}));
+        let method = case["input"]["method"].as_str().unwrap_or_default();
+        let out = ask(
+            &mut driver,
+            DAPP,
+            "d1",
+            "1",
+            method,
+            case["input"]["params"].clone(),
+        );
+        let forward = forwarded(&out);
+        assert_eq!(forward.len(), 1, "{name}: forwarded to the column");
+        assert_eq!(forward[0].chain_id, chain_id);
+        assert!(answers(&out).is_empty(), "{name}: the page waits");
+        let request = IncomingRequest::from_forwarded(forward[0].clone());
+        let column = Column::open(&request, &signer, multisigs, vec![1, chain_id]);
+        (driver, column, signer)
+    }
+
+    /// The column's one answer, handed to the browser machine as the page
+    /// does (`answer_dapp_signing`): the page gets -32603.
+    fn page_hears_the_refusal(
+        driver: &mut BrowserDriver,
+        column: &crate::wallet::signing_host::parent_safe_tests::Column,
+    ) {
+        let [payload] = column.answers.as_slice() else {
+            panic!("one answer: {:?}", column.answers);
+        };
+        let out = driver.dispatch(Event::SigningAnswered {
+            tab: TAB.to_owned(),
+            id: "1".to_owned(),
+            payload: payload.clone(),
+            user_op_hash: None,
+            now_ms: 0.0,
+        });
+        let answers = answers(&out);
+        assert_eq!(answers.len(), 1, "{answers:?}");
+        assert_eq!(answers[0]["error"]["code"], json!(-32603), "{}", answers[0]);
+        assert_eq!(answers[0]["id"], json!("1"));
+        assert!(answers[0]["result"].is_null(), "nothing signed");
+    }
+
+    #[test]
+    fn a_sites_takeover_of_a_multisig_here_is_refused_through_the_column() {
+        use crate::wallet::signing_host::parent_safe_tests::{TAKEOVER, vector};
+        use vela_core::app::parent_safe_guard::ParentReason;
+        storage::tests::with_temp_state("dbr-host-parent-takeover", || {
+            let v = vector();
+            let parent = v["parent"].as_str().unwrap_or_default().to_owned();
+            let (mut driver, mut column, _) =
+                site_asks_for_a_parent(TAKEOVER, 8453, vec![parent.clone()]);
+            assert!(column.reads().is_empty(), "on the list: no read");
+            column.assert_refused(&parent, ParentReason::Member);
+            page_hears_the_refusal(&mut driver, &column);
+        });
+    }
+
+    /// A Safe this device does not have: read through the executor and the
+    /// pool (`isOwner` → true), then refused; and one nobody could read,
+    /// refused "couldn't check".
+    #[test]
+    fn a_sites_request_for_an_unknown_safe_is_read_then_refused() {
+        use crate::executor::pool::tests::{http, scripted_node, seed_pool};
+        use crate::wallet::signing_host::parent_safe_tests::vector;
+        use vela_core::app::parent_safe_guard::ParentReason;
+        use vela_core::app::rpc_pool::RpcSource;
+        const OWNS: u32 = 424_341;
+        const DEAD: u32 = 424_342;
+        let v = vector();
+        let unknown = v["unknown"].as_str().unwrap_or_default().to_owned();
+        let parent = v["parent"].as_str().unwrap_or_default().to_owned();
+        storage::tests::with_temp_state("dbr-host-parent-read", || {
+            let (owner, _) = scripted_node(
+                std::time::Duration::ZERO,
+                Some(http(
+                    "200 OK",
+                    r#"{"jsonrpc":"2.0","id":1,"result":"0x0000000000000000000000000000000000000000000000000000000000000001"}"#,
+                )),
+            );
+            seed_pool(OWNS, &[(&owner, RpcSource::User)]);
+            let (dead, _) = scripted_node(std::time::Duration::ZERO, None);
+            seed_pool(DEAD, &[(&dead, RpcSource::User)]);
+
+            let (mut driver, mut column, _) = site_asks_for_a_parent(
+                "unknown Safe, isOwner true: refused",
+                OWNS,
+                vec![parent.clone()],
+            );
+            assert_eq!(column.reads(), vec![(OWNS, unknown.clone())]);
+            column.assert_refused(&unknown, ParentReason::Owner);
+            page_hears_the_refusal(&mut driver, &column);
+
+            let (mut driver, mut column, _) = site_asks_for_a_parent(
+                "isOwner unreadable (no node answered): refused, couldn't check",
+                DEAD,
+                Vec::new(),
+            );
+            assert_eq!(column.reads(), vec![(DEAD, unknown.clone())]);
+            column.assert_refused(&unknown, ParentReason::Unchecked);
+            page_hears_the_refusal(&mut driver, &column);
+        });
+    }
 }

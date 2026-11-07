@@ -1963,3 +1963,196 @@ fn a_proposals_approve_is_shut_until_its_review_is_read_and_opens_after_try_agai
     assert_eq!(sim.world().passkeys.len(), passkeys + 1, "approved once");
     assert_eq!(listed(&sim, &hash).approved, 2);
 }
+
+// -- §31: a site may never make a multisig act for a Safe it owns ----------------
+
+/// A second multisig here, founded by the same members under another name
+/// and threshold (so another address).
+fn created_another(sim: &mut Sim) -> String {
+    let owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
+    sim.accounts(AccountsEvent::NewDraft);
+    sim.accounts(AccountsEvent::Draft {
+        owners: owners.clone(),
+        threshold: 1,
+        name: "Second Harbor".to_owned(),
+    });
+    sim.accounts(AccountsEvent::Create {
+        choice: CreateChoice {
+            owners,
+            threshold: 1,
+            name: "Second Harbor".to_owned(),
+            chain_id: 100,
+            creator: fixture(0).address,
+            members: BTreeMap::new(),
+        },
+    });
+    let view = &sim.machines.accounts_view;
+    assert_eq!(view.create.phase, Phase::Done, "{:?}", view.create);
+    view.create.address.clone().unwrap()
+}
+
+/// `approveHash(0xcd…)` — one counting approval — and the vector's
+/// takeover calldata: `execTransaction` of a `swapOwner`, "approved by
+/// msg.sender" (v = 1).
+fn parent_calls() -> [String; 2] {
+    let takeover = crate::wallet::signing_host::parent_safe_tests::case(
+        crate::wallet::signing_host::parent_safe_tests::TAKEOVER,
+    );
+    let exec = takeover["input"]["params"][0]["data"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    [format!("0xd4d9bdcd{}", "cd".repeat(32)), exec]
+}
+
+/// A site's request to multisig `from` for a Safe it owns, held as the page
+/// holds it; the refusal it came back as, said first and in the parent
+/// Safe's words — then answered -32603, never 4001, nothing signed.
+fn refused_for_parent(
+    sim: &mut Sim,
+    from: &str,
+    to: &str,
+    data: &str,
+    why: &str,
+) -> super::dapp::ParentRefusal {
+    use super::dapp::{self, Holds, Step};
+    use crate::executor::dapp_browser::Forwarded;
+    use serde_json::json;
+    use vela_core::app::multisig_dapp::HeldStage;
+
+    let rows = sim.machines.accounts_view.accounts.clone();
+    let account = dapp::multisig_of(from, &rows).cloned().unwrap();
+    let mut holds = Holds::default();
+    let passkeys = sim.world().passkeys.len();
+    let ask = holds.hold(
+        &Forwarded {
+            tab: "t1".to_owned(),
+            id: "31".to_owned(),
+            method: "eth_sendTransaction".to_owned(),
+            params_json: json!([{ "from": from, "to": to, "value": "0x0", "data": data }])
+                .to_string(),
+            origin: "https://evil.example".to_owned(),
+            chain_id: 100,
+            granted_address: from.to_owned(),
+        },
+        &account,
+        None,
+    );
+    sim.proposals(ask);
+    let (rid, held) = holds
+        .at(&sim.machines.proposals_view, HeldStage::Refused)
+        .unwrap_or_else(|| panic!("refused: {:?}", sim.machines.proposals_view.dapp));
+    let refusal = held.refusal.clone().expect("said first");
+    let parent = dapp::parent_refusal(&refusal).expect("a parent-Safe refusal");
+    assert_eq!(refusal.data.as_ref().unwrap()["why"], why);
+    assert!(parent.safe.eq_ignore_ascii_case(to), "{parent:?}");
+    assert!(
+        sim.machines.proposals_view.draft.is_none(),
+        "nothing drafted"
+    );
+
+    // The dialog's words: "Vela can't sign this", then the call and the
+    // Safe — never "a multisig can't sign messages".
+    let en = crate::loc::Loc::for_language("en");
+    let (title, body) = dapp::refusal_words(&en, Some(&refusal), "evil.example");
+    assert_eq!(
+        title,
+        en.t("componentsUi.signing.selfCallBlockedTitle"),
+        "the sheet's title"
+    );
+    assert_ne!(title, en.t("connect.browser.multisigNoMessagesTitle"));
+    let short = crate::signing::live::short_address(&parent.safe);
+    assert_eq!(
+        body,
+        en.t_texts(
+            &parent.key,
+            &[("function", &parent.function), ("safe", &short)]
+        )
+        .to_string()
+    );
+    assert!(
+        body.contains(&parent.function) && body.contains(&short),
+        "{body}"
+    );
+
+    assert!(
+        holds.step(&sim.machines.proposals_view).is_empty(),
+        "not answered before it was read"
+    );
+    sim.proposals(ProposalsEvent::DappLeave { id: rid });
+    let steps = holds.step(&sim.machines.proposals_view);
+    let [Step::Answer { answer, .. }] = steps.as_slice() else {
+        panic!("{steps:?}");
+    };
+    assert_eq!(answer.error.as_ref().map(|e| e.code), Some(-32603));
+    assert!(answer.result.is_none());
+    assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
+    parent
+}
+
+/// The multisig-as-dApp-account path: a site connected to one multisig here
+/// asks it to approve for — or take over — another multisig here. Refused
+/// from the list, before anything is read or drafted.
+#[test]
+fn a_site_cannot_make_a_multisig_act_for_another_multisig_here() {
+    let mut sim = booted(&[0, 1]);
+    sim.long_waits_parked = true;
+    let first = created(&mut sim);
+    let second = created_another(&mut sim);
+    assert!(
+        !first.eq_ignore_ascii_case(&second),
+        "two multisigs: {first}"
+    );
+    let [approve, takeover] = parent_calls();
+    for (data, function) in [(approve, "approveHash"), (takeover, "execTransaction")] {
+        let parent = refused_for_parent(&mut sim, &first, &second, &data, "member");
+        assert_eq!(parent.function, function);
+        assert_eq!(parent.key, "componentsUi.signing.parentSafeBlocked");
+    }
+}
+
+/// A Safe this device does not have that the chain says the multisig owns
+/// (read through the desktop's own shell: its `rpc` → `isOwner`), and one
+/// whose owners nobody could read: both refused.
+#[test]
+fn a_site_cannot_make_a_multisig_act_for_a_safe_it_owns_or_that_cannot_be_read() {
+    let mut sim = booted(&[0, 1]);
+    sim.long_waits_parked = true;
+    let multisig = created(&mut sim);
+    let owned = "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe";
+    sim.world().safes.insert(
+        (100, owned.to_owned()),
+        DeployedSafe::clean(&[multisig.as_str()], 1),
+    );
+    let [approve, _] = parent_calls();
+    let parent = refused_for_parent(&mut sim, &multisig, owned, &approve, "owner");
+    assert_eq!(parent.key, "componentsUi.signing.parentSafeBlocked");
+    assert!(
+        sim.world()
+            .rpc_log
+            .iter()
+            .any(|(_, method, params)| method == "eth_call"
+                && params[0]["to"]
+                    .as_str()
+                    .is_some_and(|to| to.eq_ignore_ascii_case(owned))
+                && params[0]["data"]
+                    .as_str()
+                    .is_some_and(|d| d.starts_with("0x2f54bf6e"))),
+        "isOwner was read"
+    );
+
+    let unread = "0x7777777777777777777777777777777777777777";
+    sim.world()
+        .rpc_hooks
+        .push(Box::new(move |_, method, params| {
+            (method == "eth_call"
+                && params[0]["to"]
+                    .as_str()
+                    .is_some_and(|to| to.eq_ignore_ascii_case(unread)))
+            .then(|| Res::RpcUnanswered {
+                detail: "offline".into(),
+            })
+        }));
+    let parent = refused_for_parent(&mut sim, &multisig, unread, &approve, "unchecked");
+    assert_eq!(parent.key, "componentsUi.signing.parentSafeUnchecked");
+}

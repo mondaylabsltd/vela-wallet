@@ -341,6 +341,10 @@ const EVENTS: &[(&str, Place)] = &[
         View("the request's funding notice answered"),
     ),
     ("SignEvent::InFlightOps", Machine("the chain tracker")),
+    (
+        "SignEvent::MultisigsChanged",
+        Machine("the device's multisig list"),
+    ),
     ("SignEvent::NetworksChanged", Machine("the networks")),
     ("SignEvent::OpTracked", Machine("the chain tracker")),
     (

@@ -1901,7 +1901,7 @@ fn stored_array(key: &str, chain_id: u32, field: &str) -> Option<String> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     /// r15-15: a question the balance settle asks the pool thread is
@@ -2808,7 +2808,7 @@ mod tests {
     /// request arrived, waits `delay`, then writes `response` — or, given
     /// `None`, closes the connection unanswered: a node that swallows the
     /// read, as the black-holed one in W13 did. Returns its URL and its log.
-    fn scripted_node(
+    pub(crate) fn scripted_node(
         delay: Duration,
         response: Option<String>,
     ) -> (String, std::sync::Arc<Mutex<Vec<Instant>>>) {
@@ -2855,7 +2855,7 @@ mod tests {
         (format!("http://127.0.0.1:{port}"), log)
     }
 
-    fn http(status: &str, payload: &str) -> String {
+    pub(crate) fn http(status: &str, payload: &str) -> String {
         format!(
             "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{payload}",
             payload.len()
@@ -2893,7 +2893,7 @@ mod tests {
     }
 
     /// One chain whose pool is exactly `nodes`, with these tiers.
-    fn seed_pool(chain_id: u32, nodes: &[(&str, RpcSource)]) {
+    pub(crate) fn seed_pool(chain_id: u32, nodes: &[(&str, RpcSource)]) {
         let Ok(mut seeded) = SEEDED.lock() else {
             unreachable!("the seed lock is poisoned");
         };

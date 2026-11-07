@@ -17861,17 +17861,9 @@ impl WalletPage {
             );
             return;
         };
-        let request = crate::wallet::signing_host::IncomingRequest {
-            id: forwarded.id,
-            method: forwarded.method,
-            params_json: forwarded.params_json,
-            origin: forwarded.origin,
-            transport_id: crate::wallet::signing_host::BROWSER_TRANSPORT.to_owned(),
-            // The SITE's chain, per origin, as the machine keeps it.
-            chain_id: forwarded.chain_id,
-            granted_address: Some(forwarded.granted_address),
-        };
-        self.open_signing_request(&account, request, Some(forwarded.tab), cx);
+        let tab = forwarded.tab.clone();
+        let request = crate::wallet::signing_host::IncomingRequest::from_forwarded(forwarded);
+        self.open_signing_request(&account, request, Some(tab), cx);
     }
 
     /// r10 follow-up: a network-space switch moved the site whose request

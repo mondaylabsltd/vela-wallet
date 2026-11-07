@@ -438,16 +438,15 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) -> gpui::AnyElement {
         let site = site_of(&held.origin);
+        // §31: a request that would have made this multisig act for a Safe
+        // it owns is said in the parent Safe's words (`data.key`); any other
+        // refusal is the message one.
+        let (title, text) = ms_dapp::refusal_words(&self.loc, held.refusal.as_ref(), &site);
         let body = div()
             .flex()
             .flex_col()
             .gap(px(14.))
-            .child(crate::ui::dialog::dialog_body(
-                theme,
-                self.loc
-                    .t_text("connect.browser.multisigNoMessagesBody", "host", &site)
-                    .to_string(),
-            ))
+            .child(crate::ui::dialog::dialog_body(theme, text))
             .child(crate::ui::dialog::dialog_actions().child({
                 let rid = rid.clone();
                 crate::ui::vela_button(
@@ -464,7 +463,7 @@ impl WalletPage {
             "ms-dapp-refused",
             theme,
             window,
-            self.loc.t("connect.browser.multisigNoMessagesTitle"),
+            title,
             None,
             close_icon,
             body,
