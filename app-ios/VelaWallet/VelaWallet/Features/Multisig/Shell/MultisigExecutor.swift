@@ -131,6 +131,14 @@ struct MultisigExecutor {
                     "body": answer.body,
                 ]
             } catch {
+                #if DEBUG
+                // r18-8 (§28, §32): this test build's guard refused the write
+                // before it left — never sent, never the service's outage; the
+                // core asks once and says it in the test build's words.
+                if ProductionWriteRefused.matches(error) {
+                    return ["type": "http_unreachable", "detail": Self.describe(error), "refused": true]
+                }
+                #endif
                 return ["type": "http_unreachable", "detail": Self.describe(error)]
             }
         case "rpc":

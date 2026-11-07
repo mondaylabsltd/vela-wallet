@@ -558,7 +558,7 @@ struct MultisigCreateSheet: View {
         let row = hub.accountsView.row(created)
         let solo = owners.count == 1
         let shared = Self.sharedLine(shared: row?.shared == true, solo: solo, refused: sheet.refused != nil,
-                                     working: sheet.phase == .working, words: words)
+                                     working: sheet.phase == .working, words: words, refusedWord: sheet.refused)
         return VStack(alignment: .leading, spacing: Tokens.Space.s16) {
             Text(prose: words.t("create.created"))
                 .typeRole(Typography.title.scaled(textScale))
@@ -585,10 +585,12 @@ struct MultisigCreateSheet: View {
     /// record the service ANSWERED and did not take is the core's `refused`
     /// (§30) — said as what is true and what to do (`settings.shareAgainNote`),
     /// never "the multisig service can't be reached", which only a service
-    /// that did not answer is.
-    static func sharedLine(shared: Bool, solo: Bool, refused: Bool, working: Bool, words: MsWords) -> String {
+    /// that did not answer is. r18-8: `production_write_refused` (this test
+    /// build would not write to the live service) is its own sentence.
+    static func sharedLine(shared: Bool, solo: Bool, refused: Bool, working: Bool, words: MsWords,
+                           refusedWord: String? = nil) -> String {
         if shared { return words.t(solo ? "create.sharedSolo" : "create.shared") }
-        if refused { return words.createRefused }
+        if refused { return words.createRefused(refusedWord) }
         return working ? words.t("create.savedSharing") : words.t("create.savedLater")
     }
 

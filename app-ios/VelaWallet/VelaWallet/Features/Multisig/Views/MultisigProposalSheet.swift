@@ -404,6 +404,11 @@ struct MsProposalModel {
         if entry["sending"]?.bool == true || entry["why"]?.string == "sending" {
             return words.t("proposal.outboxSending")
         }
+        // r18-8 (§28, §32): this test build refused to write it to the live
+        // service — kept, sent again only on Send again; said as what it is.
+        if entry["why"]?.string == MsWords.productionWriteRefusedWord {
+            return words.productionWriteRefused
+        }
         // Sent again on the person's word: "Not sent yet" (with Send again).
         guard let retryAt = entry["retryAt"]?.int else { return words.t("proposal.outboxNotSent") }
         let seconds: Int? = max(1, (retryAt - Int(Date().timeIntervalSince1970 * 1000) + 999) / 1000)
