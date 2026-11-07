@@ -41,6 +41,7 @@ export function maybeInstallDevConsole(): void {
 		});
 		requester.bindRequester((request) => {
 			resident.signRequest.syncNetworks();
+			resident.signRequest.syncMultisigs();
 			resident.signRequest.dispatch({
 				type: 'request_arrived',
 				id: request.id,

@@ -199,6 +199,20 @@ class MultisigStore {
 		return this.#read.accounts;
 	}
 
+	/**
+	 * §31: every multisig address on this device — the machine's list once it
+	 * is loaded, else the stored one (read now when nothing has booted the
+	 * store yet). What the signing machine refuses a site's request to act
+	 * for. Reactive once booted.
+	 */
+	addresses(): string[] {
+		const accounts =
+			this.view || this.#booted || typeof window === 'undefined'
+				? this.accounts
+				: snapshot().accounts;
+		return accounts.map((a) => a.address);
+	}
+
 	/** The machine's row for `address` (its name, sharing, flags), once it is loaded. */
 	row(address: string): MultisigAccountRow | null {
 		return (

@@ -208,6 +208,14 @@ pub struct SigningStrings {
     pub blocked_body: String,
     pub blocked_leg_body: String,
     pub blocked_safe_tx: SharedString,
+    /// §31: the request would have made this account act for a multisig it
+    /// is a member of, or a Safe the chain says it owns
+    /// (`componentsUi.signing.parentSafeBlocked`: `{{function}}` on
+    /// `{{safe}}`).
+    pub parent_blocked: String,
+    /// §31: whether this account owns that Safe could not be read — refused
+    /// all the same (`componentsUi.signing.parentSafeUnchecked`).
+    pub parent_unchecked: String,
     pub funding_lead: SharedString,
     /// Non-refundable, and it goes to the bundler operator rather than Vela.
     /// The surface had no such sentence at all.
@@ -527,6 +535,8 @@ impl SigningStrings {
                 .t("componentsUi.signing.selfCallBlockedLegBody")
                 .to_string(),
             blocked_safe_tx: s("selfCallBlockedSafeTx"),
+            parent_blocked: raw("parentSafeBlocked"),
+            parent_unchecked: raw("parentSafeUnchecked"),
             // Founder, 2026-09-22: this surface means THE RELAY HAS NO GAS ON
             // THIS CHAIN — not "your wallet needs a fee reserve". The
             // `componentsUi.funding.*` vocabulary it used to wear describes

@@ -574,6 +574,24 @@ class AppContainer(private val app: Application) {
     @Volatile
     private var multisigBuilt = false
 
+    /**
+     * §31: every multisig on this device, by address (the multisig accounts
+     * list, whoever its members are) — what each signing request's machine is
+     * told as `multisigs_changed`, at its boot and on every change. A site's
+     * request that would make a Vela account act for one is refused at once.
+     */
+    val multisigAddresses: StateFlow<List<String>> by lazy {
+        val list = { view: app.getvela.wallet.feature.multisig.core.MsAccountsView -> view.accounts.map { it.account.address } }
+        multisig.accountsView
+            .let { flow -> kotlinx.coroutines.flow.flow { flow.collect { emit(list(it)) } } }
+            .distinctUntilChanged()
+            .stateIn(
+                CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
+                SharingStarted.Eagerly,
+                list(multisig.accountsView.value),
+            )
+    }
+
     /** A page's request, as the proposals machine holds it: one id across tabs. */
     private fun multisigDappId(tab: String, id: String) = "$tab:$id"
 
@@ -935,14 +953,8 @@ class AppContainer(private val app: Application) {
         // the page's later receipt lookups by it.
         var userOpHash: String? = null
         openSigningRequest(
-            request = IncomingRequest(
-                id = operation.id,
-                method = operation.method,
-                paramsJson = operation.params_json,
-                origin = operation.origin,
-                transportId = operation.tab,
-                chainId = operation.chain_id,
-                grantedAddress = operation.granted_address,
+            request = IncomingRequest.fromBrowser(
+                operation,
                 // r10 follow-up (core §10.4): a space switch moved this site
                 // since its last request — the browser's view of the request
                 // it forwards says so, committed before the forward runs.
@@ -1140,6 +1152,13 @@ class AppContainer(private val app: Application) {
                     override fun trackerView() = wallet.tracker
                     // One in flight per account and network (the core's read of the tracker's own JSON).
                     override fun inFlightOps() = wallet.inFlightOps
+                    // §31: every multisig on this device — a site's request that
+                    // would make this account act for one is refused by the core.
+                    override fun multisigs() = multisigAddresses
+                    // §31: the core's `isOwner` read, through the pool, its answer
+                    // as it came (the executor bounds it and hands it back).
+                    override suspend fun safeOwnerCall(chainId: Int, safe: String, data: String): RpcResult =
+                        pool.call(chainId, "eth_call", listOf(JSONObject().put("to", safe).put("data", data), "latest"))
                     override fun dataBase(): String = settings.endpointUrl(NetEndpointField.EthereumData)
                     // The pool's answer as it came; the core reads it (`simOutcome`, RG6).
                     override suspend fun simulate(chainId: Int, params: List<Any?>): RpcResult =

@@ -21,6 +21,7 @@ use vela_core::app::clear_signing::{
     ClearSigningView, ClearSiweBinding, ClearSurface, UNKNOWN_AMOUNT,
 };
 use vela_core::app::fee_policy::{FeeTier, FeeView};
+use vela_core::app::parent_safe_guard::ParentReason;
 use vela_core::app::sign_request::{SignErrorKind, SignFundingPresentation, SignPhase, SignView};
 
 use crate::signing::fixtures::{AllowanceInput, Block, ChipState, FeeModel, FeeTokenOption};
@@ -2075,7 +2076,17 @@ pub fn status_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
             text: s.blocked_title.clone(),
             tone: Tone::Danger,
         });
-        let text = if blocked.function == "SafeTx" {
+        // §31: refused for a Safe this account owns — a multisig it is a
+        // member of — in the parent Safe's own words, never the self-call
+        // sentence (which says "your account").
+        let text = if let Some(parent) = blocked.parent.as_deref() {
+            parent_refusal_text(
+                s,
+                &blocked.function,
+                parent,
+                blocked.reason == Some(ParentReason::Unchecked),
+            )
+        } else if blocked.function == "SafeTx" {
             s.blocked_safe_tx.to_string()
         } else if let Some(index) = blocked.leg_index {
             crate::signing::fill(
@@ -2411,7 +2422,30 @@ fn descriptor_host() -> String {
         .unwrap_or_default()
 }
 
-fn short_address(address: &str) -> String {
+/// §31's refusal sentence: the call (`{{function}}`) and the Safe it would
+/// have acted for (`{{safe}}`, shortened as the sheet shortens every
+/// address) — `parentSafeUnchecked` when whether this account owns it could
+/// not be read, `parentSafeBlocked` otherwise. The signing sheet's, and the
+/// multisig's own refusal of a site's request says the same.
+#[must_use]
+pub fn parent_refusal_text(
+    s: &SigningStrings,
+    function: &str,
+    safe: &str,
+    unchecked: bool,
+) -> String {
+    let template = if unchecked {
+        &s.parent_unchecked
+    } else {
+        &s.parent_blocked
+    };
+    crate::signing::fill(
+        template,
+        &[("function", function), ("safe", &short_address(safe))],
+    )
+}
+
+pub(crate) fn short_address(address: &str) -> String {
     if address.len() <= 12 {
         return address.to_owned();
     }

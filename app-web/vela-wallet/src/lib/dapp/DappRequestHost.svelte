@@ -52,6 +52,7 @@
 	import { chainName } from '$lib/services/networks';
 	import { chainLogoURL } from '$lib/flows/marks';
 	import type { RequestMessages } from '$lib/dapp/messages';
+	import { multisigRefusalWords } from '$lib/dapp/multisig-refusal';
 	import { panelSurface } from '$lib/dapp/panel-surface.svelte';
 	import { focusOwnWindow, openInBrowserTab } from '$lib/extension/open-tab';
 	import { oneSurface } from '$lib/extension/one-surface.svelte';
@@ -435,8 +436,19 @@
 	let multisigNo = $state<{
 		rid: string;
 		host: string;
-		error: { code: number; message: string };
+		error: { code: number; message: string; data?: unknown };
 	} | null>(null);
+
+	/**
+	 * What the refusal is said in (`multisigRefusalWords`): §31's parent-Safe
+	 * sentence when the core says `data.reason: "parent_safe"` (the site asked
+	 * this multisig to act for a Safe it owns), else dapp-7's.
+	 */
+	const multisigNoWords = $derived(
+		multisigRefusalWords(multisigNo?.error, multisigNo?.host ?? '', m)
+	);
+	const multisigNoTitle = $derived(multisigNoWords.title);
+	const multisigNoBody = $derived(multisigNoWords.body);
 
 	/**
 	 * The worker withdrew `rid` — its page left, its surface closed, or its
@@ -530,6 +542,7 @@
 		await signRequest.boot();
 		signRequest.syncNetworks();
 		signRequest.syncAccounts();
+		signRequest.syncMultisigs();
 		const transportId = signRequest.registerTransport({
 			sendResponse: (_id, result, error, opHash) => {
 				// The answer goes out FIRST and unconditionally. Everything below
@@ -546,7 +559,7 @@
 				// A request the CORE refuses outright is answered the moment it
 				// arrives — so the page never hangs — but the sheet is still
 				// explaining WHY; the person's dismissal is what leaves (081).
-				if (error?.kind === 'self_call_blocked') return;
+				if (error?.kind === 'self_call_blocked' || error?.kind === 'parent_safe_blocked') return;
 				// A transaction the wallet can watch stays on screen and lands; the
 				// person's Done is what leaves. Anything else leaves as it always has.
 				setTimeout(() => {
@@ -1041,13 +1054,13 @@
 	{:else if multisigNo}
 		<div class="layer">
 			<BottomSheet
-				title={m.multisigNoMessagesTitle}
+				title={multisigNoTitle}
 				closeLabel={m.gotIt}
 				dismissible="explicit"
 				onclose={closeMultisigNo}
 			>
 				<div class="card">
-					<p class="body">{m.multisigNoMessagesBody.replace('{{host}}', multisigNo.host)}</p>
+					<p class="body" data-testid="multisig-refusal">{multisigNoBody}</p>
 					<Button variant="primary" shape="rounded" onclick={closeMultisigNo}>{m.gotIt}</Button>
 				</div>
 			</BottomSheet>
@@ -1086,8 +1099,8 @@
 				onsetup={openChainSetup}
 			/>
 		{:else if multisigNo}
-			<h1>{m.multisigNoMessagesTitle}</h1>
-			<p class="body">{m.multisigNoMessagesBody.replace('{{host}}', multisigNo.host)}</p>
+			<h1>{multisigNoTitle}</h1>
+			<p class="body" data-testid="multisig-refusal">{multisigNoBody}</p>
 			<div class="stack">
 				<Button variant="primary" shape="rounded" onclick={closeMultisigNo}>{m.gotIt}</Button>
 			</div>

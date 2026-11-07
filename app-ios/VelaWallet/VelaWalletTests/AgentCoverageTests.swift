@@ -279,6 +279,7 @@ private let CALLS: [String: Place] = [
     "signing.guardLegCustomAmount": .later("limiting a dApp's approval"),
     "signing.guardChip": .later("limiting a dApp's approval"),
     "signing.landingClosed": .view("the signing ending closed"),
+    "signing.multisigsChanged": .machine("this device's multisig list, to the signing sheet (§31)"),
     "signing.pickFee": .later(SIGN),
     "signing.refreshFee": .later(SIGN),
     "signing.retry": .later(SIGN),

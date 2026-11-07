@@ -31,7 +31,7 @@ struct MultisigDappSheet: View {
         } else if held?["stage"]?.string == "refused" {
             MsSheet(title: words.t("proposal.title"), closeLabel: words.loc.t("common.done"), onClose: leave) {
                 MsNote(text: words.t("proposal.siteAsks", ["host": host(held)]))
-                MsNote(text: held?["refusal"]?["message"]?.string ?? words.t("action.unsupported"), tone: .warning, identifier: "multisig.dapp.refused")
+                MsNote(text: Self.refusalText(held?["refusal"], words: words), tone: .warning, identifier: "multisig.dapp.refused")
             }
         } else if hub.proposalsView.draft != nil {
             MultisigDraftReviewSheet(
@@ -60,6 +60,22 @@ struct MultisigDappSheet: View {
                 }
             }
         }
+    }
+
+    /// What a refused request says. §31: a request that would have made this
+    /// multisig act for a Safe it owns (`data.reason == "parent_safe"`) is
+    /// said in the catalog's sentence the core names (`data.key` —
+    /// `parentSafeBlocked` / `parentSafeUnchecked`), with the call and the
+    /// Safe; any other refusal in the core's own words.
+    static func refusalText(_ refusal: MsJSON?, words: MsWords) -> String {
+        let data = refusal?["data"]
+        if data?["reason"]?.string == "parent_safe", let key = data?["key"]?.string, !key.isEmpty {
+            return words.loc.t(key, vars: [
+                "function": data?["function"]?.string ?? "",
+                "safe": AddressText.short(data?["safe"]?.string ?? ""),
+            ])
+        }
+        return refusal?["message"]?.string ?? words.t("action.unsupported")
     }
 
     /// The draft's failure (the machine's `actions["propose"]`), worded.

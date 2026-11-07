@@ -611,3 +611,125 @@ fn calls_status_answers_are_cleared_once_taken_and_bounded() {
     assert!(!sut.view().calls_status.contains_key("s3"));
     assert_eq!(sut.view().calls_status.len(), CALLS_STATUS_KEPT - 1);
 }
+
+// ---------------------------------------------------------------------------
+// §31 — a site may never make a multisig act for a Safe it owns
+// ---------------------------------------------------------------------------
+
+/// `approveHash(0xcd…)` — one counting approval of `safe`.
+fn approve_hash_on(account: &MultisigAccount, safe: &str) -> Event {
+    ask(
+        account,
+        "r1",
+        "eth_sendTransaction",
+        json!([{ "from": account.address, "to": safe, "value": "0x0",
+                 "data": format!("0xd4d9bdcd{}", "cd".repeat(32)) }]),
+    )
+}
+
+/// A 1-of-1 parent whose one member is `account`.
+fn parent_of(account: &MultisigAccount) -> MultisigAccount {
+    let g = genesis(&[account.address.as_str()], 1, "0x77");
+    serde_json::from_value(world::stored_row(&g, &[100], true)).unwrap()
+}
+
+fn refusal_data(sut: &Sut, id: &str) -> Value {
+    let held = sut.view().dapp[id].clone();
+    assert_eq!(held.stage, HeldStage::Refused, "{held:?}");
+    held.refusal.unwrap().data.unwrap()
+}
+
+#[test]
+fn a_site_asking_a_multisig_to_approve_for_a_multisig_on_the_list_is_refused() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let parent = parent_of(&account);
+    run(
+        &mut sut,
+        &mut world,
+        Event::Accounts {
+            accounts: vec![account.clone(), parent.clone()],
+        },
+    );
+    run(
+        &mut sut,
+        &mut world,
+        approve_hash_on(&account, &parent.address),
+    );
+    let data = refusal_data(&sut, "r1");
+    assert_eq!(data["reason"], "parent_safe");
+    assert_eq!(data["why"], "member");
+    assert_eq!(data["function"], "approveHash");
+    assert_eq!(data["key"], "componentsUi.signing.parentSafeBlocked");
+    assert!(sut.view().draft.is_none(), "nothing drafted");
+    assert!(world.passkeys.is_empty(), "nothing signed");
+    // Read, then answered with the refusal — never 4001.
+    run(&mut sut, &mut world, Event::DappLeave { id: "r1".into() });
+    let answer = answer(&sut, "r1").unwrap();
+    assert_eq!(answer.error.unwrap().code, -32603);
+}
+
+#[test]
+fn a_safe_the_chain_says_the_multisig_owns_is_refused_after_the_read() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let parent = parent_of(&account);
+    world.safes.insert(
+        (100, parent.address.to_ascii_lowercase()),
+        DeployedSafe::clean(&[account.address.as_str()], 1),
+    );
+    run(
+        &mut sut,
+        &mut world,
+        approve_hash_on(&account, &parent.address),
+    );
+    assert!(
+        world
+            .rpc_log
+            .iter()
+            .any(|(_, method, params)| method == "eth_call"
+                && params[0]["data"]
+                    .as_str()
+                    .is_some_and(|d| d.starts_with("0x2f54bf6e"))),
+        "isOwner was read"
+    );
+    assert_eq!(refusal_data(&sut, "r1")["why"], "owner");
+    assert!(sut.view().draft.is_none());
+}
+
+#[test]
+fn a_safe_the_multisig_does_not_own_is_drafted_once_read() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let other = genesis(&[fixture(2).address.as_str()], 1, "0x78");
+    world.safes.insert(
+        (100, other.address.to_ascii_lowercase()),
+        DeployedSafe::clean(&[fixture(2).address.as_str()], 1),
+    );
+    run(
+        &mut sut,
+        &mut world,
+        approve_hash_on(&account, &other.address),
+    );
+    let view = sut.view();
+    assert_eq!(view.dapp["r1"].stage, HeldStage::Reviewing);
+    assert!(view.draft.is_some(), "read false: its review, as any call");
+}
+
+#[test]
+fn an_owner_read_nobody_could_make_refuses() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let target = "0x7777777777777777777777777777777777777777";
+    world.rpc_hooks.push(Box::new(move |_, method, params| {
+        (method == "eth_call"
+            && params[0]["to"]
+                .as_str()
+                .is_some_and(|to| to.eq_ignore_ascii_case(target)))
+        .then(
+            || vela_core::app::multisig_shell::MultisigShellResult::RpcUnanswered {
+                detail: "offline".into(),
+            },
+        )
+    }));
+    run(&mut sut, &mut world, approve_hash_on(&account, target));
+    let data = refusal_data(&sut, "r1");
+    assert_eq!(data["why"], "unchecked");
+    assert_eq!(data["key"], "componentsUi.signing.parentSafeUnchecked");
+}

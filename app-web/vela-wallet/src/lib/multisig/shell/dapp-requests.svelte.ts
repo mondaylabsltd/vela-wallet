@@ -107,6 +107,10 @@ export async function holdDappRequest(h: DappHandOff, machine: DappHost = host):
 		if (held.stage === 'refused' && !held.answer) {
 			if (!said && held.refusal) {
 				said = true;
+				// §31: refused after the chain was read (`isOwner`), its sheet
+				// may already be up on the held request — it goes, and the
+				// surface says the refusal instead.
+				if (shown) multisigUi.closeDapp(h.rid);
 				h.refused(held.refusal);
 			}
 			return;

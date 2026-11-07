@@ -1569,6 +1569,8 @@
    "selfCallBlockedBody": "這筆請求會改變誰能控制你的錢包（{{function}}）。簽一次就可能把錢包交給別人，所以 Vela 拒絕了它。什麼都沒有簽。",
    "selfCallBlockedLegBody": "這筆請求的第 {{index}} 步會改變誰能控制你的錢包（{{function}}）。簽一次就可能把錢包交給別人，所以 Vela 拒絕了整筆請求。什麼都沒有簽。",
    "selfCallBlockedSafeTx": "這筆請求要你的密鑰授權一筆稍後才執行的 Safe 交易。Vela 拒絕了它——這種簽章可以在你不在場時使用。什麼都沒有簽。",
+   "parentSafeBlocked": "呢個網站要你嘅帳戶替你所在嘅多簽做變更或批准（{{safe}} 上嘅 {{function}}）。Vela 從不容許網站咁做——請喺該多簽自己嘅頁面操作。乜都冇簽。",
+   "parentSafeUnchecked": "呢個網站要你嘅帳戶替一個 Safe 操作（{{safe}} 上嘅 {{function}}），而 Vela 無法確認你係咪佢嘅成員。Vela 寧願拒絕都唔會估——請連網後再試，或喺該多簽自己嘅頁面操作。乜都冇簽。",
    "stillConfirming": "尚未上鏈。Vela 會繼續監察，請勿重複發送。",
    "maybeSent": "可能已經發出。Vela 會繼續監察，請勿重複發送。",
    "refused": "網絡已拒絕此交易，沒有發出任何內容。",

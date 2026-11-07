@@ -586,6 +586,42 @@ let parityTotal = 0;
   }
 }
 
+// ---------------------------------------------------------------------------
+// §31: the parent-Safe guard's rule table (`tests/vectors/rules/
+// parent-safe-guard.json`), through the shipped wasm's door to it
+// (`parentSafeCheck`). The table lives under `rules/`, which the corpus scan
+// above never reads; it is replayed here case for case — deep equality with
+// `expect` — as `app_parent_safe_guard.rs` replays it in the crate and the
+// uniffi bridge on the natives.
+// ---------------------------------------------------------------------------
+
+let parentSafeTotal = 0;
+{
+  const doc = JSON.parse(readFileSync(join(VECTORS_DIR, 'rules', 'parent-safe-guard.json'), 'utf8'));
+  if (!Array.isArray(doc.cases) || doc.cases.length < 39) {
+    failures.push(`parent-safe-guard: the table shrank to ${doc.cases?.length ?? 0} cases`);
+  }
+  if (typeof wasm.parentSafeCheck !== 'function') {
+    failures.push('parent-safe-guard: the shipped wasm has no `parentSafeCheck`');
+  } else {
+    for (const c of doc.cases ?? []) {
+      parentSafeTotal++;
+      let actual;
+      try {
+        actual = JSON.parse(wasm.parentSafeCheck(JSON.stringify(c.input)));
+      } catch (e) {
+        failures.push(`parent-safe-guard::${c.name} — threw ${e?.message ?? e}`);
+        continue;
+      }
+      if (canonical(actual) !== canonical(c.expect)) {
+        failures.push(
+          `parent-safe-guard::${c.name} — expected ${JSON.stringify(c.expect)}, got ${JSON.stringify(actual)}`,
+        );
+      }
+    }
+  }
+}
+
 if (failures.length) {
   console.error(`verify-web: ${failures.length} of ${total} cases FAILED:\n${failures.join('\n')}`);
   process.exit(1);
@@ -596,6 +632,7 @@ console.log(
 );
 console.log(`verify-web: ${2 + 3} boundary regressions green (FR-023 borrow safety, FR-024 non-finite vars)`);
 console.log(`verify-web: ${parityTotal} native-parity cases green (the uniffi exports' recorded answers)`);
+console.log(`verify-web: ${parentSafeTotal} parent-safe-guard cases green (§31, parentSafeCheck)`);
 console.log(
   `verify-web: ${otherRunnerFiles.length} rule tables left to their own runners: ` +
     otherRunnerFiles.map((f) => `${f} (${OTHER_RUNNERS.get(f)})`).join('; '),

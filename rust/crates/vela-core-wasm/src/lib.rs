@@ -24,6 +24,8 @@ mod intents;
 /// The multisig machines (F0.4).
 mod multisig_machines;
 mod onboarding;
+/// §31: the parent-Safe guard's rule, for the vector replay.
+mod parent_safe_guard;
 /// §28: the core's service defaults, and the rule that a test build never
 /// writes to production.
 mod service_defaults;

@@ -1569,6 +1569,8 @@
    "selfCallBlockedBody": "Yêu cầu này sẽ thay đổi ai kiểm soát ví của bạn ({{function}}). Chỉ cần ký một lần là ví có thể rơi vào tay người khác, nên Vela từ chối. Không có gì được ký.",
    "selfCallBlockedLegBody": "Bước {{index}} của yêu cầu này sẽ thay đổi ai kiểm soát ví của bạn ({{function}}). Chỉ cần ký một lần là ví có thể rơi vào tay người khác, nên Vela từ chối toàn bộ yêu cầu. Không có gì được ký.",
    "selfCallBlockedSafeTx": "Yêu cầu này muốn khóa của bạn phê duyệt một giao dịch Safe để thực thi sau. Vela từ chối — chữ ký như vậy có thể được dùng khi bạn không có mặt. Không có gì được ký.",
+   "parentSafeBlocked": "Trang này yêu cầu tài khoản của bạn thay đổi hoặc phê duyệt cho một multisig mà bạn là thành viên ({{function}} trên {{safe}}). Vela không bao giờ cho phép trang web làm vậy — hãy dùng màn hình của chính multisig đó. Chưa có gì được ký.",
+   "parentSafeUnchecked": "Trang này yêu cầu tài khoản của bạn hành động thay một Safe ({{function}} trên {{safe}}), và Vela không kiểm tra được bạn có phải chủ sở hữu của nó không. Vela từ chối thay vì đoán — hãy thử lại khi có mạng, hoặc dùng màn hình của chính multisig đó. Chưa có gì được ký.",
    "stillConfirming": "Chưa lên chuỗi. Vela vẫn đang theo dõi — đừng gửi lại.",
    "maybeSent": "Có thể đã được gửi. Vela vẫn đang theo dõi — đừng gửi lại.",
    "refused": "Mạng đã từ chối — chưa có gì được gửi đi.",

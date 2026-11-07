@@ -161,6 +161,8 @@ window.VelaCS.i18n.register('id', {
   'refuse.selfCall': 'Permintaan ini meminta akun Anda memanggil {fn} pada dirinya sendiri, yang akan mengubah siapa yang menguasai akun ini. Vela tidak pernah membutuhkan itu. Tidak akan ditandatangani.',
   'refuse.delegateCall': 'Permintaan ini menjalankan kode kontrak lain sebagai akun Anda (delegatecall) — teknik yang dipakai untuk menguras Bybit. Tidak akan ditandatangani.',
   'refuse.safeTx': 'Permintaan ini meminta kunci Anda menandatangani transaksi Safe (SafeTx), yaitu instruksi yang bisa dijalankan Safe di kemudian hari. Tidak ada situs yang membutuhkan itu dari Vela. Tidak akan ditandatangani.',
+  'refuse.parentSafe': 'Situs ini meminta akun Anda menjalankan {fn} untuk Safe lain — mungkin multisig yang Anda ikuti. Vela tidak pernah membiarkan situs mengubah atau menyetujui apa pun untuk sebuah multisig; gunakan layar multisig itu sendiri. Tidak akan ditandatangani.',
+  'refuse.parentSafeMessage': 'Permintaan ini meminta kunci Anda menandatangani pesan Safe (SafeMessage) untuk Safe lain — mungkin multisig yang Anda ikuti — yang akan dihitung Safe itu sebagai persetujuan Anda. Vela tidak pernah membiarkan situs melakukan itu; gunakan layar multisig itu sendiri. Tidak akan ditandatangani.',
   'warn.nonCanonicalModule': 'Operasi ini menyebut EntryPoint atau modul 4337 yang bukan milik Vela — menandatanganinya berarti menyetujui kumpulan kontrak yang berbeda.',
   'ui.digest': 'Digest yang ditandatangani · {kind}',
   'ui.digestUnwrapped': 'tidak dibungkus dalam SafeMessage — tanda tangan gaya EOA yang tidak akan diterima Safe',

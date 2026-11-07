@@ -21952,6 +21952,18 @@ public func multisigLinkCall(method: String, argsJson: String)throws  -> String 
 })
 }
 /**
+ * `parent_safe_guard::check` over JSON: a `CheckInput` in, a
+ * `ParentVerdict` out, or `{ "error": … }` for an input that does not read.
+ */
+public func parentSafeCheck(inputJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_parent_safe_check(
+        FfiConverterString.lower(inputJson),uniffiCallStatus
+    )
+})
+}
+/**
  * A new room on `relay` (`ws://` or `wss://`): this side is the inviter.
  */
 public func peerconnectCreateRoom(relay: String)throws  -> PeerRoomRecord  {
@@ -23939,6 +23951,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_multisig_link_call() != 2238) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_parent_safe_check() != 24720) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_peerconnect_create_room() != 48634) {

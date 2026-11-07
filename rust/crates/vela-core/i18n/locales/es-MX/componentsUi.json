@@ -225,6 +225,8 @@
       "selfCallBlockedBody": "Esta solicitud cambiaría quién controla tu wallet ({{function}}). Firmarla una vez puede entregar tu wallet a otra persona, así que Vela la rechaza. No se firmó nada.",
       "selfCallBlockedLegBody": "El paso {{index}} de esta solicitud cambiaría quién controla tu wallet ({{function}}). Firmarla una vez puede entregar tu wallet a otra persona, así que Vela rechaza la solicitud completa. No se firmó nada.",
       "selfCallBlockedSafeTx": "Esta solicitud pide que tu llave autorice una transacción de Safe para ejecutarla después. Vela la rechaza: una firma así puede usarse sin ti. No se firmó nada.",
+      "parentSafeBlocked": "Este sitio pidió a tu cuenta cambiar o aprobar algo para un multisig del que eres miembro ({{function}} en {{safe}}). Vela nunca permite que un sitio haga eso: usa la pantalla del propio multisig. No se firmó nada.",
+      "parentSafeUnchecked": "Este sitio pidió a tu cuenta actuar por un Safe ({{function}} en {{safe}}) y Vela no pudo comprobar si eres uno de sus dueños. Vela lo rechaza en vez de adivinar: inténtalo de nuevo con conexión o usa la pantalla del propio multisig. No se firmó nada.",
       "stillConfirming": "Todavía no está en la cadena. Vela sigue revisando; no la envíes otra vez.",
       "maybeSent": "Es posible que ya se haya enviado. Vela sigue revisando; no la envíes otra vez.",
       "refused": "La red la rechazó; no se envió nada.",

@@ -85,6 +85,9 @@ check('…and the warning names the function',
 
 view = ns.resolve(tx(OTHER, addOwner), ctx);
 check('the same call to another Safe is not a takeover of this one', noTakeover(view));
+// §31: …but it would act for that other Safe — perhaps a multisig this account
+// is a member of — and the page cannot read whose it is, so it is refused as one.
+check('…and is refused as another Safe\'s (§31)', refusal(view, 'refuse.parentSafe'));
 
 view = ns.resolve(tx(ACCOUNT, '0x'), { ...ctx });
 check('an empty self-call (the fee leg\'s shape) is allowed', noTakeover(view));
@@ -149,9 +152,64 @@ check('a SafeTx signature is refused', refusal(view, 'refuse.safeTx'));
 view = ns.resolve(typed('Mail'), ctx);
 check('other typed data is not treated as SafeTx', !view.warnings.some((w) => w.key === 'refuse.safeTx'));
 
+// --- §31: a Safe this account owns (the parent-Safe guard) ----------------------
+//
+// The core refuses these for every Safe the account owns (its multisig list,
+// or an isOwner read). The page cannot read the chain, so it refuses the shapes
+// on ANY Safe but the account. Replayed from the core's own vector.
+
+import { readFileSync } from 'node:fs';
+const VECTOR = JSON.parse(readFileSync(new URL('../../../rust/crates/vela-core/tests/vectors/rules/parent-safe-guard.json', import.meta.url), 'utf8'));
+const PAGE_KEYS = ['refuse.parentSafe', 'refuse.parentSafeMessage', 'refuse.safeTx', 'refuse.typedShape', 'refuse.selfCall', 'refuse.delegateCall'];
+const parentRefused = (view) => view.refuse && view.warnings.some((w) => PAGE_KEYS.includes(w.key));
+const saysParent = (view) => view.warnings.some((w) => w.key === 'refuse.parentSafe' || w.key === 'refuse.parentSafeMessage');
+for (const c of VECTOR.cases) {
+  const intent = { method: c.input.method, origin: 'https://evil.example', params: c.input.params };
+  const pageCtx = { account: c.input.signer, chainId: c.input.chain_id, channel: 'url', callback: 'velawallet://sign-result' };
+  const v = ns.resolve(intent, pageCtx);
+  // A target the core had to read (or read clear) is still a target here.
+  const hasTarget = c.expect.verdict !== 'clear' || c.input.answers.length > 0;
+  if (hasTarget) {
+    check(`vector — refused on the page: ${c.name}`, parentRefused(v), v.warnings.map((w) => w.key).join(','));
+  } else {
+    check(`vector — no parent refusal: ${c.name}`, !saysParent(v), v.warnings.map((w) => w.key).join(','));
+  }
+}
+
+const PARENT = VECTOR.parent;
+const approveHash = '0xd4d9bdcd' + 'cd'.repeat(32);
+view = ns.resolve(tx(PARENT, approveHash), ctx);
+check('approveHash on another Safe is refused, the function named',
+  view.warnings.some((w) => w.key === 'refuse.parentSafe' && w.params && w.params.fn === 'approveHash'));
+view = ns.resolve(tx(OTHER, multiSend([{ to: OTHER, data: transfer }, { to: PARENT, data: approveHash }])), ctx);
+check('approveHash on another Safe, one multiSend down, is refused', refusal(view, 'refuse.parentSafe'));
+view = ns.resolve(tx(PARENT, execTransaction(PARENT, '0xe318b52b' + word('0x1') + word(ACCOUNT) + word(OTHER), 0)), ctx);
+check('execTransaction(swapOwner) on another Safe is refused', refusal(view, 'refuse.parentSafe'));
+view = ns.resolve(tx(OTHER, transfer), {
+  ...ctx,
+  ...userOp(executeUserOp(MULTI_SEND, multiSend([{ to: OTHER, data: transfer }, { to: PARENT, data: approveHash }]), 1)),
+});
+check('an approveHash leg the app slipped into the operation is refused', refusal(view, 'refuse.parentSafe'));
+const safeMessage = (contract) => ({
+  method: 'eth_signTypedData_v4',
+  origin: 'https://site.test',
+  params: [ACCOUNT, JSON.stringify({
+    primaryType: 'SafeMessage',
+    domain: { chainId: 100, verifyingContract: contract },
+    types: { EIP712Domain: [{ name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' }], SafeMessage: [{ name: 'message', type: 'bytes' }] },
+    message: { message: '0x' + 'ab'.repeat(32) },
+  })],
+});
+view = ns.resolve(safeMessage(PARENT), ctx);
+check('a SafeMessage under another Safe\'s domain is refused, never "sign anyway"', refusal(view, 'refuse.parentSafeMessage'));
+view = ns.resolve(safeMessage(ACCOUNT), ctx);
+check('a SafeMessage under the account\'s own domain is not another Safe\'s', !saysParent(view));
+view = ns.resolve(tx(OTHER, '0xa9059cbb' + word(PARENT) + num(5)), ctx);
+check('a token sent TO a multisig is untouched', !saysParent(view));
+
 // --- words -------------------------------------------------------------------
 
-for (const key of ['refuse.selfCall', 'refuse.delegateCall', 'refuse.safeTx']) {
+for (const key of ['refuse.selfCall', 'refuse.delegateCall', 'refuse.safeTx', 'refuse.parentSafe', 'refuse.parentSafeMessage']) {
   const phrase = ns.i18n ? ns.i18n.t(key, { fn: 'enableModule' }) : null;
   check(`"${key}" has English words`, typeof phrase === 'string' && phrase !== key && !phrase.includes('{'), phrase);
 }

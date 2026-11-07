@@ -1639,6 +1639,13 @@ export function networkSpaceChainIds(space: string, rows_json: string): string;
  */
 export function networkSpaceRead(stored?: string | null): string;
 
+/**
+ * `parent_safe_guard::check` over JSON: a `CheckInput` in, a
+ * `ParentVerdict` out (`{ verdict: "clear" | "refuse" | "read", … }`), or
+ * `{ "error": … }` for an input that does not read.
+ */
+export function parentSafeCheck(input_json: string): string;
+
 export function parsePublicKey(hex: string): P256PublicKey;
 
 /**
@@ -2747,6 +2754,7 @@ export interface InitOutput {
     readonly networkadmincore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly networkadmincore_skip_unchanged_views: (a: number, b: number) => void;
     readonly networkadmincore_view: (a: number) => [number, number, number, number];
+    readonly parentSafeCheck: (a: number, b: number) => [number, number];
     readonly parsePublicKey: (a: number, b: number) => [number, number, number];
     readonly parseUserOpStatus: (a: number, b: number) => [number, number];
     readonly passkeyCeremonyEnd: (a: number, b: number, c: number) => [number, number];

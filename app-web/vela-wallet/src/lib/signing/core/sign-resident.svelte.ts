@@ -126,7 +126,9 @@ class SignRequest {
 	#assetSim: AssetSimResult | null = null;
 	#networksKey: string | null = null;
 	#accountsKey: string | null = null;
+	#multisigsKey: string | null = null;
 	#stopAccountsMirror: (() => void) | null = null;
+	#stopMultisigsMirror: (() => void) | null = null;
 	#lastHandoffKey = '';
 	#lastWithdrawKey = '';
 	#forward: TrackForward | null = null;
@@ -303,6 +305,19 @@ class SignRequest {
 					this.syncAccounts();
 				});
 			});
+			// §31: every multisig on this device, on boot and on every change
+			// (an add, a removal, the machine's first read of the store). The
+			// machine refuses a site's request to act for one of them at once;
+			// any other Safe it would act for is read on chain first.
+			this.syncMultisigs();
+			this.#stopMultisigsMirror?.();
+			this.#stopMultisigsMirror = $effect.root(() => {
+				$effect(() => {
+					void multisig.view;
+					void multisig.accounts;
+					this.syncMultisigs();
+				});
+			});
 		})();
 		return this.#booting;
 	}
@@ -360,6 +375,22 @@ class SignRequest {
 		};
 		// Synchronous when the machine is up: a caller inside a port needs the
 		// rows in place before its ack resolves.
+		if (this.#loop) this.#loop.dispatch(event);
+		else this.dispatch(event);
+	}
+
+	/**
+	 * §31: hand the machine every multisig address on this device (any member
+	 * — the list, not who signs). Unchanged lists are dropped: one string
+	 * compare. Sent before every arrival too, so a multisig added a moment
+	 * ago is already in it.
+	 */
+	syncMultisigs(): void {
+		const addresses = multisig.addresses();
+		const key = addresses.map((a) => a.toLowerCase()).join(',');
+		if (key === this.#multisigsKey) return;
+		this.#multisigsKey = key;
+		const event: SignEvent = { type: 'multisigs_changed', addresses };
 		if (this.#loop) this.#loop.dispatch(event);
 		else this.dispatch(event);
 	}

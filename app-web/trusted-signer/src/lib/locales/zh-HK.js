@@ -161,6 +161,8 @@ window.VelaCS.i18n.register('zh-HK', {
   'refuse.selfCall': '這個請求要你的帳戶對自己呼叫 {fn}，這會改變誰能控制這個帳戶。Vela 從來不需要這樣做。不會簽署。',
   'refuse.delegateCall': '這個請求會以你帳戶的身份執行另一個合約的程式碼（delegatecall），正是 Bybit 被盜時所用的手法。不會簽署。',
   'refuse.safeTx': '這個請求要你的鎖匙簽署一筆 Safe 交易（SafeTx），即一條 Safe 日後可以執行的指令。沒有任何網站需要 Vela 簽署這種東西。不會簽署。',
+  'refuse.parentSafe': '這個網站要你的帳戶替另一個 Safe 執行 {fn}——可能是你所在的多簽。Vela 從不容許網站替多簽做變更或批准；請在該多簽自己的頁面操作。不會簽署。',
+  'refuse.parentSafeMessage': '這個請求要你的鎖匙替另一個 Safe 簽署一則 Safe 訊息（SafeMessage）——可能是你所在的多簽——那個 Safe 會把它當作你的批准。Vela 從不容許網站這樣做；請在該多簽自己的頁面操作。不會簽署。',
   'warn.nonCanonicalModule': '這項操作指定的 EntryPoint 或 4337 模組並非 Vela 的——簽署它，等於為另一套合約背書。',
   'ui.digest': '簽署摘要 · {kind}',
   'ui.digestUnwrapped': '沒有包裝在 SafeMessage 內——這是 EOA 式簽名，Safe 不會接受',

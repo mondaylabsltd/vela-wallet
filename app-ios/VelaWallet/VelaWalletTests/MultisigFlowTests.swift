@@ -318,6 +318,9 @@ final class MsSimWorld: MultisigPorts {
         case "0xcc2f8452":  // getModulesPaginated(address,uint256)
             return .result("0x" + Self.wordU(64) + Self.wordAddress("0x0000000000000000000000000000000000000001")
                 + Self.wordU(safe.modules.count) + safe.modules.map(Self.wordAddress).joined())
+        case "0x2f54bf6e":  // isOwner(address) (§31)
+            let who = "0x" + slice(10 + 24, 10 + 64)
+            return .result("0x" + Self.wordU(safe.owners.contains { $0.lowercased() == who } ? 1 : 0))
         case "0x7d832974":  // approvedHashes(address,bytes32)
             let owner = "0x" + slice(10 + 24, 10 + 64)
             let hash = "0x" + slice(10 + 64, 10 + 128)
@@ -1339,6 +1342,92 @@ struct MultisigFlowTests {
         #expect(refused?["verdict"]?.kind == "refused")
         #expect(refused?["verdict"]?["refusal"]?.kind == "changeWaiting")
         #expect(refused?["proposal"]?.isNull ?? true, "nothing to propose where it is refused")
+    }
+}
+
+// MARK: - §31: a site never makes a multisig act for a Safe it owns
+
+extension MultisigFlowTests {
+
+    /// `approveHash(0xcd…)` on `target`, asked of `safe` by a site.
+    private static func approveHashParams(from safe: String, on target: String) -> String {
+        MsSimWorld.text([["from": safe, "to": target, "value": "0x0", "data": "0xd4d9bdcd" + String(repeating: "cd", count: 32)]])
+    }
+
+    /// The browser's multisig entry (`RootView.openBrowserSigning` →
+    /// `MultisigHub.dappRequest`, a site connected to a multisig): a request
+    /// that would make this multisig approve for ANOTHER multisig on this
+    /// device is refused at once — nothing drafted, nothing signed — said in
+    /// the catalog's sentence (`data.key`), and its close answers -32603.
+    @Test func aSiteAskingAMultisigToApproveForAMultisigOnTheListIsRefused() async throws {
+        let world = try MsSimWorld()
+        let (hub, record, safe, _) = try await Self.hubFollowing(world, salt: "0x61")
+        defer { hub.proposals.dispose(); hub.accounts.dispose(); hub.members.dispose() }
+        let (parentRecord, parent, _) = try Self.twoOfThree("0x62", chains: [100])
+        world.store["vela.multisigAccounts"] = MsSimWorld.text([record, parentRecord])
+        hub.accounts.dispatch([
+            "type": "start", "service_url": MsSimWorld.service, "accounts": world.localsJson, "networks": [100, 8453],
+        ])
+        await Wait.until({ hub.isMultisig(safe) && hub.isMultisig(parent) }, orIdle: { hub.accounts.isIdle })
+        try #require(hub.isMultisig(parent), "both multisigs are on this device")
+        #expect(hub.multisigAddresses.map { $0.lowercased() }.contains(parent.lowercased()), "the sign machine's list has it")
+
+        var answers: [[String: Any]] = []
+        hub.dappRequest(
+            id: "site-p", address: safe, method: "eth_sendTransaction",
+            paramsJson: Self.approveHashParams(from: safe, on: parent),
+            origin: "https://evil.example", chainId: 100, answer: { answers.append($0) }
+        )
+        await Wait.until({ hub.proposalsView.dapp["site-p"]?["stage"]?.string == "refused" }, orIdle: { hub.proposals.isIdle })
+        let held = try #require(hub.proposalsView.dapp["site-p"])
+        #expect(held["stage"]?.string == "refused", "\(held)")
+        let data = held["refusal"]?["data"]
+        #expect(data?["reason"]?.string == "parent_safe")
+        #expect(data?["why"]?.string == "member")
+        #expect(data?["function"]?.string == "approveHash")
+        #expect(data?["key"]?.string == "componentsUi.signing.parentSafeBlocked")
+        #expect(hub.proposalsView.draft == nil, "nothing drafted")
+        #expect(hub.sheet == .dapp(id: "site-p"), "said in the window first")
+        let words = MsWords(loc: hub.loc, hub: nil)
+        #expect(MultisigDappSheet.refusalText(held["refusal"], words: words) == hub.loc.t(
+            "componentsUi.signing.parentSafeBlocked",
+            vars: ["function": "approveHash", "safe": AddressText.short(data?["safe"]?.string ?? "")]
+        ))
+        #expect(answers.isEmpty, "answered once read")
+
+        hub.dappLeave("site-p")
+        await Wait.until({ !answers.isEmpty }, orIdle: { hub.proposals.isIdle })
+        let error = answers.first?["error"] as? [String: Any]
+        #expect((error?["code"] as? NSNumber)?.intValue == -32603, "\(answers)")
+        #expect(world.passkeys.isEmpty && world.submits.isEmpty, "nothing signed, nothing sent")
+    }
+
+    /// A Safe not on this device that the chain says this multisig owns:
+    /// read (`isOwner`, through the machine's own rpc), then refused `owner`.
+    @Test func aSafeTheChainSaysTheMultisigOwnsIsRefusedAfterTheRead() async throws {
+        let world = try MsSimWorld()
+        let (hub, record, safe, owners) = try await Self.hubFollowing(world, salt: "0x63")
+        defer { hub.proposals.dispose(); hub.accounts.dispose(); hub.members.dispose() }
+        world.store["vela.multisigAccounts"] = MsSimWorld.text([record])
+        hub.accounts.dispatch([
+            "type": "start", "service_url": MsSimWorld.service, "accounts": world.localsJson, "networks": [100, 8453],
+        ])
+        await Wait.until({ hub.isMultisig(safe) }, orIdle: { hub.accounts.isIdle })
+        let outside = "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe"
+        world.deploy(100, outside, SimSafe(owners: [safe, owners[2]], threshold: 1))
+
+        var answers: [[String: Any]] = []
+        hub.dappRequest(
+            id: "site-o", address: safe, method: "eth_sendTransaction",
+            paramsJson: Self.approveHashParams(from: safe, on: outside),
+            origin: "https://evil.example", chainId: 100, answer: { answers.append($0) }
+        )
+        await Wait.until({ hub.proposalsView.dapp["site-o"]?["stage"]?.string == "refused" }, orIdle: { hub.proposals.isIdle })
+        let held = try #require(hub.proposalsView.dapp["site-o"])
+        #expect(held["refusal"]?["data"]?["why"]?.string == "owner", "\(held)")
+        #expect(world.rpcLog.contains { $0.contains("eth_call") }, "read on chain")
+        #expect(hub.proposalsView.draft == nil)
+        #expect(world.passkeys.isEmpty && world.submits.isEmpty)
     }
 }
 #endif

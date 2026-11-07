@@ -17,6 +17,13 @@
  * does not look at the simulation to answer it, never shortens it, and
  * answers it even when the request has gone (the core drops a stale one).
  *
+ * And one read (§31): `ReadSafeOwner` — the `eth_call` of `isOwner(account)`
+ * the core built, on the Safe and chain it names, through the app's RPC pool
+ * and bounded by one read's budget (`RPC_READ_TIMEOUT_MS`). The node's answer
+ * goes back as it came — its result, its JSON-RPC error, or "nobody
+ * answered" — and whether that makes the Safe this account's is the core's
+ * (`parent_safe_guard::classify_owner_answer`, fail-closed).
+ *
  * What DOES live here, because the core's doc comments put it here:
  *
  * - **The 15 s pre-check race.** `checkBundlerFunding` raced with a timeout that
@@ -71,12 +78,15 @@ import {
 import { UserOpNotSentError } from '$lib/services/safe-transaction';
 import {
 	dappReceiptWaitMs,
+	rpcReadTimeoutMs,
 	signAnswered,
 	signErrorWords,
 	userOpNotSentDetail,
 	userOpWriteAheadWaitMs
 } from '$lib/core/kernels';
 
+import { poolRpcCall } from '$lib/services/rpc-pool';
+import type { SafeOwnerAnswer } from '$lib/core/generated/SafeOwnerAnswer';
 import type { SignFundingNeeded } from '$lib/core/generated/SignFundingNeeded';
 import type { SignShellResult } from '$lib/core/generated/SignShellResult';
 import type { SignEffect, SignShellPorts } from './sign-types';
@@ -140,6 +150,64 @@ function parseParams(json: string): unknown[] {
 }
 
 // ---------------------------------------------------------------------------
+// §31: the parent-Safe guard's read
+// ---------------------------------------------------------------------------
+
+/** One JSON-RPC call through the app's pool — `poolRpcCall`'s shape (a test's stand-in). */
+export type SafeOwnerCall = (
+	method: string,
+	params: unknown[],
+	chainId: number
+) => Promise<{ result?: unknown; error?: { code?: unknown; message?: unknown } }>;
+
+/**
+ * `eth_call [{to: safe, data}, "latest"]` on `chainId`, answered as the node
+ * answered it — never decided here (§31): its result verbatim (`returned`),
+ * its JSON-RPC error (`rpc_error`), or `unreachable` when no node answered
+ * within `budgetMs` (offline, every endpoint failed, a throw). Never rejects
+ * and never waits past the budget. A reply with neither a result string nor
+ * an error is `unreachable` too: it is no answer, and the core refuses it as
+ * one it could not check.
+ */
+export async function readSafeOwner(
+	chainId: number,
+	safe: string,
+	data: string,
+	call: SafeOwnerCall = poolRpcCall,
+	budgetMs: number = rpcReadTimeoutMs()
+): Promise<SafeOwnerAnswer> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const late = new Promise<'late'>((resolve) => {
+		timer = setTimeout(() => resolve('late'), budgetMs);
+	});
+	try {
+		const reply = await Promise.race([
+			call('eth_call', [{ to: safe, data }, 'latest'], chainId),
+			late
+		]);
+		if (reply === 'late') return { type: 'unreachable', detail: `no answer in ${budgetMs} ms` };
+		const error = reply?.error;
+		if (error !== undefined && error !== null) {
+			const code = error.code;
+			return {
+				type: 'rpc_error',
+				code: typeof code === 'number' && Number.isInteger(code) ? code : null,
+				message: typeof error.message === 'string' ? error.message : ''
+			};
+		}
+		if (typeof reply?.result === 'string') return { type: 'returned', data: reply.result };
+		return { type: 'unreachable', detail: 'the node answered no result' };
+	} catch (error) {
+		return {
+			type: 'unreachable',
+			detail: (error as { message?: string } | null)?.message ?? String(error)
+		};
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Executor
 // ---------------------------------------------------------------------------
 
@@ -167,7 +235,11 @@ export type SignTimer = (ms: number) => Promise<void>;
 
 const wallClock: SignTimer = (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-export function createSignExecutor(ports: SignShellPorts, timer: SignTimer = wallClock) {
+export function createSignExecutor(
+	ports: SignShellPorts,
+	timer: SignTimer = wallClock,
+	ownerCall: SafeOwnerCall = poolRpcCall
+) {
 	/**
 	 * op hash → chain, for the ops this executor answered BY their op hash, so
 	 * the answer can carry `opHash: {chainId}` (spec 082 RF3). Bounded like the
@@ -286,14 +358,15 @@ export function createSignExecutor(ports: SignShellPorts, timer: SignTimer = wal
 					// the kinds the TS provider already named — `signErrorMessage`
 					// reproduces the exact string it sent for each (a `submit_failed`
 					// detail IS `err.message`, verbatim) — and the core's own for a
-					// refusal it introduced: spec 102's `venue_blocked` is
-					// `dapp_rpc::sign_error_words`, not a copy kept here.
+					// refusal it introduced: spec 102's `venue_blocked` and §31's
+					// `parent_safe_blocked` are `dapp_rpc::sign_error_words`, not a
+					// copy kept here.
 					const notice = { kind: operation.payload.kind, detail: operation.payload.message };
 					transport?.sendResponse(operation.id, undefined, {
 						code: operation.payload.code,
 						kind: operation.payload.kind,
 						message:
-							(notice.kind === 'venue_blocked'
+							(notice.kind === 'venue_blocked' || notice.kind === 'parent_safe_blocked'
 								? signErrorWords(notice.kind, notice.detail)
 								: null) ?? signErrorMessage(notice)
 					});
@@ -583,6 +656,25 @@ export function createSignExecutor(ports: SignShellPorts, timer: SignTimer = wal
 				return { type: 'account_switched' };
 			}
 
+			case 'read_safe_owner': {
+				// §31: the read the core asked for, answered as the node answered
+				// it. Echoes the id, chain and Safe exactly as given: the core
+				// matches the answer to its request by them.
+				const answer = await readSafeOwner(
+					operation.chain_id,
+					operation.safe,
+					operation.data,
+					ownerCall
+				);
+				return {
+					type: 'safe_owner_read',
+					id: operation.id,
+					chain_id: operation.chain_id,
+					safe: operation.safe,
+					answer
+				};
+			}
+
 			case 'sim_verdict_timer': {
 				// PR 3: the deadline of the confirm's wait for the simulation's
 				// verdict. A timer and nothing else — whether a verdict landed
@@ -733,6 +825,19 @@ export function createSignExecutor(ports: SignShellPorts, timer: SignTimer = wal
 				// A failed switch still has to ack, or the approval surface stays shut
 				// forever (§12.1.6 gates on this).
 				return { type: 'account_switched' };
+			case 'read_safe_owner':
+				// A read that threw is a read nobody answered: the core refuses
+				// the request as one it could not check — never a hang.
+				return {
+					type: 'safe_owner_read',
+					id: operation.id,
+					chain_id: operation.chain_id,
+					safe: operation.safe,
+					answer: {
+						type: 'unreachable',
+						detail: (error as { message?: string } | null)?.message ?? 'read failed'
+					}
+				};
 			case 'sim_verdict_timer':
 				// A clock that failed has still to answer: the confirm it holds
 				// would otherwise wait for a verdict with no deadline behind it.

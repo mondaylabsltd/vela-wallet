@@ -34,6 +34,81 @@ use vela_core::app::multisig_shell::MultisigAccount;
 
 use crate::executor::dapp_browser::Forwarded;
 
+/// §31: a refusal the machine gave because the site would have made this
+/// multisig act for a Safe it owns (`multisig_dapp::parent_refusal`) — the
+/// catalog key it is said in, the call and the Safe, all the core's.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParentRefusal {
+    /// `componentsUi.signing.parentSafeBlocked` or `…parentSafeUnchecked`.
+    pub key: String,
+    pub function: String,
+    pub safe: String,
+}
+
+/// The parent-Safe refusal in `refusal`, when it is one
+/// (`data.reason == "parent_safe"`); `None` for every other refusal — a
+/// message (dapp-7), said as ever.
+#[must_use]
+pub fn parent_refusal(refusal: &vela_core::app::multisig_dapp::DappError) -> Option<ParentRefusal> {
+    let data = refusal.data.as_ref()?;
+    if data.get("reason").and_then(Value::as_str) != Some("parent_safe") {
+        return None;
+    }
+    let text = |field: &str| {
+        data.get(field)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    };
+    // The core always names its sentence; were it ever missing, the reason
+    // picks the same one.
+    let key = Some(text("key"))
+        .filter(|key| !key.is_empty())
+        .unwrap_or_else(|| {
+            if text("why") == "unchecked" {
+                vela_core::app::multisig_dapp::PARENT_UNCHECKED_KEY
+            } else {
+                vela_core::app::multisig_dapp::PARENT_BLOCKED_KEY
+            }
+            .to_owned()
+        });
+    Some(ParentRefusal {
+        key,
+        function: text("function"),
+        safe: text("safe"),
+    })
+}
+
+/// What the refusal of a site's request says, title and body, in `loc`'s
+/// language: a parent-Safe refusal (§31) in the signing sheet's own words —
+/// "Vela can't sign this", then the call and the Safe — and any other (a
+/// message, dapp-7) as "a multisig can't sign messages yet", naming `site`.
+#[must_use]
+pub fn refusal_words(
+    loc: &crate::loc::Loc,
+    refusal: Option<&vela_core::app::multisig_dapp::DappError>,
+    site: &str,
+) -> (gpui::SharedString, String) {
+    match refusal.and_then(parent_refusal) {
+        Some(parent) => (
+            loc.t("componentsUi.signing.selfCallBlockedTitle"),
+            loc.t_texts(
+                &parent.key,
+                &[
+                    ("function", &parent.function),
+                    ("safe", &crate::signing::live::short_address(&parent.safe)),
+                ],
+            )
+            .to_string(),
+        ),
+        None => (
+            loc.t("connect.browser.multisigNoMessagesTitle"),
+            loc.t_text("connect.browser.multisigNoMessagesBody", "host", site)
+                .to_string(),
+        ),
+    }
+}
+
 /// The multisig on this device a site was granted, if `granted` is one —
 /// the request is then the proposals machine's.
 #[must_use]

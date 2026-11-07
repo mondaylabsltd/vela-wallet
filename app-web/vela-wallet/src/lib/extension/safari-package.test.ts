@@ -294,6 +294,35 @@ describe.each([
 		expect(carriers).toEqual([]);
 	});
 
+	/**
+	 * §31: the Safari package's dApp door is the same request surface as
+	 * Chrome's (`DappRequestHost` → the resident `sign_request` machine), which
+	 * `e2e/parent-safe-guard.e2e.ts` drives in the Chrome package — Playwright
+	 * loads no Safari extension. What this package must carry for that proof
+	 * to hold here: the device's multisig list fed to the machine, the
+	 * machine's isOwner read answered, its refusal special-cased as the
+	 * self-call one is, and the catalog's sentence for it.
+	 */
+	it('carries the parent-Safe guard wiring and its words (§31)', () => {
+		const text = files(dist)
+			.filter((f) => f.endsWith('.js') || f.endsWith('.html') || f.endsWith('.json'))
+			.map((f) => readFileSync(join(dist, f), 'utf8'))
+			.join('\n');
+		for (const wire of [
+			'multisigs_changed',
+			'read_safe_owner',
+			'safe_owner_read',
+			'parent_safe_blocked',
+			'parent_safe'
+		]) {
+			// The minifier writes string literals in any of the three quotes.
+			expect(new RegExp(`["'\`]${wire}["'\`]`).test(text), wire).toBe(true);
+		}
+		expect(text).toContain(
+			'This site asked your account to change or approve something for a multisig'
+		);
+	});
+
 	it('carries the very core its code names', () => {
 		const current = /export const WASM_URL = '\/([^']+)'/.exec(
 			readFileSync(WASM_URL_MODULE, 'utf8')

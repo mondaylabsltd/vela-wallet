@@ -679,6 +679,11 @@ struct RootView: View {
         .onChange(of: signing != nil) { _, up in
             if up, exploreSwitcherOpen { exploreSwitcherOpen = false }
         }
+        // §31: the device's multisig list, to the sheet up now — it was told
+        // the list when it opened (`knownMultisigs`), and again on a change.
+        .onChange(of: multisig.multisigAddresses) { _, addresses in
+            signing?.multisigsChanged(addresses)
+        }
         // Every avatar in the app opens the viewer (row 10 of 057's audit).
         //
         // Provided ONCE, here, and reached by the avatar component itself —
@@ -1843,16 +1848,7 @@ struct RootView: View {
             return
         }
         openSigningRequest(
-            SigningController.Incoming(
-                id: forward.id,
-                method: forward.method,
-                paramsJson: forward.paramsJson,
-                origin: forward.origin,
-                transportId: forward.tab,
-                chainId: forward.chainId,
-                grantedAddress: forward.grantedAddress,
-                spaceNote: forward.spaceNote
-            ),
+            SigningController.Incoming(browser: forward),
             respond: { [browser] transportId, id, payload, userOpHash in
                 // The core builds the page's message, and delivers it to the
                 // tab and DOCUMENT that asked — or to nobody, if that page
@@ -2158,6 +2154,8 @@ struct RootView: View {
                 knownChains: { [settings] in
                     settings.networkAdmin?.networks.map(\.chainId) ?? []
                 },
+                // §31: every multisig on this device, told with the accounts.
+                knownMultisigs: { [multisig] in multisig.multisigAddresses },
                 // The base the settings machine names, with the shipped
                 // default behind it — the same resolution `ChainTokens` and
                 // `RpcEndpoints` use, so a person's own endpoint reaches the

@@ -186,6 +186,28 @@ pub struct IncomingRequest {
     pub granted_address: Option<String>,
 }
 
+impl IncomingRequest {
+    /// A request the in-app browser forwarded, as the signing column opens
+    /// on it: the browser's transport, the SITE's chain, the account the
+    /// site was shown. The one mapping from the browser machine's hand-off
+    /// to this column (the page's `open_dapp_signing`), so a test that
+    /// drives the browser drives the column the same way.
+    #[must_use]
+    #[cfg_attr(target_os = "linux", allow(dead_code))]
+    pub fn from_forwarded(forwarded: crate::executor::dapp_browser::Forwarded) -> Self {
+        Self {
+            id: forwarded.id,
+            method: forwarded.method,
+            params_json: forwarded.params_json,
+            origin: forwarded.origin,
+            transport_id: BROWSER_TRANSPORT.to_owned(),
+            // The SITE's chain, per origin, as the machine keeps it.
+            chain_id: forwarded.chain_id,
+            granted_address: Some(forwarded.granted_address),
+        }
+    }
+}
+
 /// A site's answer, for the browser machine to deliver.
 pub struct TransportAnswer {
     pub id: String,
@@ -320,6 +342,32 @@ pub struct SigningHost {
     /// dispatch until the core has their result. A request whose page left
     /// keeps its machines only while one runs (spec 082 RB2).
     streaming: u32,
+    /// §31: this device's multisigs as last told to the signing machine
+    /// ([`device_multisigs`]) — told again only when the list changes.
+    multisigs_fed: Vec<String>,
+}
+
+/// Every multisig on this device (§31), as the signing machine is told it
+/// (`Event::MultisigsChanged`): the multisig accounts list — every one this
+/// device's Vela accounts are members of — in its own order. Read from the
+/// multisig machines, which boot with the wallet's session; none booted yet
+/// is an empty list, which costs nothing but speed (every Safe a request
+/// would act for is then read on chain), and the list is told again the
+/// moment the machines have it ([`SigningHost::follow_multisigs`]).
+#[must_use]
+pub fn device_multisigs(cx: &gpui::App) -> Vec<String> {
+    crate::multisig::host::booted(cx)
+        .map(|host| multisigs_of(&host.read(cx).machines().accounts_view))
+        .unwrap_or_default()
+}
+
+/// The multisig accounts list's addresses — [`device_multisigs`]'s mapping.
+#[must_use]
+pub fn multisigs_of(view: &vela_core::app::multisig_accounts::MultisigAccountsView) -> Vec<String> {
+    view.accounts
+        .iter()
+        .map(|row| row.account.address.clone())
+        .collect()
 }
 
 /// Whether a request's machines keep running, unseen, once its column goes
@@ -432,6 +480,7 @@ impl SigningHost {
             seen_submitted_ms: None,
             approved: false,
             streaming: 0,
+            multisigs_fed: Vec::new(),
         };
         // The stored default speed (spec 069), read now and followed while
         // the sheet is up: the column sits beside Settings, which may change it.
@@ -450,6 +499,13 @@ impl SigningHost {
         let tracker = crate::resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx);
         cx.observe(&tracker, |host, _, cx| host.forward_tracked(cx))
             .detach();
+        // §31: the device's multisig list, followed while the sheet is up —
+        // a multisig added (or the list first loaded) is told at once, and
+        // a request on the sheet that would act for it is refused.
+        if let Some(multisig) = crate::multisig::host::booted(cx) {
+            cx.observe(&multisig, |host, _, cx| host.follow_multisigs(cx))
+                .detach();
+        }
         // What is already in flight holds its account's nonce from the first
         // render: a transaction asked for meanwhile waits for it.
         host.forward_in_flight(cx);
@@ -492,10 +548,12 @@ impl SigningHost {
             .first()
             .map(|key| key.credential_id.clone())
             .unwrap_or_default();
+        self.multisigs_fed = device_multisigs(cx);
         let opening = opening_events(
             request,
             wallet,
             credential_id,
+            self.multisigs_fed.clone(),
             known_chain_ids(),
             now,
             plan,
@@ -1084,6 +1142,23 @@ impl SigningHost {
             self.asker_gone(),
             self.submit_running(),
         )
+    }
+
+    /// §31: the device's multisig list moved — told to the signing machine
+    /// when it is not the list it last heard.
+    fn follow_multisigs(&mut self, cx: &mut Context<Self>) {
+        let multisigs = device_multisigs(cx);
+        if multisigs == self.multisigs_fed {
+            return;
+        }
+        self.multisigs_fed.clone_from(&multisigs);
+        self.dispatch_sign(
+            SignEvent::MultisigsChanged {
+                addresses: multisigs,
+            },
+            cx,
+        );
+        cx.notify();
     }
 
     pub fn dispatch_sign(&mut self, event: SignEvent, cx: &mut Context<Self>) {
@@ -1697,10 +1772,17 @@ impl Simulation {
 /// one goes out and its verdict will stand on this sheet ([`SimPlan`]), the
 /// machine hears `SimStarted` here, after the request and before anything is
 /// drawn, so no frame ever shows a confirm that is not waiting for it.
+///
+/// **The multisigs with the accounts** (§31): every multisig on this device
+/// ([`device_multisigs`]), so a site's request that would make this account
+/// act for one of them is refused at once — and any other Safe it would act
+/// for is read on chain before it can be signed.
+#[allow(clippy::too_many_arguments, reason = "one step, named parts")]
 pub(crate) fn opening_events(
     request: &IncomingRequest,
     wallet: &str,
     credential_id: String,
+    multisigs: Vec<String>,
     chain_ids: Vec<u32>,
     now_ms: f64,
     plan: SimPlan,
@@ -1714,6 +1796,9 @@ pub(crate) fn opening_events(
                 credential_id,
             }],
             active_index: 0,
+        },
+        SignEvent::MultisigsChanged {
+            addresses: multisigs,
         },
         arrival_of(request, now_ms),
     ];
@@ -3663,6 +3748,7 @@ mod sim_wait_tests {
                 &request,
                 ME,
                 "cred0".to_owned(),
+                Vec::new(),
                 vec![1],
                 1_000.0,
                 plan,
@@ -4122,6 +4208,7 @@ mod sim_wait_tests {
                 .map(|event| match event {
                     SignEvent::NetworksChanged { .. } => "networks",
                     SignEvent::AccountsChanged { .. } => "accounts",
+                    SignEvent::MultisigsChanged { .. } => "multisigs",
                     SignEvent::RequestArrived { .. } => "arrived",
                     SignEvent::SimStarted { .. } => "sim_started",
                     _ => "other",
@@ -4135,6 +4222,7 @@ mod sim_wait_tests {
             &tx,
             ME,
             "cred0".to_owned(),
+            Vec::new(),
             vec![1],
             1.0,
             SimPlan::Awaited,
@@ -4142,7 +4230,13 @@ mod sim_wait_tests {
         );
         assert_eq!(
             kinds(&events),
-            ["networks", "accounts", "arrived", "sim_started"]
+            [
+                "networks",
+                "accounts",
+                "multisigs",
+                "arrived",
+                "sim_started"
+            ]
         );
         assert_eq!(sim.stage, SimStage::Out);
         // On the wire, as the core reads it.
@@ -4173,12 +4267,16 @@ mod sim_wait_tests {
             &tx,
             ME,
             "cred0".to_owned(),
+            Vec::new(),
             vec![1],
             1.0,
             SimPlan::Unseen,
             &mut unseen,
         );
-        assert_eq!(kinds(&events), ["networks", "accounts", "arrived"]);
+        assert_eq!(
+            kinds(&events),
+            ["networks", "accounts", "multisigs", "arrived"]
+        );
         assert_eq!(unseen.stage, SimStage::Out);
         assert!(unseen.land(a_send(), "rid-9").is_none());
         assert_eq!(
@@ -4197,6 +4295,7 @@ mod sim_wait_tests {
             &message,
             ME,
             "cred0".to_owned(),
+            Vec::new(),
             vec![1],
             1.0,
             sim_plan(
@@ -4205,7 +4304,10 @@ mod sim_wait_tests {
             ),
             &mut none,
         );
-        assert_eq!(kinds(&events), ["networks", "accounts", "arrived"]);
+        assert_eq!(
+            kinds(&events),
+            ["networks", "accounts", "multisigs", "arrived"]
+        );
         assert_eq!(none.stage, SimStage::NotAsked);
     }
 
@@ -4267,6 +4369,542 @@ mod sim_wait_tests {
         ] {
             view.swipe_action = before;
             assert!(matches!(close_event(&view), SignEvent::SwipeDismissed));
+        }
+    }
+}
+
+/// §31 on this column's wiring: a site's request that would make the signing
+/// account act for a Safe it owns — a multisig on this device — is refused by
+/// the core's guard, worded in the parent Safe's sentence, never signed, and
+/// answered -32603 `parent_safe_blocked` when the person closes it.
+///
+/// [`Column`] is the column as `SigningHost` runs it, without a window: the
+/// request is told exactly what `begin` tells it ([`opening_events`], the
+/// device's multisig list beside the account), every operation the machine
+/// asks for goes to this shell's executor (`ReadSafeOwner` through the real
+/// pool — the chain is a loopback node), and the close is the column's own
+/// (`close_plan`, then [`close_event`]). The entry points drive it: the
+/// in-app browser's hand-off (`browser_host` tests) and these.
+#[cfg(test)]
+pub(crate) mod parent_safe_tests {
+    use super::*;
+    use crate::signing::SigningStrings;
+    use crate::signing::fixtures::Block;
+    use serde_json::Value;
+    use vela_core::app::parent_safe_guard::ParentReason;
+    use vela_core::app::sign_request::{SignApproveOpts, SignErrorKind, SignResponsePayload};
+
+    /// The core's vector for the rule.
+    pub(crate) fn vector() -> Value {
+        serde_json::from_str(include_str!(
+            "../../../../rust/crates/vela-core/tests/vectors/rules/parent-safe-guard.json"
+        ))
+        .unwrap_or_else(|error| unreachable!("the vector: {error}"))
+    }
+
+    /// The vector's case `name`, whole.
+    pub(crate) fn case(name: &str) -> Value {
+        vector()["cases"]
+            .as_array()
+            .and_then(|cases| cases.iter().find(|case| case["name"] == name).cloned())
+            .unwrap_or_else(|| unreachable!("no case {name:?}"))
+    }
+
+    /// The takeover itself: `execTransaction(swapOwner)` on a multisig on the
+    /// list, signed "approved by msg.sender" (v = 1).
+    pub(crate) const TAKEOVER: &str =
+        "a: execTransaction(swapOwner) on a multisig on the list, v=1";
+
+    fn account_of(address: &str) -> Account {
+        Account {
+            id: "cred0".to_owned(),
+            name: "savings".to_owned(),
+            address: address.to_owned(),
+            public_key_hex: "04aa".to_owned(),
+            created_at_iso: String::new(),
+            keys: vec![vela_core::app::AccountKey {
+                credential_id: "cred0".to_owned(),
+                public_key_hex: "04aa".to_owned(),
+                name: String::new(),
+                transports: "internal".to_owned(),
+                signer_origin: None,
+            }],
+            sign_in_key: None,
+            signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
+            signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+        }
+    }
+
+    /// The signing column for one request, as `SigningHost` runs it.
+    pub(crate) struct Column {
+        pub sign: CoreHost<SignRequest>,
+        ctx: SignContext,
+        /// Every operation the machine asked this shell for, in order.
+        pub asked: Vec<SignOperation>,
+        /// Every answer the site was sent, in order.
+        pub answers: Vec<SignResponsePayload>,
+    }
+
+    impl Column {
+        /// `SigningHost::begin`'s opening, for `request` signed by `wallet`,
+        /// with this device's multisigs `multisigs`.
+        pub(crate) fn open(
+            request: &IncomingRequest,
+            wallet: &str,
+            multisigs: Vec<String>,
+            chain_ids: Vec<u32>,
+        ) -> Self {
+            let calls = sign_executor::calls_of(&request.method, &request.params_json);
+            let plan = sim_plan(calls.as_deref(), false);
+            let mut sim = Simulation::default();
+            let opening = opening_events(
+                request,
+                wallet,
+                "cred0".to_owned(),
+                multisigs,
+                chain_ids,
+                1_000.0,
+                plan,
+                &mut sim,
+            );
+            let mut column = Self {
+                sign: CoreHost::<SignRequest>::new(),
+                ctx: SignContext::new(&account_of(wallet), CeremonyChannel::new().ceremony(0)),
+                asked: Vec::new(),
+                answers: Vec::new(),
+            };
+            for event in opening {
+                column.dispatch(event);
+            }
+            column
+        }
+
+        pub(crate) fn dispatch(&mut self, event: SignEvent) {
+            let pending = self.sign.dispatch(event);
+            self.pump(pending);
+        }
+
+        /// `SigningHost::pump_sign`, inline: the executor answers what it
+        /// answers (a blocking read is run here, on this thread), the
+        /// transport's answers are kept, a timer is left unanswered (the
+        /// clock is stopped), and nothing that would sign may be asked.
+        fn pump(&mut self, pending: Vec<Pending<SignOperation>>) {
+            for effect in pending {
+                self.asked.push(effect.operation.clone());
+                match sign_executor::perform(&effect.operation, &self.ctx) {
+                    SignAnswer::Now(result) => {
+                        let next = self.sign.resolve(effect.id, result);
+                        self.pump(next);
+                    }
+                    SignAnswer::Blocking(work) => {
+                        assert!(
+                            matches!(effect.operation, SignOperation::ReadSafeOwner { .. }),
+                            "only a read may run here: {:?}",
+                            effect.operation
+                        );
+                        let next = self.sign.resolve(effect.id, work());
+                        self.pump(next);
+                    }
+                    SignAnswer::After(..) => {}
+                    SignAnswer::Screen => {
+                        if let SignOperation::SendResponse { payload, .. } = &effect.operation {
+                            self.answers.push(payload.clone());
+                        }
+                        let next = self.sign.resolve(effect.id, SignShellResult::Responded);
+                        self.pump(next);
+                    }
+                    SignAnswer::Streaming(_) => {
+                        panic!("a refused request was submitted: {:?}", effect.operation)
+                    }
+                }
+            }
+        }
+
+        /// The column's ✕ (`SigningHost::close`): told now, as the core
+        /// reads the request's place.
+        pub(crate) fn close(&mut self) {
+            let view = self.sign.view();
+            let facts = close_facts_of(&view, crate::signing::status::Signature::NotYet, false);
+            assert_eq!(
+                crate::signing::status::close_plan(&facts),
+                crate::signing::status::ClosePlan::Now,
+                "a refused sheet closes at once"
+            );
+            self.dispatch(close_event(&view));
+        }
+
+        /// Nothing was signed or sent: no submit, no funding check, no
+        /// sponsorship was ever asked for.
+        pub(crate) fn nothing_signed(&self) -> bool {
+            !self.asked.iter().any(|op| {
+                matches!(
+                    op,
+                    SignOperation::SignAndSubmit { .. }
+                        | SignOperation::CheckBundlerFunding { .. }
+                        | SignOperation::AttemptSponsorship { .. }
+                        | SignOperation::PersistRecord { .. }
+                )
+            })
+        }
+
+        /// The ownership reads asked, `(chain, safe)`.
+        pub(crate) fn reads(&self) -> Vec<(u32, String)> {
+            self.asked
+                .iter()
+                .filter_map(|op| match op {
+                    SignOperation::ReadSafeOwner { chain_id, safe, .. } => {
+                        Some((*chain_id, safe.clone()))
+                    }
+                    _ => None,
+                })
+                .collect()
+        }
+
+        /// The refused sheet, as the page draws it (`status_blocks`), in
+        /// English: its title and its sentence.
+        pub(crate) fn said(&self) -> Vec<String> {
+            let s = SigningStrings::resolve(&crate::loc::Loc::for_language("en"));
+            crate::signing::live::status_blocks(&self.sign.view(), &s)
+                .into_iter()
+                .filter_map(|block| match block {
+                    Block::Intent { text, .. } | Block::Warning { text, .. } => {
+                        Some(text.to_string())
+                    }
+                    _ => None,
+                })
+                .collect()
+        }
+
+        /// Refused for `parent` (`reason`), said in its sentence, unsignable
+        /// however the confirm is pressed, nothing signed — and its close
+        /// answers the site -32603 `parent_safe_blocked`, once.
+        pub(crate) fn assert_refused(&mut self, parent: &str, reason: ParentReason) {
+            let view = self.sign.view();
+            let blocked = view
+                .blocked
+                .clone()
+                .unwrap_or_else(|| panic!("not refused: {:?}", view.error));
+            assert_eq!(blocked.parent.as_deref(), Some(parent));
+            assert_eq!(blocked.reason, Some(reason));
+            assert_eq!(
+                crate::signing::live::ColumnKind::of(&view),
+                crate::signing::live::ColumnKind::Refused,
+                "the refused column"
+            );
+            assert_eq!(
+                view.error.as_ref().map(|error| error.kind),
+                Some(SignErrorKind::ParentSafeBlocked)
+            );
+
+            // Its words: the parent Safe's sentence, under "Vela can't sign
+            // this" — never the self-call one ("your account").
+            let en = crate::loc::Loc::for_language("en");
+            let key = if reason == ParentReason::Unchecked {
+                "componentsUi.signing.parentSafeUnchecked"
+            } else {
+                "componentsUi.signing.parentSafeBlocked"
+            };
+            let short = crate::signing::live::short_address(parent);
+            let sentence = en
+                .t_texts(key, &[("function", &blocked.function), ("safe", &short)])
+                .to_string();
+            assert_eq!(
+                self.said(),
+                vec![
+                    en.t("componentsUi.signing.selfCallBlockedTitle")
+                        .to_string(),
+                    sentence.clone()
+                ]
+            );
+            assert!(
+                sentence.contains(&blocked.function) && sentence.contains(&short),
+                "{sentence}"
+            );
+
+            // The confirm is not there, and pressing it anyway does nothing.
+            self.dispatch(SignEvent::ApproveTapped {
+                opts: SignApproveOpts::default(),
+            });
+            assert!(self.nothing_signed(), "{:?}", self.asked);
+            assert!(self.answers.is_empty(), "answered before it was read");
+
+            // Closed: the site hears the wallet's refusal, never the
+            // person's 4001.
+            self.close();
+            let [answer] = self.answers.as_slice() else {
+                panic!("one answer: {:?}", self.answers);
+            };
+            assert!(
+                matches!(
+                    answer,
+                    SignResponsePayload::Err {
+                        code: -32603,
+                        kind: SignErrorKind::ParentSafeBlocked,
+                        ..
+                    }
+                ),
+                "{answer:?}"
+            );
+            assert!(self.nothing_signed(), "{:?}", self.asked);
+        }
+    }
+
+    /// The vector's request as the browser hands it to the column.
+    pub(crate) fn request_of(case: &Value, chain_id: u32) -> IncomingRequest {
+        let input = &case["input"];
+        IncomingRequest::from_forwarded(crate::executor::dapp_browser::Forwarded {
+            tab: "t1".to_owned(),
+            id: "rid-31".to_owned(),
+            method: input["method"].as_str().unwrap_or_default().to_owned(),
+            params_json: input["params"].to_string(),
+            origin: "https://evil.example".to_owned(),
+            chain_id,
+            granted_address: input["signer"].as_str().unwrap_or_default().to_owned(),
+        })
+    }
+
+    /// The takeover, on a multisig this device has: refused at once — no
+    /// read, no confirm, nothing signed — and answered -32603.
+    #[test]
+    fn the_takeover_of_a_multisig_on_the_list_is_refused_at_once() {
+        let v = vector();
+        let case = case(TAKEOVER);
+        let (signer, parent) = (
+            v["signer"].as_str().unwrap_or_default(),
+            v["parent"].as_str().unwrap_or_default(),
+        );
+        let chain = u32::try_from(v["chainId"].as_u64().unwrap_or_default()).unwrap_or_default();
+        let mut column = Column::open(
+            &request_of(&case, chain),
+            signer,
+            vec![parent.to_owned()],
+            vec![chain],
+        );
+        assert!(
+            column.reads().is_empty(),
+            "a multisig on the list is not read"
+        );
+        column.assert_refused(parent, ParentReason::Member);
+    }
+
+    /// The list is told with the account, before the request: a multisig
+    /// the device has is never read on chain, and the event is in
+    /// `opening_events` between the accounts and the arrival.
+    #[test]
+    fn the_device_multisigs_are_told_with_the_account_before_the_request() {
+        let v = vector();
+        let parent = v["parent"].as_str().unwrap_or_default().to_owned();
+        let request = request_of(&case(TAKEOVER), 8453);
+        let mut sim = Simulation::default();
+        let events = opening_events(
+            &request,
+            v["signer"].as_str().unwrap_or_default(),
+            "cred0".to_owned(),
+            vec![parent.clone()],
+            vec![8453],
+            1.0,
+            SimPlan::None,
+            &mut sim,
+        );
+        let order: Vec<&str> = events
+            .iter()
+            .map(|event| match event {
+                SignEvent::NetworksChanged { .. } => "networks",
+                SignEvent::AccountsChanged { .. } => "accounts",
+                SignEvent::MultisigsChanged { addresses } => {
+                    assert_eq!(addresses, &vec![parent.clone()]);
+                    "multisigs"
+                }
+                SignEvent::RequestArrived { .. } => "arrived",
+                _ => "other",
+            })
+            .collect();
+        assert_eq!(order, ["networks", "accounts", "multisigs", "arrived"]);
+    }
+
+    /// A multisig the list gains while the request is on the sheet (the
+    /// list loading after the column opened): the request is refused then,
+    /// before anything could sign it.
+    #[test]
+    fn a_multisig_told_after_the_request_refuses_it_then() {
+        use crate::executor::pool::tests::{http, scripted_node, seed_pool};
+        use vela_core::app::rpc_pool::RpcSource;
+        const CHAIN: u32 = 424_331;
+        let v = vector();
+        let (signer, parent) = (
+            v["signer"].as_str().unwrap_or_default(),
+            v["parent"].as_str().unwrap_or_default(),
+        );
+        crate::executor::storage::tests::with_temp_state("sign-parent-late-list", || {
+            // Unknown at first: read on chain — and the node is slow to say.
+            let (slow, _) = scripted_node(
+                std::time::Duration::from_millis(10),
+                Some(http(
+                    "200 OK",
+                    r#"{"jsonrpc":"2.0","id":1,"result":"0x0000000000000000000000000000000000000000000000000000000000000000"}"#,
+                )),
+            );
+            seed_pool(CHAIN, &[(&slow, RpcSource::User)]);
+            let request = request_of(&case(TAKEOVER), CHAIN);
+            let mut column = Column {
+                sign: CoreHost::<SignRequest>::new(),
+                ctx: SignContext::new(&account_of(signer), CeremonyChannel::new().ceremony(0)),
+                asked: Vec::new(),
+                answers: Vec::new(),
+            };
+            let mut sim = Simulation::default();
+            let calls = sign_executor::calls_of(&request.method, &request.params_json);
+            let opening = opening_events(
+                &request,
+                signer,
+                "cred0".to_owned(),
+                Vec::new(),
+                vec![CHAIN],
+                1_000.0,
+                sim_plan(calls.as_deref(), false),
+                &mut sim,
+            );
+            // Told everything but the read's answer: the read is held.
+            let mut held = Vec::new();
+            for event in opening {
+                for effect in column.sign.dispatch(event) {
+                    column.asked.push(effect.operation.clone());
+                    if matches!(effect.operation, SignOperation::ReadSafeOwner { .. }) {
+                        held.push(effect);
+                    }
+                }
+            }
+            assert_eq!(column.reads(), vec![(CHAIN, parent.to_owned())]);
+            assert!(column.sign.view().blocked.is_none(), "read first");
+            // The list arrives: refused at once, the read still out.
+            column.dispatch(SignEvent::MultisigsChanged {
+                addresses: vec![parent.to_owned()],
+            });
+            // The read answering "not an owner" now changes nothing.
+            for effect in held {
+                if let SignAnswer::Blocking(work) =
+                    sign_executor::perform(&effect.operation, &column.ctx)
+                {
+                    let next = column.sign.resolve(effect.id, work());
+                    column.pump(next);
+                }
+            }
+            column.assert_refused(parent, ParentReason::Member);
+        });
+    }
+
+    /// A Safe this device does not have is read on chain first (`isOwner`
+    /// through the executor and this app's pool); while it is out the
+    /// confirm is shut, and "an owner" refuses.
+    #[test]
+    fn an_unknown_safe_is_read_and_an_owner_is_refused() {
+        use crate::executor::pool::tests::{http, scripted_node, seed_pool};
+        use vela_core::app::rpc_pool::RpcSource;
+        const CHAIN: u32 = 424_332;
+        let v = vector();
+        let case = case("unknown Safe, isOwner true: refused");
+        let unknown = v["unknown"].as_str().unwrap_or_default();
+        crate::executor::storage::tests::with_temp_state("sign-parent-owner", || {
+            let (owner, owner_log) = scripted_node(
+                std::time::Duration::ZERO,
+                Some(http(
+                    "200 OK",
+                    r#"{"jsonrpc":"2.0","id":1,"result":"0x0000000000000000000000000000000000000000000000000000000000000001"}"#,
+                )),
+            );
+            seed_pool(CHAIN, &[(&owner, RpcSource::User)]);
+            let mut column = Column::open(
+                &request_of(&case, CHAIN),
+                case["input"]["signer"].as_str().unwrap_or_default(),
+                vec![v["parent"].as_str().unwrap_or_default().to_owned()],
+                vec![CHAIN],
+            );
+            assert_eq!(column.reads(), vec![(CHAIN, unknown.to_owned())]);
+            assert_eq!(owner_log.lock().map(|log| log.len()).unwrap_or(0), 1);
+            column.assert_refused(unknown, ParentReason::Owner);
+        });
+    }
+
+    /// The read nobody could make — the node hangs up — refuses: "couldn't
+    /// check", never signed.
+    #[test]
+    fn an_unknown_safe_nobody_could_read_is_refused_unchecked() {
+        use crate::executor::pool::tests::{scripted_node, seed_pool};
+        use vela_core::app::rpc_pool::RpcSource;
+        const CHAIN: u32 = 424_333;
+        let v = vector();
+        let case = case("isOwner unreadable (no node answered): refused, couldn't check");
+        let unknown = v["unknown"].as_str().unwrap_or_default();
+        crate::executor::storage::tests::with_temp_state("sign-parent-unreachable", || {
+            let (dead, _) = scripted_node(std::time::Duration::ZERO, None);
+            seed_pool(CHAIN, &[(&dead, RpcSource::User)]);
+            let mut column = Column::open(
+                &request_of(&case, CHAIN),
+                case["input"]["signer"].as_str().unwrap_or_default(),
+                Vec::new(),
+                vec![CHAIN],
+            );
+            assert_eq!(column.reads(), vec![(CHAIN, unknown.to_owned())]);
+            column.assert_refused(unknown, ParentReason::Unchecked);
+        });
+    }
+
+    /// The same read answered "not an owner": the request is the person's
+    /// to decide, as any other (the guard decides nothing more).
+    #[test]
+    fn an_unknown_safe_this_account_does_not_own_goes_on() {
+        use crate::executor::pool::tests::{http, scripted_node, seed_pool};
+        use vela_core::app::rpc_pool::RpcSource;
+        const CHAIN: u32 = 424_334;
+        let case = case("unknown Safe, isOwner false: clear");
+        crate::executor::storage::tests::with_temp_state("sign-parent-not-owner", || {
+            let (node, _) = scripted_node(
+                std::time::Duration::ZERO,
+                Some(http(
+                    "200 OK",
+                    r#"{"jsonrpc":"2.0","id":1,"result":"0x0000000000000000000000000000000000000000000000000000000000000000"}"#,
+                )),
+            );
+            seed_pool(CHAIN, &[(&node, RpcSource::User)]);
+            let column = Column::open(
+                &request_of(&case, CHAIN),
+                case["input"]["signer"].as_str().unwrap_or_default(),
+                Vec::new(),
+                vec![CHAIN],
+            );
+            assert_eq!(column.reads().len(), 1);
+            let view = column.sign.view();
+            assert!(view.blocked.is_none(), "{:?}", view.blocked);
+            assert_ne!(
+                view.confirm_block,
+                Some(vela_core::app::sign_confirm::ConfirmBlock::Reading),
+                "the read is answered"
+            );
+            assert!(column.answers.is_empty());
+        });
+    }
+
+    /// The wording the sheet draws for each reason, in every language the
+    /// app ships: the parent sentence with the call and the Safe — the
+    /// catalog's own, never its key.
+    #[test]
+    fn the_parent_sentence_names_the_call_and_the_safe_in_every_language() {
+        for lang in crate::loc::LANGUAGES {
+            let loc = crate::loc::Loc::for_language(lang);
+            let s = SigningStrings::resolve(&loc);
+            for unchecked in [false, true] {
+                let text = crate::signing::live::parent_refusal_text(
+                    &s,
+                    "execTransaction",
+                    "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+                    unchecked,
+                );
+                assert!(!text.contains("parentSafe"), "{lang}: {text}");
+                assert!(!text.contains("{{"), "{lang}: {text}");
+                assert!(text.contains("execTransaction"), "{lang}: {text}");
+                assert!(text.contains("0x5afe…5afe"), "{lang}: {text}");
+            }
+            assert_ne!(s.parent_blocked, s.parent_unchecked, "{lang}");
         }
     }
 }

@@ -464,6 +464,7 @@ class BrowserMachineTest {
                     is SignOperation.DeleteRecord -> SignShellResult.RecordUpdated
                     is SignOperation.SwitchActiveAccount -> SignShellResult.AccountSwitched
                     is SignOperation.SimVerdictTimer -> SignShellResult.SimVerdictTimerFired(operation.id, operation.round)
+                    is SignOperation.ReadSafeOwner -> SignShellResult.SafeOwnerRead(operation.id, operation.chain_id, operation.safe, app.getvela.wallet.feature.signing.core.SafeOwnerAnswer.Unreachable("stub"))
                 }
             },
             escapedFailure = JsonShell.escapedFailure(SignOperation.serializer(), SignShellResult.serializer(), fallback = SignShellResult.Responded) { SignShellResult.Responded },
