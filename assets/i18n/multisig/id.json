@@ -159,6 +159,7 @@
     "feeUnchecked": "Tidak bisa memeriksa apakah transaksi akan berjalan — Anda tetap bisa menyetujui; Eksekusi akan memeriksa lagi.",
     "feeUncheckedHeld": "Tidak bisa memeriksa apakah transaksi akan berjalan — Eksekusi akan memeriksa lagi.",
     "feeRetry": "Periksa lagi",
+    "feeSigning": "Ditandatangani dengan biaya ini — tetap sampai kamu mengonfirmasi atau membatalkan.",
     "feeSetup": "Termasuk penyiapan satu kali di {{network}} ≈ {{amount}}:",
     "feeSetupPlain": "Termasuk penyiapan satu kali di {{network}}:",
     "setupMultisig": "menerapkan multisig ini",

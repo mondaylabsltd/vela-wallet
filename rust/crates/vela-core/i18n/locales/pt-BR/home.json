@@ -238,6 +238,7 @@
         "feeUnchecked": "Não foi possível verificar se ela seria executada — você ainda pode aprovar; Executar verifica de novo.",
         "feeUncheckedHeld": "Não foi possível verificar se ela seria executada — Executar verifica de novo.",
         "feeRetry": "Verificar de novo",
+        "feeSigning": "Assinando com esta taxa — ela não muda até você confirmar ou cancelar.",
         "feeSetup": "Inclui uma configuração única em {{network}} ≈ {{amount}}:",
         "feeSetupPlain": "Inclui uma configuração única em {{network}}:",
         "setupMultisig": "implantar este multisig",

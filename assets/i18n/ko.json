@@ -449,6 +449,7 @@
   "removeRecipient": "제거",
   "alertInsufficientBalanceBody": "합계가 잔액을 초과합니다.",
   "alertEstimateChainDownBody": "{{chain}}에 연결할 수 없어 이 거래의 수수료를 계산하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+  "alertEstimateRelayBody": "Vela 릴레이가 응답하지 않아 아무것도 보내지 않았습니다. 잠시 후 다시 시도해 주세요.",
   "alertAccountUnavailableBody": "이 거래를 준비하는 데 필요한 계정 키를 불러올 수 없습니다. 다시 시도해 주세요.",
   "recipientPickAria": "연락처에서 선택",
   "multiSendNoFundsAfterGas": "가스 예약 후 잔액이 부족합니다.",

@@ -2932,3 +2932,202 @@ fn a_no_figure_stop_follows_the_requote_and_the_next_press_signs_it() {
     run(&mut sut, &mut world, press(Some("512")));
     assert_eq!(world.sent.len(), 1, "signed at the figure the stop named");
 }
+
+// -- r18-5 (§32): the fee on screen at the passkey is the fee signed --------------------------
+
+/// Answer everything but the passkey's send (`SendCalls`): the press is out,
+/// the person not yet at Face ID. Waits last, as a shell's clock.
+fn settle_holding_the_send(sut: &mut Sut, world: &mut World) {
+    use vela_core::app::multisig_shell::MultisigOperation as Op;
+    for _ in 0..20_000 {
+        let outstanding: Vec<Op> = sut
+            .outstanding()
+            .into_iter()
+            .filter(|op| !matches!(op, Op::SendCalls { .. }))
+            .collect();
+        let Some(op) = outstanding
+            .iter()
+            .find(|op| !matches!(op, Op::Wait { .. }))
+            .or_else(|| world::soonest_wait(&outstanding))
+            .cloned()
+        else {
+            return;
+        };
+        let res = world.answer(&op);
+        sut.resolve_matching(|o| *o == op, res);
+    }
+    panic!("the machine never settled");
+}
+
+/// r18-5 (iOS, found on the one press; the rule is every press's): the fee
+/// line read 0.248201 at the press, re-quoted on screen to 0.203525 before
+/// Face ID, and 0.248201775 was charged. While a press is in flight the
+/// pressed executor's line is not re-quoted — frozen, marked `signing` — and
+/// the figure signed is the one on screen at the passkey. Vector
+/// `multisig/press-fee.json`.
+#[test]
+fn the_fee_on_screen_at_the_passkey_is_the_fee_signed() {
+    use vela_core::app::multisig_shell::{quantity, MultisigShellResult};
+    let path = format!(
+        "{}/tests/vectors/multisig/press-fee.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let cases = v["cases"].as_array().unwrap();
+    assert!(cases.len() >= 5);
+    let quote = |amount: &str| MultisigShellResult::Quoted {
+        quote: json!({"kind": "quoted", "fee": {"token": null, "amount": amount}, "totalGas": "0x1", "executorDeployed": true}),
+    };
+    let decimal = |look: &Value| {
+        look["fee"]["amount"]
+            .as_str()
+            .and_then(quantity)
+            .map(|f| f.to_string())
+    };
+    for case in cases {
+        let name = case["name"].as_str().unwrap();
+        let one_press = case["press"] == "one_press";
+        let (mut world, mut sut, _) = setup(&[0, 1]);
+        let hash = hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
+        let executor = if one_press {
+            fixture(1).address
+        } else {
+            run(
+                &mut sut,
+                &mut world,
+                Event::Approve {
+                    chain_id: 100,
+                    safe_tx_hash: hash.clone(),
+                    owner: fixture(1).address,
+                },
+            );
+            fixture(0).address
+        };
+        let key = look_key(&hash, &executor);
+        let action_key = format!("execute:{}", hash.to_ascii_lowercase());
+        let ask = || Event::Preview {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            executor: executor.clone(),
+        };
+        world.now += 60_000.0;
+        world.quote_answer = Some(quote(case["look"].as_str().unwrap()));
+        run(&mut sut, &mut world, ask());
+        let look = sut.view().previews[&key].clone();
+        assert_eq!(look["kind"], "priced", "{name}: {look}");
+        assert_ne!(look["signing"], true, "{name}: not marked before the press");
+        let shown = decimal(&look);
+        if one_press {
+            let k = format!("100:{}", hash.to_ascii_lowercase());
+            assert_eq!(
+                sut.view().approve_execute[&k],
+                vec![executor.clone()],
+                "{name}"
+            );
+        }
+        world.now += case["lookAgeMs"].as_f64().unwrap();
+        if let Some(q) = case["pressQuote"].as_str() {
+            world.quote_answer = Some(quote(q));
+        }
+        if case["outcome"] == "cancelled" {
+            world.send_answer = Some(MultisigShellResult::CallsCancelled);
+        }
+        let press = if one_press {
+            Event::ApproveExecute {
+                chain_id: 100,
+                safe_tx_hash: hash.clone(),
+                executor: executor.clone(),
+                shown_fee: shown.clone(),
+            }
+        } else {
+            Event::Execute {
+                chain_id: 100,
+                safe_tx_hash: hash.clone(),
+                executor: executor.clone(),
+                shown_fee: shown.clone(),
+            }
+        };
+        sut.dispatch(press);
+        settle_holding_the_send(&mut sut, &mut world);
+        if let Some(during) = case["expect"].get("during") {
+            // The passkey is up. The shell asks for a new look (its 5 s
+            // re-ask, the home's poll) past the look's window.
+            world.now += 20_000.0;
+            world.quote_answer = Some(quote(case["requoteDuring"].as_str().unwrap()));
+            sut.dispatch(ask());
+            settle_holding_the_send(&mut sut, &mut world);
+            let line = sut.view().previews[&key].clone();
+            assert_eq!(
+                decimal(&line).map_or(Value::Null, Value::from),
+                during["fee"],
+                "{name}: the line at the passkey"
+            );
+            assert_eq!(line["signing"], during["signing"], "{name}: marked {line}");
+            assert!(
+                matches!(
+                    sut.view().actions.get(&action_key),
+                    Some(ActionState::Working)
+                ),
+                "{name}: still the press, nothing said"
+            );
+        }
+        // The person answers the passkey (or cancels it).
+        let answered = settle_reads_first(&mut sut, &mut world, 20_000);
+        assert!(answered < 20_000, "{name}: never settled");
+        // A send the person cancelled at the passkey signed nothing.
+        let cancelled = case["outcome"] == "cancelled";
+        let signed = world
+            .sent_fees
+            .first()
+            .cloned()
+            .flatten()
+            .filter(|_| !cancelled)
+            .and_then(|f| f["amount"].as_str().and_then(quantity))
+            .map(|f| f.to_string());
+        assert_eq!(
+            signed.map_or(Value::Null, Value::from),
+            case["expect"]["signed"],
+            "{name}: the figure signed"
+        );
+        let action = sut.view().actions.get(&action_key).cloned();
+        match case["outcome"].as_str().unwrap() {
+            "signed" => assert!(
+                matches!(action, Some(ActionState::Done { .. })),
+                "{name}: {action:?}"
+            ),
+            "cancelled" => assert!(
+                matches!(action, Some(ActionState::Cancelled)),
+                "{name}: {action:?}"
+            ),
+            _ => {
+                let Some(ActionState::Failed { detail }) = action else {
+                    panic!("{name}: {action:?}");
+                };
+                let detail: Value = serde_json::from_str(&detail).unwrap();
+                assert_eq!(detail["kind"], "fee_moved", "{name}");
+                assert_eq!(detail["amount"], case["expect"]["stop"], "{name}");
+            }
+        }
+        if let Some(q) = case["requoteAfter"].as_str() {
+            world.now += 20_000.0;
+            world.quote_answer = Some(quote(q));
+            run(&mut sut, &mut world, ask());
+        }
+        let after = &case["expect"]["after"];
+        let line = sut.view().previews.get(&key).cloned();
+        assert_ne!(
+            line.as_ref().map(|l| l["signing"].clone()),
+            Some(Value::Bool(true)),
+            "{name}: the mark goes once the press is over"
+        );
+        if let Some(fee) = after.get("fee") {
+            assert_eq!(
+                line.as_ref()
+                    .and_then(decimal)
+                    .map_or(Value::Null, Value::from),
+                *fee,
+                "{name}: the line after"
+            );
+        }
+    }
+}

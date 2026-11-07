@@ -10,7 +10,13 @@ export type CreateView = { stage: CreateStage, name: string, name_editable: bool
  * Present only once the wallet is real. Showing an address earlier would
  * invite funding a wallet that may never be reachable.
  */
-address: string | null, sync_error_detail: string | null, can_go_back: boolean, 
+address: string | null, sync_error_detail: string | null, 
+/**
+ * r18-8 (§32): the sync-failed screen's sentence when the failure has
+ * its own words — this test build refused to write to the live index
+ * (`common.testBuild.productionWriteRefused`). `None`: the screen's own.
+ */
+sync_error_key?: string, can_go_back: boolean, 
 /**
  * The drafted founding keys, founding order. Non-empty from the moment
  * the first registration lands.

@@ -238,6 +238,7 @@
         "feeUnchecked": "Non è stato possibile verificare se andrebbe a buon fine — puoi comunque approvare; Esegui verifica di nuovo.",
         "feeUncheckedHeld": "Non è stato possibile verificare se andrebbe a buon fine — Esegui verifica di nuovo.",
         "feeRetry": "Verifica di nuovo",
+        "feeSigning": "Si firma con questa commissione: resta fissa finché non confermi o annulli.",
         "feeSetup": "Include una configurazione una tantum su {{network}} ≈ {{amount}}:",
         "feeSetupPlain": "Include una configurazione una tantum su {{network}}:",
         "setupMultisig": "distribuzione di questo multisig",

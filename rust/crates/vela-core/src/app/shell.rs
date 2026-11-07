@@ -390,6 +390,13 @@ pub enum ShellResult {
         /// abort). Only the shell can tell that from a 4xx, so this one bit of
         /// classification is delegated.
         network: bool,
+        /// r18-8 (§28, §32): this test build's guard refused the write to
+        /// the live index before it left — said with
+        /// `common.testBuild.productionWriteRefused`, never the network or
+        /// the index. Omitted: `false`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        refused: Option<bool>,
     },
     IndexHealth {
         ok: bool,

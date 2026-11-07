@@ -149,6 +149,7 @@
     "removeRecipient": "Quitar",
     "alertInsufficientBalanceBody": "El total supera tu saldo.",
     "alertEstimateChainDownBody": "No se puede conectar con {{chain}} para calcular la comisión de esta transacción. Inténtalo de nuevo en un momento.",
+    "alertEstimateRelayBody": "El relay de Vela no respondió, así que no se envió nada. Inténtalo de nuevo en un momento.",
     "alertAccountUnavailableBody": "No se pudo cargar la clave de la cuenta necesaria para preparar esta transacción. Inténtalo de nuevo.",
     "recipientPickAria": "Elegir un contacto",
     "multiSendNoFundsAfterGas": "No alcanza para el gas tras la reserva.",

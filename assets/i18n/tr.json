@@ -449,6 +449,7 @@
   "removeRecipient": "Kaldır",
   "alertInsufficientBalanceBody": "Toplam bakiyenizi aşıyor.",
   "alertEstimateChainDownBody": "Bu işlemin ücretini hesaplamak için {{chain}} ağına ulaşılamıyor. Birazdan tekrar deneyin.",
+  "alertEstimateRelayBody": "Vela'nın aktarıcısı yanıt vermedi, bu yüzden hiçbir şey gönderilmedi. Birazdan tekrar deneyin.",
   "alertAccountUnavailableBody": "Bu işlemi hazırlamak için gereken hesap anahtarı yüklenemedi. Lütfen tekrar deneyin.",
   "recipientPickAria": "Kişilerden seç",
   "multiSendNoFundsAfterGas": "Gas rezervinden sonra bakiye yetersiz.",

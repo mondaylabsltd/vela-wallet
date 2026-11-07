@@ -368,6 +368,7 @@ fn a_failed_publish_still_enters() {
         ShellResult::IndexFailed {
             message: "still down".to_owned(),
             network: true,
+            refused: None,
         },
     );
     assert!(
@@ -911,6 +912,7 @@ fn a_failed_unit_fetch_says_the_registry_is_unreachable_instead_of_guessing() {
     let next = sut.resolve(ShellResult::IndexFailed {
         message: "offline".to_owned(),
         network: true,
+        refused: None,
     });
     assert_eq!(
         next,
@@ -1760,6 +1762,7 @@ fn result_of(answer: Answer) -> ShellResult {
         Answer::Failed { local } => ShellResult::IndexFailed {
             message: "registry unreachable".to_owned(),
             network: local,
+            refused: None,
         },
         Answer::NoRecord(verified_by) => ShellResult::RegistryKeyStatus {
             registered: false,

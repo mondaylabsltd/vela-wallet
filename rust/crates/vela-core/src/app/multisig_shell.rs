@@ -406,6 +406,13 @@ pub enum MultisigShellResult {
     /// Nothing answered (refused, closed, offline, timed out).
     HttpUnreachable {
         detail: String,
+        /// r18-8 (§28, §32): this test build's guard refused the write
+        /// before it left — never sent, never the network's answer. Asked
+        /// once (no retry, no outage), said with
+        /// `common.testBuild.productionWriteRefused`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        refused: Option<bool>,
     },
     RpcResult {
         #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
@@ -623,6 +630,8 @@ pub enum HttpAnswer {
         body: String,
     },
     Unreachable(String),
+    /// r18-8 (§28): the test build's guard refused it before it left.
+    Refused(String),
 }
 
 /// The shell, as an async command sees it. Cheap to clone.
@@ -745,7 +754,11 @@ impl<Ev: Send + 'static> Io<Ev> {
                 retry_after,
                 body,
             },
-            MultisigShellResult::HttpUnreachable { detail } => HttpAnswer::Unreachable(detail),
+            MultisigShellResult::HttpUnreachable {
+                detail,
+                refused: Some(true),
+            } => HttpAnswer::Refused(detail),
+            MultisigShellResult::HttpUnreachable { detail, .. } => HttpAnswer::Unreachable(detail),
             other => HttpAnswer::Unreachable(format!("unexpected answer {other:?}")),
         }
     }
@@ -1126,6 +1139,10 @@ pub enum ServiceFail {
     /// A write it is over its limit for (`429`): never a failure — sent
     /// again after the wait it named (`None`: it named none).
     Busy(Option<f64>),
+    /// r18-8 (§28, §32): this test build refused to write to the live
+    /// service — never sent. Not the service's outage, never retried by
+    /// itself; said with `common.testBuild.productionWriteRefused`.
+    Refused,
 }
 
 /// How long a `429` says to wait, in ms: its `Retry-After` seconds, else
@@ -1319,6 +1336,9 @@ pub struct Service {
     /// Services found without the cross-chain list this session.
     without_all: Shared<BTreeSet<String>>,
     served: Shared<Option<(String, f64, Option<ServiceTable>)>>,
+    /// r18-8: this session's test build refused a write to this service —
+    /// the background never writes to it again (only the person's ask).
+    write_refused: Shared<bool>,
 }
 
 impl Service {
@@ -1343,8 +1363,15 @@ impl Service {
         if *current != url {
             lock(&self.outage).reset();
             *lock(&self.served) = None;
+            *lock(&self.write_refused) = false;
         }
         *current = url.to_owned();
+    }
+
+    /// r18-8: a write to this service was refused by this test build this
+    /// session (§28) — nothing writes to it again by itself.
+    pub fn write_refused(&self) -> bool {
+        *lock(&self.write_refused)
     }
 
     /// One request, with the service's retry rules (`service.ts` `request`).
@@ -1376,6 +1403,12 @@ impl Service {
                 )
                 .await;
             let (status, retry_after, text) = match answer {
+                // r18-8 (§28): refused before it left — not the service, not
+                // the network: once, never again by itself.
+                HttpAnswer::Refused(_) => {
+                    *lock(&self.write_refused) = true;
+                    return Err(ServiceFail::Refused);
+                }
                 HttpAnswer::Unreachable(detail) => {
                     let now = io.now().await;
                     lock(&self.outage).failed(now);
@@ -1435,7 +1468,9 @@ impl Service {
             HttpAnswer::Answered { status, body, .. } => {
                 super::genesis_service::service_answer(status, &body)
             }
-            HttpAnswer::Unreachable(_) => super::genesis_service::ServiceAnswer::Unreachable,
+            HttpAnswer::Unreachable(_) | HttpAnswer::Refused(_) => {
+                super::genesis_service::ServiceAnswer::Unreachable
+            }
         }
     }
 

@@ -2565,3 +2565,67 @@ fn the_rule_the_chain_said_is_kept_on_the_row() {
     assert!(row.from_chain);
     assert!(row.last_known, "not read since");
 }
+
+/// r18-8 (§32): a test build's guard refused the record before it left
+/// (§28). It was said "The multisig service can't be reached right now" and
+/// sent three times, then again on every tick. A refusal is its own kind: said
+/// in the test build's words, asked once, never marked as the service's
+/// outage, never asked again on its own — only on the person's Share again.
+#[test]
+fn a_record_the_test_build_refused_is_said_so_once_and_never_retried_by_itself() {
+    use vela_core::app::multisig_failure::{failure_said, FailureKind};
+    let imports = |world: &World| {
+        world
+            .http_log
+            .iter()
+            .filter(|l| l.starts_with("POST ") && l.ends_with("/api/import"))
+            .count()
+    };
+    let mut world = World::default();
+    world.locals.push(fixture(0));
+    world.writes_refused = true;
+    let mut sut = started(&mut world, vec![100]);
+    run(&mut sut, &mut world, Event::NewDraft);
+    let c = choice(&world);
+    run(&mut sut, &mut world, Event::Create { choice: c });
+    let view = sut.view();
+    assert_eq!(view.create.phase, Phase::Done);
+    assert_eq!(
+        view.create.refused.as_deref(),
+        Some("production_write_refused"),
+        "the test build's refusal, never a service that can't be reached"
+    );
+    assert_eq!(imports(&world), 1, "asked once, never retried");
+    assert!(!view.service_down, "a refusal is not the service's outage");
+    assert_eq!(world.stored_accounts().len(), 1, "kept here all the same");
+    // Never asked again on its own.
+    for _ in 0..3 {
+        world.now += 400_000.0;
+        run(&mut sut, &mut world, Event::Tick);
+    }
+    assert_eq!(imports(&world), 1, "no automatic retry of a refused write");
+    // The person's Share again asks once, and says it in the same words.
+    let address = sut.view().accounts[0].account.address.clone();
+    run(
+        &mut sut,
+        &mut world,
+        Event::ShareAgain {
+            address: address.clone(),
+            owner: fixture(0).address,
+        },
+    );
+    assert_eq!(imports(&world), 2, "the person's own ask, once");
+    let key = address.to_ascii_lowercase();
+    let view = sut.view();
+    assert_eq!(view.share_again.get(&key), Some(&Phase::Failed));
+    let detail = view
+        .share_again_failure
+        .get(&key)
+        .expect("the failure is said");
+    let said = failure_said(detail);
+    assert_eq!(said.kind, FailureKind::ProductionWriteRefused);
+    assert_eq!(
+        said.key.as_deref(),
+        Some("common.testBuild.productionWriteRefused")
+    );
+}

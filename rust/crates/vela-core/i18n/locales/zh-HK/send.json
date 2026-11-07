@@ -88,6 +88,7 @@
     "removeRecipient": "移除",
     "alertInsufficientBalanceBody": "總額超過你的餘額。",
     "alertEstimateChainDownBody": "暫時無法連接 {{chain}}，未能計算此交易的費用。請稍後再試。",
+    "alertEstimateRelayBody": "Vela 的中繼沒有回應，所以甚麼都沒有發送。請稍後再試。",
     "alertAccountUnavailableBody": "無法載入準備這筆交易所需的帳戶密鑰，請重試。",
     "recipientPickAria": "從通訊錄選擇",
     "multiSendNoFundsAfterGas": "扣除 gas 儲備後餘額不足。",
