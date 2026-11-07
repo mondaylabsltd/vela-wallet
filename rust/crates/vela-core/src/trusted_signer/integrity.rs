@@ -61,6 +61,18 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // §31, the parent-Safe guard (disclosure 2026-09-29, APPENDIX-PARENT): a
+    // site's request that would act for a Safe other than the account —
+    // `execTransaction`, `approveHash`, an owner / threshold / module / guard
+    // / fallback / setup call, straight or one `multiSend` / `execTransaction`
+    // down, in any leg of the operation — or a `SafeMessage` under another
+    // contract's domain is refused (`refuse.parentSafe`,
+    // `refuse.parentSafeMessage`, fifteen locales). The page cannot read the
+    // chain, so it refuses the shapes on any Safe but the account; the core
+    // refuses them for the Safes the account owns (`parent_safe_guard`).
+    // Vela's own multisig execution is read by its own rules, as before.
+    // Not LAUNCH.
+    "2c649b76e8e7c140c33ef29f1a3615325af63316496247673bfb3eb8d25d2ca3",
     // 954b9013's page, §16: a multisig member's owner proof
     // (`vela_multisigCreate`) has its card — the genesis handed over, the
     // address derived from it, its members (this signer's place marked), its

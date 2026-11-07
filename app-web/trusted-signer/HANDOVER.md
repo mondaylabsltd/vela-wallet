@@ -146,7 +146,7 @@ bun samples/gen-catalog.mjs --check # src/lib/catalog.js 与 vela-core 的网络
 node samples/gen-fonts.mjs --check  # src/fonts.css 就是 assets/fonts/ 的 Plus Jakarta Sans 按这份子集生成的（要 fontTools）
 bun samples/single-file-test.mjs   # 15/15 发布出去的单文件页：CSP 实测、App 的字体在页内加载、自定义 scheme 不被 CSP 拦
 bun samples/desktop-demo.mjs --auto #  8/8 桌面应用全流程 + 自验签（开测试页 samples/loopback-sign.html：只有它接受回环答复）
-bun samples/takeover-test.mjs      # 18/18 自调用 / delegatecall / SafeTx 拒签（与 vela-core self_call_guard 同一规则）
+bun samples/takeover-test.mjs      # 67/67 自调用 / delegatecall / SafeTx 拒签（与 vela-core self_call_guard 同一规则）；替其他 Safe 执行 / approveHash / 改配置、SafeMessage 拒签（§31）
 node samples/multisig-test.mjs     # 355/355 多签批准与多签执行（第七轮）：哈希、批准字节、读法与发布的 wasm 逐例对拍；执行者的操作逐腿读、部署从 setup 核实；敌意输入；十五种语言；第十轮：多签的钱写多签的、成员变更前后、执行卡的嵌套批量、嵌套层数与核心逐层一致
 bun samples/unlimited-line-test.mjs # 11/11 「无限额」的线：uint256 2^200、uint160 2^152（与 vela-core approval_guard 同一条线）
 node samples/origin-line-test.mjs   # 31/31 站点名就是主机时页头只写一次（082 L-HOST，与 vela-core site_label 同一规则）；不是主机的名字只作它的自称，不作页头（`source: 'vela_browser'` 不算证明）；仪式副标题只说一次钱包；网络旁「App 提供」只标 App 给的链名，本页不认识的链总显示链 ID

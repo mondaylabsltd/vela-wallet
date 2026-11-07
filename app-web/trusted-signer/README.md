@@ -75,7 +75,7 @@ node samples/claims-test.mjs    # 62 项：谁的说法 —— 「本账户」�
 node samples/provenance-test.mjs # 96 项：意图的读法从哪来 —— 同一函数形状打在陌生合约上、换一条链、App 说的金库资产、App 的模拟、去向不是本账户、App 说的现有额度；五种来源行十五种语言
 node samples/safeop-test.mjs    #  9 项：SafeOp / SafeMessage 对拍 vela-core
 node samples/identicon-test.mjs #  9 项：identicon 与 vela-core 逐字节一致（含 1000 随机地址）
-node samples/takeover-test.mjs  # 18 项：自调用 / delegatecall / SafeTx 拒签 —— 与 vela-core self_call_guard 同一规则
+node samples/takeover-test.mjs  # 67 项：自调用 / delegatecall / SafeTx 拒签 —— 与 vela-core self_call_guard 同一规则；替成员所在 Safe（多签）执行 / approveHash / 改配置、SafeMessage 一律拒签（§31，parent_safe_guard 的向量逐条重放）
 node samples/unlimited-line-test.mjs # 11 项：「无限额」从哪里开始 —— 与 vela-core approval_guard 同一条线
 ```
 
