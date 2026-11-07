@@ -25,7 +25,7 @@ const ASSOCIATION = {
 		]
 	},
 	webcredentials: {
-		apps: ['F9W689P9NE.app.getvela.VelaWallet', 'F9W689P9NE.app.aikeys.apppasskeysdemo-ios']
+		apps: ['F9W689P9NE.app.getvela.VelaWallet']
 	}
 };
 

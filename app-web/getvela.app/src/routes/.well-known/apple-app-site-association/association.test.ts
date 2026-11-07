@@ -59,13 +59,14 @@ describe('/.well-known/apple-app-site-association (getvela.app)', () => {
 		expect(claims(body)).toEqual(claims(IOS));
 	});
 
-	it('claims the pay link, and keeps /sign and the passkey apps', async () => {
+	it('claims the pay link, and keeps /sign', async () => {
 		const { body } = await served();
 		const paths = body.applinks.details.flatMap((d) => d.components.map((c) => c['/']));
 		expect(paths).toEqual(expect.arrayContaining(['/sign', '/pay', '/pay/']));
-		expect(body.webcredentials.apps).toEqual([
-			'F9W689P9NE.app.getvela.VelaWallet',
-			'F9W689P9NE.app.aikeys.apppasskeysdemo-ios'
-		]);
+	});
+
+	it('lets only the store app use getvela.app passkeys', async () => {
+		const { body } = await served();
+		expect(body.webcredentials.apps).toEqual(['F9W689P9NE.app.getvela.VelaWallet']);
 	});
 });
