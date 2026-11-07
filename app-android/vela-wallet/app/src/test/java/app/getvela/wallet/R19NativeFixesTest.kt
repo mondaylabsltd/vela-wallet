@@ -313,6 +313,83 @@ class R19NativeFixesTest {
         assertEquals(2_000L, LaunchFront.HOLD_MS)
     }
 
+    // -- r18-16: the chip and the body change in the same frame --------------
+
+    private val alice = "0xD400866e00B055B20752a826CD5C89b811de130b"
+    private val bob = "0x031d7D57c99CAF891e1C250554691Fd12D84772b"
+    private val safe = "0x7f3cE90000000000000000000000000000A0de87"
+    private val hash = "0x" + "cd".repeat(32)
+    private val tx = "0x" + "ab".repeat(32)
+
+    private val msWords = app.getvela.wallet.feature.multisig.MultisigWords(
+        strings = strings,
+        accounts = app.getvela.wallet.feature.multisig.core.MsAccountsView(),
+        localNames = mapOf(alice.lowercase() to "Interleave"),
+        networkName = { if (it == 5042002) "Arc Testnet" else null },
+        nativeSymbol = { "USDC" },
+    )
+
+    /** One transaction's sheet model, the proposals view at one moment of an execution from here. */
+    private fun sheet(status: String, approvers: List<String>, extra: String): app.getvela.wallet.feature.multisig.MsProposalModel {
+        val approvals = approvers.joinToString(",") { """{"owner":"$it"}""" }
+        val view = app.getvela.wallet.feature.multisig.core.MsProposalsView.of(
+            app.getvela.wallet.core.crux.Wire.json.parseToJsonElement(
+                """
+                {"followed":"$safe","standings":{},$extra
+                 "items":[{"chainId":5042002,"safeTxHash":"$hash","nonce":"5","proposer":"$bob","approvals":[$approvals],"approved":${approvers.size},"threshold":2,
+                  "status":"$status","canApprove":[],"canExecute":${if (status == "done") "[]" else "[\"$alice\"]"},"cancelledBy":null,"sameNonce":[],"executing":false,"createdMs":1,
+                  "unsent":false,"renameUndeployed":false,"review":{"action":{"kind":"call","to":"$bob","value":"0","data":"0x"},"sign":{"allowed":true,"anyway":false}}}],
+                 "chains":[{"chainId":5042002,"members":{"deployed":true,"owners":["$alice","$bob"],"threshold":2,"nonce":"5"},"items":[],"mailbox":true}]}
+                """.trimIndent(),
+            ),
+        )
+        return app.getvela.wallet.feature.multisig.MsProposalModel(view.items.single(), view, msWords, null)
+    }
+
+    private val executing get() = msWords.t("status.executing")
+    private val executed get() = msWords.t("proposal.executed")
+
+    /** What the chip says and what the body says, as the sheet draws them. */
+    private fun agree(frame: String, m: app.getvela.wallet.feature.multisig.MsProposalModel) {
+        val bodySaysExecuted = m.saysExecuted && m.executedTx != null ||
+            m.sheetNotes.any { it.id == "executed" } ||
+            m.approvalsCount == executed ||
+            m.executedFacts != null
+        if (m.statusLine == executing) {
+            assertTrue("$frame: the chip says Executing… over an Executed body (${m.executedFacts}, ${m.approvalsCount})", !bodySaysExecuted)
+            assertTrue("$frame: never 'isn't recorded' while it is being executed here", m.executedFacts == null)
+            assertEquals("$frame: the members, never a stripped list", listOf(alice, bob), m.listedMembers)
+        } else {
+            assertTrue("$frame: the chip moved on (${m.statusLine}) but the body did not", bodySaysExecuted)
+        }
+    }
+
+    @Test
+    fun `r18-16 from the press to the receipt, the chip and the body say the same, and change together`() {
+        val press = """"actions":{"execute:$hash":{"kind":"working"}},"""
+        // 1. The press is out; the mailbox still counts 1 (the one press carries the last approval).
+        agree("press", sheet("ready", listOf(bob), press))
+        // 2. The mailbox says done and the timeline has the executed transaction, but this
+        //    device's flight is still waiting on its receipt and the frozen facts are not in.
+        val timeline = """"timelines":{"5042002:$hash":[{"kind":"executed","tx_hash":"$tx","who":"$alice"}]},"""
+        val waiting = """"executions":{"5042002:$hash":{"kind":"waiting","txHash":"$tx"}},"""
+        val mid = sheet("done", listOf(bob), press + timeline + waiting)
+        assertEquals(executing, mid.statusLine)
+        agree("mailbox done, receipt out", mid)
+        // 2b. The press settled, the receipt still waiting.
+        agree("press settled, receipt out", sheet("done", listOf(bob), """"actions":{"execute:$hash":{"kind":"done"}},""" + timeline + waiting))
+        // 2c. The receipt judged executed while the press's action is still working: the verdict speaks.
+        val judged = """"executions":{"5042002:$hash":{"kind":"executed","txHash":"$tx"}},"""
+        val frozen = """"frozen":{"5042002:$hash":{"executor":"$alice","approvers":["$alice","$bob"],"threshold":2,"executorApproved":true}},"""
+        val resolvedWorking = sheet("done", listOf(bob), press + timeline + judged + frozen)
+        assertNotEquals(executing, resolvedWorking.statusLine)
+        agree("judged, press still working", resolvedWorking)
+        // 3. Resolved: Executed on the chip and in the body, in the same frame.
+        val done = sheet("done", listOf(alice, bob), """"actions":{"execute:$hash":{"kind":"done"}},""" + timeline + judged + frozen)
+        assertEquals(executed, done.statusLine)
+        agree("executed", done)
+    }
+
     companion object {
         const val ACCOUNT = "0x1111111111111111111111111111111111111111"
     }
