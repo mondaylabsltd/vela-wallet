@@ -329,6 +329,12 @@ pub enum Event {
         address: String,
         #[cfg_attr(feature = "bindings", ts(type = "number"))]
         chain_id: u64,
+        /// r17-1 / r17-10: asked on the person's word (their Try again on a
+        /// network that could not be checked): its reads are the person's
+        /// asks — always sent ([`Io::person`]). A shell's own ask (a sheet
+        /// opening, a re-check once the network answers) says `false`.
+        #[serde(default)]
+        person: bool,
     },
     /// r7: read what the chain says of members being added (the create
     /// sheet's owners on the networks it may be used on; an import's members
@@ -1427,11 +1433,25 @@ where
     F: FnOnce(Io<Event>, Shared<State>) -> Fut + Send + 'static,
     Fut: std::future::Future<Output = ()> + Send + 'static,
 {
+    flow_as(model, false, f)
+}
+
+/// [`flow`]; `person`: on the person's own word — every read it makes is
+/// the person's ask, always sent (r17-1 / r17-10, [`Io::person`]).
+fn flow_as<F, Fut>(model: &Model, person: bool, f: F) -> Cmd
+where
+    F: FnOnce(Io<Event>, Shared<State>) -> Fut + Send + 'static,
+    Fut: std::future::Future<Output = ()> + Send + 'static,
+{
     let state = model.state.clone();
     Command::all([
         render(),
         Command::new(move |ctx| async move {
-            let io = Io::new(ctx);
+            let io = if person {
+                Io::new(ctx).person()
+            } else {
+                Io::new(ctx)
+            };
             f(io.clone(), state).await;
             io.emit(Event::Changed);
         }),
@@ -1585,13 +1605,18 @@ impl App for MultisigAccounts {
                 lock(&model.state).link.stand = None;
                 render()
             }
-            Event::RetryLink => flow(model, |io, st| async move {
+            // r17-10: the person's Try again on a link: its reads always sent.
+            Event::RetryLink => flow_as(model, true, |io, st| async move {
                 link::retry(&io, &st).await;
             }),
             Event::DropLink => flow(model, |io, st| async move {
                 link::drop_pending(&io, &st).await;
             }),
-            Event::CheckOn { address, chain_id } => {
+            Event::CheckOn {
+                address,
+                chain_id,
+                person,
+            } => {
                 let key = verdict_key(&address, chain_id);
                 let account = {
                     let mut s = lock(&model.state);
@@ -1607,7 +1632,7 @@ impl App for MultisigAccounts {
                         _ => return render(),
                     }
                 };
-                flow(model, move |io, st| async move {
+                flow_as(model, person, move |io, st| async move {
                     let found =
                         shell::judge(&io, chain_id, &account.address, &account.genesis).await;
                     let changed = {
