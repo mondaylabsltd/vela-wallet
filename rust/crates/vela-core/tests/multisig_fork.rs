@@ -533,3 +533,455 @@ fn create_two_of_three_propose_approve_twice_execute() {
     assert_eq!(item.status, ProposalStatus::Done);
     eprintln!("executed in {}", verdict["txHash"]);
 }
+
+// ---------------------------------------------------------------------------
+// §31 — the parent-Safe guard against the real contracts (APPENDIX-PARENT)
+// ---------------------------------------------------------------------------
+
+mod parent {
+    use super::*;
+    use vela_core::app::parent_safe_guard::{ParentReason, SafeOwnerAnswer};
+    use vela_core::app::sign_request::{
+        Event as SignEvent, SignAccountRef, SignApproveOpts, SignDappIdentity, SignErrorKind,
+        SignOperation as SignOp, SignRequest, SignResponsePayload, SignShellResult, SignSurface,
+    };
+
+    const SENTINEL: &str = "0x0000000000000000000000000000000000000001";
+    const ATTACKER: &str = "0xbadbadbadbadbadbadbadbadbadbadbadbadbad0";
+
+    fn w_addr(a: &str) -> String {
+        format!("{:0>64}", a.trim_start_matches("0x").to_ascii_lowercase())
+    }
+    fn w_num(n: u64) -> String {
+        format!("{n:064x}")
+    }
+    fn pad(body: &str) -> String {
+        format!("{body:0<width$}", width = body.len().div_ceil(64) * 64)
+    }
+
+    /// `execTransaction(safe, 0, inner, CALL, 0, 0, 0, 0x0, 0x0, sig)` with the
+    /// "approved by msg.sender" signature `{r = owner, s = 0, v = 1}` — what a
+    /// site asks the owner's account to send (the disclosure's shape (a)).
+    fn exec_v1(safe: &str, inner: &str, owner: &str) -> String {
+        let body = inner.trim_start_matches("0x");
+        let dpad = pad(body);
+        let sig = format!("{}{}01", w_addr(owner), w_num(0));
+        let spad = pad(&sig);
+        let data_off = 32 * 10;
+        let sig_off = data_off + 32 + dpad.len() as u64 / 2;
+        format!(
+            "0x6a761202{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
+            w_addr(safe),
+            w_num(0),
+            w_num(data_off),
+            w_num(0),
+            w_num(0),
+            w_num(0),
+            w_num(0),
+            w_addr("0x0"),
+            w_addr("0x0"),
+            w_num(sig_off),
+            w_num(body.len() as u64 / 2),
+            dpad,
+            w_num(sig.len() as u64 / 2),
+            spad
+        )
+    }
+
+    fn owners_of(shell: &Shell, safe: &str) -> Vec<String> {
+        let r = shell
+            .rpc(
+                100,
+                "eth_call",
+                json!([{"to": safe, "data": "0xa0e67e2b"}, "latest"]),
+            )
+            .unwrap();
+        let hex = r.as_str().unwrap().trim_start_matches("0x").to_owned();
+        let n = usize::from_str_radix(&hex[64..128], 16).unwrap();
+        (0..n)
+            .map(|i| format!("0x{}", &hex[128 + i * 64 + 24..128 + (i + 1) * 64]))
+            .collect()
+    }
+
+    /// The shell's answer to the sign machine's ownership read: a real
+    /// `eth_call` to the fork (or to `rpc`, when given).
+    fn read_owner(shell: &Shell, op: &SignOp) -> SignShellResult {
+        let SignOp::ReadSafeOwner {
+            id,
+            chain_id,
+            safe,
+            data,
+            ..
+        } = op
+        else {
+            panic!("not a read: {op:?}");
+        };
+        let answer = match shell.rpc(
+            u64::from(*chain_id),
+            "eth_call",
+            json!([{"to": safe, "data": data}, "latest"]),
+        ) {
+            Ok(v) => SafeOwnerAnswer::Returned {
+                data: v.as_str().unwrap_or("0x").to_owned(),
+            },
+            Err((Some(code), message)) => SafeOwnerAnswer::RpcError {
+                code: Some(code),
+                message,
+            },
+            Err((None, detail)) => SafeOwnerAnswer::Unreachable { detail },
+        };
+        SignShellResult::SafeOwnerRead {
+            id: id.clone(),
+            chain_id: *chain_id,
+            safe: safe.clone(),
+            answer,
+        }
+    }
+
+    fn sign_machine(account: &str) -> DomainDriver<SignRequest> {
+        let mut sign = DomainDriver::<SignRequest>::new();
+        sign.dispatch(SignEvent::NetworksChanged {
+            chain_ids: vec![100],
+        });
+        sign.dispatch(SignEvent::AccountsChanged {
+            accounts: vec![SignAccountRef {
+                address: account.to_owned(),
+                credential_id: "cred-0".to_owned(),
+            }],
+            active_index: 0,
+        });
+        sign
+    }
+
+    fn arrive(
+        sign: &mut DomainDriver<SignRequest>,
+        id: &str,
+        method: &str,
+        params: &Value,
+    ) -> Vec<SignOp> {
+        sign.dispatch(SignEvent::RequestArrived {
+            id: id.to_owned(),
+            method: method.to_owned(),
+            params_json: params.to_string(),
+            origin: "https://evil.example".to_owned(),
+            transport_id: "wp-1".to_owned(),
+            dedicated_transport: false,
+            per_request_chain: Some(100),
+            dapp: Some(SignDappIdentity {
+                name: "evil.example".to_owned(),
+                url: Some("https://evil.example".to_owned()),
+            }),
+            granted_address: None,
+            requested_address: None,
+            request_ts_ms: None,
+            now_ms: 1_700_000_000_000.0,
+            first_party: false,
+        })
+    }
+
+    /// Refused for `safe` as `reason`; a tap signs nothing; the close answers
+    /// the site -32603 parent_safe_blocked.
+    fn assert_refused(sign: &mut DomainDriver<SignRequest>, safe: &str, reason: ParentReason) {
+        let view = sign.view();
+        let blocked = view.blocked.clone().expect("refused on the sheet");
+        assert_eq!(
+            blocked.parent.as_deref(),
+            Some(safe.to_ascii_lowercase().as_str())
+        );
+        assert_eq!(blocked.reason, Some(reason));
+        assert!(!view.confirm_gate_open);
+        let ops = sign.dispatch(SignEvent::ApproveTapped {
+            opts: SignApproveOpts::default(),
+        });
+        assert!(
+            !ops.iter().any(|op| matches!(
+                op,
+                SignOp::SignAndSubmit { .. } | SignOp::CheckBundlerFunding { .. }
+            )),
+            "nothing signed: {ops:?}"
+        );
+        let ops = sign.dispatch(SignEvent::SwipeDismissed);
+        assert!(
+            ops.iter().any(|op| matches!(
+                op,
+                SignOp::SendResponse {
+                    payload: SignResponsePayload::Err {
+                        code: -32603,
+                        kind: SignErrorKind::ParentSafeBlocked,
+                        ..
+                    },
+                    ..
+                }
+            )),
+            "{ops:?}"
+        );
+        assert_eq!(sign.view().surface, SignSurface::Hidden);
+    }
+
+    /// The disclosure's parent scenario, end to end on the fork: a 1-of-2
+    /// multisig P whose member A alone meets the threshold.
+    ///
+    /// 1. Vela's own flow works: P proposes, A approves (1 of 1 needed), A
+    ///    executes — the transfer lands.
+    /// 2. The site's takeover — A sending `P.execTransaction(swapOwner(A →
+    ///    attacker))` with the "approved by msg.sender" signature — IS a
+    ///    takeover on these contracts (proved on a snapshot, sent from A's
+    ///    address directly, then reverted).
+    /// 3. Through Vela it is refused, never signed: from the multisig list,
+    ///    and with no list after the real `isOwner` read; `approveHash` and a
+    ///    `SafeMessage` under P's domain too; an RPC that cannot be read
+    ///    refuses "couldn't check".
+    #[test]
+    #[ignore = "needs the fork harness (scripts/onchain/multisig-fork/up.sh) and VELA_MULTISIG_FORK=1"]
+    fn parent_safe_takeover_is_refused_while_the_multisigs_own_flow_runs() {
+        if std::env::var("VELA_MULTISIG_FORK").is_err() {
+            eprintln!("VELA_MULTISIG_FORK not set: skipped");
+            return;
+        }
+        let service = format!("http://127.0.0.1:{}", port("GENESIS_PORT", 8787));
+        let rpc = format!("http://127.0.0.1:{}", port("FORK_PORT", 8545));
+        let locals: Vec<LocalAccount> = (0..2).map(fixture).collect();
+        let a = locals[0].address.clone();
+        let mut shell = Shell {
+            service: service.clone(),
+            rpcs: BTreeMap::from([(100, rpc)]),
+            store: BTreeMap::new(),
+            locals: locals.clone(),
+            last_tx: None,
+            log: Vec::new(),
+        };
+
+        // -- the parent: a 1-of-2 of A and B ------------------------------------------
+        let mut acc = DomainDriver::<MultisigAccounts>::new();
+        acc.dispatch(accounts::Event::Start {
+            service_url: service.clone(),
+            accounts: locals.clone(),
+            networks: vec![100],
+        });
+        settle(&mut acc, &mut shell);
+        acc.dispatch(accounts::Event::NewDraft);
+        settle(&mut acc, &mut shell);
+        acc.dispatch(accounts::Event::Create {
+            choice: CreateChoice {
+                owners: locals.iter().map(|l| l.address.clone()).collect(),
+                threshold: 1,
+                name: "Parent Harbor".to_owned(),
+                chain_id: 100,
+                creator: a.clone(),
+                members: BTreeMap::new(),
+            },
+        });
+        settle(&mut acc, &mut shell);
+        let view = acc.view();
+        assert_eq!(view.create.phase, Phase::Done, "{:?}", view.create);
+        let parent = view.create.address.clone().unwrap();
+        let account: MultisigAccount = view.accounts[0].account.clone();
+        shell
+            .rpc(
+                100,
+                "anvil_setBalance",
+                json!([parent, "0xDE0B6B3A7640000"]),
+            )
+            .unwrap();
+        eprintln!("parent {parent}: 1-of-2 of {a} and {}", locals[1].address);
+
+        // -- 1. Vela's own flow: propose, approve, execute ------------------------------
+        let mut ms = DomainDriver::<MultisigProposals>::new();
+        ms.dispatch(proposals::Event::Start {
+            service_url: service.clone(),
+            accounts: locals.clone(),
+            networks: vec![100],
+            known: Vec::new(),
+        });
+        settle(&mut ms, &mut shell);
+        ms.dispatch(proposals::Event::Follow {
+            account: Some(account.clone()),
+        });
+        settle(&mut ms, &mut shell);
+        let to = "0x00000000000000000000000000000000000000cc";
+        ms.dispatch(proposals::Event::Draft {
+            chain_id: 100,
+            proposal: ProposalKind::Transfers {
+                transfers: vec![vela_core::multisig::Transfer {
+                    token: None,
+                    to: to.to_owned(),
+                    amount: "777".to_owned(),
+                }],
+            },
+        });
+        settle(&mut ms, &mut shell);
+        ms.dispatch(proposals::Event::ConfirmDraft {
+            as_member: Some(a.clone()),
+        });
+        settle(&mut ms, &mut shell);
+        let ActionState::Done {
+            safe_tx_hash: hash, ..
+        } = ms.view().actions["propose"].clone()
+        else {
+            panic!("{:?} {:?}", ms.view().actions, shell.log);
+        };
+        let item = ms
+            .view()
+            .items
+            .into_iter()
+            .find(|i| i.safe_tx_hash == hash)
+            .unwrap();
+        assert_eq!(
+            item.status,
+            ProposalStatus::Ready,
+            "proposed and approved by A: {item:?}"
+        );
+        ms.dispatch(proposals::Event::Preview {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            executor: a.clone(),
+        });
+        settle(&mut ms, &mut shell);
+        let preview = ms.view().previews[&format!("100:{hash}:{}", a.to_ascii_lowercase())].clone();
+        let shown_fee = preview["fee"]["amount"]
+            .as_str()
+            .and_then(vela_core::app::multisig_shell::quantity)
+            .map(|fee| fee.to_string());
+        let before = balance_of(&shell, to);
+        ms.dispatch(proposals::Event::Execute {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            executor: a.clone(),
+            shown_fee,
+        });
+        settle(&mut ms, &mut shell);
+        let verdict = ms.view().executions[&format!("100:{hash}")].clone();
+        assert_eq!(
+            verdict["kind"],
+            "executed",
+            "{verdict} {:?}",
+            ms.view().actions
+        );
+        assert_eq!(
+            balance_of(&shell, to) - before,
+            777,
+            "Vela's own execute landed"
+        );
+        eprintln!("own flow: executed in {}", verdict["txHash"]);
+
+        // -- 2. the site's payload is a real takeover --------------------------------------
+        let owners = owners_of(&shell, &parent);
+        let at = owners
+            .iter()
+            .position(|o| o.eq_ignore_ascii_case(&a))
+            .expect("A is an owner");
+        let prev = if at == 0 {
+            SENTINEL.to_owned()
+        } else {
+            owners[at - 1].clone()
+        };
+        let swap = format!(
+            "0xe318b52b{}{}{}",
+            w_addr(&prev),
+            w_addr(&a),
+            w_addr(ATTACKER)
+        );
+        let takeover = exec_v1(&parent, &swap, &a);
+        let snapshot = shell.rpc(100, "evm_snapshot", json!([])).unwrap();
+        shell.send_calls(
+            100,
+            &a,
+            &[vela_core::multisig::Call {
+                to: parent.clone(),
+                value: "0x0".to_owned(),
+                data: takeover.clone(),
+            }],
+        );
+        let after = owners_of(&shell, &parent);
+        assert!(
+            after.iter().any(|o| o.eq_ignore_ascii_case(ATTACKER))
+                && !after.iter().any(|o| o.eq_ignore_ascii_case(&a)),
+            "signed once, the site's request hands the parent over: {after:?}"
+        );
+        shell.rpc(100, "evm_revert", json!([snapshot])).unwrap();
+        assert!(
+            owners_of(&shell, &parent)
+                .iter()
+                .any(|o| o.eq_ignore_ascii_case(&a)),
+            "reverted"
+        );
+        eprintln!("takeover proved on a snapshot (reverted)");
+
+        // -- 3. through Vela: refused ----------------------------------------------------------
+        let attack = json!([{ "to": parent, "data": takeover, "value": "0x0" }]);
+
+        // (a) no list: the real isOwner read on the fork says A owns P.
+        let mut sign = sign_machine(&a);
+        let ops = arrive(&mut sign, "r-a1", "eth_sendTransaction", &attack);
+        let read = ops
+            .iter()
+            .find(|op| matches!(op, SignOp::ReadSafeOwner { .. }))
+            .expect("an unknown Safe is read")
+            .clone();
+        let answered = read_owner(&shell, &read);
+        sign.resolve_matching(|op| *op == read, answered);
+        assert_refused(&mut sign, &parent, ParentReason::Owner);
+
+        // (a) with the device's multisig list: refused at once, no read.
+        sign.dispatch(SignEvent::MultisigsChanged {
+            addresses: vec![parent.clone()],
+        });
+        let ops = arrive(&mut sign, "r-a2", "eth_sendTransaction", &attack);
+        assert!(!ops
+            .iter()
+            .any(|op| matches!(op, SignOp::ReadSafeOwner { .. })));
+        assert_refused(&mut sign, &parent, ParentReason::Member);
+
+        // (b) approveHash of the parent's next transaction.
+        let approve = json!([{ "to": parent, "data": format!("0xd4d9bdcd{}", "cd".repeat(32)), "value": "0x0" }]);
+        arrive(&mut sign, "r-b", "eth_sendTransaction", &approve);
+        assert_refused(&mut sign, &parent, ParentReason::Member);
+
+        // (c) a SafeMessage under the parent's domain (a nested EIP-1271 approval).
+        let message = json!({
+            "types": {
+                "EIP712Domain": [{"name": "chainId", "type": "uint256"}, {"name": "verifyingContract", "type": "address"}],
+                "SafeMessage": [{"name": "message", "type": "bytes"}]
+            },
+            "primaryType": "SafeMessage",
+            "domain": { "chainId": 100, "verifyingContract": parent },
+            "message": { "message": format!("0x{}", "ab".repeat(32)) }
+        });
+        arrive(
+            &mut sign,
+            "r-c",
+            "eth_signTypedData_v4",
+            &json!([a, message.to_string()]),
+        );
+        assert_refused(&mut sign, &parent, ParentReason::Member);
+
+        // isOwner unreadable: a node that does not answer refuses, never allows.
+        let mut dead = Shell {
+            service: service.clone(),
+            rpcs: BTreeMap::from([(100, "http://127.0.0.1:9".to_owned())]),
+            store: BTreeMap::new(),
+            locals: Vec::new(),
+            last_tx: None,
+            log: Vec::new(),
+        };
+        let mut sign = sign_machine(&a);
+        let ops = arrive(&mut sign, "r-u", "eth_sendTransaction", &attack);
+        let read = ops
+            .iter()
+            .find(|op| matches!(op, SignOp::ReadSafeOwner { .. }))
+            .unwrap()
+            .clone();
+        let answered = read_owner(&dead, &read);
+        dead.log.clear();
+        sign.resolve_matching(|op| *op == read, answered);
+        assert_refused(&mut sign, &parent, ParentReason::Unchecked);
+
+        // And P is untouched: A is still its owner, no attacker.
+        let owners = owners_of(&shell, &parent);
+        assert!(owners.iter().any(|o| o.eq_ignore_ascii_case(&a)));
+        assert!(!owners.iter().any(|o| o.eq_ignore_ascii_case(ATTACKER)));
+        eprintln!(
+            "refused: member, owner (isOwner on the fork), approveHash, SafeMessage, unchecked"
+        );
+    }
+}
