@@ -358,11 +358,16 @@ export function createRpcPoolExecutor(
 		method: string,
 		params: unknown[],
 		headers: Record<string, string> | undefined,
-		timeoutMs: number
+		timeoutMs: number,
+		mustSend = false
 	): Promise<Posted> {
 		const t0 = Date.now();
-		// home-17: an endpoint failing on transport is skipped a while.
-		if (skipper.skips(url, method)) return { outcome: { type: 'not_connected' }, latencyMs: 0 };
+		// home-17: an endpoint failing on transport is skipped a while — but
+		// never the person's own ask (r17-1 / r17-10, the core's
+		// `must_send`): a local refusal is not the network's answer, and one
+		// Try again after an outage lifts must reach the node.
+		if (!mustSend && skipper.skips(url, method))
+			return { outcome: { type: 'not_connected' }, latencyMs: 0 };
 		const { outcome, body } = await post(url, method, params, headers, timeoutMs);
 		if (body) registry.keepBody(callId, url, body);
 		skipper.note(url, outcome);
@@ -489,7 +494,8 @@ export function createRpcPoolExecutor(
 					// Spec 098 §5: a bundler call names the chain's RPC to the
 					// relay; the core sets `x_rpc_url` on bundler calls only.
 					relayRpcHeader(operation.x_rpc_url),
-					operation.timeout_ms
+					operation.timeout_ms,
+					operation.must_send ?? false
 				);
 				if (hedge && hedge.current?.url === url) stopTimer(hedge);
 				return result(posted);

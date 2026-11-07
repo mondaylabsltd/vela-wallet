@@ -636,6 +636,7 @@ fn the_network_code_round_trips_through_the_scanner() {
             code: "USD".to_owned(),
             rate: Some(1.0),
             fiat_decimals: 2,
+            space: Default::default(),
         },
     });
     let view = send.view();

@@ -228,6 +228,35 @@ fn created_and_refused_by_the_service_stays_kept() {
     assert_eq!(sut.view().create.phase, Phase::Done);
     assert_eq!(world.stored_accounts().len(), 1);
     assert_eq!(world.stored_accounts()[0]["recorded"], false);
+    // r17-19: said as a refusal — a stable word, never the service's text —
+    // never as a service that could not be reached (`refused: None`).
+    assert_eq!(sut.view().create.refused.as_deref(), Some("refused"));
+}
+
+/// r17-19: an error answer from the service (it answered, and did not
+/// record it) is a refusal too — only a service that did not answer is
+/// "can't be reached".
+#[test]
+fn an_error_answer_to_the_record_is_said_as_refused_never_unreachable() {
+    let mut world = World::default();
+    world.locals.push(fixture(0));
+    world.import_status = (400, json!({"error": "genesis rejected: bad owner"}));
+    let mut sut = started(&mut world, vec![100]);
+    run(&mut sut, &mut world, Event::NewDraft);
+    let c = choice(&world);
+    run(&mut sut, &mut world, Event::Create { choice: c });
+    let view = sut.view();
+    assert_eq!(view.create.phase, Phase::Done);
+    assert_eq!(
+        view.create.refused.as_deref(),
+        Some("refused"),
+        "never the service's English"
+    );
+    assert_eq!(
+        world.stored_accounts()[0]["recorded"],
+        false,
+        "kept here all the same"
+    );
 }
 
 /// The person closes the passkey: nothing kept, nothing asked.
@@ -2031,14 +2060,32 @@ fn a_network_is_checked_on_demand_once_a_session() {
     let check = || Event::CheckOn {
         address: g.address.clone(),
         chain_id: 8453,
+        person: false,
     };
     run(&mut sut, &mut world, check());
     let row = &sut.view().accounts[0];
     assert!(world.reads_on(8453) > 0, "read, though not used there yet");
     assert!(row.checked_on.is_empty(), "no answer is no verdict");
     assert!(row.checking_on.is_empty());
+    assert!(
+        world.rpc_person.iter().all(|(_, person)| !person),
+        "a shell's own check is not the person's ask"
+    );
     world.silent.clear();
-    run(&mut sut, &mut world, check());
+    // r17-10: the person's Try again on that network: its reads are the
+    // person's own asks — always sent.
+    world.rpc_person.clear();
+    run(
+        &mut sut,
+        &mut world,
+        Event::CheckOn {
+            address: g.address.clone(),
+            chain_id: 8453,
+            person: true,
+        },
+    );
+    assert!(!world.rpc_person.is_empty());
+    assert!(world.rpc_person.iter().all(|(_, person)| *person));
     let row = sut.view().accounts[0].clone();
     assert_eq!(row.checked_on, vec![8453], "asked again, and answered");
     assert_eq!(row.refused_on, vec![8453], "the same verdict rule");
@@ -2062,6 +2109,7 @@ fn a_network_is_checked_on_demand_once_a_session() {
         Event::CheckOn {
             address: g.address.clone(),
             chain_id: 42161,
+            person: false,
         },
     );
     assert_eq!(world.reads_on(42161), before);

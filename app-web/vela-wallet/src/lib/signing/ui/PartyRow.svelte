@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AddressText from '$lib/ui/AddressText.svelte';
 	import SourceMark from './SourceMark.svelte';
 	import type { PartyBadge } from '../model';
 
@@ -20,9 +21,9 @@
 	</p>
 	<div class="line">
 		<span class="who">
-			<span class="name">{name}</span>
+			<span class="name"><AddressText text={name} /></span>
 			{#if address}
-				<span class="address">{address}</span>
+				<span class="address"><AddressText text={address} /></span>
 			{/if}
 		</span>
 		{#if badge}
@@ -44,11 +45,18 @@
 		color: var(--color-fg-muted);
 	}
 
+	/*
+	  r17-11: a full address breaks only between its two halves (22 + 20,
+	  `AddressText`), never "…80d0a / af59…ab31 / 692D" beside the "First
+	  time sending here" chip. When the halves and the chip do not fit on one
+	  line, the chip goes under them.
+	*/
 	.line {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: flex-start;
 		justify-content: space-between;
-		gap: var(--space-lg);
+		gap: var(--space-sm) var(--space-lg);
 	}
 
 	.who {

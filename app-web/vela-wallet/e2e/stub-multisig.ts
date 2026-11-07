@@ -197,6 +197,8 @@ export class MultisigWorld {
 	 * connect; `hung`: no request is ever answered; `null`: they answer.
 	 */
 	outage: 'refused' | 'hung' | null = null;
+	/** r17-1: how many requests the outage refused at connect. */
+	refused = 0;
 	/**
 	 * r16-3: until this time (ms), a network back from an outage still turns
 	 * its safety checks away (`eth_call`, `eth_simulateV1` refused at
@@ -401,7 +403,10 @@ export class MultisigWorld {
 		const request = route.request();
 		if (request.method() !== 'POST') return route.abort('failed');
 		// r16-3: down — refused at once, or never answered at all.
-		if (this.outage === 'refused') return route.abort('connectionrefused');
+		if (this.outage === 'refused') {
+			this.refused += 1;
+			return route.abort('connectionrefused');
+		}
 		if (this.outage === 'hung') return new Promise<void>(() => {});
 		const chainId = Number(new URL(request.url()).pathname.slice(1));
 		const body = request.postDataJSON() as

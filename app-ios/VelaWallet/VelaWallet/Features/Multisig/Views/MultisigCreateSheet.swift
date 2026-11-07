@@ -557,13 +557,8 @@ struct MultisigCreateSheet: View {
     private var createdStep: some View {
         let row = hub.accountsView.row(created)
         let solo = owners.count == 1
-        let shared: String = {
-            if row?.shared == true { return words.t(solo ? "create.sharedSolo" : "create.shared") }
-            // Round 16 leftover 4: `refused` is the core's English — never
-            // drawn; Settings offers "Share it again".
-            if sheet.refused != nil { return words.createRefused }
-            return sheet.phase == .working ? words.t("create.savedSharing") : words.t("create.savedLater")
-        }()
+        let shared = Self.sharedLine(shared: row?.shared == true, solo: solo, refused: sheet.refused != nil,
+                                     working: sheet.phase == .working, words: words)
         return VStack(alignment: .leading, spacing: Tokens.Space.s16) {
             Text(prose: words.t("create.created"))
                 .typeRole(Typography.title.scaled(textScale))
@@ -583,6 +578,18 @@ struct MultisigCreateSheet: View {
             }
             .accessibilityIdentifier("multisig.create.done")
         }
+    }
+
+    /// Where the created multisig's record stands, in words. Round 16
+    /// leftover 4: `refused` is never drawn as the service's text. r17-19: a
+    /// record the service ANSWERED and did not take is the core's `refused`
+    /// (§30) — said as what is true and what to do (`settings.shareAgainNote`),
+    /// never "the multisig service can't be reached", which only a service
+    /// that did not answer is.
+    static func sharedLine(shared: Bool, solo: Bool, refused: Bool, working: Bool, words: MsWords) -> String {
+        if shared { return words.t(solo ? "create.sharedSolo" : "create.shared") }
+        if refused { return words.createRefused }
+        return working ? words.t("create.savedSharing") : words.t("create.savedLater")
     }
 
     private func close() {

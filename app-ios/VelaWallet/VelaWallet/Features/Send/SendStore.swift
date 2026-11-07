@@ -308,8 +308,8 @@ final class SendStore {
     /// at every change after it (PR 3 final note F25). The rule is the
     /// formatter's own (`WalletLive.Display.sendContext`): the committed
     /// pair, or the code on its way and NO rate.
-    static func displayContext(_ currency: CurrencyViewWire?) -> (code: String, rate: Double?) {
-        WalletLive.Display.sendContext(currency)
+    static func displayContext(_ currency: CurrencyViewWire?, testnet: Bool = false) -> (code: String, rate: Double?) {
+        WalletLive.Display.sendContext(currency, testnet: testnet)
     }
 
     func dispatch(_ event: [String: Any]) { core.dispatch(CoreJSON.string(event)) }

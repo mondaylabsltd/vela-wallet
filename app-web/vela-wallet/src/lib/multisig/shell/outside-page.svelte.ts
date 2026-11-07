@@ -94,8 +94,10 @@ export function pageDeps(input: {
 		Promise.reject(new Error(`${what}: not on the connect page`));
 	return {
 		fetch: (url, init) => fetch(url, { ...init, cache: 'no-store' }),
-		rpc: (chainId, method, params) =>
-			poolRpcCall(method, (Array.isArray(params) ? params : [params]) as unknown[], chainId),
+		rpc: (chainId, method, params, person) =>
+			poolRpcCall(method, (Array.isArray(params) ? params : [params]) as unknown[], chainId, 0, {
+				person: person ?? false
+			}),
 		storage: () => {
 			try {
 				return typeof localStorage === 'undefined' ? null : localStorage;

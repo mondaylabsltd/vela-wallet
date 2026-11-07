@@ -161,13 +161,21 @@ pub fn accounts_summary(count: &str, total: &str, known_total: &str) -> SharedSt
 /// (`switcher.hidden`, `balances` empty), and every figure is
 /// [`vela_core::app::privacy::MASK`] — the rows and the total alike, never
 /// the hero's pinned total overlaid (correctness batch item 2).
+///
+/// r17-13: in the testnet space (`network_space::shows_fiat`) there is no
+/// figure at all — no total, no row's, not even a mask: the header is the
+/// count alone ([`accounts_summary`] of an empty total).
 #[must_use]
 pub fn switcher_figures(
     switcher: &vela_core::app::balance_dashboard::BalanceSwitcherView,
     accounts: &[&str],
     currency: Option<&CurrencyView>,
     locale: &str,
+    space: vela_core::app::network_space::NetworkSpace,
 ) -> (SharedString, Vec<Option<SharedString>>) {
+    if !vela_core::app::network_space::shows_fiat(space) {
+        return (SharedString::default(), vec![None; accounts.len()]);
+    }
     if switcher.hidden {
         let mask = SharedString::from(vela_core::app::privacy::MASK);
         return (
@@ -904,6 +912,74 @@ mod tests {
         );
     }
 
+    /// r17-13: Settings and the account switcher said "3 accounts · Total
+    /// $0.00" in the testnet space — a zero total says the test coins are
+    /// worth something, and nothing. The testnet space shows no fiat
+    /// (`network_space::shows_fiat`): no total, no row figure, no mask
+    /// either (a mask says a figure is there), and the count stands alone
+    /// with no joiner left dangling. The mainnet space is as before.
+    #[test]
+    fn the_testnet_space_shows_no_account_total_at_all() {
+        use vela_core::app::network_space::NetworkSpace;
+        let accounts = ["0xaaa", "0xbbb", "0xccc"];
+        let mut switcher = vela_core::app::balance_dashboard::BalanceSwitcherView {
+            open: true,
+            loading: false,
+            // The testnet space reads no saved totals: nothing is known.
+            balances: Vec::new(),
+            hidden: false,
+        };
+        let usd = view("USD", Some(1.0));
+        let en = crate::loc::Loc::for_language("en");
+        let count = crate::settings::switcher_account_count(&en, accounts.len());
+        let clause = en.t("settingsModals.account.total");
+
+        let (total, rows) = switcher_figures(
+            &switcher,
+            &accounts,
+            Some(&usd),
+            "en",
+            NetworkSpace::Testnet,
+        );
+        assert_eq!(total.as_ref(), "", "no $0.00");
+        assert_eq!(rows, vec![None, None, None]);
+        assert_eq!(
+            accounts_summary(&count, &clause, &total).as_ref(),
+            "3 accounts"
+        );
+
+        // Hidden in the testnet space: still nothing — not a mask.
+        switcher.hidden = true;
+        let (total, rows) = switcher_figures(
+            &switcher,
+            &accounts,
+            Some(&usd),
+            "en",
+            NetworkSpace::Testnet,
+        );
+        assert_eq!(total.as_ref(), "");
+        assert_eq!(rows, vec![None, None, None]);
+
+        // The mainnet space: the figures, as before.
+        switcher.hidden = false;
+        switcher.balances = vec![vela_core::app::balance_dashboard::BalanceCacheEntry {
+            address: "0xaaa".to_owned(),
+            usd: 2.5,
+        }];
+        let (total, rows) = switcher_figures(
+            &switcher,
+            &accounts,
+            Some(&usd),
+            "en",
+            NetworkSpace::Mainnet,
+        );
+        assert_eq!(
+            accounts_summary(&count, &clause, &total).as_ref(),
+            "3 accounts · Total $2.50"
+        );
+        assert_eq!(rows[0].as_deref(), Some("$2.50"));
+    }
+
     /// PR 3 item 10: before the core commits a currency, nothing on this
     /// page is drawn in the USD/1 placeholder. The row names the stored
     /// choice on its way (its code alone) or nothing; an account's total is
@@ -939,8 +1015,13 @@ mod tests {
             }],
             hidden: false,
         };
-        let (total, rows) =
-            switcher_figures(&switcher, &["0xaaa"], Some(&waiting(Some("CNY"))), "en");
+        let (total, rows) = switcher_figures(
+            &switcher,
+            &["0xaaa"],
+            Some(&waiting(Some("CNY"))),
+            "en",
+            vela_core::app::network_space::NetworkSpace::Mainnet,
+        );
         assert_eq!(total.as_ref(), "");
         assert_eq!(rows, vec![None], "no figure in a row either");
         // The header says the count alone — never "· Total" with nothing
@@ -962,7 +1043,13 @@ mod tests {
 
         // Committed: the figures appear, in the person's money.
         let cny = view("CNY", Some(7.2));
-        let (total, rows) = switcher_figures(&switcher, &["0xaaa"], Some(&cny), "en");
+        let (total, rows) = switcher_figures(
+            &switcher,
+            &["0xaaa"],
+            Some(&cny),
+            "en",
+            vela_core::app::network_space::NetworkSpace::Mainnet,
+        );
         assert!(total.contains("8,888.40"), "{total}");
         assert_eq!(rows.len(), 1);
         assert!(rows[0].as_ref().is_some_and(|row| row.contains("8,888.40")));

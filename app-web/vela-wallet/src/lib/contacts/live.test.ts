@@ -342,6 +342,7 @@ const FEED: FeedView = {
 	settled: false,
 	unread_chains: [],
 	unread_key: null,
+	unread_network: null,
 	hidden: false,
 	contact_rows: [
 		item({ id: 't1' }),

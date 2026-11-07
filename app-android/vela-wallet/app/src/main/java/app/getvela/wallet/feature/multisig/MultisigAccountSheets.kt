@@ -72,6 +72,33 @@ data class MsLocal(val address: String, val name: String)
 private enum class CreateStep { Members, Threshold, Review, Created }
 
 /**
+ * The networks a new multisig is offered on: the space's (the network
+ * list's, as the core settles which Vela networks it shows), minus those
+ * found without the Safe contracts, the likely ones first (the core's
+ * order). r17-15: nothing here reads a language — the list is the same in
+ * every one.
+ */
+fun createNetworksOffered(spaceNetworks: List<Int>, contracts: (Int) -> String?, hints: Map<String, Any?>): List<Int> {
+    val offered = spaceNetworks.filter { contracts(it) != "missing" }
+    return MsRules.likelyNetworks(offered, hints).ifEmpty { offered }
+}
+
+/**
+ * The created step's line about the service's record of it, and its tone:
+ * recorded (shared); r17-19 — the service ANSWERED and did not record it
+ * (`create.refused`): "Share it again" from Settings, a warning, never
+ * "can't be reached"; still sending; else not reached yet, kept and sent
+ * later.
+ */
+fun createdSharedLine(words: MultisigWords, shared: Boolean, refused: String?, working: Boolean, solo: Boolean): Pair<String, MsTone> = when {
+    shared -> words.t(if (solo) "create.sharedSolo" else "create.shared") to MsTone.Positive
+    // Round 16 leftover 4: the service's refusal text is never drawn; Settings offers "Share it again".
+    refused != null -> words.createRefused to MsTone.Warning
+    working -> words.t("create.savedSharing") to MsTone.Neutral
+    else -> words.t("create.savedLater") to MsTone.Neutral
+}
+
+/**
  * Creating a multisig (M1) — the web's `CreateMultisigSheet`, iOS's
  * `MultisigCreateSheet`, on the accounts machine: its name and members (the
  * order is part of the address), how many must approve, a review that shows
@@ -127,10 +154,7 @@ fun MultisigCreateSheet(
     // contracts, the likely ones first (the core's order).
     // r5reg-19: the machine's `used_networks` / `recent_networks`.
     val hints = remember(view.usedNetworks, view.recentNetworks) { view.networkHints() }
-    val networks = run {
-        val offered = spaceNetworks.filter { sheet.contracts(it) != "missing" }
-        MsRules.likelyNetworks(offered, hints).ifEmpty { offered }
-    }
+    val networks = createNetworksOffered(spaceNetworks, sheet::contracts, hints)
 
     LaunchedEffect(Unit) {
         if (started) return@LaunchedEffect
@@ -447,15 +471,9 @@ fun MultisigCreateSheet(
             CreateStep.Created -> {
                 val row = view.row(created)
                 val solo = owners.size == 1
-                val shared = when {
-                    row?.shared == true -> words.t(if (solo) "create.sharedSolo" else "create.shared")
-                    // Round 16 leftover 4: the service's refusal text is never drawn; Settings offers "Share it again".
-                    sheet.refused != null -> words.createRefused
-                    sheet.phase == MsPhase.Working -> words.t("create.savedSharing")
-                    else -> words.t("create.savedLater")
-                }
+                val (shared, sharedTone) = createdSharedLine(words, shared = row?.shared == true, refused = sheet.refused, working = sheet.phase == MsPhase.Working, solo = solo)
                 MsText(words.t("create.created"), MsType.Title, Modifier.testTag("multisig.create.created"))
-                MsNote(shared, tone = if (row?.shared == true) MsTone.Positive else if (sheet.refused != null) MsTone.Warning else MsTone.Neutral, tag = "multisig.create.shared")
+                MsNote(shared, tone = sharedTone, tag = "multisig.create.shared")
                 created?.let { MsRow(words.t("create.address"), it, mono = true, copyable = true) }
                 MsNote(words.t(if (solo) "create.createdBodySolo" else "create.createdBody"))
                 if (!solo) created?.let { address ->
@@ -843,10 +861,9 @@ fun MultisigLinkStandSheet(
         when (stand?.kind) {
             // A damaged link is said in words, never an empty note: the corpus's
             // sentence, and what the link held (the core's `text`) when it held anything.
-            "broken" -> {
-                MsNote(words.t("proposal.badLink"), tone = MsTone.Warning, tag = "multisig.link.broken")
-                stand.text?.takeIf { it.isNotBlank() }?.let { MsText(it, MsType.Mono, color = VelaTheme.colors.fgMuted, maxLines = 3) }
-            }
+            // r17-17: the corpus's sentence for what is wrong with it — never
+            // the link's own text (the web shows none for a damaged link).
+            "broken" -> MsNote(words.linkBroken(stand), tone = MsTone.Warning, tag = "multisig.link.broken")
             "missingNetwork" -> {
                 val chainId = stand.chainId ?: 0
                 MsNote(words.missingTitle(chainId), tone = MsTone.Warning, tag = "multisig.link.missingNetwork")
@@ -854,14 +871,7 @@ fun MultisigLinkStandSheet(
                 onAddNetwork?.let { add -> VelaPrimaryButton(words.t("proposal.addNetwork"), { add(chainId) }, Modifier.fillMaxWidth().testTag("multisig.link.addNetwork")) }
             }
             "failed" -> {
-                val reason = stand.reason
-                val line = when (reason.kind) {
-                    null, "notFound" -> words.t("proposal.notFound")
-                    "unavailable" -> words.t("add.unavailable")
-                    "busy" -> words.t("add.busy", "network" to words.network(reason["chain_id"].int ?: 0))
-                    else -> words.t("add.${reason.kind}")
-                }
-                MsNote(line, tone = MsTone.Warning, tag = "multisig.link.failed")
+                MsNote(words.linkFailed(stand.reason), tone = MsTone.Warning, tag = "multisig.link.failed")
                 // §18 (c), round 14: a lookup that did not come back — the core offers Try again.
                 if (stand.retry) {
                     MsTextButton(words.t("review.state.tryAgain"), tag = "multisig.link.retry") { hub.send(ev("retry_link")) }

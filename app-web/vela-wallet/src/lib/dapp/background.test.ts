@@ -2195,6 +2195,8 @@ describe('who is signed in (spec 086, issue #315)', () => {
 		accounts: [ALICE, BOB].map((a) => ({ name: '', address: a })),
 		chain_id: 1,
 		updated_at_ms: 1,
+		networks_read: true,
+		unread_chain_ids: [],
 		ul_verified: false,
 		ul_verified_at_ms: 0,
 		theme: 'dark',

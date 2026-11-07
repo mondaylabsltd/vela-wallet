@@ -16,6 +16,8 @@ import type { FeedPresence } from '$lib/core/generated/FeedPresence';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { session } from '$lib/session/core/session.svelte';
 import { balance } from '$lib/wallet/core/balance.svelte';
+import { balanceView, subscribeBalanceDashboard } from '$lib/wallet/core/balance-resident';
+import type { BalanceView } from '$lib/core/generated/BalanceView';
 import { spaceNetworksSync, subscribeNetworks } from '$lib/services/networks';
 import { balanceReadPlan } from '$lib/core/kernels';
 import { decimalToBase, onNativeBalanceMoved, setShownNative } from '$lib/services/native-watch';
@@ -102,6 +104,18 @@ class Feed {
 				});
 			space();
 			subscribeNetworks(space);
+			// r17-3: "No activity yet" is a claim about every network of the
+			// space — the balance's reads of this account (its first read over,
+			// none of its networks unread) are handed on as the core says them.
+			const balanceRead = (view: BalanceView) =>
+				dispatchActivityFeed({
+					type: 'balance_read',
+					account: view.address ?? '',
+					read: view.networks_read ?? false,
+					unread_chain_ids: view.unread_chain_ids ?? []
+				});
+			balanceRead(balanceView());
+			subscribeBalanceDashboard(balanceRead);
 			// home-5: a native coin arrived where the scan finds no log (an
 			// account with no code yet) — its balance moved, so the hero and
 			// the rows read again past the token cache, as for a found receipt.

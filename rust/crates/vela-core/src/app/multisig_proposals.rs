@@ -1417,6 +1417,26 @@ where
     ])
 }
 
+/// [`flow`] on the person's own word (r17-1 / r17-10): their Try again or
+/// their press. Every read it makes is the person's ask ([`Io::person`]) —
+/// always put on the wire, never answered by a pool's cooldown or a shell's
+/// skip window, so one Try again after an outage lifts reads the network.
+fn person_flow<F, Fut>(model: &Model, f: F) -> Cmd
+where
+    F: FnOnce(Io<Event>, Shared<State>) -> Fut + Send + 'static,
+    Fut: std::future::Future<Output = ()> + Send + 'static,
+{
+    let state = model.state.clone();
+    Command::all([
+        render(),
+        Command::new(move |ctx| async move {
+            let io = Io::new(ctx).person();
+            f(io.clone(), state).await;
+            io.emit(Event::Changed);
+        }),
+    ])
+}
+
 impl App for MultisigProposals {
     type Event = Event;
     type Model = Model;
@@ -1537,7 +1557,7 @@ impl App for MultisigProposals {
             Event::Refresh { fresh } => flow(model, move |io, st| async move {
                 refresh(&io, &st, false, fresh).await
             }),
-            Event::Retry => flow(model, |io, st| async move {
+            Event::Retry => person_flow(model, |io, st| async move {
                 {
                     let s = lock(&st);
                     lock(&s.service.outage).reset();
@@ -1633,7 +1653,7 @@ impl App for MultisigProposals {
                     let blind = s.review_blind.get(&key).copied().unwrap_or(false);
                     (start_review_run(&mut s, &key), blind)
                 };
-                flow(model, move |io, st| async move {
+                person_flow(model, move |io, st| async move {
                     review_proposal(&io, &st, chain_id, &safe_tx_hash, blind, run).await;
                 })
             }
@@ -1651,7 +1671,7 @@ impl App for MultisigProposals {
                 let Some((round, run)) = again else {
                     return render();
                 };
-                flow(model, move |io, st| async move {
+                person_flow(model, move |io, st| async move {
                     review_draft(&io, &st, round, run).await;
                 })
             }
@@ -1723,7 +1743,7 @@ impl App for MultisigProposals {
                         .insert(format!("execute:{hash}"), ActionState::Working);
                     s.actions.remove(&format!("approve:{hash}"));
                 }
-                flow(model, move |io, st| async move {
+                person_flow(model, move |io, st| async move {
                     let shown = shown_fee.as_deref().and_then(shell::quantity);
                     approve_execute(&io, &st, chain_id, &safe_tx_hash, &executor, shown, true)
                         .await;
@@ -1747,12 +1767,29 @@ impl App for MultisigProposals {
                 lock(&model.state)
                     .actions
                     .insert(key.clone(), ActionState::Working);
-                flow(model, move |io, st| async move {
+                person_flow(model, move |io, st| async move {
                     let outcome = approve(&io, &st, chain_id, &safe_tx_hash, &owner).await;
-                    if matches!(outcome, ActionState::Done { .. }) {
+                    let approved = matches!(outcome, ActionState::Done { .. });
+                    if approved {
                         note_actor(&io, &st, chain_id, &owner).await;
                     }
-                    lock(&st).actions.insert(key, outcome);
+                    {
+                        let mut s = lock(&st);
+                        s.actions.insert(key, outcome);
+                        // r17-16: a later press that went through ends an earlier
+                        // one's failure on the same transaction — the one press's
+                        // stop is no longer said beside Execute once the approval
+                        // it could not give was given (the mirror of the one press
+                        // dropping `approve:`). One working or done is left alone.
+                        if approved {
+                            let exec = format!("execute:{}", safe_tx_hash.to_ascii_lowercase());
+                            if s.actions.get(&exec).is_some_and(|a| {
+                                !matches!(a, ActionState::Working | ActionState::Done { .. })
+                            }) {
+                                s.actions.remove(&exec);
+                            }
+                        }
+                    }
                     refresh(&io, &st, false, true).await;
                 })
             }
@@ -1776,7 +1813,7 @@ impl App for MultisigProposals {
                 lock(&model.state)
                     .actions
                     .insert(key.clone(), ActionState::Working);
-                flow(model, move |io, st| async move {
+                person_flow(model, move |io, st| async move {
                     let input = execution_input(&st, chain_id, &safe_tx_hash, &executor);
                     let shown = shown_fee.as_deref().and_then(shell::quantity);
                     let outcome =

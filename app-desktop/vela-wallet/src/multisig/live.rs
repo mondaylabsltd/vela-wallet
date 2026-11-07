@@ -695,6 +695,7 @@ impl Deps for Live {
         method: &str,
         params: &Value,
         bound: Option<Duration>,
+        person: bool,
     ) -> Result<RpcReply, String> {
         let chain = u32::try_from(chain_id).map_err(|_| format!("no chain {chain_id}"))?;
         let params = if params.is_array() {
@@ -702,9 +703,13 @@ impl Deps for Live {
         } else {
             json!([params])
         };
-        let envelope = match bound {
-            Some(budget) => pool::call_within(chain, method, params, budget),
-            None => pool::call(chain, method, params),
+        // r17-1 / r17-10: a read on the person's own word reaches the pool as
+        // theirs — always sent, never answered from a cooldown.
+        let envelope = match (bound, person) {
+            (Some(budget), false) => pool::call_within(chain, method, params, budget),
+            (Some(budget), true) => pool::person_call_within(chain, method, params, budget),
+            (None, false) => pool::call(chain, method, params),
+            (None, true) => pool::person_call(chain, method, params),
         }
         .map_err(|error| unanswered_detail(chain, &error))?;
         if let Some(error) = envelope.get("error").filter(|e| !e.is_null()) {

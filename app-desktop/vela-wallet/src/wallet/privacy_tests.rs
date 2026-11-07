@@ -229,6 +229,7 @@ fn masked_surfaces(balance: &BalanceView, feed: &FeedView) -> Vec<(&'static str,
         ],
         None,
         "en",
+        vela_core::app::network_space::NetworkSpace::Mainnet,
     );
     let mut switcher = vec![total.to_string()];
     switcher.extend(rows.into_iter().flatten().map(|row| row.to_string()));
@@ -366,6 +367,7 @@ fn hidden_no_masked_surface_says_a_figure() {
         &["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
         None,
         "en",
+        vela_core::app::network_space::NetworkSpace::Mainnet,
     );
     assert_eq!(total.as_ref(), mask);
     assert_eq!(rows, vec![Some(SharedString::from(mask))]);

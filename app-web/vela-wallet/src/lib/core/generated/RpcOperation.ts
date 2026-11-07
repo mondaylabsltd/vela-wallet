@@ -13,4 +13,12 @@ export type RpcOperation = { "type": "load_pool_config", chain_id: number, } | {
  * 081 the shells used `X-Rpc-Url`, a name the relay never read).
  * `None` ⇒ send no header. Never set on a call to an RPC provider.
  */
-x_rpc_url: string | null, timeout_ms: number, } | { "type": "probe_chain_id", chain_id: number, url: string, timeout_ms: number, } | { "type": "draw_jitter", call_id: string, } | { "type": "start_backoff", call_id: string, delay_ms: number, } | { "type": "persist_bans", entries: Array<RpcBanEntry>, } | { "type": "conclude", call_id: string, verdict: RpcCallVerdict, };
+x_rpc_url: string | null, timeout_ms: number, 
+/**
+ * r17-10: this POST is a person's own ask (their Try again, their
+ * press): it is put on the wire. A shell that answers some reads
+ * locally — the web's endpoint skipper, which says `not_connected`
+ * for a node that failed on transport a moment ago — never answers
+ * this one without asking the node. Absent: `false`.
+ */
+must_send: boolean, } | { "type": "probe_chain_id", chain_id: number, url: string, timeout_ms: number, } | { "type": "draw_jitter", call_id: string, } | { "type": "start_backoff", call_id: string, delay_ms: number, } | { "type": "persist_bans", entries: Array<RpcBanEntry>, } | { "type": "conclude", call_id: string, verdict: RpcCallVerdict, };

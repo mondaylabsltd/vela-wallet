@@ -433,7 +433,13 @@ fun MultisigProposalSheet(
                     enabled = !model.executeHeld(chosen) && model.canSign && !executingNow,
                     loading = executingNow,
                 )
-                ActionFailure(listOfNotNull(model.executeFailure), words) {
+                // r17-21: "Check again" only when its fee is what is asked
+                // again; any other failure is read again ("Try again").
+                ActionFailure(
+                    listOfNotNull(model.executeFailure),
+                    words,
+                    retryLabel = if (model.failureChecksFee) words.t("proposal.feeRetry") else null,
+                ) {
                     hub.sendProposal(ev("refresh", "fresh" to true))
                     hub.sendProposal(ev("preview", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "executor" to chosen))
                     lookRound += 1
@@ -449,7 +455,7 @@ fun MultisigProposalSheet(
             } else if (!model.isReady && !oneTapOffered) {
                 MsNote(words.t("proposal.feeNote"))
             }
-            if (item.unsent && !model.outboxSending) {
+            if (model.offersSendAgain) {
                 VelaPrimaryButton(
                     text = words.t("proposal.outboxSendAgain"),
                     onClick = { hub.sendProposal(ev("send_again", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash)) },
@@ -583,7 +589,7 @@ private fun ActionFailure(lines: List<MsLine>, words: MultisigWords, retryLabel:
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.sm)) {
             for (line in lines) MsNote(line.text, tone = line.tone, tag = "multisig.proposal.note.${line.id}")
         }
-        MsTextButton(retryLabel ?: words.t("service.retry"), tag = "multisig.proposal.failureRetry") { onRetry() }
+        MsTextButton(retryLabel ?: words.t("review.state.tryAgain"), tag = "multisig.proposal.failureRetry") { onRetry() }
     }
 }
 

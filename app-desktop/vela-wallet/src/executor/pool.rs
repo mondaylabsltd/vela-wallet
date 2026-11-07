@@ -77,6 +77,10 @@ enum Request {
         kind: RpcKind,
         method: String,
         params: Value,
+        /// r17-1 / r17-10: the person's own ask (their Try again, their
+        /// press) — the core's `CallRequested::person`: always sent, a full
+        /// sweep, its chain's cooldowns lifted.
+        person: bool,
         reply: Sender<Routed>,
     },
     /// Drop every endpoint's state for a chain, or for all of them.
@@ -169,6 +173,13 @@ pub fn call(chain_id: u32, method: &str, params: Value) -> Result<Value, PoolErr
     dispatch(chain_id, RpcKind::Rpc, method, params)
 }
 
+/// [`call`], on the person's own word (their Try again, their press —
+/// `MultisigOperation::Rpc::person`): the core's pool always puts it on the
+/// wire, lifting its chain's cooldowns (r17-1 / r17-10). **Blocks.**
+pub fn person_call(chain_id: u32, method: &str, params: Value) -> Result<Value, PoolError> {
+    route_as(chain_id, RpcKind::Rpc, method, params, true).answer
+}
+
 /// The same, against the chain's bundler rather than its RPC.
 #[allow(dead_code, reason = "the money path's entry point, wired by spec 032")]
 pub fn bundler_call(chain_id: u32, method: &str, params: Value) -> Result<Value, PoolError> {
@@ -197,7 +208,15 @@ pub fn bundler_call_until(
     budget: Duration,
     stop: &dyn Fn() -> bool,
 ) -> Result<Value, PoolError> {
-    route_within(chain_id, RpcKind::Bundler, method, params, budget, stop)
+    route_within(
+        chain_id,
+        RpcKind::Bundler,
+        method,
+        params,
+        budget,
+        stop,
+        false,
+    )
 }
 
 /// [`call`], waiting at most `budget` — for a best-effort read that must not
@@ -208,7 +227,33 @@ pub fn call_within(
     params: Value,
     budget: Duration,
 ) -> Result<Value, PoolError> {
-    route_within(chain_id, RpcKind::Rpc, method, params, budget, &|| false)
+    route_within(
+        chain_id,
+        RpcKind::Rpc,
+        method,
+        params,
+        budget,
+        &|| false,
+        false,
+    )
+}
+
+/// [`call_within`] on the person's own word ([`person_call`]).
+pub fn person_call_within(
+    chain_id: u32,
+    method: &str,
+    params: Value,
+    budget: Duration,
+) -> Result<Value, PoolError> {
+    route_within(
+        chain_id,
+        RpcKind::Rpc,
+        method,
+        params,
+        budget,
+        &|| false,
+        true,
+    )
 }
 
 /// [`bundler_call`], waiting at most `budget` for the answer (spec 079) —
@@ -219,9 +264,15 @@ pub fn bundler_call_within(
     params: Value,
     budget: Duration,
 ) -> Result<Value, PoolError> {
-    route_within(chain_id, RpcKind::Bundler, method, params, budget, &|| {
-        false
-    })
+    route_within(
+        chain_id,
+        RpcKind::Bundler,
+        method,
+        params,
+        budget,
+        &|| false,
+        false,
+    )
 }
 
 fn route_within(
@@ -231,6 +282,7 @@ fn route_within(
     params: Value,
     budget: Duration,
     stop: &dyn Fn() -> bool,
+    person: bool,
 ) -> Result<Value, PoolError> {
     /// How often a waiting caller looks at `stop`.
     const GLANCE: Duration = Duration::from_millis(200);
@@ -248,6 +300,7 @@ fn route_within(
                 kind,
                 method: method.to_owned(),
                 params,
+                person,
                 reply,
             }))
             .is_err()
@@ -452,6 +505,21 @@ pub fn take_out_of_reach_change() -> Option<PoolLoss> {
         .take()
 }
 
+/// The chains out of reach now (`RpcPoolView.out_of_reach_chains`, as last
+/// noted by the pool thread) — without taking the change the balance
+/// machine waits for, and without asking the pool thread: cheap enough for
+/// a frame. Multisig Settings re-checks a network it could not check once
+/// that network leaves this set.
+#[must_use]
+pub fn out_of_reach_now() -> Vec<u32> {
+    OUT_OF_REACH
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .said
+        .chain_ids
+        .clone()
+}
+
 /// The chains whose whole RPC pool failed on the last attempt (`RpcPoolView.
 /// failed_chains`; spec 079 US4) — the rate-limited ones among them too, which
 /// a caller subtracts with [`rate_limited_chains`]. Cleared by the next usable
@@ -605,6 +673,10 @@ pub fn with_fault<T>(chains: Option<&[u32]>, work: impl FnOnce() -> T) -> T {
 }
 
 fn route(chain_id: u32, kind: RpcKind, method: &str, params: Value) -> Routed {
+    route_as(chain_id, kind, method, params, false)
+}
+
+fn route_as(chain_id: u32, kind: RpcKind, method: &str, params: Value, person: bool) -> Routed {
     if faulted(chain_id) {
         return Routed::unavailable();
     }
@@ -619,6 +691,7 @@ fn route(chain_id: u32, kind: RpcKind, method: &str, params: Value) -> Routed {
                 kind,
                 method: method.to_owned(),
                 params,
+                person,
                 reply,
             }))
             .is_err()
@@ -889,6 +962,7 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
                 kind,
                 method,
                 params,
+                person,
                 reply,
             } => {
                 next_id += 1;
@@ -912,6 +986,7 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
                     kind,
                     method,
                     now_ms: now_ms(),
+                    person,
                 });
                 drain(&mut host, pending, &mut inflight, &mut queries, workers);
             }
@@ -1167,6 +1242,9 @@ fn offload(
             method,
             x_rpc_url,
             timeout_ms,
+            // Desktop answers no read locally (no skip window): every POST
+            // goes on the wire, so the person's word needs nothing here.
+            must_send: _,
         } => {
             // The params are read here, on the thread that owns `inflight`.
             let (params, chain_id) = inflight.get(call_id).map_or_else(
@@ -1326,6 +1404,9 @@ fn perform(
             method,
             x_rpc_url,
             timeout_ms,
+            // Desktop answers no read locally (no skip window): every POST
+            // goes on the wire, so the person's word needs nothing here.
+            must_send: _,
         } => {
             let (params, chain_id) = inflight.get(call_id).map_or_else(
                 || (Value::Array(Vec::new()), 0),

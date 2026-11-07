@@ -289,8 +289,17 @@ class MultisigHub(
         }
     }
 
+    /** r17-16: the presses' order ([MsPressOrder]); the first view's states are no presses of this session. */
+    private var pressSeq = 0L
+    private var proposalsSeen = false
+
     private fun proposalsMoved(view: JsonObject) {
-        val typed = MsProposalsView.of(view)
+        val before = _proposalsView.value
+        val read = MsProposalsView.of(view)
+        val typed = read.copy(
+            pressOrder = if (!proposalsSeen) emptyMap() else MsPressOrder.advance(before.pressOrder, before.actions, read.actions) { ++pressSeq },
+        )
+        proposalsSeen = true
         noteReviews(typed)
         _proposalsView.value = typed
         if (dappAnswers.isNotEmpty()) settleDapps(typed)

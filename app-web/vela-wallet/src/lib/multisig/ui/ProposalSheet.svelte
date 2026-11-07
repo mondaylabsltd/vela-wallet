@@ -685,7 +685,15 @@
 		| { kind: 'sent'; txHash: string | null; by: string }
 		/** r4b-1: how this device's execution ended when it was not the one that ran. */
 		| { kind: 'ended'; verdict: ExecutionVerdict; by: string }
-		| { kind: 'failed'; reason: string };
+		/**
+		 * r17-2: `action` — a press's failure that is the machine's action
+		 * (`execute:<hash>`, `approve:<hash>`): its words are read from the
+		 * machine at every render, so a stop that follows its look (§25,
+		 * `stops_follow_looks`) names the figure the next press signs — never
+		 * the figure of the moment it was said — and goes when the core
+		 * withdraws it.
+		 */
+		| { kind: 'failed'; reason: string; action?: 'approve' | 'execute' };
 	let phase = $state<Phase>({ kind: 'idle' });
 	/**
 	 * r5reg-20: executed (here, or anywhere: its number is used) — a past
@@ -730,9 +738,29 @@
 	 * person declined to sign on a high-risk network (§3.5) — nothing was
 	 * asked of a passkey — else its reason.
 	 */
-	function failedPhase(error: unknown): Phase {
-		return declinedRisk(error) ? { kind: 'idle' } : { kind: 'failed', reason: reasonOf(error) };
+	function failedPhase(error: unknown, action?: 'approve' | 'execute'): Phase {
+		if (declinedRisk(error)) return { kind: 'idle' };
+		return action
+			? { kind: 'failed', reason: reasonOf(error), action }
+			: { kind: 'failed', reason: reasonOf(error) };
 	}
+
+	/**
+	 * r17-2: the failed line's words, now. A press's failure follows the
+	 * machine's action (the core serves a fee stop with its look's figure
+	 * now); one the machine no longer holds as failed is said no more.
+	 */
+	const failedReason = $derived.by((): string | null => {
+		if (phase.kind !== 'failed') return null;
+		if (!phase.action) return phase.reason;
+		const now = actionOf(phase.action);
+		// Withdrawn by the core (a look with no figure: the fee line says why).
+		if (now === null) return null;
+		if (now.kind === 'working') return phase.reason;
+		const error = actionError(now, chainId);
+		if (!error || error instanceof ExecutionSpentError) return null;
+		return reasonText(error);
+	});
 
 	function reasonOf(error: unknown): string {
 		console.warn('[multisig] not done:', error);
@@ -972,7 +1000,7 @@
 		phase = { kind: 'busy', what: 'approve' };
 		const error = await approveAs(actor);
 		// The machine reads the list again after it (never a read begun before it).
-		phase = error ? failedPhase(error) : { kind: 'idle' };
+		phase = error ? failedPhase(error, 'approve') : { kind: 'idle' };
 	}
 
 	/** Who executed it from here (the sheet's tap, or a flight resumed after a reload). */
@@ -1011,7 +1039,7 @@
 			phase = { kind: 'idle' };
 			return;
 		}
-		phase = failedPhase(error);
+		phase = failedPhase(error, 'execute');
 	}
 
 	/**
@@ -2051,9 +2079,9 @@
 
 		{#if drafting}
 			<!-- The review of what the site asks: nothing is signed before this. -->
-			{#if phase.kind === 'failed'}
+			{#if phase.kind === 'failed' && failedReason !== null}
 				<p class="warn" role="alert" data-testid="proposal-failed">
-					{fillTemplate(m.proposal.failed, { reason: phase.reason })}
+					{fillTemplate(m.proposal.failed, { reason: failedReason })}
 				</p>
 			{/if}
 			{#if candidates.length > 1 && item.review.action !== null && !readOnly && !signBlocked}
@@ -2128,9 +2156,9 @@
 				{@render actorChoice()}
 			{/if}
 
-			{#if phase.kind === 'failed'}
+			{#if phase.kind === 'failed' && failedReason !== null}
 				<p class="warn" role="alert" data-testid="proposal-failed">
-					{fillTemplate(m.proposal.failed, { reason: phase.reason })}
+					{fillTemplate(m.proposal.failed, { reason: failedReason })}
 				</p>
 			{/if}
 

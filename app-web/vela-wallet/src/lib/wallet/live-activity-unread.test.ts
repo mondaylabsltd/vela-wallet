@@ -37,6 +37,8 @@ const BALANCE: BalanceView = {
 	refreshing: false,
 	last_refreshed_at_ms: 0,
 	updated_at_ms: 0,
+	networks_read: true,
+	unread_chain_ids: [],
 	tokens: [],
 	unpriced_tokens: [],
 	failed_chain_ids: [],
@@ -68,7 +70,8 @@ const EMPTY: FeedView = {
 	account: ME.toLowerCase(),
 	settled: false,
 	unread_chains: [ARC],
-	unread_key: 'home.activityUnreadOne'
+	unread_key: 'home.activityUnreadOne',
+	unread_network: null
 };
 
 function home(feed: FeedView) {
@@ -156,5 +159,21 @@ describe('Activity names the networks the scan could not read (r16 leftover 5)',
 		expect(model.activitySection.note).toBeUndefined();
 		expect(model.activitySection.mode).toBe('empty');
 		expect(model.activitySection.empty?.title).toBe(m.activity.emptyTitle);
+	});
+});
+
+describe('a network is said by its name, never its chain id (r17-4)', () => {
+	it('the core names it: that name', () => {
+		const feed = { ...EMPTY, unread_chains: [ARC], unread_network: 'Arc Testnet' };
+		expect(home(feed).activitySection.empty?.title).toBe(
+			"Activity can't be read on Arc Testnet right now."
+		);
+	});
+
+	it('a network nobody here can name is counted, never said by its number', () => {
+		const feed = { ...EMPTY, unread_chains: [777777], unread_network: null };
+		const title = home(feed).activitySection.empty?.title ?? '';
+		expect(title).not.toContain('777777');
+		expect(title).toBe("Activity can't be read on 1 networks right now.");
 	});
 });

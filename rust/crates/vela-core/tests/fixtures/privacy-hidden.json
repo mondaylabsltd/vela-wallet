@@ -45,6 +45,7 @@
       "internal_key": null,
       "last_refreshed_at_ms": 1700000000000.0,
       "live_key": null,
+      "networks_read": true,
       "notice": null,
       "rate_limited_chain_ids": [],
       "refreshing": false,
@@ -100,6 +101,9 @@
           "rpc_fixable": true,
           "status_key": "home.balanceDetailStatusFailed"
         }
+      ],
+      "unread_chain_ids": [
+        56
       ],
       "updated_at_ms": null
     },
@@ -979,7 +983,8 @@
         }
       ],
       "unread_chains": [],
-      "unread_key": null
+      "unread_key": null,
+      "unread_network": null
     }
   },
   "holdings_masked": [
@@ -1041,6 +1046,7 @@
       "internal_key": null,
       "last_refreshed_at_ms": 1700000000000.0,
       "live_key": null,
+      "networks_read": true,
       "notice": null,
       "rate_limited_chain_ids": [],
       "refreshing": false,
@@ -1105,6 +1111,9 @@
           "rpc_fixable": true,
           "status_key": "home.balanceDetailStatusFailed"
         }
+      ],
+      "unread_chain_ids": [
+        56
       ],
       "updated_at_ms": null
     },
@@ -1989,7 +1998,8 @@
         }
       ],
       "unread_chains": [],
-      "unread_key": null
+      "unread_key": null,
+      "unread_network": null
     }
   },
   "suite": "privacy-hidden",

@@ -1001,6 +1001,21 @@ fn a_transaction_the_core_does_not_sign_is_blocked() {
         },
     );
     assert!(wallet(&mut w).log.is_empty());
+    // Round 17 (parity with the member's sheet): an owner may still reject
+    // it — the same number's cancellation, its own transaction, reviewed
+    // and signed on its own.
+    let v = sut.view().tx.unwrap();
+    assert!(v.can_reject(&addr(SEED_B)), "Reject is offered");
+    assert!(!v.can_reject(&addr(SEED_STRANGER)), "never to a non-member");
+    run(
+        &mut sut,
+        &mut w,
+        page::Event::Reject {
+            account: addr(SEED_B),
+        },
+    );
+    assert_eq!(sut.view().step, OutsideStep::Rejected);
+    assert_eq!(w.submits.len(), 1, "the cancellation was proposed");
 }
 
 #[test]

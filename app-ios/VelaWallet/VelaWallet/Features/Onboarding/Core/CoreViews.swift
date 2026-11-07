@@ -328,6 +328,11 @@ struct PromptKind: Equatable, Identifiable {
     /// Real-device S3: the core's sentence for the platform's error
     /// (`words_key`, a corpus key) — drawn in place of the raw detail.
     var wordsKey: String? = nil
+    /// ob-4 / r17-20: the passkey WAS made and stays on the key list,
+    /// unconfirmed — only its confirmation could not reach the passkey index
+    /// (`key_kept`). The sheet says so, and that its row's Confirm finishes
+    /// it, never the index's raw words.
+    var keyKept: Bool = false
 
     var id: String { detail.map { "\(type)|\($0)" } ?? (local ? "\(type)|local" : type) }
 
@@ -349,6 +354,7 @@ struct PromptKind: Equatable, Identifiable {
         self.securityKey = json["security_key"] as? Bool ?? false
         self.local = json["local"] as? Bool ?? false
         self.wordsKey = (json["words_key"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        self.keyKept = json["key_kept"] as? Bool ?? false
     }
 }
 

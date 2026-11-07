@@ -1241,6 +1241,10 @@ pub struct WalletPage {
     /// toast on the core's own invariant ④ and can only do that if it is told.
     /// `None` = never told, so the first frame tells it.
     feed_privacy: Option<bool>,
+    /// r17-3: the balance's word on its reads the feed was last told
+    /// (`activity_feed::Event::BalanceRead`, [`wallet_live::feed_balance_read`]).
+    /// `None` = never told, so the first frame tells it.
+    feed_balance: Option<(Option<String>, bool, Vec<u32>)>,
     /// `None` = 全部联系人; `Some(i)` = the group view for `GROUPS[i]` (DC4).
     group: Option<usize>,
     /// Which contact the third column shows (index into the canon roster).
@@ -1897,6 +1901,7 @@ impl WalletPage {
             celebrating: false,
             chain_filter: None,
             feed_privacy: None,
+            feed_balance: None,
             // `VELA_ACTIVITY_FIXTURE`: the detail opens on the fixture's
             // newest transfer.
             tx_detail: Self::pinned_feed()
@@ -4572,16 +4577,12 @@ impl WalletPage {
             // r16-2: the feed's own words — whose rows they are, and whether
             // it has looked (`FeedView.account` / `settled`) — over the
             // account whose activity this is (the multisig shown, else the
-            // session's), and what the balance read of its networks.
+            // session's) — the balance's reads of its networks counted in
+            // the core (r17-3, `sync_feed_balance`).
             let feed = self.feed_view(cx);
             let shown = self.feed_shown(&feed, cx);
-            let state = wallet_live::home_activity(
-                &feed,
-                &shown,
-                !activity.is_empty(),
-                &crate::network_space::balance_view(cx),
-                &self.strings,
-            );
+            let state =
+                wallet_live::home_activity(&feed, &shown, !activity.is_empty(), &self.strings);
             // r13-7: a multisig's Activity says what its history is — being
             // read, or not read (with Try again) — never "No activity yet"
             // over either.
@@ -5279,6 +5280,7 @@ impl WalletPage {
             });
         }
         self.sync_feed_privacy(cx);
+        self.sync_feed_balance(cx);
         resident::resident::<ActivityFeed>(cx).read(cx).shared()
     }
 
@@ -5510,6 +5512,27 @@ impl WalletPage {
     /// knows, and the flag lives in another machine. Called from the one place
     /// that would leak (the toast overlay), and only on a change, so the tell
     /// costs a dispatch per toggle rather than one per frame.
+    /// r17-3: tell the feed where the balance's reads stand — whenever the
+    /// balance view moved (a round, an account or space switch), once per
+    /// change. "No activity yet" is a claim about every network of the
+    /// space, and the core's `settled` / `unread_chains` count the
+    /// balance's unread networks only once it is told them.
+    fn sync_feed_balance(&mut self, cx: &mut Context<Self>) {
+        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        let told = (
+            view.address.clone(),
+            view.networks_read,
+            view.unread_chain_ids.clone(),
+        );
+        if self.feed_balance.as_ref() != Some(&told) {
+            self.feed_balance = Some(told);
+            let event = wallet_live::feed_balance_read(&view);
+            resident::resident::<ActivityFeed>(cx).update(cx, |feed, cx| {
+                feed.dispatch(event, cx);
+            });
+        }
+    }
+
     fn sync_feed_privacy(&mut self, cx: &mut Context<Self>) -> bool {
         let hidden = resident::resident::<BalanceDashboard>(cx)
             .read(cx)
@@ -7397,10 +7420,11 @@ impl WalletPage {
 
     /// The display currency, as the send machine's context: its code, the
     /// USD rate the core committed (`None` = unpriceable, never 1), and the
-    /// fiat input's precision.
+    /// fiat input's precision — and the space in front (r17-14: the testnet
+    /// space prices nothing on Send).
     fn send_display(&self, cx: &mut Context<Self>) -> SendDisplayContext {
         let view = resident::resident::<DisplayCurrency>(cx).read(cx).view();
-        money::send_display_context(&view)
+        money::send_display_context(&view, crate::network_space::current())
     }
 
     /// Tell the open send journey the display currency when it commits or
@@ -7982,13 +8006,7 @@ impl WalletPage {
                 // own (`home_activity` over no rows).
                 let shown = self.feed_shown(&feed, cx);
                 let ours = wallet_live::feed_is_for(&feed, &shown);
-                let mode = wallet_live::home_activity(
-                    &feed,
-                    &shown,
-                    false,
-                    &crate::network_space::balance_view(cx),
-                    &self.strings,
-                );
+                let mode = wallet_live::home_activity(&feed, &shown, false, &self.strings);
                 let key = HistoryKey {
                     feed,
                     ours,
@@ -10466,8 +10484,13 @@ impl WalletPage {
             .iter()
             .map(|row| row.account.address.as_str())
             .collect();
-        let (known_total, row_totals) =
-            settings_live::switcher_figures(&switcher, &addresses, Some(&currency), &self.locale);
+        let (known_total, row_totals) = settings_live::switcher_figures(
+            &switcher,
+            &addresses,
+            Some(&currency),
+            &self.locale,
+            crate::network_space::current(),
+        );
         let summary =
             settings_live::accounts_summary(&summary_count, &accounts_total, &known_total);
         // Two copies of this list can be on screen at once — the dialog over
@@ -12437,8 +12460,11 @@ impl WalletPage {
             return wallet_live::Money::default();
         }
         // Committed or not, as the core has it: while it is not, `Money`
-        // withholds every figure (the hero waits on its skeleton).
+        // withholds every figure (the hero waits on its skeleton). And in
+        // the space in front (r17-13 / r17-14): the testnet space draws no
+        // fiat anywhere — rows, worths, Send's `≈`, fees.
         wallet_live::Money::of(&resident::resident::<DisplayCurrency>(cx).read(cx).view())
+            .in_space(crate::network_space::current())
     }
 
     /// `VELA_CURRENCY_PENDING=<code>|none` (developer builds): the display

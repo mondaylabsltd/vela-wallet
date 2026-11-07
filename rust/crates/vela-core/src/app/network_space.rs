@@ -63,6 +63,30 @@ impl NetworkSpace {
     }
 }
 
+/// r17-13 / r17-14, one rule for every shell and machine: the testnet space
+/// shows NO fiat value anywhere — no total, no worth on a row, no fiat
+/// beside a Send amount, none beside a fee. Nothing there has real value,
+/// and a fiat figure beside a test coin, or a zero total, says it has. The
+/// mainnet space shows what is priced.
+#[must_use]
+pub fn shows_fiat(space: NetworkSpace) -> bool {
+    space == NetworkSpace::Mainnet
+}
+
+/// [`shows_fiat`] applied to one price (or any fiat figure): itself in the
+/// mainnet space, none in the testnet space.
+#[must_use]
+pub fn priced_in(space: NetworkSpace, price: Option<f64>) -> Option<f64> {
+    price.filter(|_| shows_fiat(space))
+}
+
+/// [`shows_fiat`] for a shell holding the space as stored ("mainnet" /
+/// "testnet"; anything else is the mainnet space).
+#[must_use]
+pub fn shows_fiat_str(space: &str) -> bool {
+    shows_fiat(NetworkSpace::parse(Some(space)))
+}
+
 /// Whether `chain_id` is a testnet: the built-in table's word, else the
 /// person's for a network they added, else — a chain nobody vouched for — a
 /// testnet.
@@ -395,6 +419,16 @@ pub fn chain_is_testnet_json(chain_id: u32, custom_json: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_testnet_space_shows_no_fiat_anywhere() {
+        assert!(shows_fiat(NetworkSpace::Mainnet));
+        assert!(!shows_fiat(NetworkSpace::Testnet));
+        assert_eq!(priced_in(NetworkSpace::Mainnet, Some(1.0)), Some(1.0));
+        assert_eq!(priced_in(NetworkSpace::Testnet, Some(1.0)), None);
+        assert!(!shows_fiat_str("testnet"));
+        assert!(shows_fiat_str("mainnet") && shows_fiat_str(""));
+    }
 
     #[test]
     fn a_new_site_starts_on_the_network_last_used_in_this_space() {

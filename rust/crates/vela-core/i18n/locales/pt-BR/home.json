@@ -642,7 +642,7 @@
         "customNote": "Usando um serviço multisig próprio ({{host}})",
         "unreachableNote": "Serviço multisig inacessível — não é possível carregar as transações pendentes; tentando de novo.",
         "busyNote": "Serviço multisig ocupado — as transações pendentes serão carregadas em breve; tentando de novo.",
-        "retry": "Tentar de novo",
+        "retry": "Tentar novamente",
         "offline": "Mostrando o que foi carregado antes.",
         "offlineSince": "Mostrando o que foi carregado às {{time}}.",
         "chainUnreachable": "Não foi possível acessar {{network}} — não dá para verificar as transações pendentes agora."

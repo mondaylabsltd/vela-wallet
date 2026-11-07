@@ -243,9 +243,13 @@ pub fn batch_follows(view: &BatchView) -> bool {
 /// so Send stays usable meanwhile; the pair landing is told as
 /// `DisplayChanged` and opens the fiat side in the right money. The web's
 /// `sendDisplayContext`, rule for rule.
+///
+/// `space`: the space in front (r17-14). In the testnet space the core
+/// prices nothing on Send — no fiat beside an amount, no ⇄ into fiat.
 #[must_use]
 pub fn send_display_context(
     view: &vela_core::app::display_currency::CurrencyView,
+    space: vela_core::app::network_space::NetworkSpace,
 ) -> SendDisplayContext {
     let (code, rate) = if view.committed {
         (view.code.clone(), view.rate)
@@ -263,6 +267,7 @@ pub fn send_display_context(
         },
         rate,
         code,
+        space,
     }
 }
 
@@ -1696,6 +1701,7 @@ fn add_network_settled(view: &NetView, chain_id: u32) -> Option<SendAddNetworkOu
 mod tests {
     use super::*;
     use vela_core::app::fee_policy::FeePolicy;
+    use vela_core::app::network_space::NetworkSpace;
     use vela_core::app::send::{SendChainInfo, SendFeeCoin, SendToken};
 
     const BSC_USDT: &str = "0x55d398326f99059ff775485246999027b3197955";
@@ -1878,12 +1884,15 @@ mod tests {
     fn a_send_left_open_hears_the_display_currency_commit_and_change() {
         use vela_core::app::display_currency::CurrencyView;
         let currency = |code: &str, rate: Option<f64>, committed: bool, pending: Option<&str>| {
-            send_display_context(&CurrencyView {
-                code: code.to_owned(),
-                rate,
-                committed,
-                pending: pending.map(str::to_owned),
-            })
+            send_display_context(
+                &CurrencyView {
+                    code: code.to_owned(),
+                    rate,
+                    committed,
+                    pending: pending.map(str::to_owned),
+                },
+                NetworkSpace::Mainnet,
+            )
         };
 
         // Not committed: unpriceable, in the person's own choice on its way
@@ -1940,6 +1949,37 @@ mod tests {
         assert!(journey.tell_display(&mut told, &euro_later));
     }
 
+    /// r17-14: a Send opened in the testnet space carries the space to the
+    /// core, which prices nothing there — no token carries a worth, no fiat
+    /// beside the amount, no ⇄ into fiat. The mainnet space keeps both.
+    #[test]
+    fn a_send_in_the_testnet_space_shows_no_fiat() {
+        use vela_core::app::display_currency::CurrencyView;
+        let usd = CurrencyView {
+            code: "USD".to_owned(),
+            rate: Some(1.0),
+            committed: true,
+            pending: None,
+        };
+        let testnet = send_display_context(&usd, NetworkSpace::Testnet);
+        assert_eq!(testnet.space, NetworkSpace::Testnet);
+        let mut journey = Journey::open_in(testnet);
+        journey.pick(&Journey::eth());
+        let view = journey.view();
+        assert!(
+            view.tokens.iter().all(|t| t.price_usd.is_none()),
+            "no token is priced in the testnet space"
+        );
+        assert!(view.selected_token.is_some_and(|t| t.price_usd.is_none()));
+        assert!(!view.denom_toggle_shown, "no ⇄ into fiat");
+        journey.drive(SendEvent::ToggleFiatInput);
+        assert_eq!(journey.view().amount_fiat_code, None);
+
+        let mut journey = Journey::open_in(send_display_context(&usd, NetworkSpace::Mainnet));
+        journey.pick(&Journey::eth());
+        assert!(journey.view().denom_toggle_shown, "mainnet: fiat as before");
+    }
+
     /// PR 3 final note F8, the half a shell can do: the batch importer reads
     /// fiat figures in the display currency — and it was opened in the code
     /// of whatever the core's view said, which before the currency commits
@@ -1975,12 +2015,15 @@ mod tests {
         };
         // Opened while the yuan is on its way: the sheet is in yuan, not in
         // the placeholder's dollars.
-        let waiting = send_display_context(&CurrencyView {
-            code: "USD".to_owned(),
-            rate: Some(1.0),
-            committed: false,
-            pending: Some("CNY".to_owned()),
-        });
+        let waiting = send_display_context(
+            &CurrencyView {
+                code: "USD".to_owned(),
+                rate: Some(1.0),
+                committed: false,
+                pending: Some("CNY".to_owned()),
+            },
+            NetworkSpace::Mainnet,
+        );
         pump(
             &mut batch,
             BatchEvent::Open {

@@ -69,6 +69,20 @@ last_refreshed_at_ms: number | null,
  */
 updated_at_ms: number | null, 
 /**
+ * r17-3: the first read of this account has ended — every network said
+ * for it was asked (its answer, or its failure, is in). Before it,
+ * nothing may be claimed of the account's networks.
+ */
+networks_read: boolean, 
+/**
+ * r17-3: the networks said for this account that were NOT read now —
+ * failed, refused, silent (the pool's word) or rate limited — ascending.
+ * A failure or a 429 is never a read. Handed to the Activity feed
+ * (`activity_feed::Event::BalanceRead`) beside `networks_read`: "No
+ * activity yet" is a claim about every network of the space.
+ */
+unread_chain_ids: Array<number>, 
+/**
  * USD-sorted holdings for the Assets tab.
  */
 tokens: Array<BalanceToken>, 

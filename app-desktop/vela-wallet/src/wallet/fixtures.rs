@@ -261,6 +261,8 @@ pub fn unreachable_view() -> vela_core::app::balance_dashboard::BalanceView {
         refreshing: false,
         last_refreshed_at_ms: None,
         updated_at_ms: None,
+        networks_read: true,
+        unread_chain_ids: vec![1, 56, 137],
         tokens: Vec::new(),
         unpriced_tokens: Vec::new(),
         failed_chain_ids: vec![1, 56, 137],

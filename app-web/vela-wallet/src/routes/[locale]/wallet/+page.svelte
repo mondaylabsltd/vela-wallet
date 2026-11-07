@@ -798,7 +798,7 @@
 	 */
 	let toldSendDisplay: string | null = null;
 	$effect(() => {
-		const display = sendDisplayContext(currency.view);
+		const display = sendDisplayContext(currency.view, networkSpace.current);
 		const key = JSON.stringify(display);
 		if (sendSession === null || toldSendDisplay === null || toldSendDisplay === key) return;
 		toldSendDisplay = key;
@@ -964,9 +964,9 @@
 				// these exactly as it reads the deep-link params on the phone.
 				...prefill
 			},
-			display: sendDisplayContext(currency.view)
+			display: sendDisplayContext(currency.view, networkSpace.current)
 		});
-		toldSendDisplay = JSON.stringify(sendDisplayContext(currency.view));
+		toldSendDisplay = JSON.stringify(sendDisplayContext(currency.view, networkSpace.current));
 		// The account's operations still holding their nonce, on every tracker
 		// render (correctness batch item 3): while one is in flight on the
 		// form's network, the core holds this send's confirm with one line —

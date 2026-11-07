@@ -43,14 +43,15 @@ struct SwitcherCountTests {
         ).accountsSheet.summary
     }
 
+    /// r17-20: the count alone carries no separator leading nowhere.
     @Test func oneAccountIsSingularAndTwoArePlural() throws {
-        #expect(try summary(1, lang: "en") == "1 account · ")
-        #expect(try summary(2, lang: "en") == "2 accounts · ")
+        #expect(try summary(1, lang: "en") == "1 account")
+        #expect(try summary(2, lang: "en") == "2 accounts")
         // es-MX has the same two forms; zh has one.
-        #expect(try summary(1, lang: "es-MX") == "1 cuenta · ")
-        #expect(try summary(2, lang: "es-MX") == "2 cuentas · ")
-        #expect(try summary(1, lang: "zh") == "1 个账户 · ")
-        #expect(try summary(2, lang: "zh") == "2 个账户 · ")
+        #expect(try summary(1, lang: "es-MX") == "1 cuenta")
+        #expect(try summary(2, lang: "es-MX") == "2 cuentas")
+        #expect(try summary(1, lang: "zh") == "1 个账户")
+        #expect(try summary(2, lang: "zh") == "2 个账户")
     }
 
     /// With the currency committed the total joins the count on the line.

@@ -237,7 +237,7 @@ struct MultisigR16NativeTests {
                                             balances: [BalanceCacheEntryWire(address: a, usd: 0.5)],
                                             display: display, on: base, loc: loc)
         #expect(!one.accountsSheet.summary.contains(display.fiat(0.5) ?? "?"), "\(one.accountsSheet.summary)")
-        #expect(one.accountsSheet.summary == loc.t(I18nKeys.SettingsUi.accountsCount, count: 2))
+        #expect(one.accountsSheet.summary == SettingsLive.accountsSummary(count: loc.t(I18nKeys.SettingsUi.accountsCount, count: 2), total: nil))
         #expect(SettingsLive.accountsTotal([0.5, nil]) == nil)
         #expect(SettingsLive.accountsTotal([]) == nil)
         // The testnet space: no worth on a row, no total — as its home says.
@@ -245,7 +245,7 @@ struct MultisigR16NativeTests {
                                                 balances: [BalanceCacheEntryWire(address: a, usd: 0.5), BalanceCacheEntryWire(address: b, usd: 0.3)],
                                                 display: display, on: base, loc: loc, noValue: true)
         #expect(testnet.accountsSheet.rows.allSatisfy { $0.amount.isEmpty })
-        #expect(testnet.accountsSheet.summary == loc.t(I18nKeys.SettingsUi.accountsCount, count: 2))
+        #expect(testnet.accountsSheet.summary == SettingsLive.accountsSummary(count: loc.t(I18nKeys.SettingsUi.accountsCount, count: 2), total: nil))
         let root = try source("VelaWallet/App/RootView.swift")
         #expect(root.contains("noValue: space.current == .testnet"))
     }

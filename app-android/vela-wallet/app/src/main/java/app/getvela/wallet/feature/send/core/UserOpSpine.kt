@@ -664,11 +664,18 @@ class UserOpSpine(
                 )
                 draft = raisedToMeasuredFloor(draft, chainId, account, calls)
             }
-            is RelayClient.EstimateAnswer.Refused, RelayClient.EstimateAnswer.Unreachable -> {
+            is RelayClient.EstimateAnswer.Refused -> {
                 VelaLog.event("userop.submit", "estimate failed, defaults", "contract" to hasContractCall)
                 if (hasContractCall) {
                     other("Could not estimate gas for this transaction. The network may be busy — please try again.")
                 }
+            }
+            RelayClient.EstimateAnswer.Unreachable -> {
+                VelaLog.event("userop.submit", "estimate unanswered, defaults", "contract" to hasContractCall)
+                // r17-12: the relay did not answer at all — nothing was signed
+                // or sent, and it is the relay that could not be reached (said
+                // so by kind), never "Something went wrong".
+                if (hasContractCall) throw Refused(Failure.RelayerUnavailable)
             }
         }
         draft = userOpWithCalls(draft, calls, settled)

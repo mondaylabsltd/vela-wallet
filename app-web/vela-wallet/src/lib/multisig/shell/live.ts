@@ -16,8 +16,9 @@ import { findAccountByAddress } from '$lib/services/accounts';
 import { pollUserOpStatus } from '$lib/services/tx-reconciler';
 import { resolveRecipientRisk } from '$lib/services/recipient-risk';
 import { rpcSimulateReply } from '$lib/services/sim/sim-engine-rpc';
-import { PoolFailedError, poolRpcCall } from '$lib/services/rpc-pool';
+import { chainFailing, PoolFailedError, poolRpcCall } from '$lib/services/rpc-pool';
 import {
+	EstimateGasError,
 	keySetOf,
 	sendBatchCalls,
 	UserOpNotSentError,
@@ -161,6 +162,24 @@ async function passkey(op: Op<'passkey'>, signal: AbortSignal): Promise<Multisig
 export const RELAY_RETRY_MS = 1_500;
 
 /** r4a-23: out of reach before anything was signed — asked once more. */
+/**
+ * r17-12: an execution that stopped before its passkey was asked, as a kind:
+ * a read on a network the pool finds failing is `chain_unreachable`; the
+ * relay refusing or not reached (its fee estimate, its gas price, its pool)
+ * is `not_sent` — nothing was signed, so nothing left. `null`: not one of
+ * those (the passkey was asked, or the pool failed inside the app).
+ */
+function beforePasskey(error: unknown, asked: boolean, chainId: number): ShellFailure | null {
+	if (asked) return null;
+	if (error instanceof EstimateGasError) return { kind: 'not_sent' };
+	if (error instanceof PoolFailedError && !error.maybeDelivered && !error.internal) {
+		return chainFailing(chainId)
+			? { kind: 'chain_unreachable', chain_id: chainId }
+			: { kind: 'not_sent' };
+	}
+	return null;
+}
+
 function unreachable(error: unknown): boolean {
 	if (error instanceof PoolFailedError) return !error.rateLimited && !error.internal;
 	return error instanceof UserOpNotSentError && error.rejection === null;
@@ -309,6 +328,11 @@ async function sendCalls(op: Op<'send_calls'>): Promise<MultisigShellResult> {
 	} catch (error) {
 		const shell = (error as { shell?: ShellFailure }).shell;
 		if (shell) return { type: 'calls_failed', detail: shellFailure(shell), maybe_sent: false };
+		// r17-12 (the desktop's r16-18 rule): what stopped before the passkey
+		// was asked is said in the core's words for its kind, never "something
+		// went wrong" — nothing was signed, so nothing was sent.
+		const before = beforePasskey(error, asked, op.chain_id);
+		if (before) return { type: 'calls_failed', detail: shellFailure(before), maybe_sent: false };
 		const failed = signingFailure(error);
 		if (failed.type === 'passkey_cancelled') return { type: 'calls_cancelled' };
 		if (error instanceof PoolFailedError && error.maybeDelivered) {
@@ -374,8 +398,10 @@ export function liveDeps(input: {
 }): MultisigShellDeps {
 	return {
 		fetch: (url, init) => fetch(url, { ...init, cache: 'no-store' }),
-		rpc: (chainId, method, params) =>
-			poolRpcCall(method, (Array.isArray(params) ? params : [params]) as unknown[], chainId),
+		rpc: (chainId, method, params, person) =>
+			poolRpcCall(method, (Array.isArray(params) ? params : [params]) as unknown[], chainId, 0, {
+				person: person ?? false
+			}),
 		storage: () => {
 			try {
 				return typeof localStorage === 'undefined' ? null : localStorage;

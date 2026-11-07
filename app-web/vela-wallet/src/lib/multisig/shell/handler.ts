@@ -58,8 +58,11 @@ export interface PeerTransport {
  */
 export interface MultisigShellDeps {
 	fetch: typeof fetch;
-	/** One call through the RPC pool. Throws when no node answered. */
-	rpc(chainId: number, method: string, params: unknown): Promise<RpcReply>;
+	/**
+	 * One call through the RPC pool. Throws when no node answered. `person`:
+	 * the person's own ask (the core's `rpc.person`, r17-10) — always sent.
+	 */
+	rpc(chainId: number, method: string, params: unknown, person?: boolean): Promise<RpcReply>;
 	/** `localStorage`, or `null` where there is none (it answers `store_failed`). */
 	storage(): Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null;
 	now(): number;
@@ -254,7 +257,10 @@ export function multisigShell(deps: MultisigShellDeps) {
 			case 'rpc': {
 				let reply: RpcReply | null;
 				try {
-					reply = await within(deps.rpc(op.chain_id, op.method, op.params), op.bound_ms);
+					reply = await within(
+						deps.rpc(op.chain_id, op.method, op.params, op.person ?? false),
+						op.bound_ms
+					);
 				} catch (error) {
 					return { type: 'rpc_unanswered', detail: errorText(error) };
 				}
