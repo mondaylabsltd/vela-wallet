@@ -6489,6 +6489,28 @@ export function prefsRead(entries_json) {
 }
 
 /**
+ * `service_defaults::write_verdict` over JSON: a `{ testBuild,
+ * allowProductionWrites, method, url, body }` ask in, a `{ verdict:
+ * "allowed" } | { verdict: "refused", host, key, message }` out.
+ * @param {string} ask_json
+ * @returns {string}
+ */
+export function productionWriteVerdict(ask_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(ask_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.productionWriteVerdict(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * The curated public RPCs of a built-in network, in order — the RPC pool's
  * `public` tier (`network_admin::PUBLIC_RPCS`). Empty for a network with
  * none. One list for every shell: each used to hold its own copy, and a
@@ -6932,6 +6954,23 @@ export function sendEstimateFailureBodyKey(failure) {
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * `ServiceDefaults` as JSON (camelCase).
+ * @returns {string}
+ */
+export function serviceDefaults() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.serviceDefaults();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
     }
 }
 

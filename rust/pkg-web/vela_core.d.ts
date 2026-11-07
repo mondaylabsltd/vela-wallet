@@ -1741,6 +1741,13 @@ export function prefsMigrations(entries_json: string): string;
 export function prefsRead(entries_json: string): string;
 
 /**
+ * `service_defaults::write_verdict` over JSON: a `{ testBuild,
+ * allowProductionWrites, method, url, body }` ask in, a `{ verdict:
+ * "allowed" } | { verdict: "refused", host, key, message }` out.
+ */
+export function productionWriteVerdict(ask_json: string): string;
+
+/**
  * The curated public RPCs of a built-in network, in order — the RPC pool's
  * `public` tier (`network_admin::PUBLIC_RPCS`). Empty for a network with
  * none. One list for every shell: each used to hold its own copy, and a
@@ -1888,6 +1895,11 @@ export function safeProxyRuntimeCode(): string;
  * JSON; anything unreadable reads as the general sentence.
  */
 export function sendEstimateFailureBodyKey(failure: string): string;
+
+/**
+ * `ServiceDefaults` as JSON (camelCase).
+ */
+export function serviceDefaults(): string;
 
 export function sha256(data: Uint8Array): Uint8Array;
 
@@ -2753,6 +2765,7 @@ export interface InitOutput {
     readonly peggedNativeUsd: (a: number, b: number) => [number, number];
     readonly prefsMigrations: (a: number, b: number) => [number, number];
     readonly prefsRead: (a: number, b: number) => [number, number];
+    readonly productionWriteVerdict: (a: number, b: number) => [number, number];
     readonly publicRpcUrls: (a: number) => [number, number];
     readonly receivewatchcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly receivewatchcore_new: () => number;
@@ -2788,6 +2801,7 @@ export interface InitOutput {
     readonly sendcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly sendcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly sendcore_view: (a: number) => [number, number, number, number];
+    readonly serviceDefaults: () => [number, number];
     readonly sessioncore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly sessioncore_new: () => number;
     readonly sessioncore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
