@@ -20,7 +20,47 @@ import VelaCore
 /// which is why this single bit of classification is delegated to it.
 struct RegistryFailure: Error {
     let message: String
+    /// The request never got its answer from the index (a transport
+    /// failure) — the task poll asks again past it.
     let network: Bool
+    /// r18-18: of those, THIS DEVICE was offline — the request never left
+    /// it. The core's `IndexFailed.network` ("This device is offline…").
+    /// A request that left and was not answered (an index that hung, a host
+    /// that refused the connection) is the index's failure ("Vela's passkey
+    /// index didn't answer…"), never the device's.
+    var offline = false
+    /// r18-18 / r18-8 (§28): this test build's guard refused the write to
+    /// the live index before it left — said with the test build's sentence
+    /// (`IndexFailed.refused`), never the index or the network.
+    var refused = false
+
+    /// The transport's failure, by what it was (r18-18): offline, or the
+    /// index not answering.
+    static func transport(_ error: Error, label: String) -> RegistryFailure {
+        RegistryFailure(message: "\(label) failed: \(error.localizedDescription)", network: true,
+                        offline: offline(error))
+    }
+
+    /// The device has no connection: the request never left it. Every other
+    /// transport failure (a timeout, a refused or reset connection, a name
+    /// that did not resolve) left and was not answered.
+    static func offline(_ error: Error) -> Bool {
+        guard let code = (error as? URLError)?.code else { return false }
+        return [.notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff, .callIsActive].contains(code)
+    }
+}
+
+/// r18-8 / r18-18 (§28): whether `error` is this test build's guard
+/// refusing a write to a live service before it left — every build asks
+/// here; a release build has no guard, so nothing is ever refused.
+nonisolated enum TestBuildRefusal {
+    static func matches(_ error: Error) -> Bool {
+        #if DEBUG
+        ProductionWriteRefused.matches(error)
+        #else
+        false
+        #endif
+    }
 }
 
 struct GroupChallenge {
@@ -403,7 +443,7 @@ actor RegistryClient {
                             } catch let failure as RegistryFailure {
                                 return (slot, nil, failure)
                             } catch {
-                                return (slot, nil, RegistryFailure(message: "\(label) failed: \(error)", network: true))
+                                return (slot, nil, RegistryFailure.transport(error, label: label))
                             }
                         }
                     }
@@ -587,17 +627,16 @@ actor RegistryClient {
         do {
             (data, response) = try await transport(urlRequest)
         } catch {
-            #if DEBUG
             // §28: this test build would not ask the live index — the index
             // did not fail, and the network did not either.
-            if ProductionWriteRefused.matches(error) {
-                throw RegistryFailure(message: "\(label): \(error.localizedDescription)", network: false)
+            if TestBuildRefusal.matches(error) {
+                throw RegistryFailure(message: "\(label): \(error.localizedDescription)", network: false, refused: true)
             }
-            #endif
-            // The request never arrived. This is the ONE line that separates the
-            // two failure worlds, and it is why the classification is delegated
-            // to the shell at all.
-            throw RegistryFailure(message: "\(label) failed: \(error.localizedDescription)", network: true)
+            // The request got no answer. This is the ONE line that separates the
+            // failure worlds, and it is why the classification is delegated to
+            // the shell at all — r18-18: offline (never left the device) apart
+            // from an index that did not answer.
+            throw RegistryFailure.transport(error, label: label)
         }
 
         guard let http = response as? HTTPURLResponse else {

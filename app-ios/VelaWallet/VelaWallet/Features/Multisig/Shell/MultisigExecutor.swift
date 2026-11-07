@@ -131,7 +131,12 @@ struct MultisigExecutor {
                     "body": answer.body,
                 ]
             } catch {
-                return ["type": "http_unreachable", "detail": Self.describe(error)]
+                // r18-8 (§28): this test build's guard refused the write
+                // before it left — the core asks once and says the test
+                // build's sentence, never "can't reach the service".
+                var failed: [String: Any] = ["type": "http_unreachable", "detail": Self.describe(error)]
+                if TestBuildRefusal.matches(error) { failed["refused"] = true }
+                return failed
             }
         case "rpc":
             let chainId = Self.int(op["chain_id"]) ?? 0

@@ -531,6 +531,12 @@ struct MsWords {
     /// "Share it again" — the catalog's words for exactly that.
     var createRefused: String { t("settings.shareAgainNote") }
 
+    /// r18-8 (§28, §32): the core's word for a write this test build refused
+    /// before it left, and its sentence ("This test build won't write to the
+    /// live service; point it at a local one.").
+    static let productionWriteRefusedKind = "production_write_refused"
+    static let productionWriteRefusedKey = "common.testBuild.productionWriteRefused"
+
     /// Why Vela's side is not on the signing relay (`RelayStatus.why`), as
     /// the reason the relay line fills in: the relay's refusal and a pass
     /// not got in the catalog's words (the web's `relayText`), the relay

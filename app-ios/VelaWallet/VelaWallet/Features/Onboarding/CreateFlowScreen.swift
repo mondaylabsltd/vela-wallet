@@ -101,6 +101,7 @@ struct CreateFlowScreen: View {
                 RetryScreen(
                     loc: loc,
                     detail: view.syncErrorDetail,
+                    sentenceKey: view.syncErrorKey,
                     busy: view.busy,
                     onRetry: model.retryUpload,
                     onStartOver: model.startOver,

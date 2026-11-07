@@ -119,10 +119,7 @@ final class SessionExecutor {
                 try await registry.awaitTask(id: operation["task_id"] as? String ?? "")
                 return CoreJSON.string(["type": "registry_landed"])
             } catch {
-                return CoreJSON.string([
-                    "type": "registry_landing_unconfirmed",
-                    "message": (error as? RegistryFailure)?.message ?? error.localizedDescription,
-                ])
+                return CoreJSON.string(Self.landingUnconfirmed(error))
             }
 
         // Only ever after `registry_landed` — the core's rule. Best effort: a
@@ -149,10 +146,7 @@ final class SessionExecutor {
                 )
                 return CoreJSON.string(["type": "registry_landed"])
             } catch {
-                return CoreJSON.string([
-                    "type": "registry_landing_unconfirmed",
-                    "message": (error as? RegistryFailure)?.message ?? error.localizedDescription,
-                ])
+                return CoreJSON.string(Self.landingUnconfirmed(error))
             }
 
         default:
@@ -168,6 +162,18 @@ final class SessionExecutor {
     /// wallet's own. A member without its creation proof cannot be replayed
     /// without a prompt, so it is refused here rather than signed live — that
     /// is a sign-in's publish, not this one.
+    /// The landing not confirmed, and — r18-8 (§28) — whether this test
+    /// build refused the publish before it left (the session then never asks
+    /// again by itself).
+    static func landingUnconfirmed(_ error: Error) -> [String: Any] {
+        let failure = error as? RegistryFailure
+        return [
+            "type": "registry_landing_unconfirmed",
+            "message": failure?.message ?? error.localizedDescription,
+            "refused": failure?.refused ?? TestBuildRefusal.matches(error),
+        ]
+    }
+
     static func replay(
         _ pending: [String: Any],
         registry: RegistryClient,

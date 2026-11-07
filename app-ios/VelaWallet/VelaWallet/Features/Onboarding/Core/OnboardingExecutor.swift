@@ -684,13 +684,18 @@ final class OnboardingExecutor {
         ]
     }
 
-    private static func indexFailure(_ error: Error) -> [String: Any] {
-        [
+    static func indexFailure(_ error: Error) -> [String: Any] {
+        let failure = error as? RegistryFailure
+        return [
             "type": "index_failed",
             "message": describe(error),
             // The one bit of classification only a shell can supply: a request
-            // that never arrived is not the same as one the server refused.
-            "network": (error as? RegistryFailure)?.network ?? true,
+            // that never left this device (offline) is not the same as one the
+            // index did not answer or refused (r18-18: a hung index was said
+            // as "This device is offline").
+            "network": failure?.offline ?? RegistryFailure.offline(error),
+            // r18-8 / r18-18 (§28): this test build refused it before it left.
+            "refused": failure?.refused ?? false,
         ]
     }
 
