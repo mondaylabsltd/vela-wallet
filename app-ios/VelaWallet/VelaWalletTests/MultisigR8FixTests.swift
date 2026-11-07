@@ -392,10 +392,19 @@ struct MultisigR8FixTests {
     @Test func aFinishedOneWithoutItsFactsListsOnlyWhoApproved() throws {
         var json = MultisigViewsTests.proposalsJson(item: MultisigViewsTests.item(approved: 1, status: "done"),
                                                     standing: #"{"kind":"progress","approved":1,"threshold":2}"#)
-        json = json.replacingOccurrences(of: #""executions":{}"#, with: #""executions":{"100:\#(Self.hash)":{"kind":"executed","txHash":"0xe1"}}"#)
-        let model = try model(try #require(decode(MsProposalsView.self, json)))
+        // Executed elsewhere (its history says so; no flight followed here).
+        let elsewhere = json.replacingOccurrences(of: #""on_chain":false}]}"#,
+                                                  with: #""on_chain":false},{"kind":"executed","tx_hash":"0xe1","at_ms":3}]}"#)
+        let model = try model(try #require(decode(MsProposalsView.self, elsewhere)))
+        #expect(model.executedTx == "0xe1")
         #expect(model.listed == [Self.one], "never a Waiting row on one that can no longer move")
         #expect(model.executedFacts == words.t("proposal.approvalsSigned"))
+        // r18-4 (Android's r18-16): an execution this device followed — its
+        // facts are on their way, never "isn't recorded" meanwhile.
+        json = json.replacingOccurrences(of: #""executions":{}"#, with: #""executions":{"100:\#(Self.hash)":{"kind":"executed","txHash":"0xe1"}}"#)
+        let followed = try self.model(try #require(decode(MsProposalsView.self, json)))
+        #expect(followed.listed == [Self.one])
+        #expect(followed.executedFacts == nil)
     }
 
     @Test func anExecutedRowIsTheMultisigsTransactionNotALocalRecord() {
