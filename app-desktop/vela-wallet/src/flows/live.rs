@@ -6441,7 +6441,21 @@ mod tests {
                 Some(loc.t(vela_core::app::fee_policy::REASON_INTERNAL_KEY)),
                 "{tag}"
             );
-            let (_, other) = alert(&loc, SendEstimateFailure::QuoteUnavailable);
+            // r18-14 (§32): the relay giving no price or no estimate is the
+            // relay's sentence, never the general one.
+            for relay in [
+                SendEstimateFailure::QuoteUnavailable,
+                SendEstimateFailure::EstimateFailed,
+            ] {
+                let (_, said) = alert(&loc, relay);
+                assert_eq!(
+                    said,
+                    Some(loc.t(vela_core::app::send::ESTIMATE_RELAY_BODY_KEY)),
+                    "{tag}"
+                );
+                assert_ne!(said, Some(loc.t("send.alertEstimateFailedBody")), "{tag}");
+            }
+            let (_, other) = alert(&loc, SendEstimateFailure::CalculationFailed);
             assert_eq!(other, Some(loc.t("send.alertEstimateFailedBody")), "{tag}");
             assert_ne!(Some(down), other, "{tag}");
         }

@@ -1775,13 +1775,10 @@ impl WalletPage {
             // Round 16 leftover 4: the service's refusal (or a failure's
             // detail) is never drawn as text — what is true and what to do
             // (the web's and iOS's words).
-            _ => match (&view.create.refused, &view.create.phase) {
-                (Some(_), _) | (None, Phase::Failed) => {
-                    (words::t(&loc, "settings.shareAgainNote"), true)
-                }
-                (None, Phase::Working) => (words::t(&loc, "create.savedSharing"), true),
-                _ => (words::t(&loc, "create.savedLater"), true),
-            },
+            _ => (
+                unshared_note(&loc, view.create.refused.as_deref(), &view.create.phase),
+                true,
+            ),
         };
         let invite = address.clone();
         div()
@@ -2091,10 +2088,48 @@ impl WalletPage {
     }
 }
 
+/// The created screen's line while the service does not have the multisig
+/// (r4a-12, r4a-13; Round 16 leftover 4: the service's refusal or a
+/// failure's detail is never drawn as text). r18-8 (§28, §32): a record this
+/// test build refused to write to the live service
+/// (`multisig_accounts::PRODUCTION_WRITE_REFUSED`) is said in the test
+/// build's words — never "can't be reached".
+pub(crate) fn unshared_note(loc: &Loc, refused: Option<&str>, phase: &Phase) -> String {
+    match (refused, phase) {
+        (Some(ms_accounts::PRODUCTION_WRITE_REFUSED), _) => {
+            loc.t(vela_core::service_defaults::REFUSED_KEY).to_string()
+        }
+        (Some(_), _) | (None, Phase::Failed) => words::t(loc, "settings.shareAgainNote"),
+        (None, Phase::Working) => words::t(loc, "create.savedSharing"),
+        _ => words::t(loc, "create.savedLater"),
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    /// r18-8 (§28, §32): a created multisig whose record this test build
+    /// refused to write is said in the test build's words — it was "Share
+    /// again" over "the service can't be reached"; any other refusal keeps
+    /// Share again's note.
+    #[test]
+    fn a_record_the_test_build_refused_is_said_in_its_words() {
+        for tag in ["en", "zh"] {
+            let loc = Loc::for_tag(tag);
+            let line = unshared_note(
+                &loc,
+                Some(ms_accounts::PRODUCTION_WRITE_REFUSED),
+                &Phase::Done,
+            );
+            super::super::multisig::assert_test_builds_words(&loc, &line);
+            assert_eq!(
+                unshared_note(&loc, Some("bad_members"), &Phase::Done),
+                words::t(&loc, "settings.shareAgainNote")
+            );
+        }
+    }
 
     #[test]
     fn the_threshold_starts_sensible_and_steps_within_the_members() {

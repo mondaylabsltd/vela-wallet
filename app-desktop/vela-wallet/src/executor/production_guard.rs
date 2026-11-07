@@ -50,7 +50,7 @@ pub fn this_build() -> Option<ProductionWriteGuard> {
 }
 
 /// What a refused request fails with: an I/O error carrying [`Refused`].
-fn refusal(host: &str) -> ureq::Error {
+pub(crate) fn refusal(host: &str) -> ureq::Error {
     ureq::Error::Io(std::io::Error::other(Refused {
         host: host.to_owned(),
     }))

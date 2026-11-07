@@ -1254,7 +1254,7 @@ fn render_retry(host: &FlowHost<'_>) -> Div {
                 theme,
                 loc.t("onboarding.create.syncFailedMessage"),
             ))
-            .child(caption(theme, loc.t("onboarding.create.syncFailedHint"))),
+            .child(caption(theme, retry_hint(loc, view))),
     );
 
     if let Some(detail) = &view.sync_error_detail {
@@ -1495,6 +1495,19 @@ fn render_done(host: &FlowHost<'_>) -> Div {
         ))
 }
 
+/// The retry screen's hint: "Vela keeps trying on its own…" — or, r18-8
+/// (§28, §32), the sentence the core keys for this failure
+/// (`CreateView.sync_error_key`: this test build refused to write to the
+/// live index, which nothing retries by itself). A key this build's corpus
+/// lacks keeps the screen's own hint.
+fn retry_hint(loc: &Loc, view: &CreateView) -> SharedString {
+    view.sync_error_key
+        .as_deref()
+        .map(|key| loc.t(key))
+        .filter(|words| !words.starts_with("common.") && !words.starts_with("onboarding."))
+        .unwrap_or_else(|| loc.t("onboarding.create.syncFailedHint"))
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -1520,6 +1533,7 @@ mod tests {
             show_start_over: false,
             address: None,
             sync_error_detail: None,
+            sync_error_key: None,
             can_go_back: false,
             keys: Vec::new(),
             can_add_key: true,
@@ -1637,6 +1651,24 @@ mod tests {
             ..usb.clone()
         };
         assert_eq!(provider_line(&phone), "onboarding.create.methodHybridTitle");
+    }
+
+    /// r18-8 (§28, §32): a publish this test build refused says so on the
+    /// retry screen — never "Vela keeps trying on its own", which it doesn't.
+    #[test]
+    fn a_refused_publish_says_the_test_builds_words_on_the_retry_screen() {
+        for tag in ["en", "zh"] {
+            let loc = Loc::for_tag(tag);
+            let mut failed = view(CreateStage::SyncFailed, false, None);
+            assert_eq!(
+                retry_hint(&loc, &failed),
+                loc.t("onboarding.create.syncFailedHint")
+            );
+            failed.sync_error_key = Some(vela_core::service_defaults::REFUSED_KEY.to_owned());
+            let hint = retry_hint(&loc, &failed);
+            crate::wallet::page::multisig::assert_test_builds_words(&loc, &hint);
+            assert_ne!(hint, loc.t("onboarding.create.syncFailedHint"));
+        }
     }
 
     /// data-model §3's screen-selection table, which is the whole of the create

@@ -561,6 +561,7 @@ mod tests {
                 wait.id,
                 vela_core::app::session::SessionShellResult::RegistryLandingUnconfirmed {
                     message: "Register failed: reverted".to_owned(),
+                    refused: None,
                 },
             );
             assert!(state.pump(pending).is_empty());
