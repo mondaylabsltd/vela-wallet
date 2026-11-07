@@ -282,6 +282,11 @@
       "expect": { "kind": "chain_unreachable", "key": "home.multisig.proposal.reason.chainUnreachable" }
     },
     {
+      "name": "r18-8 (§28, §32): this test build refused to write to the live service — its own kind and sentence, never the network",
+      "args": { "detail": "{\"kind\":\"production_write_refused\"}" },
+      "expect": { "kind": "production_write_refused", "key": "common.testBuild.productionWriteRefused" }
+    },
+    {
       "name": "declined on the signing page",
       "args": { "detail": "{\"kind\":\"page_declined\"}" },
       "expect": { "kind": "page_declined", "key": "componentsUi.signing.trustedSignerClosed" }

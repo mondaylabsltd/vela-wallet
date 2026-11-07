@@ -159,6 +159,7 @@
     "feeUnchecked": "Ob sie durchläuft, ließ sich nicht prüfen — genehmigen kannst du trotzdem; Ausführen prüft erneut.",
     "feeUncheckedHeld": "Ob sie durchläuft, ließ sich nicht prüfen — Ausführen prüft erneut.",
     "feeRetry": "Erneut prüfen",
+    "feeSigning": "Signiert wird mit dieser Gebühr – sie bleibt fest, bis du bestätigst oder abbrichst.",
     "feeSetup": "Enthält die einmalige Einrichtung auf {{network}} ≈ {{amount}}:",
     "feeSetupPlain": "Enthält die einmalige Einrichtung auf {{network}}:",
     "setupMultisig": "Bereitstellen dieses Multisigs",

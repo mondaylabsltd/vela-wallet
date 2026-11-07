@@ -1412,8 +1412,12 @@ for (let i = 1; i < PATHS.length; i++) {
 //   multisig it is a member of, or when whether it owns that Safe could not
 //   be read (`SignBlockedView.parent` / `reason`). 2291 + 2 = 2293 paths,
 //   2173 leaves, 120 branches.
-if (PATHS.length !== 2293) fail(`expected 2293 paths (2173 leaf + 120 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2173) fail(`expected 2173 leaf paths, got ${leafSet.size}`);
+// 2294 (Round 19, §32, 2026-11-07): + `send.alertEstimateRelayBody` — a
+//   plain Send's Continue when Vela's relay gave no price or simulation
+//   ("Vela's relay didn't answer, so nothing was sent. Try again in a
+//   moment.", r18-14). 2293 + 1 = 2294 paths, 2174 leaves, 120 branches.
+if (PATHS.length !== 2294) fail(`expected 2294 paths (2174 leaf + 120 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2174) fail(`expected 2174 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
@@ -1535,7 +1539,10 @@ if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.siz
   //   The one press does both or nothing (r16-4, §26): it never approves
   //   alone, so no shell can reach those words; the web's `partial` phase that
   //   said them is gone. 693 − 1 = 692.
-  const pins = { multisig: 692 };
+  // 693 (Round 19, §32, 2026-11-07): + `home.multisig.proposal.feeSigning`
+  //   (the mark under a fee line a press is out on: "Signing at this fee —
+  //   it stays fixed until you confirm or cancel.", r18-5). 692 + 1 = 693.
+  const pins = { multisig: 693 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

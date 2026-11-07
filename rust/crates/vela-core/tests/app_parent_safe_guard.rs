@@ -552,3 +552,61 @@ fn every_vector_verdict_round_trips() {
         assert_eq!(serde_json::to_value(&verdict).unwrap(), case["expect"]);
     }
 }
+
+/// r18-10 (§32): a `SafeTx` under the domain of a Safe that is not on this
+/// device's list was refused at once in the generic self-call words, before
+/// the ownership read — though it IS a Safe this account owns. The parent
+/// rule comes first: while the read is out nothing is refused or signable;
+/// owned → the parent's words; not owned → still refused (a SafeTx is never
+/// signed), in the self-call words.
+#[test]
+fn a_safe_tx_for_an_unlisted_safe_this_account_owns_is_refused_in_the_parents_words() {
+    let mut sut = boot(&[]);
+    let (method, params) =
+        params_of("r18-10: unknown Safe, SafeTx, isOwner true: refused in the parent's words");
+    let ops = arrive(&mut sut, &method, &params);
+    assert_eq!(reads(&ops).len(), 1, "read first: {ops:?}");
+    let view = sut.view();
+    assert!(view.blocked.is_none(), "not refused before the read");
+    assert_eq!(view.confirm_block, Some(ConfirmBlock::Reading));
+    assert!(!view.confirm_gate_open);
+    answer_read(
+        &mut sut,
+        &unknown(),
+        SafeOwnerAnswer::Returned { data: word(1) },
+    );
+    assert_refused_as(&mut sut, "SafeTx", ParentReason::Owner, &unknown());
+}
+
+#[test]
+fn a_safe_tx_for_a_safe_this_account_does_not_own_is_still_refused() {
+    let mut sut = boot(&[]);
+    let (method, params) =
+        params_of("r18-10: unknown Safe, SafeTx, isOwner true: refused in the parent's words");
+    arrive(&mut sut, &method, &params);
+    answer_read(
+        &mut sut,
+        &unknown(),
+        SafeOwnerAnswer::Returned { data: word(0) },
+    );
+    let view = sut.view();
+    assert!(!view.confirm_gate_open, "a SafeTx is never signable");
+    assert_eq!(view.confirm_block, Some(ConfirmBlock::Refused));
+    let blocked = view.blocked.expect("refused");
+    assert_eq!(blocked.function, "SafeTx");
+    assert_eq!(blocked.parent, None, "the self-call words");
+    assert_eq!(
+        view.error.map(|e| e.kind),
+        Some(SignErrorKind::SelfCallBlocked)
+    );
+    let ops = sut.dispatch(Event::ApproveTapped {
+        opts: SignApproveOpts::default(),
+    });
+    assert!(
+        !ops.iter().any(|op| matches!(
+            op,
+            Op::SignAndSubmit { .. } | Op::CheckBundlerFunding { .. }
+        )),
+        "{ops:?}"
+    );
+}

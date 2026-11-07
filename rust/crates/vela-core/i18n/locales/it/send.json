@@ -89,6 +89,7 @@
     "removeRecipient": "Rimuovi",
     "alertInsufficientBalanceBody": "Il totale supera il tuo saldo.",
     "alertEstimateChainDownBody": "Impossibile raggiungere {{chain}} per calcolare la commissione di questa transazione. Riprova tra un momento.",
+    "alertEstimateRelayBody": "Il relay di Vela non ha risposto, quindi non è stato inviato nulla. Riprova tra un momento.",
     "alertAccountUnavailableBody": "Impossibile caricare la chiave dell'account necessaria per preparare questa transazione. Riprova.",
     "recipientPickAria": "Scegli un contatto",
     "scanAria": "Scansiona un codice QR",

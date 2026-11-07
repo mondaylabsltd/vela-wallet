@@ -107,6 +107,7 @@
     "scanAria": "QR-Code scannen",
     "alertInsufficientBalanceBody": "Die Summe übersteigt Ihr Guthaben.",
     "alertEstimateChainDownBody": "{{chain}} ist nicht erreichbar, die Gebühr für diese Transaktion kann nicht berechnet werden. Versuche es gleich noch einmal.",
+    "alertEstimateRelayBody": "Velas Relay hat nicht geantwortet, daher wurde nichts gesendet. Versuche es gleich noch einmal.",
     "alertAccountUnavailableBody": "Der Kontoschlüssel, der für diese Transaktion benötigt wird, konnte nicht geladen werden. Bitte versuchen Sie es erneut.",
     "recipientPickAria": "Kontakt wählen",
     "multiSendNoFundsAfterGas": "Nach der Gas-Reserve reicht das Guthaben nicht.",

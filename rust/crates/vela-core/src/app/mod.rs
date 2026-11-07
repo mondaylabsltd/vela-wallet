@@ -1332,6 +1332,20 @@ impl PromptKind {
         }
     }
 
+    /// r18-8 (§28, §32): the member challenge to the live index was refused
+    /// by this test build before it left. The key is kept; the sheet says
+    /// the test build's sentence, never the index or the network.
+    #[must_use]
+    pub fn key_kept_refused(detail: String) -> Self {
+        Self::CreateFailed {
+            detail,
+            phone_link: false,
+            key_kept: true,
+            local: false,
+            words_key: Some(crate::service_defaults::REFUSED_KEY.to_owned()),
+        }
+    }
+
     /// A failed sign-in, classified as [`PromptKind::create_failed`].
     #[must_use]
     pub fn sign_in_failed(detail: String) -> Self {

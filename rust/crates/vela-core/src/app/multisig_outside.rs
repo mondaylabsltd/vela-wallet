@@ -3795,6 +3795,7 @@ pub mod page {
         match e {
             ServiceFail::Unavailable(d) => d.clone(),
             ServiceFail::Busy(_) => "busy".to_owned(),
+            ServiceFail::Refused => "production_write_refused".to_owned(),
         }
     }
 
@@ -4202,10 +4203,13 @@ pub mod page {
                     }
                     return Err(PostFail::Refused(first.unwrap_or(refusal)));
                 }
+                // r18-8 (§28): refused by this test build — never sent, and
+                // not sent again by itself.
+                Err(ServiceFail::Refused) => return Err(PostFail::NotSent),
                 Err(fail) => {
                     let named = match fail {
                         ServiceFail::Busy(wait) => wait,
-                        ServiceFail::Unavailable(_) => None,
+                        ServiceFail::Unavailable(_) | ServiceFail::Refused => None,
                     };
                     let backoff =
                         (2_000.0 * 2f64.powi(i32::try_from(tries).unwrap_or(30))).min(30_000.0);

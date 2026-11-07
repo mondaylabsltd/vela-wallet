@@ -1,0 +1,52 @@
+{
+ "about": "r18-5 (§32): the fee signed is the fee on screen at the passkey. While a press is in flight — from the press (Execute, or \"Approve and execute\") until its signature, its cancel or its stop — the pressed executor's fee line is not re-quoted: an ask for a new look (the shell's re-ask, the home's poll) is not taken, and the look is served frozen with `signing: true` (the shells mark it as the figure being signed, `home.multisig.proposal.feeSigning`). The press's own re-quote (its look older than PREVIEW_FRESH_MS) is the only new figure the press can meet; one other than the pressed figure stops with `fee_moved`, nothing signed, the line then the new figure, unmarked (§19.11, §27 item 1). Quotes are the relay's (hex); served and signed amounts decimal. `lookAgeMs`: how old the look is when pressed; `requoteDuring`: the quote a re-ask while the press is out would get; `pressQuote`: the quote the press's own re-quote gets; `outcome`: `signed`, `cancelled` or `fee_moved`; `after`: the line once the press is over and the shell asks again past the window (`requoteAfter`).",
+ "cases": [
+  {
+   "name": "Execute: a re-ask landing between the press and the passkey is not taken — the line stays the pressed figure, marked, and exactly it is signed",
+   "press": "execute",
+   "look": "0x100",
+   "lookAgeMs": 0,
+   "requoteDuring": "0x200",
+   "outcome": "signed",
+   "expect": { "during": { "fee": "256", "signing": true }, "signed": "256", "after": { "signing": false } }
+  },
+  {
+   "name": "Approve and execute (the iOS r18-5 press): pressed at one figure, never re-quoted on screen to another before Face ID, and that figure signed",
+   "press": "one_press",
+   "look": "0x100",
+   "lookAgeMs": 0,
+   "requoteDuring": "0x200",
+   "outcome": "signed",
+   "expect": { "during": { "fee": "256", "signing": true }, "signed": "256", "after": { "signing": false } }
+  },
+  {
+   "name": "cancelled at the passkey: the mark goes, nothing is signed, and the next ask re-quotes as before",
+   "press": "one_press",
+   "look": "0x100",
+   "lookAgeMs": 0,
+   "requoteDuring": "0x200",
+   "outcome": "cancelled",
+   "requoteAfter": "0x300",
+   "expect": { "during": { "fee": "256", "signing": true }, "signed": null, "after": { "fee": "768", "signing": false } }
+  },
+  {
+   "name": "the press's own re-quote (its look stale) at another figure stops with fee_moved — nothing signed, the line the new figure, unmarked",
+   "press": "execute",
+   "look": "0x100",
+   "lookAgeMs": 20000,
+   "pressQuote": "0x180",
+   "outcome": "fee_moved",
+   "expect": { "signed": null, "stop": "384", "after": { "fee": "384", "signing": false } }
+  },
+  {
+   "name": "the press's own re-quote at the pressed figure signs it, and a re-ask after that is not taken either",
+   "press": "one_press",
+   "look": "0x100",
+   "lookAgeMs": 20000,
+   "pressQuote": "0x100",
+   "requoteDuring": "0x200",
+   "outcome": "signed",
+   "expect": { "during": { "fee": "256", "signing": true }, "signed": "256", "after": { "signing": false } }
+  }
+ ]
+}

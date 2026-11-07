@@ -53,4 +53,11 @@ verified_by: VerifiedBy, } | { "type": "registry_unit", metadata_hex: string, me
  * abort). Only the shell can tell that from a 4xx, so this one bit of
  * classification is delegated.
  */
-network: boolean, } | { "type": "index_health", ok: boolean, } | { "type": "index_transport_failed" } | { "type": "waited" } | { "type": "prompt_answered", accepted: boolean, } | { "type": "onboarding_completed" };
+network: boolean, 
+/**
+ * r18-8 (§28, §32): this test build's guard refused the write to
+ * the live index before it left — said with
+ * `common.testBuild.productionWriteRefused`, never the network or
+ * the index. Omitted: `false`.
+ */
+refused?: boolean, } | { "type": "index_health", ok: boolean, } | { "type": "index_transport_failed" } | { "type": "waited" } | { "type": "prompt_answered", accepted: boolean, } | { "type": "onboarding_completed" };

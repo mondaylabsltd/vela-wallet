@@ -161,6 +161,7 @@
     "feeUnchecked": "No se pudo comprobar si se ejecutaría — aún puedes aprobar; Ejecutar lo vuelve a comprobar.",
     "feeUncheckedHeld": "No se pudo comprobar si se ejecutaría — Ejecutar lo vuelve a comprobar.",
     "feeRetry": "Comprobar de nuevo",
+    "feeSigning": "Se firma con esta comisión: no cambia hasta que confirmes o canceles.",
     "feeSetup": "Incluye una configuración única en {{network}} ≈ {{amount}}:",
     "feeSetupPlain": "Incluye una configuración única en {{network}}:",
     "setupMultisig": "desplegar este multisig",

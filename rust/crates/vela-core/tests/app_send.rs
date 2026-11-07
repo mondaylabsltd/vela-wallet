@@ -10135,6 +10135,15 @@ fn every_fee_failure_passes_through_and_is_worded_by_its_cause() {
         ESTIMATE_FAILED_BODY_KEY
     );
     assert_eq!(ESTIMATE_FAILED_TITLE_KEY, "send.alertEstimateFailedTitle");
+    // r18-14 (§32): the relay gave no price, or its simulation no answer — a
+    // plain Send's Continue says it was Vela's relay, and that nothing was
+    // sent, never the generic "could not build a valid estimate".
+    for relay in [
+        SendEstimateFailure::QuoteUnavailable,
+        SendEstimateFailure::EstimateFailed,
+    ] {
+        assert_eq!(relay.body_key(), "send.alertEstimateRelayBody", "{relay:?}");
+    }
 }
 
 /// The fee card failed on the confirm page (a catch-up that could not price

@@ -90,6 +90,7 @@
     "removeRecipient": "Удалить",
     "alertInsufficientBalanceBody": "Сумма превышает ваш баланс.",
     "alertEstimateChainDownBody": "Нет связи с {{chain}}, комиссию за эту транзакцию не рассчитать. Попробуйте ещё раз чуть позже.",
+    "alertEstimateRelayBody": "Ретранслятор Vela не ответил, поэтому ничего не отправлено. Попробуйте ещё раз чуть позже.",
     "alertAccountUnavailableBody": "Не удалось загрузить ключ аккаунта, нужный для подготовки этой транзакции. Попробуйте ещё раз.",
     "recipientPickAria": "Выбрать контакт",
     "multiSendNoFundsAfterGas": "Недостаточно средств на газ после резерва.",

@@ -506,6 +506,7 @@
   "removeRecipient": "Hapus",
   "alertInsufficientBalanceBody": "Totalnya melebihi saldo Anda.",
   "alertEstimateChainDownBody": "Tidak bisa terhubung ke {{chain}} untuk menghitung biaya transaksi ini. Coba lagi sebentar lagi.",
+  "alertEstimateRelayBody": "Relay Vela tidak menjawab, jadi tidak ada yang dikirim. Coba lagi sebentar lagi.",
   "alertAccountUnavailableBody": "Tidak dapat memuat kunci akun yang diperlukan untuk menyiapkan transaksi ini. Silakan coba lagi.",
   "recipientPickAria": "Pilih dari kontak",
   "scanAria": "Pindai kode QR",

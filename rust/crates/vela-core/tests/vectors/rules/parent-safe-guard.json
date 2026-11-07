@@ -788,6 +788,66 @@
       }
     },
     {
+      "name": "r18-10: unknown Safe, SafeTx, isOwner true: refused in the parent's words",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeTx\": [{\"name\": \"to\", \"type\": \"address\"}, {\"name\": \"value\", \"type\": \"uint256\"}, {\"name\": \"data\", \"type\": \"bytes\"}, {\"name\": \"operation\", \"type\": \"uint8\"}, {\"name\": \"safeTxGas\", \"type\": \"uint256\"}, {\"name\": \"baseGas\", \"type\": \"uint256\"}, {\"name\": \"gasPrice\", \"type\": \"uint256\"}, {\"name\": \"gasToken\", \"type\": \"address\"}, {\"name\": \"refundReceiver\", \"type\": \"address\"}, {\"name\": \"nonce\", \"type\": \"uint256\"}]}, \"primaryType\": \"SafeTx\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"0x7777777777777777777777777777777777777777\"}, \"message\": {\"to\": \"0x7777777777777777777777777777777777777777\", \"value\": \"0\", \"data\": \"0xe318b52b0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000000000000000000000000badbadbadbadbadbadbadbadbadbadbadbadbad0\", \"operation\": 0, \"safeTxGas\": \"0\", \"baseGas\": \"0\", \"gasPrice\": \"0\", \"gasToken\": \"0x0000000000000000000000000000000000000000\", \"refundReceiver\": \"0x0000000000000000000000000000000000000000\", \"nonce\": \"0\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "known": [],
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x7777777777777777777777777777777777777777",
+            "answer": {
+              "type": "returned",
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+            }
+          }
+        ],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x7777777777777777777777777777777777777777",
+          "chain_id": 8453,
+          "function": "SafeTx",
+          "selector": "",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "owner"
+      }
+    },
+    {
+      "name": "r18-10: unknown Safe, SafeTx, before the read: read first",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeTx\": [{\"name\": \"to\", \"type\": \"address\"}, {\"name\": \"value\", \"type\": \"uint256\"}, {\"name\": \"data\", \"type\": \"bytes\"}, {\"name\": \"operation\", \"type\": \"uint8\"}, {\"name\": \"safeTxGas\", \"type\": \"uint256\"}, {\"name\": \"baseGas\", \"type\": \"uint256\"}, {\"name\": \"gasPrice\", \"type\": \"uint256\"}, {\"name\": \"gasToken\", \"type\": \"address\"}, {\"name\": \"refundReceiver\", \"type\": \"address\"}, {\"name\": \"nonce\", \"type\": \"uint256\"}]}, \"primaryType\": \"SafeTx\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"0x7777777777777777777777777777777777777777\"}, \"message\": {\"to\": \"0x7777777777777777777777777777777777777777\", \"value\": \"0\", \"data\": \"0xe318b52b0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000000000000000000000000badbadbadbadbadbadbadbadbadbadbadbadbad0\", \"operation\": 0, \"safeTxGas\": \"0\", \"baseGas\": \"0\", \"gasPrice\": \"0\", \"gasToken\": \"0x0000000000000000000000000000000000000000\", \"refundReceiver\": \"0x0000000000000000000000000000000000000000\", \"nonce\": \"0\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "known": [],
+        "answers": [],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "read",
+        "reads": [
+          {
+            "chain_id": 8453,
+            "safe": "0x7777777777777777777777777777777777777777"
+          }
+        ]
+      }
+    },
+    {
       "name": "unknown Safe, isOwner false: clear",
       "input": {
         "method": "eth_sendTransaction",

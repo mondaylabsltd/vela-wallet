@@ -159,6 +159,7 @@
     "feeUnchecked": "Couldn’t check whether it would run — you can still approve; Execute checks again.",
     "feeUncheckedHeld": "Couldn’t check whether it would run — Execute checks again.",
     "feeRetry": "Check again",
+    "feeSigning": "Signing at this fee — it stays fixed until you confirm or cancel.",
     "feeSetup": "Includes one-time setup on {{network}} ≈ {{amount}}:",
     "feeSetupPlain": "Includes one-time setup on {{network}}:",
     "setupMultisig": "deploying this multisig",

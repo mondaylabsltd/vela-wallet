@@ -145,6 +145,7 @@
     "removeRecipient": "移除",
     "alertInsufficientBalanceBody": "總額超過你的餘額。",
     "alertEstimateChainDownBody": "暫時連不上 {{chain}}，無法計算這筆交易的費用。請稍後再試。",
+    "alertEstimateRelayBody": "Vela 的中繼沒有回應，所以什麼都沒有傳送。請稍後再試。",
     "alertAccountUnavailableBody": "無法載入準備這筆交易所需的帳戶金鑰，請重試。",
     "recipientPickAria": "從通訊錄選擇",
     "scanAria": "掃描 QR code",

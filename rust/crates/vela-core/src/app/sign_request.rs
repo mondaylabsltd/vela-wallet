@@ -119,7 +119,9 @@ use super::fee_policy::{is_tempo_chain, tempo_quote_is_stale, FeeTier, TEMPO_FEE
 use super::parent_safe_guard::{
     self as parent_guard, OwnerFact, ParentReason, ParentTarget, ParentVerdict, SafeOwnerAnswer,
 };
-use super::self_call_guard::{detect_self_call, enforce_no_self_call, SelfCallBlock};
+use super::self_call_guard::{
+    detect_self_call, enforce_no_self_call, SelfCallBlock, SelfCallFunction,
+};
 use super::sign_confirm::ConfirmBlock;
 use super::token_trust::TrustSimJudgment;
 use super::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
@@ -1578,6 +1580,11 @@ struct Pending {
     owner_facts: Vec<OwnerFact>,
     /// §31: reads of those Safes still out — the confirm stays shut.
     owner_reading: bool,
+    /// r18-10 (§32): a self-call refusal held back while a Safe the request
+    /// would act for is read — a `SafeTx` under an unlisted Safe's domain.
+    /// The parent rule decides first: owned (or unreadable) → the parent's
+    /// words; not owned → this refusal, so it is never signed.
+    deferred_block: Option<SignBlockedView>,
 }
 
 /// The wait the confirm keeps for the simulation's verdict (PR 3).
@@ -2865,12 +2872,25 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
         .map(|params| parent_guard::parent_targets(&arrival.method, params, &signer, chain_id))
         .unwrap_or_default();
     let parent_verdict = parent_guard::verdict(&parent_targets, &model.known_multisigs, &[]);
-    let refusal = match &parent_verdict {
-        ParentVerdict::Refuse { target, reason } => Some(parent_blocked_view(target, *reason)),
-        _ => parsed_params
-            .as_ref()
-            .and_then(|params| detect_self_call(&arrival.method, Some(params), &signer))
-            .map(|block| blocked_view(&block)),
+    let self_block = parsed_params
+        .as_ref()
+        .and_then(|params| detect_self_call(&arrival.method, Some(params), &signer))
+        .map(|block| blocked_view(&block));
+    let (refusal, deferred_block) = match &parent_verdict {
+        ParentVerdict::Refuse { target, reason } => {
+            (Some(parent_blocked_view(target, *reason)), None)
+        }
+        // r18-10 (§32): a `SafeTx` for a Safe being read is the parent rule's
+        // first — a Safe this account owns is refused in its words, never in
+        // the generic self-call ones; the self-call refusal waits for the read.
+        ParentVerdict::Read { .. }
+            if self_block
+                .as_ref()
+                .is_some_and(|b| b.function == SelfCallFunction::SafeTxTypedData.as_str()) =>
+        {
+            (None, self_block)
+        }
+        _ => (self_block, None),
     };
     if let Some(blocked) = refusal {
         // The sheet opens refused, and the answer waits for the dismissal.
@@ -2907,6 +2927,7 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
             parent_targets,
             owner_facts: Vec::new(),
             owner_reading: false,
+            deferred_block: None,
         });
         commands.push(render());
         return Command::all(commands);
@@ -2952,6 +2973,7 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
         parent_targets,
         owner_facts: Vec::new(),
         owner_reading: !reads.is_empty(),
+        deferred_block,
     });
     commands.push(render());
     Command::all(commands)
@@ -3017,8 +3039,20 @@ fn on_parent_facts(model: &mut Model) -> Command<SignEffect, Event> {
             }
         }
         ParentVerdict::Clear => {
-            if let Some(pending) = model.pending.as_mut() {
+            let deferred = model.pending.as_mut().and_then(|pending| {
                 pending.owner_reading = false;
+                pending.deferred_block.take()
+            });
+            // r18-10: not a Safe this account owns — the self-call refusal
+            // held for the read stands (a SafeTx is never signed).
+            if let Some(blocked) = deferred {
+                model.sign_error_refused = false;
+                model.sign_error_refusal_key = None;
+                model.sign_error = Some(SignErrorNotice::new(
+                    SignErrorKind::SelfCallBlocked,
+                    Some(blocked.function.clone()),
+                ));
+                model.blocked = Some(blocked);
             }
         }
         ParentVerdict::Read { .. } => {}

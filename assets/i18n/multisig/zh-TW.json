@@ -159,6 +159,7 @@
     "feeUnchecked": "無法確認它能否執行 — 你仍可以核准；執行時會再檢查一次。",
     "feeUncheckedHeld": "無法確認它能否執行 — 執行時會再檢查一次。",
     "feeRetry": "重新檢查",
+    "feeSigning": "按這筆網路費簽名——在你確認或取消之前不會變。",
     "feeSetup": "包含在 {{network}} 上的一次性設定 ≈ {{amount}}：",
     "feeSetupPlain": "包含在 {{network}} 上的一次性設定：",
     "setupMultisig": "部署這個多簽",
