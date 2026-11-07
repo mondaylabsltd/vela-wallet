@@ -61,6 +61,7 @@ use std::time::Duration;
 use ureq::{Agent, Proxy, ProxyProtocol};
 
 use crate::diag::vlog;
+use crate::executor::production_guard;
 
 /// How much of a request's budget its connection may take to set up — TCP,
 /// a proxy's CONNECT, TLS: nine tenths. Shorter than the whole on purpose:
@@ -449,7 +450,10 @@ fn walk<T>(
                     failure
                 });
                 return Err(Transport {
-                    local: matches!(route, Route::Direct) && failed_inside_this_machine(&error),
+                    // §28: a test build's write to production was refused
+                    // here, before it was sent — never "may have been sent".
+                    local: production_guard::is_refusal(&error)
+                        || (matches!(route, Route::Direct) && failed_inside_this_machine(&error)),
                     error,
                     proxy: refused,
                 });
@@ -545,7 +549,22 @@ fn agent_over(route: &Route, timeout: Duration) -> Agent {
     {
         return agent.clone();
     }
-    let config = Agent::config_builder()
+    let agent = agent_with(route, timeout, production_guard::this_build());
+    if let Ok(mut agents) = agents.lock() {
+        agents.insert(key, agent.clone());
+    }
+    agent
+}
+
+/// An agent over `route`, carrying `guard` — §28's production-write guard,
+/// which only a test build has (`production_guard::this_build`). The one
+/// place an agent is configured; [`agent_over`] caches what it builds.
+pub(crate) fn agent_with(
+    route: &Route,
+    timeout: Duration,
+    guard: Option<production_guard::ProductionWriteGuard>,
+) -> Agent {
+    let mut config = Agent::config_builder()
         .timeout_global(Some(timeout))
         .timeout_connect(Some(connect_budget(timeout)))
         // A balance read talks to two dozen chains' endpoints at once; the
@@ -554,11 +573,10 @@ fn agent_over(route: &Route, timeout: Duration) -> Agent {
         .max_idle_connections_per_host(8)
         // `None` is "no proxy" — never ureq's own pick from the environment.
         .proxy(route.proxy());
-    let agent = config.build().new_agent();
-    if let Ok(mut agents) = agents.lock() {
-        agents.insert(key, agent.clone());
+    if let Some(guard) = guard {
+        config = config.middleware(guard);
     }
-    agent
+    config.build().new_agent()
 }
 
 /// The same proxy, with the target hostname resolved at the far end.

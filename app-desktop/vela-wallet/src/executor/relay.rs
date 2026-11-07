@@ -50,7 +50,7 @@ use crate::executor::{pool, proxy, storage};
 
 /// The built-in relay. Per-chain JSON-RPC is `{base}/{chain_id}`; REST is
 /// `{base}/v1/…`.
-pub const BUILTIN_BASE: &str = "https://vela-relay-cf.getvela.app";
+pub const BUILTIN_BASE: &str = vela_core::service_defaults::BUNDLER_SERVICE_URL;
 
 /// `NET_TIMEOUTS.bundlerRest` — the REST account and treasury lookups.
 const REST_TIMEOUT: Duration = Duration::from_secs(10);
