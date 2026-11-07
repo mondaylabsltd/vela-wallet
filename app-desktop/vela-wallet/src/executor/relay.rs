@@ -655,7 +655,7 @@ pub fn estimate_user_op_gas(
         "eth_estimateUserOperationGas",
         json!([user_op_to_json(op, &[]), ENTRY_POINT]),
     )
-    .map_err(|error| EstimateError::unanswered(format!("gas estimation unreachable: {error:?}")))?;
+    .map_err(|error| EstimateError::unanswered(format!("gas estimation unreachable: {error}")))?;
     estimate_of(&body)
 }
 

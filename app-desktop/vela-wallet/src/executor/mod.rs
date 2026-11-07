@@ -233,6 +233,7 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
                     Err(error) => ShellResult::IndexFailed {
                         message: format!("the registry challenge is not hex: {error}"),
                         network: false,
+                        refused: None,
                     },
                     // Spec 075: the page fetches its OWN member challenge and
                     // must agree with these bytes; the core refuses an answer
@@ -257,6 +258,7 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
                                         "could not assemble the member proof: {error}"
                                     ),
                                     network: false,
+                                    refused: None,
                                 },
                             },
                         }
@@ -439,9 +441,7 @@ pub fn perform_session(operation: &SessionOperation) -> SessionShellResult {
         // this one on the background executor (`session_blocks`).
         SessionOperation::AwaitRegistryLanding { task_id } => match registry::await_task(task_id) {
             Ok(()) => SessionShellResult::RegistryLanded,
-            Err(error) => SessionShellResult::RegistryLandingUnconfirmed {
-                message: error.message,
-            },
+            Err(error) => landing_unconfirmed(error),
         },
         SessionOperation::RemovePendingUpload { credential_id } => {
             let _ = storage::remove_pending_upload(credential_id);
@@ -463,10 +463,18 @@ pub fn perform_session(operation: &SessionOperation) -> SessionShellResult {
             None,
         ) {
             Ok(_) => SessionShellResult::RegistryLanded,
-            Err(error) => SessionShellResult::RegistryLandingUnconfirmed {
-                message: error.message,
-            },
+            Err(error) => landing_unconfirmed(error),
         },
+    }
+}
+
+/// A publish (or its landing) the index did not confirm. r18-8 (§28, §32):
+/// one this test build refused before it left says so (`refused`), and the
+/// session asks nothing more by itself.
+fn landing_unconfirmed(error: registry::RegistryError) -> SessionShellResult {
+    SessionShellResult::RegistryLandingUnconfirmed {
+        message: error.message,
+        refused: error.refused.then_some(true),
     }
 }
 
@@ -566,6 +574,7 @@ fn trusted_signer_ceremony(
                 Err(error) => ShellResult::IndexFailed {
                     message: format!("could not assemble the member proof: {error}"),
                     network: false,
+                    refused: None,
                 },
             }
         }
@@ -608,6 +617,8 @@ fn index_failed(error: registry::RegistryError) -> ShellResult {
     ShellResult::IndexFailed {
         message: error.message,
         network: error.network,
+        // r18-8 (§28, §32): the test build's refusal, said as its own kind.
+        refused: error.refused.then_some(true),
     }
 }
 
@@ -939,5 +950,53 @@ mod landing_409_tests {
             };
             assert_eq!(records, vec![OutboxRecord(None)], "only cred0 went");
         });
+    }
+}
+
+#[cfg(test)]
+mod refusal_tests {
+    use super::*;
+
+    fn error(refused: bool, network: bool) -> registry::RegistryError {
+        registry::RegistryError {
+            message: "Register: refused".to_owned(),
+            network,
+            local: network,
+            refused,
+        }
+    }
+
+    /// r18-8 (§28, §32): the guard's refusal of a write to the live key
+    /// index reaches the core as `refused: Some(true)` — the challenge, the
+    /// publish and the session's publish alike — and nothing else does.
+    #[test]
+    fn a_refused_index_write_reaches_the_core_as_refused() {
+        assert!(matches!(
+            index_failed(error(true, false)),
+            ShellResult::IndexFailed {
+                refused: Some(true),
+                network: false,
+                ..
+            }
+        ));
+        assert!(matches!(
+            index_failed(error(false, true)),
+            ShellResult::IndexFailed {
+                refused: None,
+                network: true,
+                ..
+            }
+        ));
+        assert!(matches!(
+            landing_unconfirmed(error(true, false)),
+            SessionShellResult::RegistryLandingUnconfirmed {
+                refused: Some(true),
+                ..
+            }
+        ));
+        assert!(matches!(
+            landing_unconfirmed(error(false, true)),
+            SessionShellResult::RegistryLandingUnconfirmed { refused: None, .. }
+        ));
     }
 }

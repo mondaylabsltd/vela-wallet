@@ -117,6 +117,13 @@ pub enum OutcomeKind {
         local: bool,
     },
     SignInFailed,
+    /// ob-4 / r18-8: the passkey was made and stays on the key list,
+    /// unconfirmed — only its member confirmation did not reach the index
+    /// (`local`: never left this device). A sentence the core keys
+    /// (`words_key`, the test build's refusal) replaces the body.
+    KeyKept {
+        local: bool,
+    },
     /// The link to the other device failed, not the authenticator — the
     /// core's `phone_link` (issue #446): scan again, not "set up Face ID".
     PhoneLink,
@@ -214,6 +221,15 @@ impl OutcomeKind {
                 loc.t("onboarding.common.unknownTitle"),
                 loc.t("onboarding.common.phoneLinkFailed"),
             ),
+            Self::KeyKept { local } => (
+                BadgeVariant::Warning,
+                loc.t("onboarding.create.keyKeptTitle"),
+                loc.t(if local {
+                    "onboarding.create.keyKeptBodyNetwork"
+                } else {
+                    "onboarding.create.keyKeptBodyIndex"
+                }),
+            ),
         };
 
         OutcomeSpec {
@@ -262,6 +278,12 @@ impl OutcomeKind {
             | PromptKind::SignInFailed {
                 phone_link: true, ..
             } => Self::PhoneLink,
+            // ob-4 / r18-8: the core's classification, never the detail's words.
+            PromptKind::CreateFailed {
+                key_kept: true,
+                local,
+                ..
+            } => Self::KeyKept { local: *local },
             PromptKind::CreateFailed { detail, .. } => refine(detail, Self::Unknown),
             PromptKind::SignInFailed { detail, .. } => refine(detail, Self::SignInFailed),
         }
@@ -353,6 +375,7 @@ impl Prompt {
                 | OutcomeKind::Server
                 | OutcomeKind::Timeout
                 | OutcomeKind::RegistryUnreachable { .. }
+                | OutcomeKind::KeyKept { local: false }
         )
     }
 }
@@ -625,6 +648,42 @@ mod tests {
             prompt_spec(&bare, &loc).body,
             OutcomeKind::SignInFailed.spec(&loc).body
         );
+    }
+
+    /// r18-8 (§28, §32) and ob-4: a key kept because its member challenge
+    /// was refused by this test build says the key is kept and the test
+    /// build's sentence (`words_key`) — never the index, never the network,
+    /// whatever the detail's words; one kept because the index didn't answer
+    /// (or the device is offline) says that, and the raw detail stays in the
+    /// disclosure.
+    #[test]
+    fn a_kept_key_is_said_kept_in_the_cores_words() {
+        for tag in ["en", "zh"] {
+            let loc = Loc::for_tag(tag);
+            let detail = format!(
+                "Member challenge: {} (p256-index-v2.getvela.app) connection host",
+                vela_core::service_defaults::REFUSED_ENGLISH
+            );
+            let refused = PromptKind::key_kept_refused(detail.clone());
+            let spec = prompt_spec(&refused, &loc);
+            assert_eq!(spec.headline, loc.t("onboarding.create.keyKeptTitle"));
+            crate::wallet::page::multisig::assert_test_builds_words(&loc, &spec.body);
+            assert_eq!(
+                Prompt::new(refused, false, 1).details.as_deref(),
+                Some(detail.as_str()),
+                "the raw words only in the disclosure"
+            );
+            for (local, body) in [
+                (true, "onboarding.create.keyKeptBodyNetwork"),
+                (false, "onboarding.create.keyKeptBodyIndex"),
+            ] {
+                let kept =
+                    PromptKind::key_kept_unconfirmed("Member challenge failed: 503".into(), local);
+                let spec = prompt_spec(&kept, &loc);
+                assert_eq!(spec.headline, loc.t("onboarding.create.keyKeptTitle"));
+                assert_eq!(spec.body, loc.t(body));
+            }
+        }
     }
 
     /// The prompt a missing key produces really is the one above.

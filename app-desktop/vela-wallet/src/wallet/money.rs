@@ -3359,6 +3359,119 @@ mod tests {
                 }
             }
         ));
+        // r18-14: the relay giving no price or no estimate says so.
+        for failure in [FeeFailure::QuoteUnavailable, FeeFailure::EstimateFailed] {
+            assert_eq!(
+                SendEstimateFailure::from(failure).body_key(),
+                vela_core::app::send::ESTIMATE_RELAY_BODY_KEY
+            );
+        }
+    }
+
+    /// r18-14 (§32): a plain Send whose relay was refused said "Could not
+    /// build a valid transaction estimate" at Continue. Through the real send
+    /// core, the fee machine's failure for a relay that gave no price
+    /// (`QuoteUnavailable`) or no estimate (`EstimateFailed`) reaches
+    /// Continue's alert as it is, and the alert says the relay's sentence —
+    /// in English and Chinese — never the generic one.
+    #[test]
+    fn a_relay_refused_continue_says_the_relays_sentence() {
+        use vela_core::app::fee_policy::FeeFailure;
+        use vela_core::app::send::SendAlertKind;
+        for failure in [FeeFailure::QuoteUnavailable, FeeFailure::EstimateFailed] {
+            let mut send = CoreHost::<Send>::new();
+            let mut alerts: Vec<SendAlertKind> = Vec::new();
+            let mut drive = |send: &mut CoreHost<Send>, event: SendEvent| {
+                let mut pending = send.dispatch(event);
+                while let Some(effect) = pending.pop() {
+                    let result = match &effect.operation {
+                        SendOperation::FetchTokens { .. } => SendShellResult::TokensLoaded {
+                            tokens: Some(vec![Journey::eth()]),
+                            chains: vec![SendChainInfo {
+                                chain_id: 1,
+                                network: "ethereum".to_owned(),
+                                native_symbol: "ETH".to_owned(),
+                            }],
+                        },
+                        SendOperation::LoadAccountCredential { .. } => {
+                            SendShellResult::AccountCredential {
+                                public_key_hex: Some("04aa".to_owned()),
+                            }
+                        }
+                        SendOperation::PrewarmFees { .. } => SendShellResult::FeesPrewarmed,
+                        SendOperation::ProbeTreasury { .. } => SendShellResult::TreasuryProbed {
+                            probe: vela_core::app::send::SendTreasuryProbe::Covered,
+                        },
+                        SendOperation::ResolveIdentity { .. } => {
+                            SendShellResult::IdentityResolved { identity: None }
+                        }
+                        SendOperation::ResolveRisk { .. } => {
+                            SendShellResult::RiskResolved { risk: None }
+                        }
+                        // The relay refused: the fee machine's own failure,
+                        // passed through as the executor passes it.
+                        SendOperation::EstimateFee { .. } => SendShellResult::FeeEstimated {
+                            outcome: SendFeeOutcome::Failed {
+                                kind: SendEstimateFailure::from(failure),
+                            },
+                        },
+                        SendOperation::ShowAlert { kind } => {
+                            alerts.push(kind.clone());
+                            SendShellResult::AlertAcknowledged
+                        }
+                        _ => continue,
+                    };
+                    pending.extend(send.resolve(effect.id, result));
+                }
+            };
+            drive(
+                &mut send,
+                SendEvent::Open {
+                    account: Some(SendAccountRef {
+                        id: "cred0".to_owned(),
+                        address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+                        name: None,
+                        multisig: None,
+                    }),
+                    params: SendOpenParams::default(),
+                    display: SendDisplayContext::default(),
+                },
+            );
+            drive(
+                &mut send,
+                SendEvent::SelectToken {
+                    token_id: Journey::eth().id(),
+                },
+            );
+            drive(
+                &mut send,
+                SendEvent::SetRecipient {
+                    recipient: "0x2222222222222222222222222222222222222222".to_owned(),
+                },
+            );
+            drive(
+                &mut send,
+                SendEvent::SetAmount {
+                    amount: "0.001".to_owned(),
+                },
+            );
+            drive(&mut send, SendEvent::Continue);
+            let [alert] = alerts.as_slice() else {
+                panic!("one alert at Continue: {alerts:?}");
+            };
+            for tag in ["en", "zh"] {
+                let loc = crate::loc::Loc::for_tag(tag);
+                let (_, body) = crate::flows::live::send_alert_words(&loc, alert, "Ethereum");
+                let body = body.unwrap_or_default();
+                assert_eq!(
+                    body,
+                    loc.t(vela_core::app::send::ESTIMATE_RELAY_BODY_KEY),
+                    "{failure:?} {tag}"
+                );
+                assert_ne!(body, loc.t("send.alertEstimateFailedBody"), "{tag}");
+                assert!(!body.contains("Could not build"), "{body}");
+            }
+        }
     }
 
     /// The active account is the one the session index names, whole — keys

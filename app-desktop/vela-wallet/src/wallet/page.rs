@@ -53,6 +53,9 @@ pub(crate) mod multisig;
 mod multisig_add;
 /// The create sheet (AUDIT M1).
 mod multisig_create;
+/// The created screen's line, for the scenarios (r18-8).
+#[cfg(all(test, feature = "dev-fixtures"))]
+pub(crate) use multisig_create::unshared_note as multisig_create_note;
 /// Where a multisig link opened here stands (AUDIT M1).
 mod multisig_links;
 /// Multisig notifications: the switch, the in-app line, a click's way in (M6).

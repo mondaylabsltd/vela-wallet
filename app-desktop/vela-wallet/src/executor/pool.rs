@@ -131,6 +131,23 @@ pub enum PoolError {
     Unavailable,
 }
 
+/// r18-7: a stable sentence for each kind (a detail or a log line), never
+/// the enum's debug text.
+impl std::fmt::Display for PoolError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Failed { rate_limited: true } => {
+                f.write_str("every node answered only with a rate limit (HTTP 429)")
+            }
+            Self::Failed {
+                rate_limited: false,
+            } => f.write_str("no node answered"),
+            Self::RangeCap { .. } => f.write_str("a node capped the range asked"),
+            Self::Unavailable => f.write_str("the RPC pool is unavailable"),
+        }
+    }
+}
+
 /// A routed call's answer, and whether any POST of it may have reached an
 /// endpoint that acted on it while its reply was lost (spec 082 RA1: the OR
 /// of `rpc_pool::may_have_delivered` over every POST). Only the submit reads

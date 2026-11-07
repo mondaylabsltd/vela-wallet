@@ -147,6 +147,24 @@ pub fn look_of(
         .and_then(|(_, v)| Look::of(v))
 }
 
+/// r18-5 (§32): a press is out on `executor`'s look (the core serves it
+/// `"signing": true`, from the press to its signature, cancel or stop): its
+/// figure is the one being signed and is not re-quoted, so the fee line says
+/// so (`proposal.feeSigning`).
+#[must_use]
+pub fn look_signing(
+    previews: &std::collections::BTreeMap<String, Value>,
+    chain_id: u64,
+    hash: &str,
+    executor: &str,
+) -> bool {
+    let key = look_key(chain_id, hash, executor);
+    previews
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case(&key))
+        .is_some_and(|(_, v)| v.get("signing").and_then(Value::as_bool) == Some(true))
+}
+
 /// What the sheet's foot offers, for the member it acts as.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Foot {

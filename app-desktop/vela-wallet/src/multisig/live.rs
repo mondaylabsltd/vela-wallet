@@ -23,7 +23,7 @@ use vela_core::app::{Account, FailureKind, KeyMethod};
 use vela_core::multisig_review::SimCall;
 use vela_core::signing_venue::{SignatureKind, SigningRoute, signing_route};
 
-use super::shell::{Deps, HttpReply, RecipientFacts, RpcReply};
+use super::shell::{Deps, HttpFailure, HttpReply, RecipientFacts, RpcReply};
 use crate::core_host::CoreHost;
 use crate::executor::passkey::{self, Ceremony, PasskeyFailure};
 use crate::executor::{pool, proxy, relay, storage, trusted_signer, user_op};
@@ -129,14 +129,21 @@ pub fn relay_url() -> Option<String> {
 /// Why the pool gave no answer, as the core reads it (r14-5): every node
 /// answering only "slow down" leads with the core's
 /// [`vela_core::app::multisig_shell::RATE_LIMITED_DETAIL`], so an add names
-/// the network busy rather than out of reach.
+/// the network busy rather than out of reach. r18-7: each other kind is a
+/// stable sentence of its own, never the error's debug text.
 fn unanswered_detail(chain: u32, error: &pool::PoolError) -> String {
     match error {
         pool::PoolError::Failed { rate_limited: true } => format!(
             "{}: every node of chain {chain} answered only with a rate limit (HTTP 429)",
             vela_core::app::multisig_shell::RATE_LIMITED_DETAIL
         ),
-        other => format!("{other:?}"),
+        pool::PoolError::Failed {
+            rate_limited: false,
+        } => format!("no node of chain {chain} answered"),
+        pool::PoolError::RangeCap { .. } => {
+            format!("a node of chain {chain} capped the range asked")
+        }
+        pool::PoolError::Unavailable => "the RPC pool is unavailable".to_owned(),
     }
 }
 
@@ -322,7 +329,7 @@ impl Live {
             },
             Err(trusted_signer::PageEnd::Failed(failure)) => Res::PasskeyFailed {
                 detail: ShellFailure::PageApproval {
-                    failure: format!("{failure:?}"),
+                    failure: page_failure_word(failure),
                 }
                 .detail(),
             },
@@ -369,7 +376,7 @@ impl Live {
             },
             Err(trusted_signer::PageEnd::Failed(failure)) => Res::PasskeyFailed {
                 detail: ShellFailure::PageApproval {
-                    failure: format!("{failure:?}"),
+                    failure: page_failure_word(failure),
                 }
                 .detail(),
             },
@@ -640,6 +647,29 @@ pub fn quote(chain_id: u64, from: &str, calls: &[SentCall]) -> Value {
     }
 }
 
+/// The page's failure as the core reads it (`failure_said`'s
+/// `page_approval`: `unanswered`, `mismatch`, `refused`, `not_opened`) —
+/// its stable wire word, never its debug text (r18-7: `Unanswered` read as
+/// a refusal).
+fn page_failure_word(failure: vela_core::app::sign_request::PageFailure) -> String {
+    serde_json::to_value(failure)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+
+/// A request that got no answer, as the core is told it. r18-8 (§28, §32):
+/// this test build's guard refusing a write to the live service is its own
+/// kind (`refused`) — not the network, not the service's outage — so the
+/// core asks once and says it in the test build's words.
+fn http_failure(failure: proxy::Transport) -> HttpFailure {
+    if crate::executor::production_guard::is_refusal(&failure.error) {
+        HttpFailure::refused(failure.error.to_string())
+    } else {
+        HttpFailure::unanswered(failure.error.to_string())
+    }
+}
+
 impl Deps for Live {
     fn http(
         &self,
@@ -647,7 +677,7 @@ impl Deps for Live {
         url: &str,
         body: Option<&str>,
         timeout: Duration,
-    ) -> Result<HttpReply, String> {
+    ) -> Result<HttpReply, HttpFailure> {
         let answer = proxy::with_routes(url, timeout, |agent| {
             let mut response = match (method, body) {
                 ("GET", _) => agent
@@ -686,7 +716,7 @@ impl Deps for Live {
                 body,
             })
         });
-        answer.map_err(|failure| failure.error.to_string())
+        answer.map_err(http_failure)
     }
 
     fn rpc(
@@ -954,6 +984,48 @@ impl Deps for Live {
 mod tests {
     use super::*;
 
+    /// r18-7: a trusted page's failure reaches the core as its wire word, so
+    /// the core says the right sentence (`Unanswered` was read as refused).
+    #[test]
+    fn a_page_failure_is_its_wire_word_never_debug_text() {
+        use vela_core::app::multisig_failure::{FailureKind, failure_said};
+        use vela_core::app::sign_request::PageFailure;
+        for (failure, kind) in [
+            (PageFailure::Unanswered, FailureKind::PageUnanswered),
+            (PageFailure::Mismatch, FailureKind::PageMismatch),
+            (PageFailure::NotOpened, FailureKind::PageNotOpened),
+            (PageFailure::Refused, FailureKind::PageRefused),
+        ] {
+            let detail = ShellFailure::PageApproval {
+                failure: page_failure_word(failure),
+            }
+            .detail();
+            assert_eq!(failure_said(&detail).kind, kind, "{detail}");
+        }
+    }
+
+    /// r18-8 (§28, §32): the genesis service's and mailbox's client tells the
+    /// core a write this test build's guard refused as `refused` — it was
+    /// dropped as `failure.error.to_string()`, so the core retried it three
+    /// times and said "can't be reached". Anything else stays unanswered.
+    #[test]
+    fn a_guard_refusal_reaches_the_core_as_refused() {
+        let refused = http_failure(proxy::Transport {
+            error: crate::executor::production_guard::refusal("genesis.getvela.app"),
+            local: true,
+            proxy: None,
+        });
+        assert!(refused.refused, "{refused:?}");
+        for error in [ureq::Error::ConnectionFailed, ureq::Error::HostNotFound] {
+            let unanswered = http_failure(proxy::Transport {
+                error,
+                local: true,
+                proxy: None,
+            });
+            assert!(!unanswered.refused, "{unanswered:?}");
+        }
+    }
+
     /// r16-18: an execution that failed is said in the core's words, never
     /// as the shell's debug text (`That didn't go through: Other("Could not
     /// fetch the account nonce …")`). A read before the passkey on a network
@@ -1151,6 +1223,23 @@ mod tests {
             },
         );
         assert!(!rate_limited_detail(&down), "{down}");
+        // r18-7: never the pool's debug text (`Failed { rate_limited: false }`).
+        for detail in [
+            down.clone(),
+            unanswered_detail(1, &pool::PoolError::Unavailable),
+            unanswered_detail(
+                1,
+                &pool::PoolError::RangeCap {
+                    max_span: 1.0,
+                    error_json: None,
+                },
+            ),
+        ] {
+            assert!(
+                !detail.contains('{') && !detail.contains("Failed"),
+                "{detail}"
+            );
+        }
         assert!(!rate_limited_detail(&unanswered_detail(
             1,
             &pool::PoolError::Unavailable
