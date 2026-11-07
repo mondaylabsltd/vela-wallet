@@ -2125,6 +2125,12 @@ Left open:
 - One unread network nobody can name reads "Activity can't be read on 1
   networks" (the corpus has no singular for an unnamed one); built-in networks
   and the person's own are always named.
+- The onchain web suite (fresh harness, 97xx ports, every `*.getvela.app`
+  host resolved to nowhere): 11 passed, 1 flaky (the rename), 2 failed in the
+  suite's order ("two devices…": "Another transaction at #0 ran first"; "an
+  outside owner…": no outside link) — both pass alone on a fresh harness
+  (2/2). The core's `multisig_fork` test passes on its own harness. The
+  ordering failure is not diagnosed further here.
 - The web skipper still answers a background read locally during its window
   (that is its purpose, home-17); only the person's asks pass it. Moving the
   skip window into the core pool (one rule for every shell) is a later
