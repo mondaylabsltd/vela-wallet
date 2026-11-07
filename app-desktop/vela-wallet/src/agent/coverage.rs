@@ -366,6 +366,10 @@ const EVENTS: &[(&str, Place)] = &[
     ("SpeedEvent::StageChanged", Machine("the fee quote")),
     ("SpeedEvent::Toggle", View("the speed choices shown")),
     (
+        "activity_feed::Event::BalanceRead",
+        Machine("the balance's reads, told to the feed"),
+    ),
+    (
         "activity_feed::Event::ChainFilterChanged",
         View("the network filter"),
     ),

@@ -74,13 +74,16 @@ pub trait Deps: Send + Sync + 'static {
         timeout: Duration,
     ) -> Result<HttpReply, String>;
     /// One call through the RPC pool; `Err` when no node answered (`bound`:
-    /// past it nobody did).
+    /// past it nobody did). `person`: asked on the person's own word (their
+    /// Try again, their press — `MultisigOperation::Rpc::person`), handed to
+    /// the pool as the person's ask, which is always sent (r17-1 / r17-10).
     fn rpc(
         &self,
         chain_id: u64,
         method: &str,
         params: &Value,
         bound: Option<Duration>,
+        person: bool,
     ) -> Result<RpcReply, String>;
     /// The store keys, as they are (`None`: absent). `Err`: no store.
     fn load(&self, keys: &[String]) -> Result<BTreeMap<String, Option<String>>, String>;
@@ -292,12 +295,18 @@ pub fn perform(op: &Op, deps: &Arc<dyn Deps>, rooms: &Arc<dyn Rooms>) -> Perform
             method,
             params,
             bound_ms,
+            person,
         } => {
-            let (deps, method, params, chain_id) =
-                (deps.clone(), method.clone(), params.clone(), *chain_id);
+            let (deps, method, params, chain_id, person) = (
+                deps.clone(),
+                method.clone(),
+                params.clone(),
+                *chain_id,
+                *person,
+            );
             let bound = bound_ms.map(|ms| Duration::from_millis(u64::from(ms)));
             Perform::Blocking(Box::new(move || {
-                match deps.rpc(chain_id, &method, &params, bound) {
+                match deps.rpc(chain_id, &method, &params, bound, person) {
                     Ok(RpcReply::Result(result)) => Res::RpcResult { result },
                     // r8-4: the node's data reaches the core (the state probe reads it there).
                     Ok(RpcReply::Error {
@@ -521,8 +530,12 @@ mod tests {
             method: &str,
             params: &Value,
             bound: Option<Duration>,
+            person: bool,
         ) -> Result<RpcReply, String> {
-            self.note(format!("rpc {chain_id} {method} {params} {bound:?}"));
+            self.note(format!(
+                "rpc {chain_id} {method} {params} {bound:?}{}",
+                if person { " person" } else { "" }
+            ));
             self.rpc.lock().unwrap().take().unwrap()
         }
         fn load(&self, keys: &[String]) -> Result<BTreeMap<String, Option<String>>, String> {
@@ -713,6 +726,7 @@ mod tests {
             method: "eth_getCode".to_owned(),
             params: json!(["0x01", "latest"]),
             bound_ms: Some(4000),
+            person: false,
         };
         let fake = Fake::default();
         *fake.rpc.lock().unwrap() = Some(Ok(RpcReply::Result(json!("0x6080"))));
@@ -751,6 +765,30 @@ mod tests {
                 detail: "no answer in 4000 ms".to_owned()
             }
         );
+    }
+
+    /// r17-1 / r17-10: a read the core asks on the person's own word (their
+    /// Try again, their press) reaches the pool as theirs; any other read
+    /// does not.
+    #[test]
+    fn rpc_hands_the_persons_word_to_the_pool() {
+        for person in [false, true] {
+            let op = Op::Rpc {
+                chain_id: 5_042_002,
+                method: "eth_call".to_owned(),
+                params: json!([]),
+                bound_ms: None,
+                person,
+            };
+            let fake = Fake::default();
+            *fake.rpc.lock().unwrap() = Some(Ok(RpcReply::Result(json!("0x"))));
+            let (_, fake) = run(fake, &op);
+            assert_eq!(
+                fake.log.lock().unwrap()[0].ends_with(" person"),
+                person,
+                "person = {person}"
+            );
+        }
     }
 
     #[test]
@@ -1212,6 +1250,7 @@ mod tests {
                     method: "m".into(),
                     params: json!([]),
                     bound_ms: None,
+                    person: false,
                 },
                 "rpc_unanswered",
             ),

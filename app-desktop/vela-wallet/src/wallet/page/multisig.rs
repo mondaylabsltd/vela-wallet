@@ -1295,7 +1295,9 @@ impl WalletPage {
         Some(crate::wallet::live::MultisigHistory {
             stand,
             unread_text: unread_text.into(),
-            retry_text: self.loc.t("common.tryAgain"),
+            // r17-21: re-asking a read that failed — the web's
+            // `service.retry` beside the same line.
+            retry_text: words::t(&loc, "service.retry").into(),
         })
     }
 
@@ -2243,35 +2245,48 @@ impl WalletPage {
             .gap(px(4.))
             .child(ms_note(theme, &text, tone));
         if retry {
-            let executors = item.can_execute.clone();
-            let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
-            line = line.child(
-                text_action(
-                    "ms-look-again",
-                    theme,
-                    &mut self.icons,
-                    None,
-                    words::t(&loc, "proposal.feeRetry").into(),
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    let host = this.ms_host(cx);
-                    let (hash, executors) = (hash.clone(), executors.clone());
-                    host.update(cx, |host, cx| {
-                        for executor in executors {
-                            host.proposals(
-                                ms_proposals::Event::Preview {
-                                    chain_id,
-                                    safe_tx_hash: hash.clone(),
-                                    executor,
-                                },
-                                cx,
-                            );
-                        }
-                    });
-                })),
-            );
+            line = line.child(self.ms_check_again(theme, item, "ms-look-again", cx));
         }
         line
+    }
+
+    /// "Check again" (`proposal.feeRetry`): a new look of the execution by
+    /// each executor — beside a fee line that could not be worked out or
+    /// checked, or beside an Execute that stopped for it (r17-21: re-asking
+    /// a failed read is "Try again"; a new look of an execution is this).
+    fn ms_check_again(
+        &mut self,
+        theme: &Theme,
+        item: &ProposalItem,
+        id: &'static str,
+        cx: &mut Context<Self>,
+    ) -> gpui::Stateful<Div> {
+        let loc = self.ms_loc();
+        let executors = item.can_execute.clone();
+        let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
+        text_action(
+            id,
+            theme,
+            &mut self.icons,
+            None,
+            words::t(&loc, "proposal.feeRetry").into(),
+        )
+        .on_click(cx.listener(move |this, _, _, cx| {
+            let host = this.ms_host(cx);
+            let (hash, executors) = (hash.clone(), executors.clone());
+            host.update(cx, |host, cx| {
+                for executor in executors {
+                    host.proposals(
+                        ms_proposals::Event::Preview {
+                            chain_id,
+                            safe_tx_hash: hash.clone(),
+                            executor,
+                        },
+                        cx,
+                    );
+                }
+            });
+        }))
     }
 
     /// A row of members to pick from: who acts (`As`).
@@ -2552,6 +2567,14 @@ impl WalletPage {
                     )),
                     Some(ActionState::Stopped { .. })
                 );
+                // r17-21: a fee stop's way on is Check again (a new look),
+                // once — beside the stop, where the fee line's would be.
+                // Not while the review's door is shut: its own Try again is
+                // the one control then (one control per failure).
+                if door.enabled && rule::stop_offers_check_again(&view.actions, &item.safe_tx_hash)
+                {
+                    foot = foot.child(self.ms_check_again(theme, item, "ms-stop-look-again", cx));
+                }
                 if !stopped {
                     foot = foot.child(self.ms_look_line(
                         theme,

@@ -1554,8 +1554,10 @@ fn fiat_line(
     currency: &crate::wallet::live::Money,
 ) -> Option<SharedString> {
     // `Some("")` while the figure is withheld: the line is this amount's,
-    // and it stays — `None` is a token nobody prices, which has no line.
-    usd.map(|usd| SharedString::from(currency.approx(usd, locale)))
+    // and it stays — `None` is a token nobody prices, which has no line,
+    // and every amount in the testnet space (r17-14: no fiat there at all).
+    usd.filter(|_| currency.shows_fiat())
+        .map(|usd| SharedString::from(currency.approx(usd, locale)))
 }
 
 /// A settled estimate as one line: the fee coin's amount. `—` while there is
@@ -8968,7 +8970,6 @@ mod tests {
     /// rows when there are rows — once, never both.
     #[test]
     fn a_history_says_the_networks_its_scan_could_not_read() {
-        use crate::wallet::fixtures::{FirstRead, first_read_view};
         use crate::wallet::live::{activity_unread_line, home_activity};
         use vela_core::app::activity_feed::{
             ACTIVITY_UNREAD_ONE, ActivityFeed, Event as FeedEvent, FeedDirection, FeedItem,
@@ -8985,8 +8986,7 @@ mod tests {
         };
         let (s, w) = (strings(), wallet_strings());
         let line = activity_unread_line(&feed, &w).expect("said");
-        let read = first_read_view(FirstRead::Live);
-        let mode = home_activity(&feed, "0xme", false, &read, &w);
+        let mode = home_activity(&feed, "0xme", false, &w);
         let empty = history_panel(&feed, true, &mode, &s, &w, false);
         assert!(!empty.loading);
         assert_eq!(empty.empty, Some(line.clone()));
@@ -9030,7 +9030,7 @@ mod tests {
             ],
             ..feed.clone()
         };
-        let mode = home_activity(&rows, "0xme", true, &read, &w);
+        let mode = home_activity(&rows, "0xme", true, &w);
         let listed = history_panel(&rows, true, &mode, &s, &w, false);
         assert_eq!(listed.groups.len(), 1);
         assert_eq!(listed.unread, Some(line), "above the rows");
