@@ -535,11 +535,12 @@ struct MsWords {
     /// before it left, and its sentence ("This test build won't write to the
     /// live service; point it at a local one.").
     static let productionWriteRefusedKind = "production_write_refused"
-    static let productionWriteRefusedKey = "common.testBuild.productionWriteRefused"
+    /// The core's key (uniffi `production_write_refused_key`) — no copy here.
+    static let productionWriteRefusedKey = VelaCore.productionWriteRefusedKey()
     /// r18-8 (§28, §32): this test build refused to write to the live
     /// service — the catalog's sentence (`common.testBuild.productionWriteRefused`),
     /// never "can't be reached", "didn't answer" or "offline".
-    var productionWriteRefused: String { loc.t(productionWriteRefusedKey()) }
+    var productionWriteRefused: String { loc.t(Self.productionWriteRefusedKey) }
 
     /// The created multisig's `create.refused`, in words: the test build's
     /// refusal (`production_write_refused`) its own sentence; any other —
