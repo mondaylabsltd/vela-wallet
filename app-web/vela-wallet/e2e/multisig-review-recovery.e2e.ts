@@ -171,10 +171,20 @@ async function backFrom(
 		const sheet = page.getByRole('dialog').filter({ hasText: 'Multisig transaction' }).last();
 		const tryAgain = sheet.getByRole('button', { name: 'Try again', exact: true }).first();
 		if (how.immediately) {
-			// r17-1 / r17-10: the outage lifts and the person presses at once —
-			// before any read of the app's own has found the node again, while
-			// its pool would still skip it. One press, and no other.
+			// r17-1 / r17-10: the outage lasts — the app's own reads keep
+			// meeting the refused node, so its pool skips it ever longer (the
+			// window doubles with each failure: 4 s after the fifth) — then
+			// lifts just after a refusal, and the person presses at once:
+			// before any read of the app's own has found the node again,
+			// while its pool would still skip it. One press, and no other.
 			await expect(tryAgain).toBeVisible();
+			await expect
+				.poll(() => world.refused, { timeout: 180_000, intervals: [500] })
+				.toBeGreaterThanOrEqual(5);
+			const last = world.refused;
+			await expect
+				.poll(() => world.refused > last, { timeout: 180_000, intervals: [50] })
+				.toBe(true);
 			const before = world.rpcAsked.length;
 			world.outage = null;
 			await tryAgain.click();
