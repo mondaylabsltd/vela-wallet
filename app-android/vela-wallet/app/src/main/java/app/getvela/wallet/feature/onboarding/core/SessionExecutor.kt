@@ -136,7 +136,7 @@ class SessionExecutor(
                 "waitedMs" to System.currentTimeMillis() - started,
                 "reason" to error.message,
             )
-            SessionShellResult.RegistryLandingUnconfirmed(error.message ?: error.javaClass.simpleName)
+            SessionShellResult.RegistryLandingUnconfirmed(error.message ?: error.javaClass.simpleName, refused = true.takeIf { app.getvela.wallet.core.net.Refusals.of(error) })
         }
     }
 
@@ -192,9 +192,9 @@ class SessionExecutor(
             // stops, the warning stays, the next launch asks again.
             SessionOperation.LoadPendingUploads -> SessionShellResult.PendingUploadsUnavailable
             is SessionOperation.AwaitRegistryLanding ->
-                SessionShellResult.RegistryLandingUnconfirmed(error.message ?: error.javaClass.simpleName)
+                SessionShellResult.RegistryLandingUnconfirmed(error.message ?: error.javaClass.simpleName, refused = true.takeIf { app.getvela.wallet.core.net.Refusals.of(error) })
             is SessionOperation.PublishPendingUpload ->
-                SessionShellResult.RegistryLandingUnconfirmed(error.message ?: "the publish did not answer")
+                SessionShellResult.RegistryLandingUnconfirmed(error.message ?: "the publish did not answer", refused = true.takeIf { app.getvela.wallet.core.net.Refusals.of(error) })
             is SessionOperation.RemovePendingUpload -> SessionShellResult.PendingUploadRemoved
         }
 

@@ -166,7 +166,14 @@ sealed class MultisigShellResult {
 
     @Serializable
     @SerialName("http_unreachable")
-    data class HttpUnreachable(val detail: String) : MultisigShellResult()
+    data class HttpUnreachable(
+        val detail: String,
+        /**
+         * r18-8 (§28, §32): this test build's guard refused the write before
+         * it left — never sent, never the network's answer. `null`: not.
+         */
+        val refused: Boolean? = null,
+    ) : MultisigShellResult()
 
     @Serializable
     @SerialName("rpc_result")

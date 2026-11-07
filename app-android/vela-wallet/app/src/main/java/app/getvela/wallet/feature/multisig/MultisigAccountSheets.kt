@@ -93,6 +93,8 @@ fun createNetworksOffered(spaceNetworks: List<Int>, contracts: (Int) -> String?,
 fun createdSharedLine(words: MultisigWords, shared: Boolean, refused: String?, working: Boolean, solo: Boolean): Pair<String, MsTone> = when {
     shared -> words.t(if (solo) "create.sharedSolo" else "create.shared") to MsTone.Positive
     // Round 16 leftover 4: the service's refusal text is never drawn; Settings offers "Share it again".
+    // r18-8 (core §32): this test build refused to write it to the live service.
+    refused == "production_write_refused" -> words.raw("common.testBuild.productionWriteRefused") to MsTone.Warning
     refused != null -> words.createRefused to MsTone.Warning
     working -> words.t("create.savedSharing") to MsTone.Neutral
     else -> words.t("create.savedLater") to MsTone.Neutral

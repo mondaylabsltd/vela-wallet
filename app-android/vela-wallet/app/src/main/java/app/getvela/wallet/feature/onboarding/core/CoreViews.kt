@@ -142,6 +142,12 @@ data class CreateView(
     val canGoBack: Boolean,
     val address: String?,
     val syncErrorDetail: String?,
+    /**
+     * r18-8 (core §32): the sync-failed screen's sentence when the failure has
+     * its own words — this test build refused to write to the live index
+     * (`common.testBuild.productionWriteRefused`). `null`: the screen's own.
+     */
+    val syncErrorKey: String? = null,
     /** The places a key may be minted in — always the three (spec 102). */
     val addMethods: List<KeyMethod> = KeyMethod.entries,
     /**
@@ -205,6 +211,7 @@ data class CreateView(
             canGoBack = json.optBoolean("can_go_back"),
             address = json.nullableString("address"),
             syncErrorDetail = json.nullableString("sync_error_detail"),
+            syncErrorKey = json.nullableString("sync_error_key"),
             addMethods = json.optJSONArray("add_methods")
                 ?.let { arr -> (0 until arr.length()).map { KeyMethod.of(arr.getString(it)) } }
                 ?: KeyMethod.entries,
@@ -353,6 +360,8 @@ data class PromptKind(
      * place of [detail], which stays the bug report's.
      */
     val wordsKey: String? = null,
+    /** r17-20 (d) / r18-18: `create_failed` only — the minted key was kept; its row's Confirm is the way on. */
+    val keyKept: Boolean = false,
 ) {
     companion object {
         fun from(json: JSONObject): PromptKind =
@@ -363,6 +372,7 @@ data class PromptKind(
                 json.optBoolean("security_key", false),
                 json.optBoolean("local", false),
                 json.nullableString("words_key"),
+                json.optBoolean("key_kept", false),
             )
     }
 }

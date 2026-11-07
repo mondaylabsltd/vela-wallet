@@ -140,7 +140,11 @@ sealed class SessionShellResult {
 
     @Serializable
     @SerialName("registry_landing_unconfirmed")
-    data class RegistryLandingUnconfirmed(val message: String) : SessionShellResult()
+    data class RegistryLandingUnconfirmed(
+        val message: String,
+        /** r18-8 (§28, §32): this test build refused the publish to the live index — the session asks no more by itself. */
+        val refused: Boolean? = null,
+    ) : SessionShellResult()
 
     @Serializable
     @SerialName("pending_upload_removed")

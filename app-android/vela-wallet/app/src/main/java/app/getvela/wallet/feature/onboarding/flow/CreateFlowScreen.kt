@@ -168,6 +168,7 @@ fun CreateFlowScreen(
 
             Screen.Retry -> RetryScreen(
                 detail = view!!.syncErrorDetail,
+                sentenceKey = view.syncErrorKey,
                 busy = view.busy,
                 onRetry = model::retryUpload,
                 onStartOver = model::startOver,

@@ -766,7 +766,15 @@ class OnboardingExecutor(
             put("message", describe(error))
             // The one bit of classification only a shell can supply: a request
             // that never arrived is not the same as one the server refused.
-            put("network", (error as? RegistryFailure)?.network ?: true)
+            // r18-18 (§33, iOS's finding; Android parity): and "this device is
+            // offline" (`network`) only when the device has no network — a
+            // hung or unreachable index on a device that is online is the
+            // index's silence ("Vela's passkey index didn't answer"), the
+            // r14-3 rule (`NetHealth`): a timeout says nothing of the device.
+            val reached = (error as? RegistryFailure)?.network ?: true
+            put("network", reached && !app.getvela.wallet.core.net.NetHealth.online.value)
+            // r18-8 (§32): this test build's guard refused the write — its own words.
+            if (app.getvela.wallet.core.net.Refusals.of(error)) put("refused", true)
         }
 
         private fun describe(error: Throwable): String =

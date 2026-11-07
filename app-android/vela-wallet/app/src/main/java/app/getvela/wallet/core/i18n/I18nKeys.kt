@@ -166,6 +166,16 @@ object I18nKeys {
 
         // Prompts (data-model 5).
         const val ALERT_ERROR_TITLE = "onboarding.create.alertErrorTitle"
+
+        /**
+         * r17-20 (d) / r18-18 (§30, §33): the key was minted and kept, its
+         * confirmation to the index did not land — said by WHY: the device is
+         * offline, or the index did not answer (a third, the test build's
+         * refusal, is the core's `words_key`).
+         */
+        const val KEY_KEPT_TITLE = "onboarding.create.keyKeptTitle"
+        const val KEY_KEPT_BODY_NETWORK = "onboarding.create.keyKeptBodyNetwork"
+        const val KEY_KEPT_BODY_INDEX = "onboarding.create.keyKeptBodyIndex"
         const val ALERT_NOT_SUPPORTED_TITLE = "onboarding.create.alertNotSupportedTitle"
         const val ALERT_NOT_SUPPORTED_BODY = "onboarding.create.alertNotSupportedBody"
 

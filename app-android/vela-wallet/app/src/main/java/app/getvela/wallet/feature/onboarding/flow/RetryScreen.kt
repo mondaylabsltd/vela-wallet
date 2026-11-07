@@ -44,6 +44,8 @@ fun ColumnScope.RetryScreen(
      */
     detail: String?,
     busy: Boolean,
+    /** r18-8 (core §32): the core's own sentence for this failure (`sync_error_key`), in the message's place. */
+    sentenceKey: String? = null,
     onRetry: () -> Unit,
     onStartOver: () -> Unit,
     onEditEndpoint: () -> Unit,
@@ -64,7 +66,7 @@ fun ColumnScope.RetryScreen(
         )
         Spacer(modifier = Modifier.height(VelaSpacing.md))
         Text(
-            text = strings.t(I18nKeys.Create.SYNC_FAILED_MESSAGE),
+            text = strings.t(sentenceKey ?: I18nKeys.Create.SYNC_FAILED_MESSAGE),
             color = colors.fgMuted,
             fontFamily = VelaFontFamily,
             fontSize = VelaTextSize.lg,

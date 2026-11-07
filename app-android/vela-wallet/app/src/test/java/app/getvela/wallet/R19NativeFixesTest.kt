@@ -330,7 +330,7 @@ class R19NativeFixesTest {
     )
 
     /** One transaction's sheet model, the proposals view at one moment of an execution from here. */
-    private fun sheet(status: String, approvers: List<String>, extra: String): app.getvela.wallet.feature.multisig.MsProposalModel {
+    private fun sheet(status: String, approvers: List<String>, extra: String, unsent: Boolean = false): app.getvela.wallet.feature.multisig.MsProposalModel {
         val approvals = approvers.joinToString(",") { """{"owner":"$it"}""" }
         val view = app.getvela.wallet.feature.multisig.core.MsProposalsView.of(
             app.getvela.wallet.core.crux.Wire.json.parseToJsonElement(
@@ -338,7 +338,7 @@ class R19NativeFixesTest {
                 {"followed":"$safe","standings":{},$extra
                  "items":[{"chainId":5042002,"safeTxHash":"$hash","nonce":"5","proposer":"$bob","approvals":[$approvals],"approved":${approvers.size},"threshold":2,
                   "status":"$status","canApprove":[],"canExecute":${if (status == "done") "[]" else "[\"$alice\"]"},"cancelledBy":null,"sameNonce":[],"executing":false,"createdMs":1,
-                  "unsent":false,"renameUndeployed":false,"review":{"action":{"kind":"call","to":"$bob","value":"0","data":"0x"},"sign":{"allowed":true,"anyway":false}}}],
+                  "unsent":$unsent,"renameUndeployed":false,"review":{"action":{"kind":"call","to":"$bob","value":"0","data":"0x"},"sign":{"allowed":true,"anyway":false}}}],
                  "chains":[{"chainId":5042002,"members":{"deployed":true,"owners":["$alice","$bob"],"threshold":2,"nonce":"5"},"items":[],"mailbox":true}]}
                 """.trimIndent(),
             ),
@@ -474,6 +474,77 @@ class R19NativeFixesTest {
         }
         // The mainnet space still prices what it can.
         assertEquals("CN¥7.10", WalletLive.Money.of(cny, "en").fiat(1.0))
+    }
+
+    // -- §32 adoption: the fee being signed (r18-5), the test build's refusal (r18-8, r18-18) --
+
+    private val refusedWords get() = strings.t("common.testBuild.productionWriteRefused")
+
+    @Test
+    fun `r18-5 the pressed look the core serves signing is marked as the figure being signed`() {
+        val look = """{"kind":"priced","fee":{"amount":"248201775000000000"},"canPay":true}"""
+        val key = "5042002:$hash:${alice.lowercase()}"
+        val signing = sheet("ready", listOf(bob), """"previews":{"$key":${look.dropLast(1)},"signing":true}},"actions":{"execute:$hash":{"kind":"working"}},""")
+        val lines = signing.executionLines(alice, null)
+        assertEquals(listOf("fee", "feeSigning"), lines.map { it.id })
+        assertTrue(lines.first().text, lines.first().text.contains("0.248201"))
+        assertEquals(msWords.t("proposal.feeSigning"), lines[1].text)
+        assertEquals("Signing at this fee — it stays fixed until you confirm or cancel.", lines[1].text)
+        // Not pressed: the fee line alone.
+        val idle = sheet("ready", listOf(bob), """"previews":{"$key":$look},""")
+        assertEquals(listOf("fee"), idle.executionLines(alice, null).map { it.id })
+    }
+
+    @Test
+    fun `r18-8 a write this test build refused is said as that - the multisig service, the outbox, the record`() = runBlocking {
+        // The shell tells the core: a refused write is `refused`, never the network.
+        val ports = object : app.getvela.wallet.feature.multisig.core.MultisigPorts by MultisigShellTest.FakePorts() {
+            override suspend fun http(method: String, url: String, body: String?, timeoutMs: Long): app.getvela.wallet.feature.multisig.core.HttpAnswer =
+                throw app.getvela.wallet.core.net.ProductionWriteRefused("safe-genesis.getvela.app")
+        }
+        val executor = app.getvela.wallet.feature.multisig.core.MultisigExecutor(ports)
+        val refused = executor.answer(app.getvela.wallet.feature.multisig.core.MultisigOperation.Http("POST", "https://safe-genesis.getvela.app/api/import", "{}", 10_000))
+        val wire = app.getvela.wallet.core.crux.Wire.json.encodeToString(app.getvela.wallet.feature.multisig.core.MultisigShellResult.serializer(), refused)
+        assertTrue(wire, wire.contains("\"type\":\"http_unreachable\"") && wire.contains("\"refused\":true"))
+        val away = object : app.getvela.wallet.feature.multisig.core.MultisigPorts by MultisigShellTest.FakePorts() {
+            override suspend fun http(method: String, url: String, body: String?, timeoutMs: Long): app.getvela.wallet.feature.multisig.core.HttpAnswer =
+                throw java.io.IOException("connection reset")
+        }
+        val down = app.getvela.wallet.feature.multisig.core.MultisigExecutor(away).answer(app.getvela.wallet.feature.multisig.core.MultisigOperation.Http("GET", "http://127.0.0.1:1/x", null, 10_000))
+        val downWire = app.getvela.wallet.core.crux.Wire.json.encodeToString(app.getvela.wallet.feature.multisig.core.MultisigShellResult.serializer(), down)
+        assertTrue(downWire, !downWire.contains("refused"))
+        // The outbox entry the core kept as refused, and the record the service never got.
+        val outbox = sheet(
+            "pending", listOf(bob),
+            """"outbox":{"5042002:$safe:$hash:${alice.lowercase()}":{"why":"production_write_refused"}},""",
+            unsent = true,
+        )
+        assertEquals(refusedWords, outbox.notes.single { it.id == "outbox" }.text)
+        assertEquals(refusedWords, app.getvela.wallet.feature.multisig.createdSharedLine(msWords, shared = false, refused = "production_write_refused", working = false, solo = false).first)
+        assertNotEquals(refusedWords, app.getvela.wallet.feature.multisig.createdSharedLine(msWords, shared = false, refused = "refused", working = false, solo = false).first)
+        // A failed action of that kind, in the catalog's words.
+        assertEquals(refusedWords, msWords.failureText("""{"kind":"production_write_refused"}"""))
+    }
+
+    @Test
+    fun `r18-18 a kept key is said by its one cause - offline, the index's silence, the test build's refusal`() {
+        fun copy(json: String) = app.getvela.wallet.feature.onboarding.flow.promptCopy(
+            app.getvela.wallet.feature.onboarding.core.PromptKind.from(org.json.JSONObject(json)), strings,
+        )
+        val offline = copy("""{"type":"create_failed","detail":"x","key_kept":true,"local":true}""")
+        val index = copy("""{"type":"create_failed","detail":"x","key_kept":true,"local":false}""")
+        val refused = copy("""{"type":"create_failed","detail":"x","key_kept":true,"local":false,"words_key":"common.testBuild.productionWriteRefused"}""")
+        assertEquals(strings.t("onboarding.create.keyKeptBodyNetwork"), offline.message)
+        assertEquals(strings.t("onboarding.create.keyKeptBodyIndex"), index.message)
+        assertEquals(refusedWords, refused.message)
+        assertEquals("three causes, three sentences", 3, setOf(offline.message, index.message, refused.message).size)
+        assertEquals(strings.t("onboarding.create.keyKeptTitle"), index.title)
+        // The executor: a hung index on a device that is online is the index's silence, and a refusal is said.
+        app.getvela.wallet.core.net.NetHealth.reset()
+        assertTrue(app.getvela.wallet.core.net.NetHealth.online.value)
+        assertTrue(app.getvela.wallet.core.net.Refusals.of(app.getvela.wallet.feature.onboarding.core.RegistryFailure("challenge: refused", network = false, refused = true)))
+        assertTrue(app.getvela.wallet.core.net.Refusals.of(RuntimeException("wrapped", app.getvela.wallet.core.net.ProductionWriteRefused("p256-index-v2.getvela.app"))))
+        assertTrue(!app.getvela.wallet.core.net.Refusals.of(app.getvela.wallet.feature.onboarding.core.RegistryFailure("challenge failed: timeout", network = true)))
     }
 
     companion object {

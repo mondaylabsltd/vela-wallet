@@ -120,3 +120,18 @@ object ProductionWriteGuard : Interceptor {
  * "may have been sent".
  */
 class ProductionWriteRefused(val host: String) : IOException("${productionWriteRefusedEnglish()} ($host)")
+
+/**
+ * r18-8 (§32): whether an error — or anything that caused it — is this test
+ * build's guard refusing a write before it left. The shells say it to the
+ * core as `refused: true`: never sent, never the network's answer.
+ */
+object Refusals {
+    fun Throwable.refusal(): Boolean =
+        generateSequence(this) { it.cause }.take(8).any {
+            it is ProductionWriteRefused || (it as? app.getvela.wallet.feature.onboarding.core.RegistryFailure)?.refused == true
+        }
+
+    /** [refusal] of [error], for a caller with no receiver in hand. */
+    fun of(error: Throwable): Boolean = error.refusal()
+}

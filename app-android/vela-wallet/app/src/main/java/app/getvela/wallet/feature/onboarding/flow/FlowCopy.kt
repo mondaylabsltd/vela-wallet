@@ -155,11 +155,19 @@ fun promptCopy(kind: PromptKind, strings: VelaStrings): PromptCopy = keyUnavaila
     // report, and inventing friendlier text here would lose the detail that
     // makes the report worth filing.
     "create_failed" -> PromptCopy(
-        title = strings.t(I18nKeys.Create.ALERT_ERROR_TITLE),
+        title = strings.t(if (kind.keyKept) I18nKeys.Create.KEY_KEPT_TITLE else I18nKeys.Create.ALERT_ERROR_TITLE),
         // Issue #446: the link to the other device failed — the core says which.
         // Real device S3: the core's sentence for the platform error (`words_key`),
         // never the system's English; the raw detail is the bug report's.
-        message = if (kind.phoneLink) strings.t(I18nKeys.Flow.PHONE_LINK_FAILED) else kind.wordsKey?.let { strings.t(it) } ?: kind.detail.orEmpty(),
+        // r18-18 (§33): a kept key is said by its one cause — this test build's
+        // refusal (the core's `words_key`), the device offline (`local`), or
+        // the index that did not answer — three words, never swapped.
+        message = when {
+            kind.phoneLink -> strings.t(I18nKeys.Flow.PHONE_LINK_FAILED)
+            kind.wordsKey != null -> strings.t(kind.wordsKey)
+            kind.keyKept -> strings.t(if (kind.local) I18nKeys.Create.KEY_KEPT_BODY_NETWORK else I18nKeys.Create.KEY_KEPT_BODY_INDEX)
+            else -> kind.detail.orEmpty()
+        },
     )
     "recover_offer" -> PromptCopy(
         title = strings.t(I18nKeys.Login.RECOVER_OFFER_TITLE),

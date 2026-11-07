@@ -449,7 +449,7 @@ class RegistryClient(
             val url = baseUrl + path
             ProductionWriteGuard.refusal("POST", url) { body.toString() }?.let { host ->
                 val refused = ProductionWriteGuard.refused("POST", url, host)
-                throw RegistryFailure("$label: ${refused.message}", network = false)
+                throw RegistryFailure("$label: ${refused.message}", network = false, refused = true)
             }
         }
         val connection = try {
@@ -550,7 +550,12 @@ class RegistryClient(
  * which is why this single bit of classification is delegated to it; everything
  * else about an index failure is the core's to interpret.
  */
-class RegistryFailure(message: String, val network: Boolean) : Exception(message)
+class RegistryFailure(
+    message: String,
+    val network: Boolean,
+    /** r18-8 (§28, §32): this test build refused to write to the live index — never sent. */
+    val refused: Boolean = false,
+) : Exception(message)
 
 data class GroupChallenge(
     val groupChallenge: String,

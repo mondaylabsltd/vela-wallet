@@ -322,6 +322,9 @@ class MsProposalModel(
         // r8-16: on its way to the service right now — said so, and no Send again.
         if (entry["sending"].bool == true || entry["why"].str == "sending") return words.t("proposal.outboxSending")
         // Sent again only on the person's word: "Not sent yet" (with Send again).
+        // r18-8 (core §32): this test build refused to write it to the live
+        // service — said as that, kept; Send again is the person's.
+        if (entry["why"].str == "production_write_refused") return words.raw("common.testBuild.productionWriteRefused")
         val retryAt = entry["retryAt"].long ?: return words.t("proposal.outboxNotSent")
         val seconds = ((retryAt - nowMs() + 999) / 1000).coerceAtLeast(1)
         return when (entry["why"].str) {
@@ -388,6 +391,9 @@ class MsProposalModel(
             else -> null
         }
     }
+
+    /** r18-5 (core §32): the core serves the pressed look `signing` — its fee is the one being signed. */
+    fun feeSigning(executor: String): Boolean = preview(executor)?.let { it.kind == "priced" && it["signing"].bool == true } == true
 
     /** The setup an execution carries (deploying the multisig, activating accounts). */
     fun setupLines(executor: String): List<String> {
@@ -469,7 +475,13 @@ class MsProposalModel(
      * Execute draw the same lines.
      */
     fun executionLines(executor: String, failure: MsLine?): List<MsLine> = buildList {
-        feeLineBeside(executor, failure)?.let { (text, tone) -> add(MsLine(text, tone, "fee")) }
+        feeLineBeside(executor, failure)?.let { (text, tone) ->
+            add(MsLine(text, tone, "fee"))
+            // r18-5 (core §32): a press is out on this look — its figure is the
+            // one being signed, held still until the signature, the cancel or
+            // the stop (`signing`, never re-quoted under the passkey).
+            if (feeSigning(executor)) add(MsLine(words.t("proposal.feeSigning"), MsTone.Neutral, "feeSigning"))
+        }
         setupLines(executor).forEachIndexed { i, line -> add(MsLine(line, MsTone.Neutral, "setup$i")) }
     }
 
