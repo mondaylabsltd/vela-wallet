@@ -375,6 +375,7 @@
 		<RetryScreen
 			round={retryRound}
 			detail={view.sync_error_detail}
+			wordsKey={view.sync_error_key ?? null}
 			busy={view.busy}
 			{strings}
 			onRetry={() => send({ type: 'retry_upload' })}

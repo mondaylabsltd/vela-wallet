@@ -44,7 +44,10 @@ const seams = vi.hoisted(() => ({
 	otherSpace: [] as number[],
 	/** r7-9: what the sheet asked the machine to keep (`keep_draft`), and discards. */
 	keptDrafts: [] as { owners: string[]; name: string; chainId: number | null }[],
-	discarded: 0
+	discarded: 0,
+	/** r18-8: whether the service holds the created one, and why its record was not asked. */
+	shared: true,
+	refused: null as string | null
 }));
 vi.mock('$lib/services/networks', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/services/networks')>()),
@@ -113,7 +116,7 @@ vi.mock('../core/store.svelte', async () => {
 				facade.accounts = rows;
 			},
 			find,
-			row: (a: string) => (find(a) ? { shared: true } : null),
+			row: (a: string) => (find(a) ? { shared: seams.shared } : null),
 			get view() {
 				return {
 					create: {
@@ -176,7 +179,7 @@ vi.mock('../core/store.svelte', async () => {
 				seams.created.push({ ...event.choice, chainId: event.choice.chain_id });
 				return { phase: 'done', address: SAFE, refused: null, error: null };
 			},
-			until: async () => ({ phase: 'done', address: SAFE, refused: null, error: null })
+			until: async () => ({ phase: 'done', address: SAFE, refused: seams.refused, error: null })
 		}
 	};
 });
@@ -282,6 +285,8 @@ afterEach(() => {
 	seams.evidence = {};
 	seams.evidenceOn = [];
 	seams.picked = [];
+	seams.shared = true;
+	seams.refused = null;
 });
 
 describe('creating a multisig', () => {
@@ -785,6 +790,54 @@ describe('round 6: the create sheet at a phone’s width, and a multisig of one'
 		expect(document.body.querySelector('[data-testid="created-body"]')?.textContent?.trim()).toBe(
 			'create.createdBodySolo'
 		);
+		await screen.unmount();
+	});
+
+	/**
+	 * r18-8 (§28, §32): the record was not written because this test build
+	 * refused to write to the live service (`create.refused =
+	 * production_write_refused`) — said in the test build's words, never
+	 * "can't be reached right now" or the service's refusal.
+	 */
+	it('r18-8: a record the test build refused is said as that, never the network', async () => {
+		seams.shared = false;
+		seams.refused = 'production_write_refused';
+		const m = words();
+		m.testBuild = { productionWriteRefused: 'This test build won’t write to the live service.' };
+		const screen = render(CreateMultisigSheet, {
+			props: {
+				m,
+				locale: 'en',
+				current: ME,
+				wide: true,
+				closeLabel: 'Close',
+				onclose: () => {},
+				oncreated: () => {}
+			}
+		});
+		await settle();
+		type('.name-field', 'Solo');
+		press('create.next');
+		await settle();
+		press('create.next');
+		await settle();
+		document.body.querySelector<HTMLButtonElement>('[role="radio"]')?.click();
+		await settle();
+		facade.accounts = [
+			{
+				address: SAFE,
+				owners: [ME],
+				threshold: 1,
+				chainIds: [100],
+				addedMs: 1
+			} as unknown as MultisigAccount
+		];
+		press('create.create');
+		await settle();
+		const state = document.body.querySelector('[data-testid="created-state"]');
+		expect(state?.textContent?.trim()).toBe('This test build won’t write to the live service.');
+		expect(state?.textContent).not.toContain('create.savedLater');
+		expect(state?.textContent).not.toContain('settings.shareAgainNote');
 		await screen.unmount();
 	});
 });

@@ -1110,6 +1110,15 @@ pub fn network_space_read(stored: Option<String>) -> String {
         .to_owned()
 }
 
+/// r18-9 (spec 105, r17-13): whether `space` ("mainnet" / "testnet", as
+/// stored; anything else is the mainnet space) shows any fiat value
+/// (`network_space::shows_fiat`) — the testnet space shows none anywhere.
+#[wasm_bindgen(js_name = networkSpaceShowsFiat)]
+#[must_use]
+pub fn network_space_shows_fiat(space: &str) -> bool {
+    vela_core::app::network_space::shows_fiat_str(space)
+}
+
 /// The chain ids of `space`'s networks (spec 105), from `NetView.networks`
 /// as JSON. A JSON array.
 #[wasm_bindgen(js_name = networkSpaceChainIds)]

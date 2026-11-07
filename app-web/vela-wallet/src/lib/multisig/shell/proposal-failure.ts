@@ -125,6 +125,7 @@ export function previewOf(value: unknown, chainId: number): ExecutionPreview | n
 				canPay: v.canPay !== false,
 				carries: (v.carries ?? []) as string[],
 				executorApproves: v.executorApproves === true,
+				signing: v.signing === true,
 				setup: {
 					multisig: setup.multisig === true,
 					members: (setup.members ?? []) as string[],

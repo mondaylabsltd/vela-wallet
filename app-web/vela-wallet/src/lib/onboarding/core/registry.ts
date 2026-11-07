@@ -14,6 +14,7 @@
 import { loadCore, registryResolveKeyStep, registryResolveUnitStep } from '$lib/core/client';
 import { SERVICE_DEFAULTS } from '$lib/core/generated/serviceDefaults';
 import { getPasskeyIndexURL } from '$lib/services/endpoints';
+import { isProductionWriteRefused } from '$lib/services/production-guard';
 import { publicRpcs } from '$lib/services/rpc-pool-endpoints';
 import type { RegistryProof } from '../generated/RegistryProof';
 import type { RegistryUnitMember } from '../generated/RegistryUnitMember';
@@ -42,11 +43,25 @@ const POLL_INTERVAL_MS = 2_000;
  */
 export class RegistryError extends Error {
 	readonly network: boolean;
-	constructor(message: string, network: boolean) {
+	/**
+	 * r18-8 (§28, §32): this test build's guard refused the write to the
+	 * live index before it left — never sent, never the network (`network`
+	 * is `false`); said with `common.testBuild.productionWriteRefused`.
+	 */
+	readonly refused: boolean;
+	constructor(message: string, network: boolean, refused = false) {
 		super(message);
 		this.name = 'RegistryError';
 		this.network = network;
+		this.refused = refused;
 	}
+}
+
+/** A request that threw before any answer: refused by this test build, or the network. */
+function unsent(label: string, error: unknown): RegistryError {
+	return isProductionWriteRefused(error)
+		? new RegistryError(`${label} failed: ${describe(error)}`, false, true)
+		: new RegistryError(`${label} failed: ${describe(error)}`, true);
 }
 
 export type ChallengeValue = { challenge: string; challengeBase64url: string };
@@ -102,8 +117,9 @@ async function request<T>(
 	try {
 		response = await fetch(`${registryUrl()}${path}`, { ...init, signal: controller.signal });
 	} catch (error) {
-		// Transport failure or abort: the request never arrived.
-		throw new RegistryError(`${label} failed: ${describe(error)}`, true);
+		// Transport failure or abort: the request never arrived — or this test
+		// build refused to send it (r18-8), its own kind.
+		throw unsent(label, error);
 	} finally {
 		clearTimeout(timer);
 	}
@@ -319,7 +335,7 @@ async function resolve<T>(
 			}
 			return { id: request.id, outcome: 'ok', body: await response.text() };
 		} catch (error) {
-			indexFailure = new RegistryError(`${label} failed: ${describe(error)}`, true);
+			indexFailure = unsent(label, error);
 			return failed;
 		} finally {
 			clearTimeout(timer);

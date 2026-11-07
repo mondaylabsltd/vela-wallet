@@ -27,6 +27,7 @@
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { FeeQuote } from '$lib/flows/core/fee-quote.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
+	import { networkSpace } from '$lib/network-space/network-space.svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import { feeCallsOf } from '$lib/signing/fee-calls';
 	import { simulateRequest } from '$lib/signing/fee-balance-changes';
@@ -716,6 +717,8 @@
 				feeOptions: (tier: FeeTier) => speedControl.feeOptions(tier)
 			},
 			currency: currency.view,
+			// r18-9: the testnet space shows no fiat on the sheet.
+			space: networkSpace.current,
 			m: messages,
 			identity,
 			identicon: identiconSvgForClient

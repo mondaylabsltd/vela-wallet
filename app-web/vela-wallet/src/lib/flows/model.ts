@@ -964,7 +964,8 @@ export interface BatchImportModel {
 	closeLabel: string;
 	/** "How the amounts are written" — the toggle was a choice with no question. */
 	unitCaption: string;
-	units: { fiat: string; token: string };
+	/** r18-9: `fiat` absent in the testnet space — no figure there is money. */
+	units: { fiat?: string; token: string };
 	unit: 'fiat' | 'token';
 	pasteValue: string;
 	pastePlaceholder: string;

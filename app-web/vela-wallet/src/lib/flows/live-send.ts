@@ -47,6 +47,8 @@ import type { FeeFailureView } from '$lib/core/generated/FeeFailureView';
 import { failureForChain } from './fee-failure';
 import type { WalletFlowMessages } from './messages';
 import { feeAmountText, feeLine, feeLineParts, feeOptionPriceUsd, feeParts } from './fee-line';
+import { pricedIn, showsFiat } from '$lib/network-space/fiat';
+import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
 import { chainMark, tokenMarkFor } from './marks';
 import { offeredTier, speedControlModel, type OfferedTier, type SpeedWords } from './speed-control';
 import type {
@@ -103,6 +105,11 @@ export interface SendLiveInputs {
 	/** The review on screen is one the person's AI agent drafted (spec 103). */
 	draftedByAgent?: boolean;
 	currency: CurrencyView;
+	/**
+	 * r18-9 (spec 105): the space in front — the testnet space shows no fiat
+	 * on any Send screen (`showsFiat`). Absent: the device's space.
+	 */
+	space?: NetworkSpace;
 	identity: WalletIdentity;
 	identicon: (seed: string) => string;
 	/**
@@ -272,7 +279,12 @@ function provenanceView(token: SendToken, m: WalletFlowMessages): ProvenanceView
 }
 
 /** A token row for the picker: the balance the core carries, priced by it too. */
-function tokenRow(token: SendToken, currency: CurrencyView, m: WalletFlowMessages): AssetRowModel {
+function tokenRow(
+	token: SendToken,
+	currency: CurrencyView,
+	m: WalletFlowMessages,
+	space?: NetworkSpace
+): AssetRowModel {
 	const art = mark(token);
 	// Two tokens of one name never read as one row: one nobody vouches for
 	// carries its contract, and a lookalike says it is not the real one.
@@ -292,8 +304,10 @@ function tokenRow(token: SendToken, currency: CurrencyView, m: WalletFlowMessage
 		badgeHidden: art.badgeHidden,
 		// The asset list's own call (`liveAssetRow`), so the two lists agree.
 		balance: tokenAmountText(token.balance),
-		fiat:
-			token.price_usd === null
+		// r18-9: the testnet space gives no row a worth — not even "no price".
+		fiat: !showsFiat(space)
+			? { kind: 'none' }
+			: token.price_usd === null
 				? { kind: 'no-price', text: '—' }
 				: {
 						kind: 'value',
@@ -316,6 +330,8 @@ function feeUnitPriceUsd(
 	chainId: number,
 	inputs: SendLiveInputs
 ): number | null {
+	// r18-9: no fee is worth money in the testnet space.
+	if (!showsFiat(inputs.space)) return null;
 	const published = feeOptionPriceUsd(contract, inputs.fee.options);
 	if (published !== null) return published;
 	const sameCoin = (other: string | null) =>
@@ -338,7 +354,12 @@ function feeUnitPriceUsd(
 function feeText(fee: FeeEstimateView | null, inputs: SendLiveInputs): string {
 	if (!fee) return '—';
 	const parts = feeParts(fee, inputs.fee.options);
-	return feeLine(parts, feeUnitPriceUsd(parts.contract, fee.chain_id, inputs), inputs.currency);
+	return feeLine(
+		parts,
+		feeUnitPriceUsd(parts.contract, fee.chain_id, inputs),
+		inputs.currency,
+		inputs.space
+	);
 }
 
 /**
@@ -517,7 +538,8 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 			? feeLineParts(
 					quoteParts,
 					feeUnitPriceUsd(quoteParts.contract, quote.chain_id, inputs),
-					inputs.currency
+					inputs.currency,
+					inputs.space
 				)
 			: null;
 	return {
@@ -578,7 +600,8 @@ function feeSpeed(inputs: SendLiveInputs): FeeSpeedModel | undefined {
 		return feeLineParts(
 			parts,
 			feeUnitPriceUsd(parts.contract, quote.chain_id, inputs),
-			inputs.currency
+			inputs.currency,
+			inputs.space
 		);
 	});
 }
@@ -615,7 +638,7 @@ export function speedWords(m: WalletFlowMessages): SpeedWords {
 export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): SendPickModel {
 	const { send, currency, m } = inputs;
 	const visible = visibleSendTokens(send, inputs);
-	const rows = visible.map((token) => tokenRow(token, currency, m));
+	const rows = visible.map((token) => tokenRow(token, currency, m, inputs.space));
 	const classFilter = inputs.classFilter ?? 'all';
 	const filters = SEND_CLASS_FILTERS.map((id) => ({
 		id,
@@ -839,11 +862,13 @@ function sweepAmount(send: SendView, token: SendToken): string {
 export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): SendFormModel {
 	const { send, m, currency, identicon } = inputs;
 	const token = send.selected_token;
+	// r18-9: the testnet space prices nothing — no "≈" beside any amount.
+	const price = pricedIn(token?.price_usd, inputs.space);
 	// A figure the core cannot read exactly has no worth to state: "1.2.3"
 	// priced by its leading digits read "≈ $1.20" beside the refusal.
 	const usd =
-		token?.price_usd != null && (send.amount_issue ?? null) === null
-			? (parseFloat(send.token_amount) || 0) * token.price_usd
+		price !== null && (send.amount_issue ?? null) === null
+			? (parseFloat(send.token_amount) || 0) * price
 			: null;
 
 	const split = send.split_mode;
@@ -853,7 +878,7 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 	const issues = split ? (send.split_row_issues ?? []) : [];
 	const splitSum = split ? parseFloat(send.confirm_amount) || 0 : 0;
 	// Nothing typed yet is not "≈ $0.00" — it is nothing to say.
-	const splitUsd = splitSum > 0 && token?.price_usd != null ? splitSum * token.price_usd : null;
+	const splitUsd = splitSum > 0 && price !== null ? splitSum * price : null;
 	// Which unit the figure is being TYPED in. `amount_fiat_code` is the
 	// figure's OWN code, never re-derived from the display context — the core
 	// is emphatic about that, and this file only reads it.
@@ -891,7 +916,11 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 		// the control unconditionally and wired it to nothing — the one event
 		// (`toggle_fiat_input`) and all three view fields went unread, so the
 		// tap was swallowed whether or not the swap was possible.
-		denomToggle: send.denom_toggle_shown ? { enabled: send.denom_toggle_enabled } : undefined,
+		// r18-9: no fiat to type an amount in, in the testnet space.
+		denomToggle:
+			send.denom_toggle_shown && showsFiat(inputs.space)
+				? { enabled: send.denom_toggle_enabled }
+				: undefined,
 		pasteRefused: m['send.amountPasteRefused']
 	};
 	const recipientBlock = {
@@ -1613,8 +1642,9 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 					busy: failure.tap === 'retry' && (inputs.fee.busy || failure.retrying)
 				};
 	const token = send.selected_token;
-	const usd =
-		token?.price_usd != null ? (parseFloat(send.confirm_amount) || 0) * token.price_usd : null;
+	// r18-9: no "≈" beside the amount signed, in the testnet space.
+	const price = pricedIn(token?.price_usd, inputs.space);
+	const usd = price !== null ? (parseFloat(send.confirm_amount) || 0) * price : null;
 	const chainId = token?.chain_id ?? 1;
 	// The core's own verdict, resolved on this page only (`confirm_probes`) —
 	// the form's note never sees it. One recipient only: a split's rows have
@@ -1691,7 +1721,8 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 		let totalUsd = 0;
 		const breakdown = picked.map((row) => {
 			const amount = sweepAmount(send, row);
-			const rowUsd = row.price_usd === null ? null : (parseFloat(amount) || 0) * row.price_usd;
+			const rowPrice = pricedIn(row.price_usd, inputs.space);
+			const rowUsd = rowPrice === null ? null : (parseFloat(amount) || 0) * rowPrice;
 			if (rowUsd !== null) totalUsd += rowUsd;
 			const value = `${sentAmountText(amount)} ${row.symbol}`;
 			return {
@@ -1706,10 +1737,13 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 			amount: fill(m['componentsTx.receipt.assetsCount'], { n: picked.length }),
 			// A count, not a figure: no coin of its own (and never the drawn one's).
 			amountUnit: undefined,
-			subline: fill(m['send.confirmTotalLine'], {
-				fiat: moneyText(totalUsd, currency),
-				network: chainName(sweepChain)
-			}),
+			// r18-9: the testnet space has no total worth — the network alone.
+			subline: showsFiat(inputs.space)
+				? fill(m['send.confirmTotalLine'], {
+						fiat: moneyText(totalUsd, currency),
+						network: chainName(sweepChain)
+					})
+				: chainName(sweepChain),
 			facts,
 			breakdown,
 			recipientTag,

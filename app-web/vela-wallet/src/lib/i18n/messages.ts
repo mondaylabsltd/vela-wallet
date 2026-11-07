@@ -222,6 +222,10 @@ const FLOW_PROMPT_KEYS = [
 	'onboarding.create.keyKeptTitle',
 	'onboarding.create.keyKeptBodyNetwork',
 	'onboarding.create.keyKeptBodyIndex',
+	// r18-8 (§28, §32): a test build's write to the live index, refused — the
+	// kept key's sheet and the sync-failed screen say it (`words_key`,
+	// `sync_error_key`).
+	'common.testBuild.productionWriteRefused',
 	// A notice is acknowledged, not backed out of (ob-4, ob-15).
 	'common.gotIt',
 	'onboarding.create.alertNotSupportedTitle',

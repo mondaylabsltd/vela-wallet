@@ -81,3 +81,29 @@ describe('a failure is a kind the web words, never its text (r16 leftover 4)', (
 		).toBe('cannot reach Gnosis');
 	});
 });
+
+/**
+ * r18-8 (§28, §32): the core's own failure for a write this test build
+ * refused (`production_write_refused`, a share-again's) is said in the test
+ * build's words — never "can't be reached", "didn't answer" or "offline".
+ */
+describe('a write the test build refused', () => {
+	it('is said as the test build’s refusal, never the network', () => {
+		const refused = 'This test build won’t write to the live service.';
+		const said = failureWords(
+			JSON.stringify({ kind: 'production_write_refused' }),
+			proposal,
+			'',
+			refused
+		);
+		expect(said).toBe(refused);
+		// Without resolved words: the corpus' English, still never the network.
+		const english = failureWords(JSON.stringify({ kind: 'production_write_refused' }), proposal);
+		expect(english).toBe(
+			"This test build won't write to the live service; point it at a local one."
+		);
+		for (const text of [said, english]) {
+			expect(text).not.toMatch(/didn.t answer|can.t be reached|offline|went wrong/i);
+		}
+	});
+});

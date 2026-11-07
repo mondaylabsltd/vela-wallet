@@ -1814,6 +1814,30 @@ describe('what was signed here and the mailbox has not taken', () => {
 		// Never a second signature: no approve, no passkey.
 		expect(fake.calls).toEqual([]);
 	});
+
+	/**
+	 * r18-8 (§28, §32): kept because this test build refused to write it to
+	 * the live service — said in the test build's words, never "the multisig
+	 * service didn't take it" or "couldn't reach"; nothing sends it again by
+	 * itself (the core keeps no `retryAt`), only the person's Send again.
+	 */
+	it('kept because the test build refused it: said so, sent again only on Send again', async () => {
+		fake.chain = { chainId: 100, members, mailbox: true, items: [item({ unsent: true })] };
+		fake.kept = { why: 'production_write_refused', retryAt: null };
+		const m = words();
+		m.testBuild = { productionWriteRefused: 'This test build won’t write to the live service.' };
+		show({ m });
+		await settle();
+		const why = document.body.querySelector('[data-testid="proposal-unsent-why"]');
+		expect(why?.textContent?.trim()).toBe('This test build won’t write to the live service.');
+		const unsent = document.body.querySelector('[data-testid="proposal-unsent"]');
+		expect(unsent?.textContent).not.toContain('proposal.outboxNotSent');
+		expect(unsent?.textContent).not.toMatch(/couldn.t reach|didn.t answer|offline/i);
+		expect(fake.sentAgain).toBe(0);
+		press('proposal.outboxSendAgain');
+		await settle();
+		expect(fake.sentAgain).toBe(1);
+	});
 });
 
 describe('who can act for it on this network (§3.5)', () => {
@@ -2392,6 +2416,47 @@ describe('an execution looked at before its passkey (r4-5, r4-7)', () => {
 			String(35n * 10n ** 15n)
 		]);
 		await screen.unmount();
+	});
+
+	/**
+	 * r18-5 (§32): while a press is out the core serves the pressed look
+	 * `signing: true` and never re-quotes it — the sheet marks the fee line
+	 * so (`proposal.feeSigning`), still the very figure the press carried,
+	 * and draws no mark on a look no press is out on.
+	 */
+	it('marks the fee line while its press is out, at the figure the press carried', async () => {
+		fake.chain.items = [ready()];
+		fake.execution = { maybeSent: false, userOpHash: '0x01', waitForTxHash: async () => '0x02' };
+		const m = words();
+		m.proposal.feeLine = 'Fee {{fee}} by {{name}}';
+		m.proposal.feeSigning = 'Signing at this fee.';
+		fake.previews = { [ME]: priced() };
+		const screen = show({ m });
+		await settle();
+		const fee = () => document.querySelector('[data-testid="execute-fee"]');
+		const mark = () => document.querySelector('[data-testid="execute-fee-signing"]');
+		expect(fee()?.textContent).toContain('Fee 0.035 xDAI by 0x0000');
+		expect(mark()).toBeNull();
+		press('proposal.approveAndExecute');
+		await settle();
+		expect(machineSent('approve_execute').map((e) => e.shown_fee)).toEqual([
+			String(35n * 10n ** 15n)
+		]);
+		await screen.unmount();
+
+		// The press is out: the core serves the same look, marked.
+		fake.previews = { [ME]: priced({ signing: true }) };
+		const pressing = show({ m });
+		await settle();
+		expect(fee()?.textContent).toContain('Fee 0.035 xDAI by 0x0000');
+		expect(mark()?.textContent?.trim()).toBe('Signing at this fee.');
+		// The mark sits under the fee line, inside the fee block, said once.
+		const lines = [...(fee()?.querySelectorAll('p') ?? [])].map((p) => p.textContent?.trim());
+		expect(lines.indexOf('Signing at this fee.')).toBe(
+			lines.findIndex((l) => l?.startsWith('Fee ')) + 1
+		);
+		expect(document.body.textContent?.match(/Fee \d/g)?.length).toBe(1);
+		await pressing.unmount();
 	});
 
 	/**

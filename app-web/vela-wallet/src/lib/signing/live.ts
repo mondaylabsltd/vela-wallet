@@ -39,9 +39,11 @@ import type { FeeSpeedModel } from '$lib/flows/model';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
 import { chainLogoURL, tokenMarkFor } from '$lib/flows/marks';
-import { browserSiteLabel, signConfirmState } from '$lib/core/kernels';
+import { browserSiteLabel, checksumAddress, signConfirmState } from '$lib/core/kernels';
 import { estimateRevertsFor } from '$lib/services/estimate-verdict';
 import { exactAmount, moneyText, trimBalance } from '$lib/wallet/live';
+import { showsFiat } from '$lib/network-space/fiat';
+import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
 import { fromBaseUnits } from '$lib/services/eip681';
 import { chainName, nativeSymbol } from '$lib/services/networks';
 import { shortenAddress } from '$lib/wallet/identity';
@@ -86,6 +88,12 @@ export interface SigningLiveInputs {
 	feeOpen?: boolean;
 	/** The display currency the fee's "≈" half is written in (issue 201). */
 	currency: CurrencyView;
+	/**
+	 * r18-9 (spec 105): the space in front — the testnet space shows no fiat
+	 * on the sheet, neither beside an amount nor beside the fee
+	 * (`showsFiat`). Absent: the device's space.
+	 */
+	space?: NetworkSpace;
 	/**
 	 * The speed control (spec 069), as the `fee_speed` core decided it — the
 	 * send form's, so the two surfaces choose a speed the same way. Absent
@@ -408,7 +416,8 @@ export const MINUS = '\u2212';
 function amountLine(
 	field: ClearSignField,
 	outgoing: boolean,
-	currency: SigningLiveInputs['currency']
+	currency: SigningLiveInputs['currency'],
+	space?: NetworkSpace
 ): AmountLine {
 	return {
 		// Spec 097 N1: an amount nobody could scale (the core's em dash) has
@@ -416,7 +425,11 @@ function amountLine(
 		sign: field.unverified ? '' : outgoing ? MINUS : '+',
 		value: field.value,
 		symbol: '',
-		fiat: field.usd_value === null ? undefined : `≈ ${moneyText(field.usd_value, currency)}`,
+		// r18-9: no worth beside a test coin (the testnet space).
+		fiat:
+			field.usd_value === null || !showsFiat(space)
+				? undefined
+				: `≈ ${moneyText(field.usd_value, currency)}`,
 		// Spec 097 N3: the hero drops the field's label, so an amount the core
 		// marks as a bound keeps it as its caption — "You receive (min)", the
 		// words a batch leg's row already says. The core decides; this draws.
@@ -625,6 +638,19 @@ export function calldataBytes(paramsJson: string): number {
 }
 
 /**
+ * r18-23: a Safe as the parent sentence names it — its EIP-55 checksummed
+ * form, shortened (the core's `checksumAddress`), never the lowercase a
+ * request carried: the letters' case is what a person checks it by.
+ */
+function safeShort(address: string): string {
+	try {
+		return shortenAddress(checksumAddress(address));
+	} catch {
+		return shortenAddress(address);
+	}
+}
+
+/**
  * The sentence under a refused request (spec 081). §31: one that would have
  * made this account act for a Safe it owns (`blocked.parent`) says that
  * Safe and what was asked of it — or, when whether it owns it could not be
@@ -637,7 +663,7 @@ export function selfCallBlockedText(
 	if (blocked.parent != null) {
 		return fill(blocked.reason === 'unchecked' ? m.parentSafeUnchecked : m.parentSafeBlocked, {
 			function: blocked.function,
-			safe: shortenAddress(blocked.parent)
+			safe: safeShort(blocked.parent)
 		});
 	}
 	if (blocked.function === 'SafeTx') return m.selfCallBlockedSafeTx;
@@ -879,7 +905,7 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		const currency = inputs.currency;
 		// An output paid to a stranger is not "+" this account's (cs-2).
 		const received = (field: ClearSignField): AmountLine => {
-			const line = amountLine(field, false, currency);
+			const line = amountLine(field, false, currency, inputs.space);
 			return reading.goes_elsewhere ? { ...line, sign: '', tone: 'neutral' } : line;
 		};
 		if (reading.allowance && send) {
@@ -896,11 +922,11 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		} else if (send && receive) {
 			blocks.push({
 				kind: 'swap',
-				pay: amountLine(send, true, currency),
+				pay: amountLine(send, true, currency, inputs.space),
 				receive: received(receive)
 			});
 		} else if (send) {
-			blocks.push({ kind: 'amount', line: amountLine(send, true, currency) });
+			blocks.push({ kind: 'amount', line: amountLine(send, true, currency, inputs.space) });
 		} else if (receive) {
 			blocks.push({ kind: 'amount', line: received(receive) });
 		}
@@ -1231,7 +1257,9 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// The display currency is not the person's yet: the fee's money is
 	// withheld, and the row keeps the line it will land on from now — under
 	// "Estimating…" too, so the fee landing moves nothing either (F12).
-	const withheld = inputs.currency.committed ? {} : { valueFiatWithheld: true };
+	// r18-9: the testnet space has no money to withhold — none is drawn.
+	const withheld =
+		inputs.currency.committed || !showsFiat(inputs.space) ? {} : { valueFiatWithheld: true };
 	// Device walk of 2026-10-11, item 2: the sheet has its final geometry for
 	// everything the fee card can say from its first settled frame. It is
 	// anchored at the bottom, so a line that ARRIVES in the card moved the
@@ -1323,7 +1351,12 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// can stand the money under the coin WHOLE (F12). As one string, "0.0015
 	// ETH · ≈…" became "0.0015 ETH · ≈₫112,500.00" at 320 px, "Network fee"
 	// wrapped to make room, and the bottom-anchored sheet moved 18 px.
-	const line = feeLineParts(parts, feeOptionPriceUsd(parts.contract, fee.options), inputs.currency);
+	const line = feeLineParts(
+		parts,
+		feeOptionPriceUsd(parts.contract, fee.options),
+		inputs.currency,
+		inputs.space
+	);
 	const selector = feeSelector(inputs);
 	// The core shut the gate because the selected coin cannot pay this fee
 	// (issue 262); its row says `insufficient`. Said under the row, where the
@@ -1423,7 +1456,12 @@ function speedModel(inputs: SigningLiveInputs): FeeSpeedModel | undefined {
 	const model = speedControlModel(speed.view, inputs.m.speed, (quote, tier) => {
 		const options = speed.feeOptions(tier);
 		const parts = feeParts(quote, options);
-		return feeLineParts(parts, feeOptionPriceUsd(parts.contract, options), inputs.currency);
+		return feeLineParts(
+			parts,
+			feeOptionPriceUsd(parts.contract, options),
+			inputs.currency,
+			inputs.space
+		);
 	});
 	// The speed's note ("Fast costs no more on this network…") is only known
 	// once every speed is priced; its line is held under the summary until
@@ -1971,6 +2009,13 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 		inputs.messageUnread === true
 	);
 	const enabled = confirmState?.enabled === true;
+	// r18-6 (§31): the core is still reading whether this account owns the
+	// Safe the request acts for (`confirm_block: reading`) — the request is
+	// not judged yet, and may be refused with no way to sign. The confirm is
+	// a shut, plain "Sign" under "Reading the request…": never "… anyway",
+	// never the danger tone, whatever the clear-signing view says.
+	const ownerReading = sign.confirm_block === 'reading';
+	const anyway = clear.sign_anyway && !ownerReading;
 	// signer-11: an open confirm after a passkey prompt that signed nothing
 	// says so — the confirm is the way to try again.
 	const note =
@@ -2048,18 +2093,20 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 			 * template fallback once put "{{action}}" on screen (spec 027 T340).
 			 * With no intent from the core, the generic word is the honest one.
 			 */
-			action: clear.sign_anyway
-				? m.certain.signAnyway
-				: clear.surface === 'plain_send' && clear.plain_send
-					? clear.plain_send.no_value
-						? m.confirmPlain
-						: m.confirmSend
-					: clear.confirm.type === 'confirm_intent'
-						? clear.confirm.intent
-						: m.confirmPlain,
+			action: ownerReading
+				? m.signLabel
+				: anyway
+					? m.certain.signAnyway
+					: clear.surface === 'plain_send' && clear.plain_send
+						? clear.plain_send.no_value
+							? m.confirmPlain
+							: m.confirmSend
+						: clear.confirm.type === 'confirm_intent'
+							? clear.confirm.intent
+							: m.confirmPlain,
 			enabled,
 			// cs-8: nobody could read this request — the red "Sign anyway".
-			...(clear.sign_anyway ? { danger: true } : {}),
+			...(anyway ? { danger: true } : {}),
 			...(note
 				? {
 						// cs-17: a grant-all waits for "Allow all" or "Revoke", not an amount.

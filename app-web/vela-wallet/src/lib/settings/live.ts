@@ -9,6 +9,7 @@
  * core's module doc assigns to shells.
  */
 
+import { showsFiat } from '$lib/network-space/fiat';
 import { accountName } from '$lib/multisig/core/account-name';
 import { resetEndpointsQuestion } from './questions';
 import { fill } from '$lib/wallet/messages';
@@ -1747,9 +1748,12 @@ export function liveRpcFix(input: LiveRpcFixInput, m: RescueMessages): RpcFixMod
 export function liveUnreachable(
 	view: BalanceView,
 	currency: CurrencyView,
-	m: RescueMessages
+	m: RescueMessages,
+	/** r18-9 (spec 105): the space in front — the testnet space states no worth. */
+	space?: NetworkSpace
 ): UnreachableModel {
 	const rows = view.unreachable_networks;
+	const priced = showsFiat(space);
 	return {
 		title: unreachableLine(view, m.rescue) ?? m.rescue.unreachableNone,
 		summary: rows.length > 0 ? m.rescue.unreachableBody : undefined,
@@ -1758,10 +1762,18 @@ export function liveUnreachable(
 			chainId: row.chain_id,
 			mark: rescueMark(row.chain_id),
 			name: chainName(row.chain_id),
-			line: fill(m.rescue.lines[row.line_key] ?? '', {
-				amount:
-					view.hidden || row.last_seen_usd === null ? MASK : moneyText(row.last_seen_usd, currency)
-			}),
+			// r18-9: in the testnet space, what was held is said without a worth.
+			line: fill(
+				m.rescue.lines[
+					!priced && row.line_key === 'assets.lastSeen' ? 'assets.lastSeenUnpriced' : row.line_key
+				] ?? '',
+				{
+					amount:
+						view.hidden || row.last_seen_usd === null
+							? MASK
+							: moneyText(row.last_seen_usd, currency)
+				}
+			),
 			// The core's rule, not the shell's (PR 3 note 4): only a network that
 			// itself did not answer is offered its RPC editor. One whose token
 			// list could not be loaded has an endpoint that works — "Fix" there
@@ -1781,8 +1793,14 @@ export function liveBalanceDetail(
 	currency: CurrencyView,
 	m: RescueMessages,
 	/** The hero's own sentence, reused as the third section's title (spec 038 #E8). */
-	unpricedLabel: string
+	unpricedLabel: string,
+	/**
+	 * r18-9 (spec 105): the space in front — the testnet space states no
+	 * worth: no total, no network's figure.
+	 */
+	space?: NetworkSpace
 ): BalanceDetailModel {
+	const priced = showsFiat(space);
 	const pending: BalanceDetailModel['pending'] = view.rate_limited_chain_ids.map((id) => ({
 		id: String(id),
 		mark: rescueMark(id),
@@ -1831,16 +1849,17 @@ export function liveBalanceDetail(
 			id: String(id),
 			mark: rescueMark(id),
 			name: chainName(id),
-			amount: view.hidden ? MASK : moneyText(usd, currency),
+			amount: !priced ? '' : view.hidden ? MASK : moneyText(usd, currency),
 			...(fallback.has(id) ? { note: m.balanceDetail.statusPublicNodes } : {})
 		}));
 
 	const total = view.display_total_usd ?? view.cached_total_usd;
 	return {
 		title: m.balanceDetail.title,
-		summary:
-			// home-11: nothing held could be priced — there is no total to state.
-			view.unpriced_only && !view.hidden
+		summary: !priced
+			? ''
+			: // home-11: nothing held could be priced — there is no total to state.
+				view.unpriced_only && !view.hidden
 				? m.balanceDetail.allUnpriced
 				: fill(m.balanceDetail.total, {
 						amount: view.hidden || total === null ? MASK : moneyText(total, currency)

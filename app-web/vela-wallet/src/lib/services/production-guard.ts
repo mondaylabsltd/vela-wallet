@@ -59,6 +59,20 @@ export class ProductionWriteRefused extends TypeError {
 	}
 }
 
+/**
+ * r18-8 (§28, §32): whether `error` is this test build's refusal — its own
+ * kind, never the network's. By name too: the extension's request window and
+ * its service worker hand errors across realms, where `instanceof` fails.
+ */
+export function isProductionWriteRefused(error: unknown): error is ProductionWriteRefused {
+	return (
+		error instanceof ProductionWriteRefused ||
+		(typeof error === 'object' &&
+			error !== null &&
+			(error as { name?: unknown }).name === 'ProductionWriteRefused')
+	);
+}
+
 /** Methods the core never counts as a write: no need to ask it. */
 const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 

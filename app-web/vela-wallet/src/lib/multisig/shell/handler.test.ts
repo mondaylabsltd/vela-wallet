@@ -105,6 +105,36 @@ describe('the multisig shell', () => {
 		expect(hung.type).toBe('http_unreachable');
 	});
 
+	/**
+	 * r18-8 (§28, §32): a write this test build's guard refused is its own
+	 * kind — `refused: true`, asked once — never the network's silence.
+	 */
+	it('says a write the test build refused as refused, never as unreachable', async () => {
+		const { ProductionWriteRefused } = await import('$lib/services/production-guard');
+		const fetch = vi.fn(async () => {
+			throw new ProductionWriteRefused('multisig.getvela.app');
+		});
+		const answer = await run(deps({ fetch: fetch as unknown as typeof globalThis.fetch }), {
+			type: 'http',
+			method: 'POST',
+			url: 'https://multisig.getvela.app/api/genesis',
+			body: '{}',
+			timeout_ms: 1000
+		});
+		expect(answer).toMatchObject({ type: 'http_unreachable', refused: true });
+		expect(fetch).toHaveBeenCalledTimes(1);
+		// A plain network failure carries no `refused`.
+		const away = await run(
+			deps({
+				fetch: (async () => {
+					throw new TypeError('Failed to fetch');
+				}) as unknown as typeof globalThis.fetch
+			}),
+			{ type: 'http', method: 'POST', url: 'http://x', body: '{}', timeout_ms: 1000 }
+		);
+		expect(away).not.toHaveProperty('refused');
+	});
+
 	it('answers JSON-RPC with the result, the node’s error, or unanswered (bounded)', async () => {
 		const op = (bound: number | null): MultisigOperation => ({
 			type: 'rpc',

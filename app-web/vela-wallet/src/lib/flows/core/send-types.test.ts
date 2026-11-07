@@ -40,7 +40,12 @@ describe('toSendFeeOutcome', () => {
 			'send.alertEstimateChainDownBody'
 		);
 		expect(sendEstimateFailureBodyKey('internal')).toBe('componentsUi.gas.reasonInternal');
-		for (const other of ['quote_unavailable', 'would_fail', 'timeout', 'other'] as const) {
+		// r18-14 (§32): Vela's relay gave no price or no simulation — its own
+		// sentence, never the generic one.
+		for (const relay of ['quote_unavailable', 'estimate_failed'] as const) {
+			expect(sendEstimateFailureBodyKey(relay), relay).toBe('send.alertEstimateRelayBody');
+		}
+		for (const other of ['would_fail', 'timeout', 'other'] as const) {
 			expect(sendEstimateFailureBodyKey(other), other).toBe('send.alertEstimateFailedBody');
 		}
 	});

@@ -51,6 +51,12 @@ export function whyText(m: MultisigMessages, why: ExecutionBlock): string {
 export interface FeeWords {
 	/** "Network fee ≈ 0.035 USDC, paid by Alice" */
 	fee: string;
+	/**
+	 * r18-5 (§32): the mark under the fee line while a press is out on it —
+	 * "Signing at this fee — it stays fixed until you confirm or cancel." —
+	 * else `null`.
+	 */
+	signing: string | null;
 	/** "Includes one-time setup on Arc Testnet ≈ 0.02 USDC:", or `null` with nothing set up. */
 	setup: string | null;
 	/** What that setup is, one line each. */
@@ -73,6 +79,7 @@ export function feeWords(
 		fee: coin(preview.fee.amount),
 		name: opts.label(opts.executor)
 	});
+	const signing = preview.signing === true ? m.proposal.feeSigning : null;
 	const items: string[] = [];
 	if (preview.setup.multisig) items.push(m.proposal.setupMultisig);
 	for (const member of preview.setup.members) {
@@ -81,7 +88,7 @@ export function feeWords(
 	if (preview.setup.executor) {
 		items.push(fillTemplate(m.proposal.setupExecutor, { name: opts.label(opts.executor) }));
 	}
-	if (items.length === 0) return { fee, setup: null, items };
+	if (items.length === 0) return { fee, signing, setup: null, items };
 	const setup =
 		preview.setup.amount !== null && preview.setup.amount > 0n
 			? fillTemplate(m.proposal.feeSetup, {
@@ -89,5 +96,5 @@ export function feeWords(
 					amount: coin(preview.setup.amount)
 				})
 			: fillTemplate(m.proposal.feeSetupPlain, { network: opts.network });
-	return { fee, setup, items };
+	return { fee, signing, setup, items };
 }

@@ -208,6 +208,37 @@ describe('a new key whose confirmation could not reach the index', () => {
 		);
 		expect(index.message).toBe('onboarding.create.keyKeptBodyIndex');
 	});
+
+	/**
+	 * r18-8 (§28, §32): this test build refused the challenge to the live
+	 * index — the core keeps the key with its own sentence (`words_key`),
+	 * said before anything of the network or the index, offline or not.
+	 */
+	it('a confirmation the test build refused is said in its words, never the network', async () => {
+		const { promptCopy } = await import('./copy');
+		const { FLOW_KEYS } = await import('$lib/i18n/messages');
+		const t = (key: string) => key;
+		const words_key = 'common.testBuild.productionWriteRefused';
+		vi.stubGlobal('navigator', { onLine: false });
+		for (const local of [true, false]) {
+			const copy = promptCopy(
+				{
+					type: 'create_failed',
+					detail: 'Challenge failed: refused',
+					phone_link: false,
+					key_kept: true,
+					local,
+					words_key
+				},
+				t
+			);
+			expect(copy.title).toBe('onboarding.create.keyKeptTitle');
+			expect(copy.message).toBe(words_key);
+		}
+		vi.unstubAllGlobals();
+		// The sheet is handed the sentence (no dotted key).
+		expect(FLOW_KEYS as readonly string[]).toContain(words_key);
+	});
 });
 
 /**

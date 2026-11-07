@@ -17,6 +17,7 @@ import * as Storage from '$lib/onboarding/core/storage';
 import * as Registry from '$lib/onboarding/core/registry';
 import * as Passkey from '$lib/onboarding/core/passkey';
 import { publish } from '$lib/onboarding/core/publish';
+import { isProductionWriteRefused } from '$lib/services/production-guard';
 import { trustedSignerRegistryRpId } from '$lib/core/kernels';
 import type { PendingPublish } from '../generated/PendingPublish';
 import type { SessionOperation } from '../generated/SessionOperation';
@@ -96,7 +97,10 @@ export async function executeSession(effect: SessionEffect): Promise<SessionShel
 			} catch (error) {
 				return {
 					type: 'registry_landing_unconfirmed',
-					message: error instanceof Error ? error.message : String(error)
+					message: error instanceof Error ? error.message : String(error),
+					// r18-8 (§28, §32): this test build refused the publish to the live
+					// index before it left — the session asks no more by itself.
+					...(refusedByThisBuild(error) ? { refused: true } : {})
 				};
 			}
 
@@ -105,6 +109,13 @@ export async function executeSession(effect: SessionEffect): Promise<SessionShel
 			throw new Error(`unhandled session operation: ${JSON.stringify(never)}`);
 		}
 	}
+}
+
+/** r18-8: the guard's refusal, bare or as the index client's error. */
+function refusedByThisBuild(error: unknown): boolean {
+	return (
+		isProductionWriteRefused(error) || (error instanceof Registry.RegistryError && error.refused)
+	);
 }
 
 /**
