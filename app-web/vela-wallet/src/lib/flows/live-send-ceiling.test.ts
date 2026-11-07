@@ -92,6 +92,8 @@ class Drive {
 	readonly core = new SendCore();
 	view: SendView;
 	quote: FeeEstimateView | null = null;
+	/** §34: hold the press's own reads (the credential, the relay's float). */
+	holdPress = false;
 	private pending: Out['effects'] = [];
 
 	constructor() {
@@ -100,6 +102,17 @@ class Drive {
 
 	dispatch(event: SendEvent): void {
 		this.take(this.core.dispatch(JSON.stringify(event)));
+	}
+
+	/** The press's reads answered now. */
+	release(): void {
+		this.holdPress = false;
+		this.take(JSON.stringify({ view: null, effects: [] }));
+	}
+
+	/** The operations still outstanding (nothing answers a submit). */
+	outstanding(): SendOperation[] {
+		return this.pending.map((effect) => effect.operation);
 	}
 
 	private take(text: string): void {
@@ -129,7 +142,7 @@ class Drive {
 			case 'prewarm_fees':
 				return { type: 'fees_prewarmed' };
 			case 'load_account_credential':
-				return { type: 'account_credential', public_key_hex: '04deadbeef' };
+				return this.holdPress ? null : { type: 'account_credential', public_key_hex: '04deadbeef' };
 			case 'estimate_fee':
 				return {
 					type: 'fee_estimated',
@@ -139,7 +152,7 @@ class Drive {
 							: { type: 'ok', estimate: this.quote }
 				};
 			case 'probe_treasury':
-				return { type: 'treasury_probed', probe: { type: 'covered' } };
+				return this.holdPress ? null : { type: 'treasury_probed', probe: { type: 'covered' } };
 			case 'resolve_risk':
 				return { type: 'risk_resolved', risk: null };
 			case 'resolve_identity':
@@ -294,6 +307,68 @@ describe('r14-8: the most that can be sent is the confirm’s own quote’s', ()
 			expect(units(send.confirm_amount) + drawnFee(send)).toBe(HELD);
 			expect(send.same_asset_fee_issue).toBeNull();
 			expect(send.can_confirm).toBe(true);
+		} finally {
+			drive.dispose();
+		}
+	});
+});
+
+describe('§34 (R20 S1): charged = shown, frozen at the press', () => {
+	it('a quote landing under the press leaves the figures pressed on screen, then stops beside the button with the new ones', () => {
+		const drive = opened();
+		try {
+			drive.dispatch({ type: 'fee_updated', estimate: interfaceFee('110808') });
+			drive.dispatch({ type: 'tap_max' });
+			drive.quote = interfaceFee('98400');
+			drive.dispatch({ type: 'continue' });
+			let send = drive.view;
+			expect(send.stage).toBe('confirm');
+			expect(send.can_confirm).toBe(true);
+			const pressedAmount = send.confirm_amount;
+			const pressedFee = drawnFee(send);
+			expect(units(pressedAmount) + pressedFee).toBe(HELD);
+
+			// The press: its reads are out when the fee card's next quote lands.
+			drive.holdPress = true;
+			drive.dispatch({ type: 'slide_confirm', review: send.review_digest ?? undefined });
+			drive.dispatch({ type: 'fee_updated', estimate: interfaceFee('104000') });
+			send = drive.view;
+			expect(send.tx_status).toBe('preparing');
+			expect(send.confirm_amount).toBe(pressedAmount);
+			expect(drawnFee(send)).toBe(pressedFee);
+			expect(send.fee_signing_key).toBe('send.feeSigning');
+			const under = liveSendConfirm(confirmModel(), inputs(send));
+			const feeRow = under.facts.find((fact) => fact.label === m['send.estFeeLabel']);
+			expect(feeRow?.note).toBe(m['send.feeSigning']);
+
+			// The signature's moment: the quote moved, so nothing is signed and
+			// the stop is said beside the confirm, over the new figures.
+			drive.release();
+			send = drive.view;
+			expect(drive.outstanding().some((op) => op.type === 'submit_user_op')).toBe(false);
+			expect(send.tx_status).toBe('idle');
+			expect(send.fee_signing_key ?? null).toBeNull();
+			expect(drawnFee(send)).toBe(104_000_000_000_000_000n);
+			expect(units(send.confirm_amount) + drawnFee(send)).toBe(HELD);
+			expect(send.fee_moved?.key).toBe('send.feeMovedMax');
+			const said = liveSendConfirm(confirmModel(), inputs(send));
+			expect(said.error?.calm).toBe(true);
+			expect(said.error?.text).toBe(
+				fill(m['send.feeMovedMax'], {
+					from: send.fee_moved?.max?.from ?? '',
+					to: send.fee_moved?.max?.to ?? '',
+					symbol: 'USDC'
+				})
+			);
+			expect(said.maxNote).toBeUndefined();
+			expect(send.can_confirm).toBe(true);
+
+			// The next press signs exactly what is drawn now.
+			drive.dispatch({ type: 'slide_confirm', review: send.review_digest ?? undefined });
+			const submit = drive.outstanding().find((op) => op.type === 'submit_user_op');
+			if (submit?.type !== 'submit_user_op') throw new Error('the next press is signed');
+			expect(BigInt(submit.review.transfers[0].amount)).toBe(units(send.confirm_amount));
+			expect(BigInt(submit.review.fee?.amount ?? '0')).toBe(104_000n);
 		} finally {
 			drive.dispose();
 		}
