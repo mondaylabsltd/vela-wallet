@@ -162,6 +162,8 @@ object WalletLive {
          * fixture board, drawn as given.
          */
         shownAccount: String? = null,
+        /** r17-4: both spaces' network names, for a network the space's list does not name. */
+        allChainNames: Map<Int, String> = emptyMap(),
     ): WalletHomeModel {
         // The symbol is the language's (`fiatSymbol`): this screen's own, as its words are.
         val money = Money.of(currency, strings.language)
@@ -178,7 +180,7 @@ object WalletLive {
         // shared helper below also builds History, so it never caps.
         val groups = if (feedIsShown) activity(feed.copy(rows = feed.home_rows), strings, now, chainNames) else emptyList()
         // Round 16 leftover 5: the networks the scan could not read, in words.
-        val unread = if (feedIsShown) unreadLine(feed, strings, chainNames) else null
+        val unread = if (feedIsShown) unreadLine(feed, strings, chainNames, allChainNames) else null
         val mode = activityMode(groups.isNotEmpty(), feedIsShown, feed.settled, live = shownAccount != null, unread = unread != null)
         return fallback.copy(
             balance = balance(fallback.balance, view, strings, money, chainNames, noValue).copy(refresh = refresh(view, strings, now)),
@@ -242,13 +244,27 @@ object WalletLive {
      * list, else its id), or "… on {{n}} networks …". `null` when every
      * network was read.
      */
-    fun unreadLine(feed: FeedView, strings: VelaStrings, chainNames: Map<Int, String>): String? {
+    /** The core's catalog name for [chainId] (`networks.name`); `null` when it does not know it, or cannot be asked. */
+    private fun catalogName(chainId: Int): String? =
+        runCatching { app.getvela.wallet.feature.multisig.core.MsRules.networkName(chainId) }.getOrNull()?.takeIf { it.isNotBlank() }
+
+    fun unreadLine(
+        feed: FeedView,
+        strings: VelaStrings,
+        chainNames: Map<Int, String>,
+        /**
+         * r17-4: every network this device has, both spaces' — a network the
+         * space's list does not name is named from here, else the core's
+         * catalog (`networks.name`), never by its raw id while either knows it.
+         */
+        allNames: Map<Int, String> = emptyMap(),
+    ): String? {
         val key = feed.unread_key ?: return null
         val first = feed.unread_chains.firstOrNull()
         return strings.t(
             key,
             mapOf(
-                "network" to (first?.let { chainNames[it] ?: it.toString() } ?: ""),
+                "network" to (first?.let { chainNames[it] ?: allNames[it] ?: catalogName(it) ?: it.toString() } ?: ""),
                 "n" to feed.unread_chains.size.toString(),
             ),
         )
@@ -1015,16 +1031,27 @@ object WalletLive {
          * (`CurrencyView.pending`); nothing at all before either is known.
          */
         val label: String = code,
+        /**
+         * r17-14 (spec 105): the testnet space — nothing in it has a worth.
+         * Every figure is NONE ([fiat] `null` while [settled]): no line, no
+         * room kept, never "withheld".
+         */
+        val noValue: Boolean = false,
     ) {
         private fun convert(usd: Double): Double = rate?.let { usd * it } ?: usd
+
+        /** r17-14: this money in a space with no worth — every figure none. */
+        fun withoutValue(): Money = Money(code, symbol, rate, settled = true, label = label, noValue = true)
 
         /**
          * A fiat figure in this money, drawn with the person's number format
          * (spec 047 D2) — or `null`: WITHHELD, the currency is not the
          * person's yet. A caller draws the figure's room and nothing in it.
+         * In the testnet space ([noValue]) `null` too, with [settled] true:
+         * no figure, and no room for one.
          */
         fun fiat(usd: Double): String? {
-            if (!settled) return null
+            if (noValue || !settled) return null
             // r8-3: a worth that is not a number (a NaN or infinite price or
             // amount upstream) is unknown — said as such, with no currency
             // sign dressing it up as a figure, and never a crash.
@@ -1049,7 +1076,7 @@ object WalletLive {
          * `BigDecimal(12.34)` is 12.3399…, and cutting that printed $12.33.
          */
         fun parts(usd: Double): Parts? {
-            if (!settled) return null
+            if (noValue || !settled) return null
             // r8-3: not a number is no figure — the hero's "not a number yet"
             // state (its own notice says why), never `BigDecimal(NaN)`'s throw.
             val value = convert(usd)

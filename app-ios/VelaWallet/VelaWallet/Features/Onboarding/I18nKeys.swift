@@ -112,6 +112,11 @@ enum I18nKeys {
         static let taskDeriveAddress = "onboarding.create.taskDeriveAddress"
         static let taskWriteIndex = "onboarding.create.taskWriteIndex"
 
+        // ob-4 / r17-20: a key kept, its confirmation not reaching the index.
+        static let keyKeptTitle = "onboarding.create.keyKeptTitle"
+        static let keyKeptBodyNetwork = "onboarding.create.keyKeptBodyNetwork"
+        static let keyKeptBodyIndex = "onboarding.create.keyKeptBodyIndex"
+
         // Retry screen.
         static let syncFailedTitle = "onboarding.create.syncFailedTitle"
         static let syncFailedMessage = "onboarding.create.syncFailedMessage"
@@ -329,6 +334,7 @@ enum I18nKeys {
         Create.providerPlatform, Create.providerGeneric, Create.providerSecurityKey,
         Create.progressTitle, Create.progressSubtitle,
         Create.taskVerifyKey, Create.taskDeriveAddress, Create.taskWriteIndex,
+        Create.keyKeptTitle, Create.keyKeptBodyNetwork, Create.keyKeptBodyIndex,
         Create.syncFailedTitle, Create.syncFailedMessage, Create.syncFailedHint,
         Create.retryUploadBtn, Create.technicalDetails,
         Create.successTitle, Create.verifyHint, Create.enterWalletBtn,

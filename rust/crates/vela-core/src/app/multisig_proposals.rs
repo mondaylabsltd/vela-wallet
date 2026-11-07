@@ -1769,10 +1769,27 @@ impl App for MultisigProposals {
                     .insert(key.clone(), ActionState::Working);
                 person_flow(model, move |io, st| async move {
                     let outcome = approve(&io, &st, chain_id, &safe_tx_hash, &owner).await;
-                    if matches!(outcome, ActionState::Done { .. }) {
+                    let approved = matches!(outcome, ActionState::Done { .. });
+                    if approved {
                         note_actor(&io, &st, chain_id, &owner).await;
                     }
-                    lock(&st).actions.insert(key, outcome);
+                    {
+                        let mut s = lock(&st);
+                        s.actions.insert(key, outcome);
+                        // r17-16: a later press that went through ends an earlier
+                        // one's failure on the same transaction — the one press's
+                        // stop is no longer said beside Execute once the approval
+                        // it could not give was given (the mirror of the one press
+                        // dropping `approve:`). One working or done is left alone.
+                        if approved {
+                            let exec = format!("execute:{}", safe_tx_hash.to_ascii_lowercase());
+                            if s.actions.get(&exec).is_some_and(|a| {
+                                !matches!(a, ActionState::Working | ActionState::Done { .. })
+                            }) {
+                                s.actions.remove(&exec);
+                            }
+                        }
+                    }
                     refresh(&io, &st, false, true).await;
                 })
             }

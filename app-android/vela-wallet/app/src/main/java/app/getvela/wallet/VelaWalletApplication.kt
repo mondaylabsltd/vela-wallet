@@ -409,6 +409,10 @@ class AppContainer(private val app: Application) {
             accountNetworks = { address ->
                 if (multisigBuilt) multisig.accountsView.value.row(address)?.account?.chainIds.orEmpty() else emptyList()
             },
+            // r17-15: the first holdings round is noted — read the network record
+            // again now, so the core settles the shown networks this session
+            // (every list was every Vela network until the next launch).
+            onHoldingsFirstRead = { CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch { settings.startNetworks() } },
         ).also { controller ->
             // r9-17: back online — what failed offline can be read now (the core decides).
             CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {

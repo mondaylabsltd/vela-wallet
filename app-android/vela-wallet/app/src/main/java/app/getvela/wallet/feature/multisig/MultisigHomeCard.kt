@@ -111,7 +111,7 @@ fun MultisigHomeCard(
             waitingNote(words, cardNote(view.waitingNote, historySaidInActivity), time)?.let { (text, retry) ->
                 Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
                     MsNote(text, Modifier.weight(1f), tone = MsTone.Warning, tag = "multisig.home.note")
-                    if (retry) MsTextButton(words.t("service.retry"), tag = "multisig.home.retry") { hub.sendProposal(ev("retry")) }
+                    if (retry) MsTextButton(words.t("review.state.tryAgain"), tag = "multisig.home.retry") { hub.sendProposal(ev("retry")) }
                 }
             }
         }

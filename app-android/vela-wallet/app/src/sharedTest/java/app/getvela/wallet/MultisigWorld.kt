@@ -335,7 +335,11 @@ class MultisigWorld(private val canonicalCode: (String) -> String) : MultisigShe
         return onAskRisk?.invoke(op) ?: riskSigns
     }
 
+    /** r17: the shell's failure `detail` the next sends answer with (nothing sent), e.g. the relay never took it. */
+    @Volatile var sendFailure: String? = null
+
     override suspend fun sendCalls(op: MultisigOperation.SendCalls): MultisigShellResult {
+        sendFailure?.let { return MultisigShellResult.CallsFailed(it, maybe_sent = false) }
         synchronized(this) {
             onSend?.let { land(it) }
             onSend = null

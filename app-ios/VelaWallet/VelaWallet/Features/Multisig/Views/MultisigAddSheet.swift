@@ -213,8 +213,9 @@ struct MultisigAddSheet: View {
         case "busy":
             // r14-5: the network's nodes were rate-limiting — named, with Try again.
             failure = words.t("add.busy", ["network": words.network(outcome["chain_id"]?.int ?? 0)])
-        case "notFound", "unavailable", "unsupported", "notMultisig", "unchecked":
-            failure = words.t("add.\(outcome.kind ?? "unavailable")")
+        // A closed list of kinds with words (`add.<kind>`): never a key built
+        // from a kind the corpus has no words for (r17-17).
+        case "notFound", "unavailable", "unsupported", "notMultisig", "unchecked": failure = words.t("add.\(outcome.kind ?? "unavailable")")
         default:
             failure = words.t("add.unavailable")
         }
@@ -353,7 +354,7 @@ struct MultisigLinkStandSheet: View {
         MsSheet(title: title, closeLabel: words.loc.t("common.done"), onClose: close) {
             switch stand?.kind {
             case "broken":
-                MsNote(text: stand?.text ?? words.t("proposal.badLink"), tone: .warning, identifier: "multisig.link.broken")
+                MsNote(text: Self.brokenLine(stand, words: words), tone: .warning, identifier: "multisig.link.broken")
             case "missingNetwork":
                 let chainId = stand?.chainId ?? 0
                 MsNote(text: words.t("proposal.missingNetwork", ["chainId": String(chainId)]), tone: .warning, identifier: "multisig.link.missingNetwork")
@@ -367,10 +368,10 @@ struct MultisigLinkStandSheet: View {
                 // §18 (c): a lookup that did not come back — the core says
                 // whether to offer Try again; it opens the same link again.
                 if stand?.retry == true {
-                    VelaButton(title: words.t("review.state.tryAgain"), kind: .secondary) {
-                        hub.send(["type": "retry_link"])
-                    }
-                    .accessibilityIdentifier("multisig.link.retry")
+                    // r17-20: busy the moment it is pressed, until the lookup
+                    // says something new (Opening, or its answer).
+                    MsRetryButton(title: words.t("review.state.tryAgain"), said: failedLine,
+                                  identifier: "multisig.link.retry") { hub.send(["type": "retry_link"]) }
                 }
             case "kept":
                 MsNote(text: words.t("proposal.previewNote"), identifier: "multisig.link.kept")
@@ -392,14 +393,36 @@ struct MultisigLinkStandSheet: View {
         stand?.kind == "invite" ? words.t("add.title") : words.t("proposal.title")
     }
 
-    private var failedLine: String {
-        guard let reason = stand?.reason else { return words.t("proposal.notFound") }
+    private var failedLine: String { Self.failedLine(stand?.reason, words: words) }
+
+    /// r17-17: a link whose lookup failed, in the catalog's words for every
+    /// `AddOutcome` kind — never a key built from a kind with no words
+    /// (`add.refused`, `add.highRisk` and `add.unverified` are not in the
+    /// corpus, so they were drawn as raw keys).
+    static func failedLine(_ reason: MsJSON?, words: MsWords) -> String {
+        guard let reason else { return words.t("proposal.notFound") }
+        let network = words.network(reason["chain_id"]?.int ?? 0)
         switch reason.kind {
         case "notFound": return words.t("proposal.notFound")
+        case "busy": return words.t("add.busy", ["network": network])
+        case "unverified": return words.t("authority.unverified", ["network": network])
+        case "refused": return words.t("authority.refusedTitle")
+        case "highRisk": return words.t("authority.riskTitle")
         case "unavailable": return words.t("add.unavailable")
-        case "busy": return words.t("add.busy", ["network": words.network(reason["chain_id"]?.int ?? 0)])
-        default: return words.t("add.\(reason.kind ?? "unavailable")")
+        case "unsupported": return words.t("add.unsupported")
+        case "notMultisig": return words.t("add.notMultisig")
+        case "unchecked": return words.t("add.unchecked")
+        case "chooseNetwork": return words.t("add.chooseNetwork")
+        default: return words.t("add.unavailable")
         }
+    }
+
+    /// r17-17: a damaged link, in words — never what it held drawn as the
+    /// sentence (the zh tester saw "5042002.0x2746…0x8496…" under 多签交易):
+    /// a proposal link's "incomplete or damaged", an invite's own fault.
+    static func brokenLine(_ stand: MsLinkStand?, words: MsWords) -> String {
+        guard stand?.link?.string == "add" else { return words.t("proposal.badLink") }
+        return words.t(stand?.fault == "checksum" ? "add.badChecksum" : "add.badInvite")
     }
 
     private func close() {

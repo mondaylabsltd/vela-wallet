@@ -393,9 +393,12 @@ class R16LeftoversTest {
         assertEquals(SectionMode.Empty, many.activitySection.mode)
         assertEquals(strings.t("home.activityUnreadMany", mapOf("n" to "2")), many.activitySection.empty?.title)
         assertTrue(many.activitySection.empty!!.title.contains("2"))
-        // A network this device has no name for: its id, never a blank.
-        val unnamed = home(feed(listOf(5042002)))
-        assertTrue(unnamed.activitySection.empty!!.title.contains("5042002"))
+        // r17-4: a network neither this space's list nor the core's catalog
+        // names (Arc is the catalog's: "Arc Testnet"): its id, never a blank.
+        val catalogued = home(feed(listOf(5042002)))
+        assertFalse(catalogued.activitySection.empty!!.title.contains("5042002"))
+        val unnamed = home(feed(listOf(987_654_321)))
+        assertTrue(unnamed.activitySection.empty!!.title.contains("987654321"))
         // Every network read and nothing there: the core's own empty line.
         assertEquals(strings.t("home.emptyNoActivity"), home(feed(emptyList())).activitySection.empty?.title)
         // Another account's feed is never said under this one.

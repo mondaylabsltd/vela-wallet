@@ -1247,7 +1247,8 @@ fun VelaNavHost(
                         nativeSymbol = networks.networks.firstOrNull { it.chain_id.toInt() == signChain }?.native_symbol ?: "ETH",
                         walletName = activeLabel,
                         walletAddress = session.address,
-                        money = WalletLive.Money.of(currency, strings.language),
+                        // r17-14: the testnet space prices no fee on the signing sheet either.
+                        money = WalletLive.Money.of(currency, strings.language).let { if (space.testnet) it.withoutValue() else it },
                         origin = signRequest?.origin?.substringAfter("://")?.substringBefore('/'),
                         chainId = signChain,
                         feeOpen = feeOpen,
@@ -1601,7 +1602,8 @@ fun VelaNavHost(
                     // (the core's currency symbol) are built when THEIR inputs
                     // move; a keystroke rebuilds only the live form over them.
                     val drawnFrame = remember(liveState, strings, i18nNamespaces) { FlowFixtures.build(liveState, strings) }
-                    val sendMoney = remember(currency, strings.language) { WalletLive.Money.of(currency, strings.language) }
+                    // r17-14: the testnet space prices nothing — amounts, fees, receipts (spec 105).
+                    val sendMoney = remember(currency, strings.language, space.testnet) { WalletLive.Money.of(currency, strings.language).let { if (space.testnet) it.withoutValue() else it } }
                     LaunchedEffect(liveState, drawnFrame.base::class) {
                         VelaLog.event("send.base", drawnFrame.base::class.simpleName ?: "?", "state" to liveState.name, "top" to flowState.name)
                     }
@@ -2351,6 +2353,8 @@ fun VelaNavHost(
                                 noValue = strings.t(I18nKeys.NetworkSpace.NO_VALUE).takeIf { noValue },
                                 // r15-1: the feed's rows only under their own account.
                                 shownAccount = shownAddress,
+                                // r17-4: a network the space does not list is named from the whole list.
+                                allChainNames = allNetworks.networks.associate { it.chain_id.toInt() to it.display_name },
                             ).let { home ->
                                 // Spec 047 D9: no network at all is said on the hero, not guessed from a slow pool.
                                 // S4 (r9): its "Updated" is the core's stamp, which a round

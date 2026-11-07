@@ -2436,10 +2436,17 @@ async fn record(
         .import_genesis(io, req)
         .await
         .map_err(|_| RecordFail::Service)?;
-    Ok(matches!(
-        answer,
-        ImportAnswer::Recorded { .. } | ImportAnswer::Queued { .. }
-    ))
+    match answer {
+        ImportAnswer::Recorded { .. } | ImportAnswer::Queued { .. } => Ok(true),
+        // r17-19: the service answered and would not record it (its refusal,
+        // or an error answer it gave): a refusal, said as one — never "the
+        // multisig service can't be reached", which only a service that did
+        // not answer is. A stable word, never the service's text (§27 item 4).
+        ImportAnswer::Refused { .. } | ImportAnswer::Error { .. } => {
+            Err(RecordFail::Other("refused".to_owned()))
+        }
+        ImportAnswer::Resolved { .. } => Ok(false),
+    }
 }
 
 /// `owner` asks the service to record `multisig` (created from `genesis`

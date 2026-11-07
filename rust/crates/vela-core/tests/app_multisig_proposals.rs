@@ -2311,6 +2311,54 @@ fn approve_and_execute_stopped_before_signing_approves_nothing() {
     assert_eq!(item.approved, 1, "no approval behind the person's back");
 }
 
+/// r17-16: the one press stopped (nothing signed), then the person approved
+/// alone and it went through — the stop beside Execute is no longer said.
+/// A failure of the approval itself leaves the one press's stop as it was.
+#[test]
+fn an_approval_that_went_through_ends_the_one_press_stop_before_it() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let hash = hash_of(&propose(&mut sut, &mut world, transfer("1000"), None));
+    world
+        .balances
+        .insert((100, account.address.to_ascii_lowercase()), 5);
+    let b = fixture(1).address;
+    assert_eq!(preview_of(&mut sut, &mut world, &hash, &b)["kind"], "fails");
+    run(
+        &mut sut,
+        &mut world,
+        Event::ApproveExecute {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            executor: b.clone(),
+            shown_fee: None,
+        },
+    );
+    let lower = hash.to_ascii_lowercase();
+    let exec = format!("execute:{lower}");
+    assert!(matches!(
+        sut.view().actions[&exec],
+        ActionState::Stopped { .. }
+    ));
+    run(
+        &mut sut,
+        &mut world,
+        Event::Approve {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            owner: b,
+        },
+    );
+    assert!(matches!(
+        sut.view().actions[&format!("approve:{lower}")],
+        ActionState::Done { .. }
+    ));
+    assert!(
+        !sut.view().actions.contains_key(&exec),
+        "the stale stop is gone: {:?}",
+        sut.view().actions
+    );
+}
+
 /// r16-4 (Android, Arc rate-limited): the sheet drew a priced fee, the look
 /// aged, and at the press its re-quote could not price it. The one press
 /// approved alone and said nothing (the stop was "quiet", r11-9), and the

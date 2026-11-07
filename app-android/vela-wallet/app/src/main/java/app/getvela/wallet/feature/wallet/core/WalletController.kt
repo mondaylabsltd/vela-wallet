@@ -79,6 +79,22 @@ internal fun refreshOnArrival(scope: CoroutineScope, feed: StateFlow<FeedView>, 
 }
 
 /**
+ * The networks a settled round found something held on, added to what the
+ * device noted before ([KeyValueStore.Keys.HELD_CHAIN_IDS]). [Update.write]:
+ * the stored list changes (written once a round settled, even empty);
+ * [Update.firstRead]: nothing was noted before — the evidence the shown
+ * networks' one-time settling waits for is here for the first time (r17-15).
+ */
+object HeldChains {
+    data class Update(val union: List<Long>, val write: Boolean, val firstRead: Boolean)
+
+    fun merge(before: List<Long>?, held: List<Long>): Update {
+        val union = ((before ?: emptyList()) + held).distinct().sorted()
+        return Update(union, write = before == null || union.size != before.size, firstRead = before == null)
+    }
+}
+
+/**
  * Spec 105: [view] with only the space in front's holdings — [chains], the
  * space's chain ids; `null` before the network list is read (nothing to
  * narrow by). A total that counted a holding of the other space is not shown
@@ -133,6 +149,12 @@ class WalletController(
     private val testnet: () -> Boolean = { false },
     /** r9-17 (core §9.4): the networks [address] lives on — a multisig's record's; empty for a Vela account. */
     private val accountNetworks: (address: String) -> List<Int> = { emptyList() },
+    /**
+     * r17-15: the first holdings round of this device was just noted
+     * ([KeyValueStore.Keys.HELD_CHAIN_IDS] written for the first time) — the
+     * one-time settling of the shown networks can run now.
+     */
+    private val onHoldingsFirstRead: () -> Unit = {},
 ) {
 
     private val store = VelaStore(context)
@@ -748,10 +770,14 @@ class WalletController(
                 val before = store.read(KeyValueStore.Keys.HELD_CHAIN_IDS)
                     ?.let { raw -> runCatching { org.json.JSONArray(raw) }.getOrNull() }
                     ?.let { array -> (0 until array.length()).mapNotNull { array.opt(it) as? Number }.map { it.toLong() } }
-                val union = ((before ?: emptyList()) + held).distinct().sorted()
-                if (before == null || union.size != before.size) {
-                    store.write(KeyValueStore.Keys.HELD_CHAIN_IDS, org.json.JSONArray(union).toString())
+                val update = HeldChains.merge(before, held)
+                if (update.write) {
+                    store.write(KeyValueStore.Keys.HELD_CHAIN_IDS, org.json.JSONArray(update.union).toString())
                 }
+                // r17-15: the evidence is here for the first time — the shown
+                // networks settle now, not at the next launch (the list kept
+                // every Vela network until a restart, then dropped four).
+                if (update.firstRead) onHoldingsFirstRead()
             }
         }
     }
