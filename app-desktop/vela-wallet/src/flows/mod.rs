@@ -558,6 +558,14 @@ pub struct FlowStrings {
     /// r5reg-3: `{{to}}`, `{{symbol}}`, `{{from}}` — the Max filled again from
     /// a newer fee quote (`SendView::max_moved`).
     pub max_moved: String,
+    /// §34: the line under the fee while a press is out
+    /// (`SendView::fee_signing_key`).
+    pub fee_signing: SharedString,
+    /// §34: the press signed nothing — the fee moved before the signature
+    /// (`SendView::fee_moved`); `fee_moved_max` carries `{{to}}`,
+    /// `{{from}}`, `{{symbol}}`.
+    pub fee_moved: String,
+    pub fee_moved_max: String,
     /// Every sentence a refusal can be told in (`TrackEntryView.refusal_key`,
     /// `SendReceiptView.refusal_key`), by corpus key — the core chooses.
     pub refusals: Vec<(&'static str, SharedString)>,
@@ -1225,6 +1233,9 @@ impl FlowStrings {
             recipient_zero_address: s("send.recipientZeroAddress"),
             recipient_self: s("send.recipientSelf"),
             max_moved: loc.t("send.maxMoved").to_string(),
+            fee_signing: s("send.feeSigning"),
+            fee_moved: loc.t("send.feeMoved").to_string(),
+            fee_moved_max: loc.t("send.feeMovedMax").to_string(),
             refusals: refusal_sentences(loc),
             venue_blocks: crate::signing::trusted_signer::VenueBlockWords::resolve(loc),
             first_time_tag: s("componentsUi.signing.firstTimeTag"),

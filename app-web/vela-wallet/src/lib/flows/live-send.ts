@@ -429,6 +429,42 @@ export function maxMovedNote(
 	});
 }
 
+/**
+ * §34: the last press signed nothing — the quote at the signature was not
+ * the one shown (`SendView.fee_moved`). Said beside the confirm, in the
+ * core's words: a Max's new figure with it. The page already draws the new
+ * fee and amount; the next press signs exactly those.
+ */
+export function feeMovedNote(
+	send: Pick<SendView, 'fee_moved' | 'selected_token'>,
+	m: WalletFlowMessages
+): string | undefined {
+	const moved = send.fee_moved;
+	if (!moved) return undefined;
+	const words =
+		(m as Readonly<Record<string, string>>)[moved.key] ??
+		(moved.max ? m['send.feeMovedMax'] : m['send.feeMoved']);
+	return fill(words, {
+		from: moved.max?.from ?? '',
+		to: moved.max?.to ?? '',
+		symbol: send.selected_token?.symbol ?? ''
+	});
+}
+
+/**
+ * §34: while the person's press is out, the line under the fee that says the
+ * fee and the amount drawn are the ones being signed, frozen until the
+ * signature, a cancel or a stop (`SendView.fee_signing_key`).
+ */
+export function feeSigningNote(
+	send: Pick<SendView, 'fee_signing_key'>,
+	m: WalletFlowMessages
+): string | undefined {
+	const key = send.fee_signing_key;
+	if (!key) return undefined;
+	return (m as Readonly<Record<string, string>>)[key] ?? m['send.feeSigning'];
+}
+
 /** The form's chain: the selected token's, else the sweep's (the core's `form_chain`). */
 export function formChainOf(
 	send: Pick<SendView, 'selected_token' | 'multi_chain_id'>
@@ -1542,7 +1578,10 @@ function confirmHolds(
 			: send.passkey_note === 'cancelled'
 				? m['componentsUi.signing.passkeyClosed']
 				: undefined;
-	const note = passkey === undefined ? {} : { error: { text: passkey, calm: true } };
+	// §34: a press stopped because the fee moved under it — nothing signed,
+	// the new figures drawn — said beside the confirm, calmly.
+	const said = feeMovedNote(send, m) ?? passkey;
+	const note = said === undefined ? {} : { error: { text: said, calm: true } };
 	// Round 3 (send-15): another tab is sending from this account on this
 	// network; this one goes next, by itself, with a nonce read after it.
 	if (send.queued_behind_tab) return { ...note, held: m['send.queuedBehindTab'] };
@@ -1628,7 +1667,12 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 	// which is then the fee being signed: never the fee machine's newer quote
 	// beside it, nor that machine's failure in its place. Once the submit is
 	// over the newest quote is drawn again, before anything is signed again.
-	const out = send.tx_status === 'signing' || send.tx_status === 'submitting';
+	// §34: …and from the press itself, while it prepares: the core then
+	// serves the fee the press was made on (`fee_signing_key` says so).
+	const out =
+		send.tx_status === 'signing' ||
+		send.tx_status === 'submitting' ||
+		(send.fee_signing_key ?? null) !== null;
 	const failure = out ? null : sendFeeFailure(inputs);
 	const feeFailure = failure ? feeFailureWords(failure, formChainOf(send), m) : null;
 	const shownFee = out ? send.fee : (send.fee ?? inputs.fee.fee);
@@ -1686,7 +1730,7 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 					? m['send.feeTokenEstimate']
 					: m['send.estFeeLabel'],
 			value: feeFailure ? feeFailure.figure : feeText(shownFee, inputs),
-			note: feeFailure?.reason,
+			note: feeFailure?.reason ?? feeSigningNote(send, m),
 			tap: feeTap
 		}
 	];

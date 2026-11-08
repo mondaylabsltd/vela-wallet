@@ -334,6 +334,11 @@ export const WALLET_FLOW_KEYS = [
 	'componentsUi.signing.trustedSignerRefused',
 	'componentsUi.signing.integrity.couldNotCheck',
 	'send.maxMoved',
+	// §34: the press froze the fee and the amount (`SendView.fee_signing_key`);
+	// a quote that moved before the signature stopped it (`SendView.fee_moved`).
+	'send.feeSigning',
+	'send.feeMoved',
+	'send.feeMovedMax',
 	'send.txReviewAgain',
 	'send.txSendAgain',
 	'send.txCheckingElapsed',

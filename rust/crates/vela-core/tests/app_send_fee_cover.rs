@@ -551,6 +551,216 @@ fn a_max_follows_the_confirms_quote_until_it_is_signed() {
 }
 
 // ===========================================================================
+// §34 — charged = shown, frozen at the press (R20 S1)
+// ===========================================================================
+
+/// A press's quote: the vector's native fee, for an account not deployed yet
+/// (its first send deploys it, and the fee carries that).
+fn deploying_fee(chain_id: u32, fee: &Value) -> FeeEstimateView {
+    FeeEstimateView {
+        deployed: false,
+        ..fee_view(chain_id, fee)
+    }
+}
+
+/// The fee drawn, in wei (every quote here is native).
+fn drawn_fee_wei(view: &SendView) -> String {
+    let fee = view.fee.as_ref().expect("a fee is drawn");
+    assert!(
+        matches!(fee.fee_asset, FeeAssetView::Native),
+        "a native fee"
+    );
+    fee.total_wei.clone()
+}
+
+/// Answer the press's own reads — the credential and the relay's float —
+/// and nothing else: the submit, once issued, is left out.
+fn answer_press_reads(sut: &mut Sut) {
+    for _ in 0..16 {
+        let Some(op) = sut.outstanding().into_iter().find(|op| {
+            matches!(
+                op,
+                Op::ProbeTreasury { .. } | Op::LoadAccountCredential { .. }
+            )
+        }) else {
+            return;
+        };
+        let answer = match &op {
+            Op::ProbeTreasury { .. } => Res::TreasuryProbed {
+                probe: SendTreasuryProbe::Covered,
+            },
+            _ => Res::AccountCredential {
+                public_key_hex: Some("04deadbeef".to_owned()),
+            },
+        };
+        let wanted = op.clone();
+        sut.resolve_matching(|pending| *pending == wanted, answer);
+    }
+}
+
+/// The review of the submit out, if one is: (transfer amount, fee amount).
+fn submitted(sut: &Sut) -> Option<(String, String)> {
+    sut.outstanding().into_iter().find_map(|op| match op {
+        Op::SubmitUserOp { review, .. } => Some((
+            review.transfers[0].amount.clone(),
+            review.fee.as_ref().expect("an in-band fee").amount.clone(),
+        )),
+        _ => None,
+    })
+}
+
+/// The R20 S1 path, replayed: a press is frozen from the press to the
+/// signature; a quote that moved under it stops the press beside the button
+/// with the new figures, nothing signed; the next press signs exactly those.
+#[test]
+fn the_figures_signed_are_the_figures_pressed_or_nothing_is_signed() {
+    let root = vectors();
+    for case in cases(&root, "press_freeze") {
+        let name = text(&case["name"]);
+        let quotes = case["quotes"].as_array().expect("quotes");
+        let (mut sut, token) = picked(case);
+        let chain = token.chain_id;
+        sut.dispatch(Event::SetRecipient {
+            recipient: RECIPIENT.to_owned(),
+        });
+        settle(&mut sut, None);
+        sut.dispatch(Event::FeeUpdated {
+            estimate: deploying_fee(chain, &quotes[0]),
+        });
+        settle(&mut sut, None);
+        if case["max"].as_bool() == Some(true) {
+            sut.dispatch(Event::TapMax);
+        } else {
+            sut.dispatch(Event::SetAmount {
+                amount: text(&case["amount"]),
+            });
+        }
+        settle(&mut sut, None);
+        sut.dispatch(Event::Continue);
+        settle(&mut sut, Some(&deploying_fee(chain, &quotes[1])));
+        let view = sut.view();
+        assert_eq!(view.stage, SendStage::Confirm, "{name}: on the confirm");
+        assert!(view.can_confirm, "{name}: the confirm is open");
+        assert!(view.fee_moved.is_none(), "{name}: nothing moved yet");
+        let drawn = view.review_digest.clone();
+
+        match text(&case["moment"]).as_str() {
+            "preparing" => {
+                sut.dispatch(Event::SlideConfirm { review: drawn });
+                // The quote lands while the press reads the credential and
+                // the relay's float — before the operation is built.
+                sut.dispatch(Event::FeeUpdated {
+                    estimate: deploying_fee(chain, &quotes[2]),
+                });
+                let view = sut.view();
+                let pressed = &case["pressed"];
+                assert_eq!(
+                    view.confirm_amount,
+                    text(&pressed["amount"]),
+                    "{name}: the amount pressed stays drawn under the press"
+                );
+                assert_eq!(
+                    drawn_fee_wei(&view),
+                    text(&pressed["fee_wei"]),
+                    "{name}: the fee pressed stays drawn under the press"
+                );
+                assert_eq!(
+                    view.fee_signing_key.as_deref(),
+                    Some("send.feeSigning"),
+                    "{name}: and it is marked as the fee being signed"
+                );
+                answer_press_reads(&mut sut);
+            }
+            "before_tap" => {
+                sut.dispatch(Event::FeeUpdated {
+                    estimate: deploying_fee(chain, &quotes[2]),
+                });
+                // The tap that was drawn on the review before it.
+                sut.dispatch(Event::SlideConfirm { review: drawn });
+                answer_press_reads(&mut sut);
+            }
+            other => panic!("{name}: unknown moment {other}"),
+        }
+
+        let stopped = &case["stopped"];
+        if stopped.is_null() {
+            let (amount, fee) =
+                submitted(&sut).unwrap_or_else(|| panic!("{name}: the press is signed"));
+            let signed = &case["signed"];
+            assert_eq!(amount, text(&signed["amount"]), "{name}: amount signed");
+            assert_eq!(fee, text(&signed["fee"]), "{name}: fee signed");
+            continue;
+        }
+
+        // Stopped: nothing signed, said beside the button, the new figures
+        // drawn.
+        assert!(
+            submitted(&sut).is_none(),
+            "{name}: nothing is signed on a quote that moved: {:?}",
+            sut.outstanding()
+        );
+        let view = sut.view();
+        assert_eq!(view.stage, SendStage::Confirm, "{name}: still the confirm");
+        let moved = view
+            .fee_moved
+            .clone()
+            .unwrap_or_else(|| panic!("{name}: the stop is said"));
+        assert_eq!(moved.key, text(&stopped["fee_moved_key"]), "{name}: words");
+        assert_eq!(
+            moved.max.as_ref().map(|m| m.from.clone()),
+            opt_text(&stopped["max_from"]),
+            "{name}: the Max pressed"
+        );
+        assert_eq!(
+            moved.max.as_ref().map(|m| m.to.clone()),
+            opt_text(&stopped["max_to"]),
+            "{name}: the Max now"
+        );
+        if moved.max.is_some() {
+            assert!(
+                view.max_moved.is_none(),
+                "{name}: one sentence for one move"
+            );
+        }
+        assert!(view.fee_signing_key.is_none(), "{name}: no press is out");
+        assert_eq!(
+            view.confirm_amount,
+            text(&stopped["after"]["amount"]),
+            "{name}: the amount drawn after the stop"
+        );
+        assert_eq!(
+            drawn_fee_wei(&view),
+            text(&stopped["after"]["fee_wei"]),
+            "{name}: the fee drawn after the stop"
+        );
+        assert!(view.can_confirm, "{name}: the next press is open");
+
+        // The next press signs exactly what is drawn now.
+        sut.dispatch(Event::SlideConfirm {
+            review: view.review_digest.clone(),
+        });
+        assert!(
+            sut.view().fee_moved.is_none(),
+            "{name}: the press clears the stop"
+        );
+        answer_press_reads(&mut sut);
+        let (amount, fee) =
+            submitted(&sut).unwrap_or_else(|| panic!("{name}: the next press is signed"));
+        let signed = &case["signed"];
+        assert_eq!(amount, text(&signed["amount"]), "{name}: amount signed");
+        assert_eq!(fee, text(&signed["fee"]), "{name}: fee signed");
+        let held = to_base_units(&token.balance, token.decimals).expect("balance");
+        if case["max"].as_bool() == Some(true) {
+            assert_eq!(
+                amount.parse::<u128>().expect("amount") + fee.parse::<u128>().expect("fee"),
+                held,
+                "{name}: a Max spends the balance exactly: charged = shown"
+            );
+        }
+    }
+}
+
+// ===========================================================================
 // The fee machine (a dApp request's sheet)
 // ===========================================================================
 

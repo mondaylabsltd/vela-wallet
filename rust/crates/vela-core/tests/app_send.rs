@@ -4720,6 +4720,89 @@ fn a_requote_on_a_sweep_s_confirm_simulates_the_moved_calls_again() {
     assert_eq!(sut.view().sim_json.as_deref(), Some(SIM_JSON));
 }
 
+/// §34: a sweep's lines are figured against the fee drawn. Pressed on one
+/// quote, they stay as pressed while the press is out; a quote that moved by
+/// the signature stops it — nothing signed, said beside the confirm — and the
+/// next press signs the lines figured against the new one.
+#[test]
+fn a_sweep_whose_reserve_moved_under_the_press_signs_nothing_and_says_so() {
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    sut.dispatch(Event::SetMultiNetwork { chain_id: Some(1) });
+    sut.dispatch(Event::ToggleMultiToken {
+        token_id: eth("2").id(),
+    });
+    sut.dispatch(Event::ToggleMultiToken {
+        token_id: usdc("5").id(),
+    });
+    sut.dispatch(Event::ConfirmMultiSelection);
+    sut.resolve(credential(Some(PK)));
+    sut.resolve(fee_ok(native_fee(1, 500_000_000_000_000_000)));
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::Continue);
+    sut.resolve_matching(
+        |op| matches!(op, Op::EstimateFee { .. }),
+        fee_ok(native_fee(1, 500_000_000_000_000_000)),
+    );
+    drop_the_precheck_timer(&mut sut);
+    sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    answer_confirm_probes(&mut sut);
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::Confirm);
+    assert_eq!(view.multi_specs[0].amount, "1.5");
+
+    // The press; the next block's quote lands while it reads the float.
+    let ops = sut.dispatch(Event::SlideConfirm {
+        review: view.review_digest.clone(),
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]),
+        "{ops:?}"
+    );
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 600_000_000_000_000_000),
+    });
+    let view = sut.view();
+    assert_eq!(view.multi_specs[0].amount, "1.5", "the line pressed stays");
+    assert_eq!(view.fee_signing_key.as_deref(), Some("send.feeSigning"));
+
+    // The signature's moment: the reserve moved — nothing signed.
+    let ops = sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::SubmitUserOp { .. })),
+        "{ops:?}"
+    );
+    let view = sut.view();
+    assert_eq!(view.multi_specs[0].amount, "1.4", "the new line is drawn");
+    assert_eq!(
+        view.fee_moved.as_ref().map(|m| m.key.as_str()),
+        Some("send.feeMoved")
+    );
+    for op in ops {
+        if let Op::SimulateCalls { .. } = op {
+            sut.resolve_matching(
+                |op| matches!(op, Op::SimulateCalls { .. }),
+                Res::SimResolved { sim_json: None },
+            );
+        }
+    }
+
+    // The next press signs the lines drawn now.
+    let ops = sut.dispatch(Event::SlideConfirm {
+        review: sut.view().review_digest.clone(),
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]),
+        "{ops:?}"
+    );
+    let ops = sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    let Some(Op::SubmitUserOp { calls, .. }) =
+        ops.iter().find(|op| matches!(op, Op::SubmitUserOp { .. }))
+    else {
+        panic!("the next press is signed: {ops:?}")
+    };
+    assert_eq!(calls[0].value, "1400000000000000000");
+}
+
 #[test]
 fn fee_busy_or_estimating_disables_the_confirm_slide() {
     let mut sut = boot(vec![eth("2")]);

@@ -518,6 +518,18 @@ data class SendSubmitSlow(val seconds: Int = 0, val busy: Boolean = false)
 @Serializable
 data class SendMaxMoved(val from: String = "", val to: String = "")
 
+/**
+ * `SendFeeMoved` (§34): the last press signed nothing — the quote at the
+ * signature was not the one shown. `key` is the core's words; `max`, a Max's
+ * two figures when it moved with the fee.
+ */
+@Serializable
+data class SendFeeMoved(
+    val key: String = "",
+    @Serializable(with = SendMaxMovedFailSoft::class)
+    val max: SendMaxMoved? = null,
+)
+
 /** `SendPasskeyNote`: the passkey sheet closed without a signature — how. */
 @Serializable
 enum class SendPasskeyNote {
@@ -563,6 +575,7 @@ object SendRecipientWarningFailSoft :
     app.getvela.wallet.core.crux.FailSoftSerializer<SendRecipientWarning>(SendRecipientWarning.serializer())
 object SendSubmitSlowFailSoft : app.getvela.wallet.core.crux.FailSoftSerializer<SendSubmitSlow>(SendSubmitSlow.serializer())
 object SendMaxMovedFailSoft : app.getvela.wallet.core.crux.FailSoftSerializer<SendMaxMoved>(SendMaxMoved.serializer())
+object SendFeeMovedFailSoft : app.getvela.wallet.core.crux.FailSoftSerializer<SendFeeMoved>(SendFeeMoved.serializer())
 object SendMultisigRefFailSoft : app.getvela.wallet.core.crux.FailSoftSerializer<SendMultisigRef>(SendMultisigRef.serializer())
 object SendProposedFailSoft : app.getvela.wallet.core.crux.FailSoftSerializer<SendProposed>(SendProposed.serializer())
 
@@ -994,6 +1007,14 @@ data class SendView(
     /** Max was tapped and the figure moved as the fee settled. */
     @Serializable(with = SendMaxMovedFailSoft::class)
     val max_moved: SendMaxMoved? = null,
+    /**
+     * §34: while the person's press is out, the fee and the amount drawn are
+     * frozen at the press — the line under the fee that says so (a key).
+     */
+    val fee_signing_key: String? = null,
+    /** §34: the last press signed nothing — the fee moved; said beside the confirm. */
+    @Serializable(with = SendFeeMovedFailSoft::class)
+    val fee_moved: SendFeeMoved? = null,
     val sending: Boolean = false,
     val tx_status: SendTxStatus = SendTxStatus.Idle,
     val tx_error: SendTxErrorKey? = null,

@@ -578,6 +578,12 @@ struct SendViewWire: Decodable, Equatable {
     var submitSlow: SendSubmitSlowWire?
     /// r5reg-3: a Max shown was filled again from a newer quote.
     var maxMoved: SendMaxMovedWire?
+    /// §34: while the person's press is out, the fee and amount drawn are
+    /// frozen at the press — the line under the fee that says so (a key).
+    var feeSigningKey: String?
+    /// §34: the last press signed nothing — the quote at the signature was
+    /// not the one shown. Said beside the confirm, over the new figures.
+    var feeMoved: SendFeeMovedWire?
     /// send-11: why the last passkey prompt signed nothing
     /// (`cancelled` / `timed_out`).
     var passkeyNote: String?
@@ -600,6 +606,13 @@ struct SendSubmitSlowWire: Decodable, Equatable {
 struct SendMaxMovedWire: Decodable, Equatable {
     let from: String
     let to: String
+}
+
+/// `SendFeeMoved` (§34): the stop's words (a key), and a Max's two figures
+/// when it moved with the fee.
+struct SendFeeMovedWire: Decodable, Equatable {
+    let key: String
+    var max: SendMaxMovedWire?
 }
 
 /// `SendMultisigRef`: "2 of 3 approve".

@@ -347,7 +347,9 @@ class SendRoundsTest {
         val failed = FeeBoards.view(FeeBoards.Case.Retrying, chainId = 100, account = safe)
         val fee = confirmModel(signing, failed).facts.single { it.label == strings.t(I18nKeys.Flows.EST_FEE) }
         assertNotEquals("no dash over the fee being signed", "—", fee.value)
-        assertNull(fee.note)
+        // §34: the line under it says it is the fee being signed — never the
+        // failure's reason.
+        assertEquals(strings.t(I18nKeys.Flows.FEE_SIGNING), fee.note)
         assertFalse(fee.tap)
         // Once the submit is over, the failure is drawn again.
         m.answer(SendShellResult.SubmitFailed(SendSubmitFailure.PasskeyCancelled))

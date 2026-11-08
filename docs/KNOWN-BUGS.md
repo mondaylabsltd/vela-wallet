@@ -1,5 +1,23 @@
 # Known bugs
 
+## R20-S1 (✅ FIXED 2026-11-08, §34; found 2026-11-07, iOS, Arc Testnet) — a deploying account's Max charged a fee larger than shown
+
+**Platform:** found on iOS (the rule was the core's, so every shell). **Symptom:**
+"R20 iOS ZH" (0.3 USDC, never deployed — its first send deployed it), zh: Send →
+USDC → Max → payee → Continue; the confirm read 0.0675 USDC with 预估手续费 0.2325
+USDC; the chain took 0.0058875 to the payee and a 0.29411249999 fee leg (tx
+`0x5c832ead9782777a38e92ca41b50ca36b07004a30c14cde91a1ee3f989052357`) — 0.0616 more
+fee than shown. The receipt said "已发送 0.005888 USDC". Seen 1 in 3. **Severity:**
+S1 (charged ≠ shown). **Cause:** a re-quote landed during the press's own reads
+(credential, the relay's float); the confirm drew it beside the amount pressed,
+the submit found the review moved and returned the button without a word, the
+Max was re-derived from the new quote, and the next press signed it.
+**Fix (§34):** the press freezes the fee and amount drawn (marked
+`send.feeSigning`) until the signature, a cancel or a stop; a quote that moved by
+the signature signs nothing and is said beside the confirm with the new figures
+(`send.feeMoved` / `send.feeMovedMax`); the next press signs exactly those. Proved
+in the core (vector `press_freeze`), on every shell, and on the fork harness.
+
 ## SEC-PARENT-1 (✅ FIXED 2026-11-07, §31; reported 2026-09-29) — a site could make the account act for a multisig it is a member of
 
 **Reported** in the 2026-09-29 disclosure package (`APPENDIX-PARENT.md`): the
