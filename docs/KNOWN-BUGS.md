@@ -33,6 +33,82 @@ with no "anyway" for this device's multisigs and for any Safe whose
 again at submit; independently on the signing page (2c649b76). Proved on the
 fork harness (`multisig_fork.rs` `parent::…`).
 
+## R20-2 (open, S3, 2026-11-08, Android) — found in the R20 release-candidate acceptance
+
+**Platform:** Android. **Symptom:** Testnet, fresh install, first switch from Mainnet: "No activity yet" beside "Can't reach 2 networks right now" from about 21 s to 39 s (r18-1 fixed on Mainnet, web and iOS, not here). **Severity:** S3. **Workaround:** Wait for the networks to answer, or pull to refresh.
+
+## R20-3 (open, S4, 2026-11-08, desktop) — found in the R20 release-candidate acceptance
+
+**Platform:** desktop. **Symptom:** The parent-Safe refusal names the Safe in lowercase ("0xd276…1ef9"); the desktop twin of r18-23. **Severity:** S4. **Workaround:** Compare the address case-insensitively.
+
+## R20-4 (open, S4, 2026-11-08, desktop) — found in the R20 release-candidate acceptance
+
+**Platform:** desktop. **Symptom:** An Activity row can keep the language it was recorded in (a zh row in the English UI); intermittent. **Severity:** S4. **Workaround:** Open the row; the sheet is in the current language.
+
+## R20-5 (open, S4, 2026-11-08, desktop) — found in the R20 release-candidate acceptance
+
+**Platform:** desktop. **Symptom:** In the dark theme, Settings → Account's "Create New Account" button is white on light grey (about 1.2:1 contrast). **Severity:** S4. **Workaround:** Use the switcher's Create New Account, or the light theme.
+
+## R20-6 (open, S4, 2026-11-08, desktop) — found in the R20 release-candidate acceptance
+
+**Platform:** desktop. **Symptom:** Approve and execute pressed under a refused Arc draws the review's "can't check" line, not "nothing was sent" beside the button (r18-13 partly fixed). Nothing is signed. **Severity:** S4. **Workaround:** Check again once the network answers.
+
+## R20-7 (open, S4, 2026-11-08, iOS) — found in the R20 release-candidate acceptance
+
+**Platform:** iOS. **Symptom:** Settings → Change members shows the plan line "2 of 0 → 2 of 0" under a correct header; the review sheet after the press is correct. **Severity:** S4. **Workaround:** Read the rule on the proposal's review sheet before approving.
+
+## R20-8 (open, S4, 2026-11-08, iOS) — found in the R20 release-candidate acceptance
+
+**Platform:** iOS. **Symptom:** The deep4 and delegate member sheets have no Reject (R18-15's twin). Vela never signs these. **Severity:** S4. **Workaround:** Reject from web or desktop, or replace it with another proposal at the same number.
+
+## R20-9 (open, S4, 2026-11-08, iOS) — found in the R20 release-candidate acceptance
+
+**Platform:** iOS. **Symptom:** Change members still says "Proposed on Arc Testnet" right after the change executed. **Severity:** S4. **Workaround:** Reopen Settings.
+
+## R20-10 (open, S4, 2026-11-08, iOS) — found in the R20 release-candidate acceptance
+
+**Platform:** iOS. **Symptom:** A deployed multisig's home keeps the first-run cards ("Get it ready / Add funds…"). **Severity:** S4. **Workaround:** Dismiss them with Got it.
+
+## R20-11 (open, S4, 2026-11-08, Safari Web Extension) — found in the R20 release-candidate acceptance
+
+**Platform:** Safari Web Extension. **Symptom:** After declining a multisig dApp request and switching the front account, the request tab stays on "Opening the transaction…". **Severity:** S4. **Workaround:** Press Done.
+
+## R20-12 (open, S4, 2026-11-08, iOS) — found in the R20 release-candidate acceptance
+
+**Platform:** iOS. **Symptom:** After creating an account, Enter wallet lands on the previous front account. **Severity:** S4. **Workaround:** Switch accounts in the header.
+
+## R20-13 (open, S4, 2026-11-08, Android) — found in the R20 release-candidate acceptance
+
+**Platform:** Android. **Symptom:** For 1.0–1.7 s after an execution the chip says "Executing…" over an "Executed" body (r18-16 partly fixed). **Severity:** S4. **Workaround:** Transient.
+
+## R20-14 (open, S4, 2026-11-08, Android (test builds only)) — found in the R20 release-candidate acceptance
+
+**Platform:** Android (test builds only). **Symptom:** After a §28-refused create, the home line says "Vela keeps trying" though nothing is retried. **Severity:** S4. **Workaround:** Point the build at a local service; use Share again.
+
+## R20-15 (open, S4, 2026-11-08, Android) — found in the R20 release-candidate acceptance
+
+**Platform:** Android. **Symptom:** A press stop reads "That didn't go through: Network fee ≈ …", naming the fee line as the reason. Nothing is signed. **Severity:** S4. **Workaround:** Press Check again, then Execute.
+
+## R20-16 (open, S4, 2026-11-08, Android) — found in the R20 release-candidate acceptance
+
+**Platform:** Android. **Symptom:** Wording: the zh Send form says the relay "couldn't test-run… retrying" before anything is typed; the unchecked-owner refusal says "when you're online" while the device is online; the hash copy button is announced "Copy address". **Severity:** S4. **Workaround:** Cosmetic.
+
+## R20-17 (open, S4, 2026-11-08, Android) — found in the R20 release-candidate acceptance
+
+**Platform:** Android. **Symptom:** A cold start flashes a deployed multisig's "Get it ready" card for about 0.2 s before the settled home. **Severity:** S4. **Workaround:** Clears itself.
+
+## R20-18 (open, S4, 2026-11-08, web) — found in the R20 release-candidate acceptance
+
+**Platform:** web. **Symptom:** The approvals heading says "Executed" while "Executing…" is still in the sheet for 0.7–1.1 s. **Severity:** S4. **Workaround:** Transient.
+
+## R20-19 (open, S4, 2026-11-08, outside /connect page, zh) — found in the R20 release-candidate acceptance
+
+**Platform:** outside /connect page, zh. **Symptom:** The approval title doubles the ordinal: "批准第 第 5 号 号". **Severity:** S4. **Workaround:** Cosmetic.
+
+## R20-T1 (open, test only, 2026-11-08, web) — `FeedbackBody` "keeps Tab inside itself" fails under full-suite load
+
+**Platform:** web client vitest. **Symptom:** fails once under a fully loaded host, passes 3/3 alone. **Severity:** test flake, no product effect.
+
 ## R18-11 (open, S4, 2026-11-07, desktop) — a site's request to the connected multisig flashes a "passkey prompt was closed" sheet first
 
 **Platform:** desktop. **Symptom:** a request arriving as the multisig (in-app browser, a site connected to a multisig) shows a sheet that says the passkey prompt was closed, with live Decline / Try again, for 0.7–2 s before the parent-Safe refusal replaces it (Round 18, desk-2). Nothing is signed; the refusal and the site's `-32603` are right. **Severity:** S4. Not fixed in Round 19 (scope frozen).
