@@ -158,6 +158,13 @@ export interface SigningMessages {
 	selfCallBlockedBody: string;
 	selfCallBlockedLegBody: string;
 	selfCallBlockedSafeTx: string;
+	/**
+	 * VELA-2026-002 (templates — '{{function}}', '{{safe}}'): the request would have made
+	 * this account act for a Safe it owns —
+	 * or whether it owns that Safe could not be read (`…Unchecked`).
+	 */
+	parentSafeBlocked: string;
+	parentSafeUnchecked: string;
 	/** What a typed cap that is not a number gets told. */
 	invalidAmount: string;
 	/**

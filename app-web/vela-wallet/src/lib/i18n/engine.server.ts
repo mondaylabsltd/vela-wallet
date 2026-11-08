@@ -1151,6 +1151,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		selfCallBlockedBody: k('componentsUi.signing.selfCallBlockedBody'),
 		selfCallBlockedLegBody: k('componentsUi.signing.selfCallBlockedLegBody'),
 		selfCallBlockedSafeTx: k('componentsUi.signing.selfCallBlockedSafeTx'),
+		parentSafeBlocked: k('componentsUi.signing.parentSafeBlocked'),
+		parentSafeUnchecked: k('componentsUi.signing.parentSafeUnchecked'),
 		invalidAmount: k('componentsUi.signingApprove.invalidAmount'),
 		loading: k('componentsUi.signing.loading'),
 		summarySend: k('componentsUi.signing.summarySend'),

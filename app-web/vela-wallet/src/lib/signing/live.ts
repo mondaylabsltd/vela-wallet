@@ -353,11 +353,22 @@ export function calldataBytes(paramsJson: string): number {
 	}
 }
 
-/** The sentence under a refused request (spec 081). */
-function selfCallBlockedText(
+/**
+ * The sentence under a refused request (spec 081). VELA-2026-002: one that would have
+ * made this account act for a Safe it owns (`blocked.parent`) says that
+ * Safe and what was asked of it — or, when whether it owns it could not be
+ * read, that Vela refused rather than guess.
+ */
+export function selfCallBlockedText(
 	blocked: NonNullable<SignView['blocked']>,
 	m: SigningMessages
 ): string {
+	if (blocked.parent != null) {
+		return fill(blocked.reason === 'unchecked' ? m.parentSafeUnchecked : m.parentSafeBlocked, {
+			function: blocked.function,
+			safe: shortenAddress(blocked.parent)
+		});
+	}
 	if (blocked.function === 'SafeTx') return m.selfCallBlockedSafeTx;
 	if (blocked.leg_index != null) {
 		return fill(m.selfCallBlockedLegBody, {

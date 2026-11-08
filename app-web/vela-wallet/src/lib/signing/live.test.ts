@@ -862,7 +862,9 @@ describe('after the approval the sheet is a status', () => {
 						function: 'enableModule',
 						selector: '0x610b5925',
 						leg_index: null,
-						nested: false
+						nested: false,
+						parent: null,
+						reason: null
 					}
 				}),
 				progress: SIGNED
@@ -3331,7 +3333,14 @@ describe('the simulation’s verdict is drawn in its place (the web signing verd
 
 		const refused: SignView = {
 			...OPEN_SIGN,
-			blocked: { function: 'enableModule', selector: '0x610b5925', leg_index: null, nested: false }
+			blocked: {
+				function: 'enableModule',
+				selector: '0x610b5925',
+				leg_index: null,
+				nested: false,
+				parent: null,
+				reason: null
+			}
 		};
 		for (const first_party of [false, true]) {
 			for (const sim of [undefined, ended(NOTHING_MOVES), ended(REVERTS), ended(UNREACHABLE)]) {
@@ -3606,7 +3615,14 @@ describe('the simulation’s verdict: waited for, and said when it could not be 
 		const refused: SignView = {
 			...waitedOut,
 			sim_checking: false,
-			blocked: { function: 'enableModule', selector: '0x610b5925', leg_index: null, nested: false }
+			blocked: {
+				function: 'enableModule',
+				selector: '0x610b5925',
+				leg_index: null,
+				nested: false,
+				parent: null,
+				reason: null
+			}
 		};
 		for (const sign of [refused, own(refused)]) {
 			const model = buildSigningModel(inputs({ sign }))!;

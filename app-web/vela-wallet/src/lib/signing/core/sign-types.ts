@@ -201,6 +201,16 @@ export type SignRequestSessionOptions = SessionOptions<SignView> & {
 	 * it can stop.
 	 */
 	timer?: (ms: number) => Promise<void>;
+	/**
+	 * VELA-2026-002: the JSON-RPC call behind `ReadSafeOwner` (`eth_call` of
+	 * `isOwner`). Absent: the app's pool (`poolRpcCall`). A test passes a
+	 * node it answers itself.
+	 */
+	ownerCall?: (
+		method: string,
+		params: unknown[],
+		chainId: number
+	) => Promise<{ result?: unknown; error?: { code?: unknown; message?: unknown } }>;
 };
 
 /**
