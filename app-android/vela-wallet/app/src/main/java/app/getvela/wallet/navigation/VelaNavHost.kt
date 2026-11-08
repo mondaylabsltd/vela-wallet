@@ -1208,6 +1208,7 @@ fun VelaNavHost(
                     val signFee by controller.fee.collectAsStateWithLifecycle()
                     val signSpeed by controller.speed.collectAsStateWithLifecycle()
                     val signSim by controller.sim.collectAsStateWithLifecycle()
+                    val refuseBlind by app.getvela.wallet.core.data.SigningPrefs.refuseBlind.collectAsStateWithLifecycle()
                     val signRequest by controller.request.collectAsStateWithLifecycle()
                     // Phase 3: a request the core judged dangerous buzzes a warning
                     // once, as its sheet opens (SigningHaptics) — never again for it.
@@ -1281,8 +1282,15 @@ fun VelaNavHost(
                             val signingModel = app.getvela.wallet.feature.signing.SigningLive.model(
                                 drawn, request, signView, clearView, guardView, signFee, signCtx, signSim,
                                 speed = SendLive.SpeedInputs(signSpeed, controller::feeViewOf),
-                                confirm = remember(signJson, guardJson, clearJson, feeJson, signSpeed.tier) {
-                                    app.getvela.wallet.feature.signing.SigningLive.confirmState(signJson, guardJson, clearJson, feeJson, signSpeed.tier)
+                                // R22: the sheet's own simulation verdict and "Refuse blind
+                                // signing" go to the core's gate too (its posture: anyway,
+                                // danger, hold).
+                                confirm = remember(signJson, guardJson, clearJson, feeJson, signSpeed.tier, signSim, refuseBlind) {
+                                    app.getvela.wallet.feature.signing.SigningLive.confirmState(
+                                        signJson, guardJson, clearJson, feeJson, signSpeed.tier,
+                                        simJson = signSim?.verdictJson,
+                                        refuseBlind = refuseBlind,
+                                    )
                                 },
                             )
                             SideEffect { lastSigning.value = signingModel to signCtx }
@@ -1310,6 +1318,12 @@ fun VelaNavHost(
                                 },
                                 onRetry = { controller.retry() },
                                 onRecheck = { controller.simAgain() },
+                                // R22: "add your own node and turn on 'Only use my node'" —
+                                // this network's RPC settings; Back returns to the sheet.
+                                onOwnNode = {
+                                    application.container.pendingNetworkDetail.value = request.chainId
+                                    navController.swapOverWallet(VelaDestinations.SETTINGS)
+                                },
                             )
                         }
                     }
@@ -2924,6 +2938,20 @@ fun VelaNavHost(
                 // A page asked for while Settings is already up (the AI agent's
                 // `show`) recomposes it, so the model below takes it.
                 val askedPage by application.container.pendingSettingsPage.collectAsStateWithLifecycle()
+                // R22: the signing sheet's own-node hint — this network's RPC
+                // settings ("Only use my node"), opened once and consumed.
+                val askedNetwork by application.container.pendingNetworkDetail.collectAsStateWithLifecycle()
+                LaunchedEffect(askedNetwork) {
+                    val chainId = askedNetwork ?: return@LaunchedEffect
+                    application.container.pendingNetworkDetail.value = null
+                    application.container.settings.networks.value.networks
+                        .firstOrNull { it.chain_id.toInt() == chainId }
+                        ?.let { row ->
+                            openNetworkId = row.id
+                            application.container.settings.expandOverride(row.chain_id)
+                            requestedPage = SettingsPage.NetworkDetail
+                        }
+                }
                 val sessionView = session
                 val i18nState by application.container.i18nRuntime.state.collectAsStateWithLifecycle()
                 var storageReport by remember { mutableStateOf<DeviceStorage.Report?>(null) }
@@ -3090,6 +3118,13 @@ fun VelaNavHost(
                         // Spec 091: stored with the preferences; the browser follows them (the container).
                         onDebugModeRevealed = { application.container.preferences.revealDebugMode() },
                         onDebugMode = { on -> application.container.preferences.setDebugMode(on) },
+                        // R22: Security's "Refuse blind signing" — stored in the core's spelling.
+                        onSwitch = { id, on ->
+                            if (id == SettingsFixtures.REFUSE_BLIND_SWITCH) {
+                                settingsHaptic(VelaHaptic.Select)
+                                application.container.preferences.setRefuseBlind(on)
+                            }
+                        },
                         onStorageClear = { itemId ->
                             if ("://" in itemId) {
                                 // One connected site (spec 070) is the browser's, not

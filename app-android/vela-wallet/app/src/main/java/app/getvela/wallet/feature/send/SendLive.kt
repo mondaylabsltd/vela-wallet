@@ -1220,7 +1220,7 @@ object SendLive {
         is FeeAssetView.Erc20 -> {
             val symbol = asset.symbol ?: "TOKEN"
             FeeParts(
-                coin = "${feeFromBase(asset.amount, asset.decimals)} $symbol",
+                coin = "${feeFromBase(asset.amount, asset.decimals, TOKEN_FEE_PLACES)} $symbol",
                 mark = WalletLive.mark(estimate.chain_id, symbol, asset.token),
                 units = asset.amount.toBigDecimalOrNull()?.movePointLeft(asset.decimals)?.toDouble(),
                 contract = asset.token,
@@ -1246,7 +1246,7 @@ object SendLive {
                 symbol = option.symbol,
                 balanceLabel = ctx.strings.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to tokenAmountText(humanOfBase(option.balance, option.decimals)))),
                 // A fee reads as the fee row writes it — rounded UP.
-                fee = option.amount?.let { "~${feeFromBase(it, option.decimals)} ${option.symbol}" } ?: "—",
+                fee = option.amount?.let { "~${feeFromBase(it, option.decimals, feePlaces(option.contract))} ${option.symbol}" } ?: "—",
                 selected = option.selected,
                 // Issue 211: the core refuses to select a coin that cannot pay;
                 // a row that looks like the others and silently does nothing is
@@ -2043,16 +2043,24 @@ object SendLive {
      * is the wrong way to be wrong; a fee below the sixth decimal keeps two
      * significant figures instead of reading as zero.
      */
-    fun feeFromBase(units: String, decimals: Int): String {
-        val value = units.toBigDecimalOrNull()?.movePointLeft(decimals) ?: return units
-        if (value.signum() == 0) return Formats.current.plain("0")
-        val shown = if (value < java.math.BigDecimal("0.000001")) {
-            value.round(java.math.MathContext(2, RoundingMode.UP))
-        } else {
-            value.setScale(6, RoundingMode.UP)
-        }
-        return Formats.current.plain(shown.stripTrailingZeros().toPlainString())
+    fun feeFromBase(units: String, decimals: Int, shown: Int = NATIVE_FEE_PLACES): String {
+        // r21-2 (§36): the figure is the core's (`fee_figure`) — rounded UP at
+        // the shown places (under the last place, two significant digits,
+        // up), so a fee never reads below what is charged; plain digits with
+        // a `.` mark, localised here as every other figure is.
+        val figure = uniffi.vela_core_uniffi.feeFigure(units, decimals.coerceAtLeast(0).toUInt(), shown.coerceAtLeast(0).toUInt())
+            ?: return units
+        return Formats.current.plain(figure)
     }
+
+    /** r21-2: the places a fee in the chain's own coin is shown at. */
+    const val NATIVE_FEE_PLACES = 6
+
+    /** r21-2: the places a fee in a token is shown at. */
+    const val TOKEN_FEE_PLACES = 4
+
+    /** The places a fee in [contract] (`null`: the chain's own coin) is shown at. */
+    fun feePlaces(contract: String?): Int = if (contract == null) NATIVE_FEE_PLACES else TOKEN_FEE_PLACES
 
     /**
      * A balance on a Send screen: the one token-amount rule the asset list's

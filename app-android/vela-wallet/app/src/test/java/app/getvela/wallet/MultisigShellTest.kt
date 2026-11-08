@@ -82,6 +82,29 @@ class MultisigShellTest {
             return httpAnswer(url)
         }
         override suspend fun rpc(chainId: Int, method: String, params: JsonElement) = rpcAnswer(chainId, method, params)
+
+        /** R22: one node's word only — no independent second answer. Off: two nodes of this one world agree. */
+        var singleNode = false
+
+        override suspend fun rpcCorroborated(chainId: Int, method: String, params: JsonElement): JsonElement {
+            val body = when (val reply = rpcAnswer(chainId, method, params)) {
+                is MultisigRpcReply.Result -> kotlinx.serialization.json.buildJsonObject { put("result", reply.value) }.toString()
+                is MultisigRpcReply.Error -> kotlinx.serialization.json.buildJsonObject {
+                    put(
+                        "error",
+                        kotlinx.serialization.json.buildJsonObject {
+                            put("code", kotlinx.serialization.json.JsonPrimitive(reply.code))
+                            put("message", kotlinx.serialization.json.JsonPrimitive(reply.message))
+                            reply.data?.let { put("data", it) }
+                        },
+                    )
+                }.toString()
+                is MultisigRpcReply.Unanswered -> null
+            }
+            return app.getvela.wallet.core.crux.Wire.json.parseToJsonElement(
+                uniffi.vela_core_uniffi.rpcCorroboratedEnvelope(body, body?.takeUnless { singleNode }, false),
+            )
+        }
         override suspend fun storeRead(key: String): StoreRead = if (unreadable) StoreRead.Unreadable else StoreRead.Value(store[key])
         override suspend fun storeWrite(key: String, value: String?): Boolean {
             if (refuseWrites) return false

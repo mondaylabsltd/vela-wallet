@@ -153,11 +153,9 @@ class NativeShownFeeDeviceTest {
         waitFor(tag, timeoutMs)
         compose.waitUntil(timeoutMs) { enabled(tag) == true }
         runCatching { compose.onAllNodesWithTag(tag)[0].performScrollTo() }
-        compose.onAllNodesWithTag(tag)[0].performClick()
-        compose.waitForIdle()
-        // The world answers neither safety check: "… anyway", confirmed as a person would.
-        val anyway = compose.onAllNodesWithTag("multisig.sign.anywayConfirm")
-        if (anyway.fetchSemanticsNodes().isNotEmpty()) anyway[0].performClick()
+        // R22: the world answers neither safety check — "… anyway", held:
+        // pressed as a person using TalkBack presses it (twice), else tapped.
+        compose.onAllNodesWithTag(tag)[0].confirmPress()
         compose.waitForIdle()
     }
 
@@ -222,8 +220,9 @@ class NativeShownFeeDeviceTest {
         // Execute pressed: the world reads neither safety check, so its
         // "… anyway" asks once more. While it asks, nothing more is painted …
         runCatching { compose.onAllNodesWithTag("multisig.proposal.execute")[0].performScrollTo() }
-        compose.onAllNodesWithTag("multisig.proposal.execute")[0].performClick()
-        waitFor("multisig.sign.anywayConfirm")
+        // R22: the hold's accessible path — the first press arms it ("Press again to confirm").
+        compose.onAllNodesWithTag("multisig.proposal.execute")[0].armHeld()
+        compose.waitForIdle()
         compose.mainClock.autoAdvance = false
         // … and the relay's price moves: a new look lands in the core, fresh.
         world.quoteAmount = "0x2"
@@ -236,7 +235,7 @@ class NativeShownFeeDeviceTest {
         assertEquals("the screen still says the figure pressed on", drawn, text("multisig.proposal.fee"))
         // The button's own click (its semantics action): an injected touch
         // would move the held clock by a frame between down and up.
-        compose.onAllNodesWithTag("multisig.sign.anywayConfirm")[0].performSemanticsAction(SemanticsActions.OnClick)
+        compose.onAllNodesWithTag("multisig.proposal.execute")[0].performSemanticsAction(SemanticsActions.OnClick)
         // The press is the machine's before any frame is drawn.
         eventually("the press reached the machine") {
             hub.proposalsView.value.action("execute:$hash")?.takeIf { it.kind != null }

@@ -141,11 +141,9 @@ class R15NativeDeviceTest {
         waitFor(tag, timeoutMs)
         compose.waitUntil(timeoutMs) { enabled(tag) == true }
         runCatching { compose.onAllNodesWithTag(tag)[0].performScrollTo() }
-        compose.onAllNodesWithTag(tag)[0].performClick()
-        compose.waitForIdle()
-        // The world answers neither safety check: "… anyway", confirmed as a person would.
-        val anyway = compose.onAllNodesWithTag("multisig.sign.anywayConfirm")
-        if (anyway.fetchSemanticsNodes().isNotEmpty()) anyway[0].performClick()
+        // R22: the world answers neither safety check — "… anyway", held:
+        // pressed as a person using TalkBack presses it (twice), else tapped.
+        compose.onAllNodesWithTag(tag)[0].confirmPress()
         compose.waitForIdle()
     }
 

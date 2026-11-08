@@ -241,6 +241,8 @@ data class SettingsActions(
     // Spec 047 US1: the rows that do what they say.
     val onSegment: (group: String, id: String) -> Unit = { _, _ -> },
     val onTextScale: (Int) -> Unit = {},
+    /** R22: a section switch changed (Security's "Refuse blind signing"). */
+    val onSwitch: (id: String, on: Boolean) -> Unit = { _, _ -> },
     val onStorageClear: (String) -> Unit = {},
     val onClearCaches: () -> Unit = {},
     val onErase: () -> Unit = {},
@@ -445,6 +447,7 @@ fun SettingsRoute(
         },
         onSegment = actions.onSegment,
         onTextScale = actions.onTextScale,
+        onSwitch = actions.onSwitch,
         onStorageClear = { id ->
             val group = model.storage.groups.firstOrNull { g -> g.items.any { it.id == id } }
             val item = group?.items?.firstOrNull { it.id == id }
@@ -617,6 +620,7 @@ fun SettingsScreen(
     onResetEndpoints: () -> Unit = {},
     onSegment: (String, String) -> Unit = { _, _ -> },
     onTextScale: (Int) -> Unit = {},
+    onSwitch: (String, Boolean) -> Unit = { _, _ -> },
     onStorageClear: (String) -> Unit = {},
     /** Spec 058: the question a storage row's 清除 asks first. */
     storageConfirm: ConfirmSheetModel? = null,
@@ -729,6 +733,7 @@ fun SettingsScreen(
                             onSignOut = onSignOut,
                             onSegment = onSegment,
                             onTextScale = onTextScale,
+                            onSwitch = onSwitch,
                         )
                     }
                     else -> {
@@ -881,6 +886,7 @@ private fun SettingsHomeBody(
     onSignOut: () -> Unit = {},
     onSegment: (String, String) -> Unit = { _, _ -> },
     onTextScale: (Int) -> Unit = {},
+    onSwitch: (String, Boolean) -> Unit = { _, _ -> },
 ) {
     VelaAccountRow(model.account) { onOpenOverlay(SettingsOverlay.Accounts) }
 
@@ -906,6 +912,16 @@ private fun SettingsHomeBody(
                     row = row,
                     divider = index < section.rows.lastIndex,
                     onClick = onRow,
+                )
+            }
+            // R22: a section's switches (Security's "Refuse blind signing").
+            section.switches.forEach { switch ->
+                VelaSwitchRow(
+                    title = switch.title,
+                    body = switch.subtitle,
+                    checked = switch.on,
+                    onCheckedChange = { on -> onSwitch(switch.id, on) },
+                    modifier = Modifier.testTag("settings.switch.${switch.id}"),
                 )
             }
         }
@@ -1107,17 +1123,9 @@ private fun SettingsPageBody(
                 onEdited = { id, value -> onOverrideEdited(detail.chainId, id, value) },
                 onCommitted = { onOverrideCommitted(detail.chainId) },
             )
-            if (detail.callout != null) {
-                Spacer(modifier = Modifier.height(VelaSpacing.xl))
-                VelaCallout(detail.callout)
-            }
-            // The pool's word on the person's own node, beside the field it
-            // is about — then the switch it bears on (the web's
-            // `NetworkDetailPanel`: rpc, callouts, "Only use my node", explorer).
-            if (detail.nodeCallout != null) {
-                Spacer(modifier = Modifier.height(VelaSpacing.xl))
-                VelaCallout(detail.nodeCallout)
-            }
+            // R22: "Only use my node" right under the network's own RPC field
+            // — never buried under the callouts — with what it means for
+            // Vela's safety checks said under it.
             detail.onlyMine?.let { onlyMine ->
                 Spacer(modifier = Modifier.height(VelaSpacing.xl))
                 VelaSwitchRow(
@@ -1125,7 +1133,27 @@ private fun SettingsPageBody(
                     body = onlyMine.subtitle,
                     checked = onlyMine.on,
                     onCheckedChange = { on -> onOnlyMine(detail.chainId, on) },
+                    modifier = Modifier.testTag(ONLY_MINE_TAG),
                 )
+                onlyMine.trust?.let { trust ->
+                    Text(
+                        text = trust,
+                        color = colors.fgSubtle,
+                        fontFamily = VelaFontFamily,
+                        fontSize = VelaTextSize.sm,
+                        modifier = Modifier.fillMaxWidth().testTag(ONLY_MINE_TRUST_TAG),
+                    )
+                }
+            }
+            if (detail.callout != null) {
+                Spacer(modifier = Modifier.height(VelaSpacing.xl))
+                VelaCallout(detail.callout)
+            }
+            // The pool's word on the person's own node, beside the field and
+            // the switch it is about (the web's `NetworkDetailPanel`).
+            if (detail.nodeCallout != null) {
+                Spacer(modifier = Modifier.height(VelaSpacing.xl))
+                VelaCallout(detail.nodeCallout)
             }
             Spacer(modifier = Modifier.height(VelaSpacing.xl3))
             EditableUrlField(
@@ -1991,6 +2019,12 @@ private fun ConfirmSheetBody(
 
 /** The confirm sheet's acknowledgement row (ob-2). */
 const val CONFIRM_ACK_TAG = "confirm-ack"
+
+/** R22: a network's "Only use my node" switch, right under its RPC field. */
+const val ONLY_MINE_TAG = "settings.network.onlyMine"
+
+/** R22: what "Only use my node" means for Vela's safety checks, under the switch. */
+const val ONLY_MINE_TRUST_TAG = "settings.network.onlyMineTrust"
 
 @Composable
 internal fun AccountsSheetBody(

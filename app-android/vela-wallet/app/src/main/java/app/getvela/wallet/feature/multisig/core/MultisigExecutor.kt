@@ -69,7 +69,8 @@ class MultisigExecutor(private val ports: MultisigPorts) {
             MultisigShellResult.HttpUnreachable(describe(error), refused = true.takeIf { app.getvela.wallet.core.net.Refusals.of(error) })
         }
 
-        is MultisigOperation.Rpc -> {
+        // R22: a read a guard stands on — both nodes' answers, one envelope.
+        is MultisigOperation.Rpc -> if (op.corroborate) corroborated(op) else {
             val bound = op.bound_ms
             val reply = if (bound != null) {
                 withTimeoutOrNull(bound.coerceAtLeast(0)) { ports.rpc(op.chain_id.toInt(), op.method, op.params) }
@@ -172,6 +173,22 @@ class MultisigExecutor(private val ports: MultisigPorts) {
         }
     }
 
+    /**
+     * R22: a corroborated [MultisigOperation.Rpc] — the pool's corroborated
+     * read, both answers in the core's one envelope; bounded like any read
+     * (no answer in time: `rpc_unanswered`, which the core reads as unread).
+     */
+    private suspend fun corroborated(op: MultisigOperation.Rpc): MultisigShellResult {
+        val bound = op.bound_ms
+        val envelope = if (bound != null) {
+            withTimeoutOrNull(bound.coerceAtLeast(0)) { ports.rpcCorroborated(op.chain_id.toInt(), op.method, op.params) }
+        } else {
+            ports.rpcCorroborated(op.chain_id.toInt(), op.method, op.params)
+        }
+        return envelope?.let { MultisigShellResult.RpcCorroborated(it) }
+            ?: MultisigShellResult.RpcUnanswered("no answer in $bound ms")
+    }
+
     companion object {
         /**
          * The failure each operation answers when its port could not — the
@@ -247,6 +264,27 @@ class MultisigWalletRefusal(val code: Long?, message: String) : Exception(messag
 interface MultisigPorts {
     suspend fun http(method: String, url: String, body: String?, timeoutMs: Long): HttpAnswer
     suspend fun rpc(chainId: Int, method: String, params: JsonElement): MultisigRpcReply
+
+    /**
+     * R22: the same read, corroborated — both nodes' answers in the core's
+     * one envelope (a JSON object: `{result | error | unreachable, witness?,
+     * ownNode?}`). The default is one node's word, never two.
+     */
+    suspend fun rpcCorroborated(chainId: Int, method: String, params: JsonElement): JsonElement =
+        when (val reply = rpc(chainId, method, params)) {
+            is MultisigRpcReply.Result -> kotlinx.serialization.json.buildJsonObject { put("result", reply.value) }
+            is MultisigRpcReply.Error -> kotlinx.serialization.json.buildJsonObject {
+                put(
+                    "error",
+                    kotlinx.serialization.json.buildJsonObject {
+                        put("code", kotlinx.serialization.json.JsonPrimitive(reply.code))
+                        put("message", kotlinx.serialization.json.JsonPrimitive(reply.message))
+                        reply.data?.let { put("data", it) }
+                    },
+                )
+            }
+            is MultisigRpcReply.Unanswered -> kotlinx.serialization.json.buildJsonObject { put("unreachable", kotlinx.serialization.json.JsonPrimitive(true)) }
+        }
     suspend fun storeRead(key: String): StoreRead
     suspend fun storeWrite(key: String, value: String?): Boolean
     fun nowMs(): Double

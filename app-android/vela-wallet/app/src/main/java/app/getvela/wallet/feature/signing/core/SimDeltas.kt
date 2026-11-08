@@ -52,14 +52,14 @@ object SimDeltas {
     }
 
     /**
-     * The reply envelope the core reads (contract §8): the JSON-RPC body as it
-     * came (`{"result": …}` or `{"error": …}`), or `{"unreachable": true}` when
-     * the pool gave up or nothing was asked.
+     * The reply envelope the core reads (contract §8, R22): the first node's
+     * JSON-RPC body (`{"result": …}` or `{"error": …}`), the second,
+     * independent node's beside it (`witness`) or the person's own node alone
+     * (`ownNode`) — built by the core's helper over the pool's corroborated
+     * answer — or `{"unreachable": true}` when the pool gave up or nothing
+     * was asked. A body with no witness is one node's word: `unconfirmed`.
      */
-    fun replyJson(answer: RpcResult?): String = when (answer) {
-        is RpcResult.Body -> answer.json.toString()
-        is RpcResult.RangeCapped, is RpcResult.Failed, null -> UNREACHABLE
-    }
+    fun replyJson(answer: RpcResult?): String = RpcResult.corroboratedEnvelope(answer)
 
     /** The core's reading of the answer for [user] (`simOutcome`). */
     fun outcome(user: String, answer: RpcResult?): SimOutcomeRecord = simOutcome(user, replyJson(answer))
@@ -74,9 +74,37 @@ object SimDeltas {
             risk = risk, key = key, reason = record.revertReason,
             // dapp-15: the core's `SimVerdict.recheck` — "no node answered",
             // the line is about the network: asked again once it answers.
+            // R22: also a check nobody independent confirmed — "Check again".
             recheck = record.recheck,
+            // R22: one node's word, or two that disagree — the sheet also says
+            // how to check with a node the person trusts (`ownNodeHint`).
+            ownNodeHint = record.kind == KIND_UNCONFIRMED,
+            // dapp-15: only a node nobody reached is watched for coming back;
+            // a node that answered alone would answer at once, and again.
+            watchNode = record.kind == KIND_UNREACHABLE,
+            verdict = verdictJson(record),
         )
     }
+
+    /**
+     * R22: the core's verdict as the confirm gate reads it back
+     * (`sign_confirm_state`'s `sim_json`, a `SimVerdict`): the record as it
+     * came, its deltas as the parsed array.
+     */
+    fun verdictJson(record: SimOutcomeRecord): String = verdictObject(record).toString()
+
+    private fun verdictObject(record: SimOutcomeRecord): kotlinx.serialization.json.JsonObject =
+        kotlinx.serialization.json.buildJsonObject {
+            put("kind", kotlinx.serialization.json.JsonPrimitive(record.kind))
+            put("deltas", runCatching { Wire.json.parseToJsonElement(record.deltasJson) }.getOrDefault(kotlinx.serialization.json.JsonArray(emptyList())))
+            put("revert_reason", kotlinx.serialization.json.JsonPrimitive(record.revertReason))
+            put("notice_risk", kotlinx.serialization.json.JsonPrimitive(record.noticeRisk))
+            put("notice_key", kotlinx.serialization.json.JsonPrimitive(record.noticeKey))
+            put("no_change_key", kotlinx.serialization.json.JsonPrimitive(record.noChangeKey))
+            put("recheck", kotlinx.serialization.json.JsonPrimitive(record.recheck))
+            record.source?.let { put("source", kotlinx.serialization.json.JsonPrimitive(it)) }
+            record.sourceKey?.let { put("source_key", kotlinx.serialization.json.JsonPrimitive(it)) }
+        }
 
     /**
      * Spec 103: the simulation as the agent's review reads it
@@ -85,18 +113,7 @@ object SimDeltas {
      */
     fun ended(record: SimOutcomeRecord, judged: app.getvela.wallet.feature.wallet.core.TrustSimView?): kotlinx.serialization.json.JsonElement =
         kotlinx.serialization.json.buildJsonObject {
-            put(
-                "verdict",
-                kotlinx.serialization.json.buildJsonObject {
-                    put("kind", kotlinx.serialization.json.JsonPrimitive(record.kind))
-                    put("deltas", runCatching { Wire.json.parseToJsonElement(record.deltasJson) }.getOrDefault(kotlinx.serialization.json.JsonArray(emptyList())))
-                    put("revert_reason", kotlinx.serialization.json.JsonPrimitive(record.revertReason))
-                    put("notice_risk", kotlinx.serialization.json.JsonPrimitive(record.noticeRisk))
-                    put("notice_key", kotlinx.serialization.json.JsonPrimitive(record.noticeKey))
-                    put("no_change_key", kotlinx.serialization.json.JsonPrimitive(record.noChangeKey))
-                    put("recheck", kotlinx.serialization.json.JsonPrimitive(record.recheck))
-                },
-            )
+            put("verdict", verdictObject(record))
             put(
                 "judged",
                 judged?.let { Wire.json.encodeToJsonElement(app.getvela.wallet.feature.wallet.core.TrustSimView.serializer(), it) }
@@ -134,7 +151,8 @@ object SimDeltas {
     fun couldNotCheck(): SigningController.SimOutcome.Notice =
         // Not about the network (moves nobody could read or judge, a reading
         // that threw): asking the node again would say the same — no recheck.
-        notice(simOutcome("", UNREACHABLE))?.copy(recheck = false)
+        // R22: the gate reads it as the could-not-check it is (unread, "… anyway").
+        notice(simOutcome("", UNREACHABLE))?.copy(recheck = false, watchNode = false)
             ?: SigningController.SimOutcome.Notice(ClearRisk.Caution, "componentsUi.signing.simUnavailableWarning")
 
     /**
@@ -147,8 +165,22 @@ object SimDeltas {
     fun nothingMoves(): SigningController.SimOutcome = NOTHING_MOVES
 
     private val NOTHING_MOVES: SigningController.SimOutcome by lazy {
-        val record = simOutcome("", JSONObject().put("result", JSONArray().put(JSONObject().put("calls", JSONArray().put(JSONObject().put("status", "0x1").put("logs", JSONArray()))))).toString())
-        notice(record) ?: SigningController.SimOutcome.Ready(emptyList(), noChangeKey = record.noChangeKey)
+        // R22: a check two independent nodes agreed on (the witness beside it).
+        val clean = JSONObject().put("result", JSONArray().put(JSONObject().put("calls", JSONArray().put(JSONObject().put("status", "0x1").put("logs", JSONArray())))))
+        val record = simOutcome("", JSONObject(clean.toString()).put("witness", clean).toString())
+        notice(record) ?: SigningController.SimOutcome.Ready(emptyList(), noChangeKey = record.noChangeKey, verdict = verdictJson(record))
+    }
+
+    /**
+     * R22: the core's notice for a check only one node answered (`unconfirmed`,
+     * a clean run with no witness) — for the room the sheet keeps; a
+     * session's comes from its own corroborated read.
+     */
+    fun oneNodeOnly(): SigningController.SimOutcome? = ONE_NODE
+
+    private val ONE_NODE: SigningController.SimOutcome? by lazy {
+        val clean = JSONObject().put("result", JSONArray().put(JSONObject().put("calls", JSONArray().put(JSONObject().put("status", "0x1").put("logs", JSONArray())))))
+        notice(simOutcome("", clean.toString()))
     }
 
     /**
@@ -195,4 +227,8 @@ object SimDeltas {
     }
 
     private const val UNREACHABLE = """{"unreachable":true}"""
+
+    /** R22: the core's verdict kinds this file tells apart (`SimVerdict.kind`). */
+    const val KIND_UNCONFIRMED = "unconfirmed"
+    const val KIND_UNREACHABLE = "unreachable"
 }

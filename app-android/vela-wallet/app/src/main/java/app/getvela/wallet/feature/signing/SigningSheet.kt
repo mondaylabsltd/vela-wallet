@@ -90,6 +90,15 @@ const val FOOTER_TAG = "signing-footer"
 /** The Trusted Signer account's "continue to the signing page" in the confirm's place (spec 079). */
 const val OPEN_SIGNER_TAG = "signing-open-signer"
 
+/** R22: the "Hold to confirm" / "Press again to confirm" line under a held confirm. */
+const val CONFIRM_HOLD_HINT_TAG = "signing-confirm-hold-hint"
+
+/** R22: the quiet "Checked by your own node only" line under the balance changes. */
+const val SIM_SOURCE_TAG = "signing-sim-source"
+
+/** R22: "To check with a node you trust…" under a check one node answered alone — opens the network's RPC settings. */
+const val OWN_NODE_HINT_TAG = "signing-own-node-hint"
+
 /**
  * The signing sheet (spec 022): the universal block renderer plus a fixed
  * footer — technical details → fee → signer → confirm — over the page that
@@ -141,6 +150,8 @@ fun SigningSheet(
     onRetry: (() -> Unit)? = null,
     /** dapp-15: "Check again" on a could-not-check line whose node nobody reached. */
     onRecheck: () -> Unit = {},
+    /** R22: the own-node hint's action — this network's RPC settings ("Only use my node"). */
+    onOwnNode: () -> Unit = {},
 ) {
     VelaModalSheet(
         onDismissRequest = onDismiss,
@@ -168,6 +179,7 @@ fun SigningSheet(
             onHandoffTrust = onHandoffTrust,
             onRetry = onRetry,
             onRecheck = onRecheck,
+            onOwnNode = onOwnNode,
         )
     }
 }
@@ -226,6 +238,8 @@ fun SigningSheetContent(
     onRetry: (() -> Unit)? = null,
     /** dapp-15: "Check again" on a could-not-check line whose node nobody reached. */
     onRecheck: () -> Unit = {},
+    /** R22: the own-node hint's action — this network's RPC settings ("Only use my node"). */
+    onOwnNode: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     var techOverride by remember(model.state) { mutableStateOf<Boolean?>(null) }
@@ -363,13 +377,16 @@ fun SigningSheetContent(
                         SigningParty(block.label, block.name, block.address, block.badge)
 
                     is SigningBlock.Rows -> SigningRows(block.rows)
-                    is SigningBlock.Warning -> SigningWarning(block.tone, block.text, recheck = block.recheck, onRecheck = onRecheck)
+                    is SigningBlock.Warning -> SigningWarning(
+                        block.tone, block.text, recheck = block.recheck, onRecheck = onRecheck,
+                        hint = block.hint, onHint = onOwnNode,
+                    )
                     is SigningBlock.Positive -> SigningPositive(block.text)
                     is SigningBlock.Source -> SigningSource(block.text, block.tone)
                     is SigningBlock.Code -> SigningCode(block.lines, block.note, runs = block.runs)
                     is SigningBlock.Card -> SigningCard(block.title, block.rows, block.tone)
                     is SigningBlock.Balances ->
-                        SigningBalances(block.title, block.rows, block.note, block.noteTone)
+                        SigningBalances(block.title, block.rows, block.note, block.noteTone, source = block.source)
 
                     // A place kept for a verdict that lands late: every verdict
                     // the sheet usually ends on is drawn unseen and unsaid, one
@@ -440,6 +457,10 @@ fun SigningSheetContent(
                     onOpen = onConfirm,
                     modifier = Modifier.testTag(OPEN_SIGNER_TAG),
                     onTrust = onHandoffTrust,
+                    holdMs = model.confirmHoldMs,
+                    danger = model.confirmDanger,
+                    holdHint = model.holdHint,
+                    confirmAgain = model.confirmAgain,
                 )
                 noteLine?.invoke()
             }
@@ -468,10 +489,20 @@ fun SigningSheetContent(
                 // Shut (dimmed) only while the core says so; once approved, the
                 // receipt takes the form's place, so busy never looks shut.
                 // The value button: signing is the action the accent exists for.
-                app.getvela.wallet.core.designsystem.components.VelaValueButton(
+                // R22: the core's friction — "… anyway" and danger in the
+                // danger style, held for `hold_ms` (the accessible path: press
+                // twice); a plain press otherwise. The hint's room is kept so a
+                // verdict that changes the friction moves nothing.
+                app.getvela.wallet.core.designsystem.components.VelaHoldToConfirmButton(
                     text = pinned,
-                    onClick = onConfirm,
+                    onConfirm = onConfirm,
+                    holdMs = model.confirmHoldMs,
+                    holdHint = model.holdHint,
+                    confirmAgain = model.confirmAgain,
+                    danger = model.confirmDanger,
                     enabled = model.confirmEnabled,
+                    keepHintRoom = true,
+                    hintTag = CONFIRM_HOLD_HINT_TAG,
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag(CONFIRM_TAG),

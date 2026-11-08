@@ -16,6 +16,8 @@ import uniffi.vela_core_uniffi.prefsDebugModeValue
 import uniffi.vela_core_uniffi.prefsLocaleJson
 import uniffi.vela_core_uniffi.prefsMigrations
 import uniffi.vela_core_uniffi.prefsRead
+import uniffi.vela_core_uniffi.refuseBlindSigning
+import uniffi.vela_core_uniffi.refuseBlindSigningKey
 
 /**
  * Settings' debug mode (spec 091) as the core names it (`prefsDebugMode`):
@@ -59,8 +61,24 @@ data class PrefsView(
     val textScale: TextScaleLevel = TextScaleLevel.Standard,
     /** Spec 091: the hidden developer switch. */
     val debugMode: DebugMode = DebugMode.Hidden,
+    /**
+     * R22: Settings' "Refuse blind signing" (`vela.refuseBlindSigning`,
+     * `on`/`off`, the core's `refuse_blind_signing`) — default off. On, a
+     * request that would sign only "… anyway" is refused instead.
+     */
+    val refuseBlind: Boolean = false,
     val loaded: Boolean = false,
 )
+
+/**
+ * R22: the person's "Refuse blind signing", where the two signing surfaces
+ * read it — the dApp sheet's gate (`signConfirmState`'s `refuse_blind`) and
+ * the multisig sign door (`review.door`'s `refuseBlind`). Published by
+ * [Preferences] on every change; off until it is read.
+ */
+object SigningPrefs {
+    val refuseBlind = kotlinx.coroutines.flow.MutableStateFlow(false)
+}
 
 class Preferences(
     private val store: KeyValueStore,
@@ -94,6 +112,7 @@ class Preferences(
                     timeFormat = TimeFormatKey.of(read.timeFormat),
                     textScale = TextScaleLevel.of(read.textScale),
                     debugMode = DebugMode.of(prefsDebugMode(entries, developerBuild)),
+                    refuseBlind = refuseBlindSigning(entries[KEY_REFUSE_BLIND]),
                     loaded = true,
                 ),
             )
@@ -109,6 +128,15 @@ class Preferences(
     fun setTimeFormat(key: TimeFormatKey) = update(_view.value.copy(timeFormat = key)) { writeLocalePrefs(it) }
 
     fun setTextScale(level: TextScaleLevel) = update(_view.value.copy(textScale = level)) { store.write(KEY_TEXT_SCALE, level.wire) }
+
+    /** R22: Settings' "Refuse blind signing", stored in the core's spelling (`on` / `off`). */
+    fun setRefuseBlind(on: Boolean) =
+        update(_view.value.copy(refuseBlind = on)) { store.write(KEY_REFUSE_BLIND, if (on) "on" else "off") }
+
+    /** R22: the store changed under this view (an erase): read back, never assumed. */
+    fun reloadRefuseBlind() {
+        scope.launch { publish(_view.value.copy(refuseBlind = refuseBlindSigning(store.read(KEY_REFUSE_BLIND)))) }
+    }
 
     /** Spec 091: seven taps on About's version revealed the switch — it shows from now on, off. */
     fun revealDebugMode() = setDebugMode(false)
@@ -144,6 +172,7 @@ class Preferences(
         // The formats first: a reader woken by the view must already find the
         // presets it is about to draw with (spec 049).
         onFormats(Formats(number = view.numberFormat, date = view.dateFormat, time = view.timeFormat, locale = locale()))
+        SigningPrefs.refuseBlind.value = view.refuseBlind
         _view.value = view
     }
 
@@ -154,6 +183,9 @@ class Preferences(
 
         /** Spec 091: the core's `prefs::keys::DEBUG_MODE`. */
         const val KEY_DEBUG_MODE = "vela.debugMode"
+
+        /** R22: the core's `prefs::keys::REFUSE_BLIND_SIGNING`. */
+        val KEY_REFUSE_BLIND: String = refuseBlindSigningKey()
 
         /** Retired (spec 074): read only so the core's migrations can remove it. */
         private const val RETIRED_AVATAR_STYLE = "vela.avatarStyle"
@@ -167,6 +199,7 @@ class Preferences(
             KEY_LOCALE_PREFS,
             KEY_TEXT_SCALE,
             KEY_DEBUG_MODE,
+            KEY_REFUSE_BLIND,
             "vela.formats",
             RETIRED_AVATAR_STYLE,
             // Spec 075's pairing service, retired 2026-09-23: the core REMOVES

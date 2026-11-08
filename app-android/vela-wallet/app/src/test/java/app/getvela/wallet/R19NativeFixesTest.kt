@@ -487,7 +487,8 @@ class R19NativeFixesTest {
         val signing = sheet("ready", listOf(bob), """"previews":{"$key":${look.dropLast(1)},"signing":true}},"actions":{"execute:$hash":{"kind":"working"}},""")
         val lines = signing.executionLines(alice, null)
         assertEquals(listOf("fee", "feeSigning"), lines.map { it.id })
-        assertTrue(lines.first().text, lines.first().text.contains("0.248201"))
+        // r21-2 (§36): the core's fee figure, rounded UP — never below the charge (0.248201775).
+        assertTrue(lines.first().text, lines.first().text.contains("0.248202"))
         assertEquals(msWords.t("proposal.feeSigning"), lines[1].text)
         assertEquals("Signing at this fee — it stays fixed until you confirm or cancel.", lines[1].text)
         // Not pressed: the fee line alone.

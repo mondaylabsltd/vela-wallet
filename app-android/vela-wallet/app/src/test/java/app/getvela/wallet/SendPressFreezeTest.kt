@@ -146,23 +146,24 @@ class SendPressFreezeTest {
         view = m.view()
         assertEquals(SendTxStatus.Idle, view.tx_status)
         assertNull(view.fee_signing_key)
-        assertEquals("0.0058875", view.confirm_amount)
+        // r21-2 (§36): Max is cut DOWN to the places it is shown at, and sends exactly that.
+        assertEquals("0.005887", view.confirm_amount)
         assertEquals("294112500000000000", view.fee?.total_wei)
-        assertEquals(SendFeeMoved(key = I18nKeys.Flows.FEE_MOVED_MAX, max = SendMaxMoved(from = "0.0675", to = "0.005888")), view.fee_moved)
+        assertEquals(SendFeeMoved(key = I18nKeys.Flows.FEE_MOVED_MAX, max = SendMaxMoved(from = "0.0675", to = "0.005887")), view.fee_moved)
         val stopped = confirmModel(view)
         assertEquals(
-            strings.t(I18nKeys.Flows.FEE_MOVED_MAX, mapOf("from" to "0.0675", "to" to "0.005888", "symbol" to "USDC")),
+            strings.t(I18nKeys.Flows.FEE_MOVED_MAX, mapOf("from" to "0.0675", "to" to "0.005887", "symbol" to "USDC")),
             stopped.notice,
         )
         assertTrue("said calmly", stopped.noticeCalm)
         assertNull("one sentence for one move", stopped.maxNote)
         assertTrue(view.can_confirm)
 
-        // The next press signs exactly what is drawn: 0.0058875 + 0.2941125.
+        // The next press signs exactly what is drawn (r21-2: the Max as shown, 0.005887).
         m.send(SendEvent.SlideConfirm(view.review_digest))
         val submit = m.submit() ?: error("the next press is signed (waiting: ${m.script.waiting()})")
         val review = submit.getJSONObject("review")
-        assertEquals("5887500000000000", review.getJSONArray("transfers").getJSONObject(0).getString("amount"))
+        assertEquals("5887000000000000", review.getJSONArray("transfers").getJSONObject(0).getString("amount"))
         assertEquals("294112500000000000", review.getJSONObject("fee").getString("amount"))
         assertFalse(m.view().fee_moved != null)
     }

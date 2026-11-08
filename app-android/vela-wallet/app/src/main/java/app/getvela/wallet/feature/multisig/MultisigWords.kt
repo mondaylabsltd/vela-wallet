@@ -510,8 +510,13 @@ class MultisigWords(
     }
 
     /** r11-9: a look that only could not price or check it is a warning, never a failure. */
-    fun actionFailureTone(state: JsonElement?): MsTone =
-        if (state.kind == "stopped" && state["preview"].kind in setOf("unpriced", "unchecked", "unverified")) MsTone.Warning else MsTone.Danger
+    fun actionFailureTone(state: JsonElement?): MsTone = when {
+        state.kind == "stopped" && state["preview"].kind in setOf("unpriced", "unchecked", "unverified") -> MsTone.Warning
+        // r21-1 (§36): an operation that expired before it was submitted is
+        // the Send's calm "not sent" — nothing went out, the press signs anew.
+        state.kind == "failed" && MsRules.failureSaid(state["detail"].str).kind == EXPIRED_KIND -> MsTone.Warning
+        else -> MsTone.Danger
+    }
 
     /** The core's sentence for a passkey error's own words; `null` when it names nothing more than "it failed". */
     private fun passkeyWords(message: String?): String? {
@@ -547,7 +552,7 @@ class MultisigWords(
             // new figure (its own fee line's words), so the next press is on it.
             "fee_moved" -> {
                 val chain = failure?.get("chainId").int ?: chainId ?: 0
-                val fee = "${MsRules.formatUnits(failure?.get("amount").str ?: "0", MsRules.COIN_DECIMALS)} ${symbol(chain)}"
+                val fee = "${MsRules.feeFigure(failure?.get("amount").str ?: "0")} ${symbol(chain)}"
                 t("proposal.failed", "reason" to t("proposal.feeLine", "fee" to fee, "name" to label(failure?.get("executor").str.orEmpty())))
             }
             "chain_unreachable" -> {
@@ -613,6 +618,9 @@ class MultisigWords(
     companion object {
         /** r18-8: the core's word for a write this test build refused (§28): `create.refused`, an outbox `why`. */
         const val PRODUCTION_WRITE_REFUSED = "production_write_refused"
+
+        /** r21-1: `review.failure`'s kind for an operation that expired before it was submitted. */
+        const val EXPIRED_KIND = "expired"
 
         /** "0xd9c79C…a20432": short, in its EIP-55 case. */
         fun short(address: String): String =

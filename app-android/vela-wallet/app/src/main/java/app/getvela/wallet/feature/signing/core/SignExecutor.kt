@@ -233,17 +233,25 @@ class SignExecutor(
         // One bounded read through the pool, its answer handed back as it
         // came — the core decides; a read nobody could make is its refusal.
         is SignOperation.ReadSafeOwner -> {
-            val answer = try {
-                safeOwnerAnswer(
-                    operation.chain_id,
-                    withTimeoutOrNull(SAFE_OWNER_READ_MS) { ports.safeOwnerCall(operation.chain_id, operation.safe, operation.data) },
-                )
+            // R22: a corroborated read — the first node's answer, and a
+            // second, independent node's in the same shape (or the person's
+            // own node alone). The core compares them.
+            val read = try {
+                withTimeoutOrNull(SAFE_OWNER_READ_MS) { ports.safeOwnerCall(operation.chain_id, operation.safe, operation.data) }
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (error: Throwable) {
-                SafeOwnerAnswer.Unreachable(error.message ?: error.javaClass.simpleName)
+                null.also { VelaLog.event("sign.safeOwner", "the read failed", "error" to (error.message ?: error.javaClass.simpleName)) }
             }
-            SignShellResult.SafeOwnerRead(id = operation.id, chain_id = operation.chain_id, safe = operation.safe, answer = answer)
+            val body = read as? app.getvela.wallet.feature.wallet.core.RpcResult.Body
+            SignShellResult.SafeOwnerRead(
+                id = operation.id,
+                chain_id = operation.chain_id,
+                safe = operation.safe,
+                answer = safeOwnerAnswer(operation.chain_id, read),
+                witness = body?.witness?.let { safeOwnerAnswer(operation.chain_id, app.getvela.wallet.feature.wallet.core.RpcResult.Body(it)) },
+                own_node = body?.ownNode?.takeIf { it },
+            )
         }
     }
 
@@ -315,6 +323,8 @@ class SignExecutor(
                 // RJ1: the record is written ahead, then the asker is asked
                 // once more, immediately before the POST.
                 beforePost = { localHash, submitBlock -> writtenAhead(op, localHash, submitBlock) },
+                // R22 (review 1-5): hashed only as the request the sheet showed.
+                dapp = UserOpSpine.DappAttest(op.review),
             )
             val hash = submitted.userOpHash
             ports.opSubmitted(op.id, submitted)
@@ -340,8 +350,14 @@ class SignExecutor(
 
     /** A message: hashed the way the page's verifier hashes it, signed once, answered as the EIP-1271 envelope. */
     private suspend fun signMessage(op: SignOperation.SignAndSubmit): SignSubmitOutcome {
-        val original = messageHash(op.method, op.params_json)
+        val digest = messageHash(op.method, op.params_json)
             ?: return SignSubmitOutcome.Failed("${op.method} carried nothing this wallet could sign")
+        // R22 (review 1-5): the digest goes on only when it is exactly the one
+        // the sheet read for this account — the SafeMessage wraps what the
+        // core returns, never the request's own bytes. Missing review or a
+        // drifted digest: refused, no passkey asked, nothing signed.
+        val original = attestedMessage(op, digest)
+            ?: return SignSubmitOutcome.Failed("The request is not the one you reviewed. Nothing was signed.")
         return try {
             SignSubmitOutcome.Succeeded(
                 spine.signMessage(
@@ -362,6 +378,17 @@ class SignExecutor(
                 else -> SignSubmitOutcome.Failed("Signing failed")
             }
         }
+    }
+
+    /** R22: [digest] through the core's attestation (`dappMessageHash`), or `null` when it refuses. */
+    private fun attestedMessage(op: SignOperation.SignAndSubmit, digest: ByteArray): ByteArray? {
+        val review = op.review ?: run {
+            VelaLog.event("sign.submit", "not_reviewed: no dApp review — nothing signed", "method" to op.method)
+            return null
+        }
+        return runCatching { uniffi.vela_core_uniffi.dappMessageHash(digest, op.address, review) }
+            .onFailure { VelaLog.event("sign.submit", "not_the_dapp_review", "method" to op.method, "why" to (it.message ?: "")) }
+            .getOrNull()
     }
 
     /**

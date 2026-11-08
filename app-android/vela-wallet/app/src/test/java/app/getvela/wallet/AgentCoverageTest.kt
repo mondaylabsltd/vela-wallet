@@ -55,6 +55,7 @@ class AgentCoverageTest {
         const val CODE = "a code handed to the send — the camera's or a pay link's"
         const val FEE_TOKEN = "paying the fee in another token, per transfer"
         const val DEBUG = "a developer's switch (spec 091), hidden in a release build"
+        const val BOUNDARY_SIGNING = "Refuse blind signing is the person's own guard on what they sign (R22)"
         const val READ = "a read"
         const val BOOT = "boot"
         const val FEE = "the fee quote"
@@ -146,6 +147,8 @@ class AgentCoverageTest {
             "paymentHandOff.takeScan" to Place.None(CODE),
             "preferences.revealDebugMode" to Place.None(DEBUG),
             "preferences.setDebugMode" to Place.None(DEBUG),
+            // R22: an agent loosening it would be the blind signing it refuses.
+            "preferences.setRefuseBlind" to Place.None(BOUNDARY_SIGNING),
             "relay.probeTreasury" to Place.Machine(READ),
             // F6 / F27: a scanned request's network, added through the network machine's own add.
             "send.addNetworkTapped" to Place.Step("add_network"),

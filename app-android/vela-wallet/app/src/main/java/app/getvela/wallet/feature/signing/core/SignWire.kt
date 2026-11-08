@@ -179,6 +179,13 @@ enum class ConfirmBlock {
      * unreadable and keep the confirm shut for ever, with no line.)
      */
     @SerialName("sim_checking") SimChecking,
+
+    /**
+     * R22: "Refuse blind signing" is on and this request would sign only
+     * "… anyway" — refused instead; the confirm stays shut with the core's
+     * line (`componentsUi.signing.confirmBlock.blindRefused`).
+     */
+    @SerialName("blind_refused") BlindRefused,
 }
 
 /**
@@ -192,6 +199,16 @@ data class ConfirmState(
     val enabled: Boolean = false,
     val block: ConfirmBlock? = null,
     val key: String? = null,
+    /**
+     * R22: the confirm is "… anyway" (`componentsUi.signing.certain.signAnyway`,
+     * in the danger style): something Vela checks could not be read — the
+     * core's `posture`, never a shell-side rule.
+     */
+    val anyway: Boolean = false,
+    /** R22: the request is a danger (a drain's shape, an unlimited grant, a revert, `eth_sign`): the danger style. */
+    val danger: Boolean = false,
+    /** R22: hold the confirm this long before it acts (`0`: a plain press); the accessible path confirms twice. */
+    val hold_ms: Int = 0,
 )
 
 @Serializable
@@ -756,6 +773,13 @@ sealed class SignOperation {
         val max_fee_per_gas: String? = null,
         val gas_fee_token: String? = null,
         val quoted_fee: SignQuotedFee? = null,
+        /**
+         * R22 (review 1-5): what the person confirmed, frozen by the core at
+         * the confirm from these FINAL params (`DappReview` JSON). Hashed only
+         * through `userOpDappSafeOpHash` / `dappMessageHash`; `null` (a
+         * request the core could not read) is signed by no one.
+         */
+        val review: String? = null,
     ) : SignOperation()
 
     @Serializable
@@ -857,6 +881,14 @@ sealed class SignShellResult {
         val chain_id: Int,
         val safe: String,
         val answer: SafeOwnerAnswer,
+        /**
+         * R22 (SEC-PARENT-3): the same read, answered by a second,
+         * independent node (the pool's corroborated read). A "not an owner"
+         * stands only when it agrees — or when [own_node].
+         */
+        val witness: SafeOwnerAnswer? = null,
+        /** R22: the person's own node answered alone ("Only use my node"). */
+        val own_node: Boolean? = null,
     ) : SignShellResult()
 }
 

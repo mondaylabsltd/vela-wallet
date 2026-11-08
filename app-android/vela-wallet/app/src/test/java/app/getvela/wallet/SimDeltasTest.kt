@@ -32,10 +32,14 @@ class SimDeltasTest {
         .put("topics", JSONArray().put(transferTopic).put(topic(from)).put(topic(to)))
         .put("data", word(value))
 
-    private fun answer(vararg calls: JSONObject): RpcResult =
-        RpcResult.Body(JSONObject().put("jsonrpc", "2.0").put("id", 1).put("result", JSONArray().put(JSONObject().put("calls", JSONArray(calls.toList())))))
+    /** R22: a node's answer, and a second, independent node's the same — a corroborated read. */
+    private fun answer(vararg calls: JSONObject): RpcResult {
+        val body = JSONObject().put("jsonrpc", "2.0").put("id", 1).put("result", JSONArray().put(JSONObject().put("calls", JSONArray(calls.toList()))))
+        return RpcResult.Body(body, witness = JSONObject(body.toString()))
+    }
 
-    private fun noticeOf(answer: RpcResult?) = SimDeltas.notice(SimDeltas.outcome(me, answer))
+    /** The notice without the verdict JSON it carries for the gate (pinned in R22SigningTruthTest). */
+    private fun noticeOf(answer: RpcResult?) = SimDeltas.notice(SimDeltas.outcome(me, answer))?.copy(verdict = null)
 
     /** `Error(string)` ABI of [text]: selector, offset, length, bytes. */
     private fun errorString(text: String): String {
@@ -64,15 +68,15 @@ class SimDeltasTest {
     fun `a node that could not check is a caution, never a danger and never nothing-moves`() {
         val unavailable = SigningController.SimOutcome.Notice(ClearRisk.Caution, "componentsUi.signing.simUnavailableWarning")
         // dapp-15: no node answered — about the network, so it may be checked again.
-        assertEquals("the pool gave up", unavailable.copy(recheck = true), noticeOf(RpcResult.Failed(rateLimited = false)))
-        assertEquals("nothing was asked", unavailable.copy(recheck = true), noticeOf(null))
+        assertEquals("the pool gave up", unavailable.copy(recheck = true, watchNode = true), noticeOf(RpcResult.Failed(rateLimited = false)))
+        assertEquals("nothing was asked", unavailable.copy(recheck = true, watchNode = true), noticeOf(null))
         val refused = RpcResult.Body(JSONObject().put("error", JSONObject().put("code", -32601).put("message", "the method eth_simulateV1 does not exist")))
         // A node that spoke and does not simulate would say the same again.
         assertEquals("the node does not offer it", unavailable, noticeOf(refused))
         val crashed = RpcResult.Body(JSONObject().put("error", JSONObject().put("code", -32603).put("message", "method handler crashed")))
         assertEquals(unavailable, noticeOf(crashed))
         assertEquals("an empty answer is not a check", unavailable, noticeOf(RpcResult.Body(JSONObject().put("result", JSONArray()))))
-        assertEquals(unavailable, SimDeltas.couldNotCheck())
+        assertEquals(unavailable, SimDeltas.couldNotCheck().copy(verdict = null))
     }
 
     @Test
@@ -117,7 +121,10 @@ class SimDeltasTest {
         assertNull("a revert is no check", SimDeltas.outcome(me, answer(JSONObject().put("status", "0x0").put("returnData", "0x").put("logs", JSONArray()))).noChangeKey)
         assertNull("nor is a node that could not", SimDeltas.outcome(me, RpcResult.Failed(rateLimited = false)).noChangeKey)
         // The room the sheet keeps for that verdict is this reading.
-        assertEquals(SigningController.SimOutcome.Ready(emptyList(), noChangeKey = quiet.noChangeKey), SimDeltas.nothingMoves())
+        assertEquals(
+            SigningController.SimOutcome.Ready(emptyList(), noChangeKey = quiet.noChangeKey),
+            (SimDeltas.nothingMoves() as SigningController.SimOutcome.Ready).copy(verdict = null),
+        )
     }
 
     /**

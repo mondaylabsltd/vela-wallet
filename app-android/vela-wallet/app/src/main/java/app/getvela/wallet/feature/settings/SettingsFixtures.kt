@@ -210,6 +210,19 @@ object SettingsFixtures {
                 ),
             ),
         ),
+        // R22: Security, above Advanced — found without opening a disclosure.
+        SettingsSectionModel(
+            label = s.t(SECURITY_SECTION_KEY),
+            rows = emptyList(),
+            switches = listOf(
+                SettingsSwitchModel(
+                    id = REFUSE_BLIND_SWITCH,
+                    title = s.t("settings.refuseBlind.title"),
+                    subtitle = s.t("settings.refuseBlind.subtitle"),
+                    on = false,
+                ),
+            ),
+        ),
         SettingsSectionModel(
             label = s.t(I18nKeys.SettingsUi.SECTION_ADVANCED),
             collapsible = true,
@@ -792,6 +805,12 @@ object SettingsFixtures {
     private val UNREACHABLE_NAMES = mapOf(1 to "Ethereum", 56 to "BNB Chain", 137 to "Polygon")
 
     const val FEE_SPEED_ROW = "fee-speed"
+
+    /** R22: Security's "Refuse blind signing" switch. */
+    const val REFUSE_BLIND_SWITCH = "refuse-blind"
+
+    /** R22: the Security section's label. */
+    const val SECURITY_SECTION_KEY = "settings.sections.security"
 
     /** The Settings row of Signing pages (spec 102). */
     const val SIGNING_PAGES_ROW = "signing-pages"

@@ -20,6 +20,12 @@ data class MsSignDoor(
     val anyway: Boolean,
     val reasonKey: String?,
     val retry: Boolean,
+    /**
+     * R22: hold the button this long before it signs (the core's
+     * `hold_to_confirm_ms` for an enabled "… anyway" or danger review);
+     * `0`: a plain press. The accessible path confirms with a second press.
+     */
+    val holdMs: Int = 0,
 ) {
     val loading: Boolean get() = shows != SHOWS_REVIEW && shows != SHOWS_FAILED
     val failed: Boolean get() = shows == SHOWS_FAILED
@@ -45,6 +51,7 @@ data class MsSignDoor(
             anyway = e["anyway"].bool == true,
             reasonKey = e["reason_key"].str,
             retry = e["retry"].bool == true,
+            holdMs = e["hold_ms"].int ?: 0,
         )
     }
 }
@@ -104,6 +111,14 @@ object MsRules {
     /** Base units as the page says them (`1,234.5`; `<0.000001`). */
     fun formatUnits(amount: String, decimals: Int): String =
         string("formatUnits", mapOf("amount" to amount, "decimals" to decimals)) ?: amount
+
+    /**
+     * r21-2 (§36): an execution's fee as the screen shows it — the core's
+     * `fee_figure` (rounded UP at the native coin's six places), never a
+     * figure below what is charged; localised as every fee figure is.
+     */
+    fun feeFigure(amount: String, decimals: Int = COIN_DECIMALS): String =
+        app.getvela.wallet.feature.send.SendLive.feeFromBase(amount, decimals, app.getvela.wallet.feature.send.SendLive.NATIVE_FEE_PLACES)
 
     /** Base units as a plain decimal string (a record's `value`). */
     fun plainUnits(amount: String, decimals: Int): String =
@@ -197,8 +212,16 @@ object MsRules {
      * not asked yet (`loading`). A question the core could not answer is a
      * shut door ([MsSignDoor.Shut]) — never "allowed" by default.
      */
-    fun reviewDoor(state: JsonElement?, review: JsonElement?): MsSignDoor =
-        MsSignDoor.of(call("review.door", mapOf("state" to state, "review" to review)))
+    fun reviewDoor(
+        state: JsonElement?,
+        review: JsonElement?,
+        /**
+         * R22: the person's "Refuse blind signing" — a review that would sign
+         * only "… anyway" is a shut door with `home.multisig.review.blindRefused`.
+         */
+        refuseBlind: Boolean = app.getvela.wallet.core.data.SigningPrefs.refuseBlind.value,
+    ): MsSignDoor =
+        MsSignDoor.of(call("review.door", mapOf("state" to state, "review" to review, "refuseBlind" to refuseBlind)))
 
     /**
      * §18 (b), round 14 + round 16 leftover 3: what a proposal sheet opened

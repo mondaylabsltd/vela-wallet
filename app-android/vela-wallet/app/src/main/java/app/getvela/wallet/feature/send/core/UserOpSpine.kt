@@ -39,6 +39,7 @@ import uniffi.vela_core_uniffi.userOpHasContractCall
 import uniffi.vela_core_uniffi.userOpRelayJson
 import uniffi.vela_core_uniffi.CoreException
 import uniffi.vela_core_uniffi.userOpReviewedSafeOpHash
+import uniffi.vela_core_uniffi.userOpDappSafeOpHash
 import uniffi.vela_core_uniffi.userOpSafeOpHash
 import uniffi.vela_core_uniffi.userOpSign
 import uniffi.vela_core_uniffi.userOpStampValidity
@@ -318,6 +319,16 @@ class UserOpSpine(
     /** The displayed fee, signed verbatim. */
     data class Quoted(val amount: String, val recipient: String, val tier: FeeTier? = null)
 
+    /**
+     * R22 (review 1-5, WYSIWYS): a site's transaction or `wallet_sendCalls`
+     * batch — signed only as exactly the request the person confirmed.
+     * [review] is the core's frozen `DappReview` (`SignAndSubmit.review`);
+     * the SafeOp is hashed only through `userOpDappSafeOpHash`, which allows
+     * the reviewed calls in order and at most one fee leg to the quoted
+     * recipient. `null` (a request the core could not read): nobody signs it.
+     */
+    data class DappAttest(val review: String?)
+
     sealed class Failure {
         data object PasskeyCancelled : Failure()
 
@@ -447,6 +458,9 @@ class UserOpSpine(
 
         /** How long the POST waits for a head read still out; past it the head is unknown. */
         const val HEAD_WAIT_MS = 1_500L
+
+        /** The refusal of an operation that is not exactly what was reviewed (nothing signed). */
+        const val NOT_THE_REVIEW = "The operation is not the one you reviewed. Nothing was signed."
     }
 
     private fun other(message: String): Nothing = throw Refused(Failure.Other(message))
@@ -573,12 +587,14 @@ class UserOpSpine(
          * the inner calls — when it measured the account as it stands now.
          */
         prepared: PreparedGas? = null,
+        /** R22: a site's request — hashed only as the request it reviewed ([DappAttest]). */
+        dapp: DappAttest? = null,
     ): Submitted = coroutineScope {
         // The head before the first POST (ruling 8): read beside the assembly
         // and the ceremony, taken only if it came back before the POST.
         val head = async { runCatching { relay.headBlock(chainId) }.getOrNull() }
         try {
-            submitSigned(chainId, account, calls, gasFeeToken, quotedFee, review, signingStarted, intent, ceremonyDone, beforePost, prepared) {
+            submitSigned(chainId, account, calls, gasFeeToken, quotedFee, review, signingStarted, intent, ceremonyDone, beforePost, prepared, dapp) {
                 withTimeoutOrNull(HEAD_WAIT_MS) { head.await() }
             }
         } finally {
@@ -598,8 +614,15 @@ class UserOpSpine(
         ceremonyDone: () -> Unit,
         beforePost: suspend (localHash: String, submitBlock: Long?) -> Unit,
         prepared: PreparedGas?,
+        dapp: DappAttest?,
         headBeforePost: suspend () -> Long?,
     ): Submitted {
+        // R22: a site's request the core could not freeze a review of is
+        // signed by no one — refused before anything is read or asked.
+        if (dapp != null && dapp.review == null) {
+            VelaLog.event("sign", "not_reviewed: no dApp review — nothing signed")
+            other(NOT_THE_REVIEW)
+        }
         val keys = accounts.keysOf(account)
         if (keys.isEmpty()) other("No passkey credential for the active account")
         // A submit, and the first quote after it, landed or not, measure the
@@ -702,14 +725,22 @@ class UserOpSpine(
         // refuses an operation that never expires.
         draft = runCatching { userOpStampValidity(draft, wallClockMs().toDouble()) }
             .getOrElse { other(it.message ?: "The operation could not be given its expiry.") }
-        val challenge = if (review == null) {
-            userOpSafeOpHash(draft, chainId.toUInt())
-        } else {
-            try {
+        val challenge = when {
+            // R22 (review 1-5): a site's request — the SafeOp hash only for
+            // exactly the calls the sheet showed, then at most one fee leg to
+            // the quoted recipient. Anything else: refused, nothing signed.
+            dapp != null -> try {
+                userOpDappSafeOpHash(draft, chainId.toUInt(), dapp.review ?: other(NOT_THE_REVIEW))
+            } catch (mismatch: CoreException) {
+                VelaLog.event("sign", "not_the_dapp_review ${mismatch.message}")
+                other(NOT_THE_REVIEW)
+            }
+            review == null -> userOpSafeOpHash(draft, chainId.toUInt())
+            else -> try {
                 userOpReviewedSafeOpHash(draft, chainId.toUInt(), review)
             } catch (mismatch: CoreException) {
                 VelaLog.event("sign", "not_the_review ${mismatch.message}")
-                other("The operation is not the one you reviewed. Nothing was signed.")
+                other(NOT_THE_REVIEW)
             }
         }
         signingStarted()

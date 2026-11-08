@@ -243,6 +243,32 @@ class MultisigWorld(private val canonicalCode: (String) -> String) : MultisigShe
         return answer(chainId, method, params)
     }
 
+    /**
+     * R22: the world's nodes read one chain, so two independent nodes agree —
+     * unless [singleNode]: only one node answers (no witness), as a network
+     * with one public RPC does.
+     */
+    @Volatile var singleNode: Boolean = false
+
+    override suspend fun rpcCorroborated(chainId: Int, method: String, params: JsonElement): JsonElement {
+        val body = when (val reply = rpc(chainId, method, params)) {
+            is MultisigRpcReply.Result -> kotlinx.serialization.json.buildJsonObject { put("result", reply.value) }.toString()
+            is MultisigRpcReply.Error -> kotlinx.serialization.json.buildJsonObject {
+                put(
+                    "error",
+                    kotlinx.serialization.json.buildJsonObject {
+                        put("code", JsonPrimitive(reply.code))
+                        put("message", JsonPrimitive(reply.message))
+                        reply.data?.let { put("data", it) }
+                    },
+                )
+            }.toString()
+            is MultisigRpcReply.Unanswered -> null
+        }
+        val envelope = uniffi.vela_core_uniffi.rpcCorroboratedEnvelope(body, body?.takeUnless { singleNode }, false)
+        return app.getvela.wallet.core.crux.Wire.json.parseToJsonElement(envelope)
+    }
+
     private fun answer(chainId: Int, method: String, params: JsonElement): MultisigRpcReply = synchronized(this) {
         rpcLog += Triple(chainId, method, params)
         fun ok(v: Any?) = MultisigRpcReply.Result(jsonOf(v))

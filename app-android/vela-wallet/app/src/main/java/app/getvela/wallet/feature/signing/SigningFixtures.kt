@@ -386,6 +386,13 @@ object SigningFixtures {
             confirmEnabled = gate.enabled,
             confirmBlockLine = gate.key?.takeIf { !gate.enabled }?.let { t(it) },
             confirmBlockRoom = saidWhileHeld,
+            // R22: the core's friction, as the live sheet draws it — a verdict
+            // waited out is a check not read: "… anyway", held.
+            confirmAction = if (gate.anyway) t(SigningLive.SIGN_ANYWAY_KEY) else base.confirmAction,
+            confirmDanger = gate.anyway || gate.danger,
+            confirmHoldMs = gate.hold_ms,
+            holdHint = t(SigningLive.HOLD_TO_CONFIRM_KEY),
+            confirmAgain = t(SigningLive.CONFIRM_AGAIN_KEY),
         )
     }
 

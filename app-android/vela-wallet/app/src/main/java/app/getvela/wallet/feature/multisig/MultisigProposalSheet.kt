@@ -232,7 +232,9 @@ fun MultisigProposalSheet(
             }
             return@MsSheet
         }
-        val model = MsProposalModel(item, view, words, accounts.activeRow?.account, origin, locale)
+        // R22: "Refuse blind signing" — read here, so a change redraws the door.
+        val refuseBlind by app.getvela.wallet.core.data.SigningPrefs.refuseBlind.collectAsStateWithLifecycle()
+        val model = MsProposalModel(item, view, words, accounts.activeRow?.account, origin, locale, refuseBlind = refuseBlind)
         val colors = VelaTheme.colors
         Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
             MsText(model.title, MsType.Title, Modifier.testTag("multisig.proposal.title"))
@@ -311,6 +313,7 @@ fun MultisigProposalSheet(
                         else -> words.t(if (model.signAnyway) "review.approveAnyway" else "proposal.approve")
                     },
                     anyway = model.signAnyway,
+                    holdMs = model.door.holdMs,
                     dangerLines = model.dangerLines,
                     words = words,
                     onConfirm = {
@@ -388,6 +391,7 @@ fun MultisigProposalSheet(
                     MsSignButton(
                         text = words.t(if (model.signAnyway) "review.approveAnyway" else "proposal.approve"),
                         anyway = model.signAnyway,
+                        holdMs = model.door.holdMs,
                         dangerLines = model.dangerLines,
                         words = words,
                         secondary = true,
@@ -421,6 +425,7 @@ fun MultisigProposalSheet(
                 MsSignButton(
                     text = words.t(if (model.signAnyway) "review.executeAnyway" else "proposal.execute"),
                     anyway = model.signAnyway,
+                    holdMs = model.door.holdMs,
                     dangerLines = model.dangerLines,
                     words = words,
                     onConfirm = {

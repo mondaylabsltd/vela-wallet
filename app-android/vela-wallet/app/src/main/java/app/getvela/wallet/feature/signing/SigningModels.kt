@@ -266,7 +266,13 @@ sealed interface SigningBlock {
 
     data class Rows(val rows: List<SigningRow>) : SigningBlock
 
-    data class Warning(val tone: SigningTone, val text: String, val recheck: Recheck? = null) : SigningBlock
+    data class Warning(
+        val tone: SigningTone,
+        val text: String,
+        val recheck: Recheck? = null,
+        /** R22: "To check with a node you trust…" — a tap opens this network's RPC settings. */
+        val hint: String? = null,
+    ) : SigningBlock
 
     /**
      * dapp-15: "Check again" under a could-not-check line whose node nobody
@@ -312,6 +318,8 @@ sealed interface SigningBlock {
         val rows: List<BalanceDeltaRow>,
         val note: String? = null,
         val noteTone: SigningTone = SigningTone.Neutral,
+        /** R22: the core's `source_key` line ("Checked by your own node only"), quiet, under the rows. */
+        val source: String? = null,
     ) : SigningBlock
 
     /**
@@ -644,6 +652,18 @@ data class SigningScreenModel(
      */
     val confirmAction: String?,
     val confirmEnabled: Boolean,
+    /**
+     * R22: the confirm's friction, the core's (`ConfirmState`): drawn in the
+     * danger style ([confirmDanger], `anyway || danger`) and held for
+     * [confirmHoldMs] before it acts (`0`: a plain press). The accessible
+     * path confirms with a second activation.
+     */
+    val confirmDanger: Boolean = false,
+    val confirmHoldMs: Int = 0,
+    /** R22: "Hold to confirm" — under a held confirm, and its accessibility hint. */
+    val holdHint: String = "",
+    /** R22: "Press again to confirm" — what the accessible path's first activation says. */
+    val confirmAgain: String = "",
     val panelTitle: String,
     /**
      * Spec 099 R7: why the confirm is shut, one line under it — the core's
