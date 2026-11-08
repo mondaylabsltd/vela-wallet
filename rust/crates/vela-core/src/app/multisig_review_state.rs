@@ -218,19 +218,39 @@ pub struct SignDoor {
     /// `failed`: offer "Try again" (`review_again`). `review` (D1): the
     /// unchecked line's Try again.
     pub retry: bool,
+    /// R22: hold the button this long before it acts — every "… anyway" and
+    /// every danger (`sign_confirm::HOLD_TO_CONFIRM_MS`), or the accessible
+    /// second press; `0`: a plain press.
+    #[serde(default)]
+    pub hold_ms: u32,
 }
+
+/// R22: "Refuse blind signing" is on and the review signs only "… anyway":
+/// refused, said above the review ([`SignDoor::reason_key`]).
+pub const BLIND_REFUSED_KEY: &str = "home.multisig.review.blindRefused";
 
 /// The sign door for a review in `state` (`None`: not asked yet — the same
 /// as `loading`): enabled only when it is `ready`, a review is there, and its
 /// sign rule allows it. Nothing else opens it — not a missing review, not a
 /// missing sign rule.
 pub fn door(state: Option<&ReviewState>, review: Option<&Value>) -> SignDoor {
+    door_with(state, review, false)
+}
+
+/// [`door`], with the person's "Refuse blind signing" preference (R22): a
+/// review that signs only "… anyway" is refused instead.
+pub fn door_with(
+    state: Option<&ReviewState>,
+    review: Option<&Value>,
+    refuse_blind: bool,
+) -> SignDoor {
     let closed = |shows, reason_key: Option<String>| SignDoor {
         shows,
         enabled: false,
         anyway: false,
         retry: reason_key.is_some(),
         reason_key,
+        hold_ms: 0,
     };
     match state {
         None | Some(ReviewState::Loading) => closed(ReviewShows::Loading, None),
@@ -247,12 +267,32 @@ pub fn door(state: Option<&ReviewState>, review: Option<&Value>) -> SignDoor {
             // Try again, and signed only "… anyway" (whatever the sign rule
             // handed says: the door never lets it be one plain tap).
             let unchecked = unchecked(review);
+            let anyway = allowed && (sign["anyway"].as_bool() == Some(true) || unchecked);
+            let danger =
+                review.and_then(|r| r.get("tone")).and_then(Value::as_str) == Some("danger");
+            if anyway && refuse_blind {
+                return SignDoor {
+                    shows: ReviewShows::Review,
+                    enabled: false,
+                    anyway: false,
+                    reason_key: Some(BLIND_REFUSED_KEY.to_owned()),
+                    // Read again, the checks may come back: refused only
+                    // for as long as they are unread.
+                    retry: unchecked,
+                    hold_ms: 0,
+                };
+            }
             SignDoor {
                 shows: ReviewShows::Review,
                 enabled: allowed,
-                anyway: allowed && (sign["anyway"].as_bool() == Some(true) || unchecked),
+                anyway,
                 reason_key: unchecked.then(|| UNCHECKED_KEY.to_owned()),
                 retry: unchecked,
+                hold_ms: if allowed && (anyway || danger) {
+                    super::sign_confirm::HOLD_TO_CONFIRM_MS
+                } else {
+                    0
+                },
             }
         }
     }
@@ -451,7 +491,8 @@ pub fn door_json(args: &Value) -> Result<Value, String> {
         Some(v) => Some(serde_json::from_value(v.clone()).map_err(|e| format!("state: {e}"))?),
     };
     let review = args.get("review").filter(|r| !r.is_null());
-    serde_json::to_value(door(state.as_ref(), review)).map_err(|e| e.to_string())
+    let refuse_blind = args.get("refuseBlind").and_then(Value::as_bool) == Some(true);
+    serde_json::to_value(door_with(state.as_ref(), review, refuse_blind)).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

@@ -48,6 +48,8 @@ pub mod clear_signing;
 pub mod contacts;
 pub mod contacts_initials;
 pub mod contacts_io;
+/// R22: a plain verdict stands on two independent sources (§36).
+pub mod corroborate;
 pub mod create_wallet;
 pub mod dapp_activity;
 pub mod dapp_browser;

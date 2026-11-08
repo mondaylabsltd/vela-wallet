@@ -1144,8 +1144,12 @@ fn dapp_request(
             flow(model, move |io, st| async move {
                 let signer = account.address.clone();
                 let mut facts = Vec::new();
+                // R22 (SEC-PARENT-3): an unlisted Safe's `isOwner` is read
+                // of two independent nodes; one node's "no", or two that
+                // differ, is "couldn't check" — refused.
+                let guard = io.corroborating();
                 for read in reads {
-                    let answer = match io
+                    let answer = match guard
                         .eth_call(
                             u64::from(read.chain_id),
                             &read.safe,

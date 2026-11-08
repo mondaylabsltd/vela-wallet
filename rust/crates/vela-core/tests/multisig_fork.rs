@@ -21,6 +21,7 @@
 #![cfg(all(feature = "crux", feature = "dev-fixtures"))]
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+mod fork_proxy;
 mod support;
 
 use std::collections::BTreeMap;
@@ -99,6 +100,9 @@ fn http(
 struct Shell {
     service: String,
     rpcs: BTreeMap<u64, String>,
+    /// R22: per chain, the second, independent node a corroborated read is
+    /// also asked of (an honest `fork_proxy` in front of the same anvil).
+    witnesses: BTreeMap<u64, String>,
     store: BTreeMap<String, String>,
     locals: Vec<LocalAccount>,
     last_tx: Option<String>,
@@ -135,6 +139,20 @@ impl Shell {
             ));
         }
         Ok(v["result"].clone())
+    }
+
+    /// R22: a corroborated read — the chain's node and its independent
+    /// witness asked the same — as the one envelope the core compares.
+    fn corroborated(&self, chain: u64, method: &str, params: &Value) -> Value {
+        let body =
+            json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).to_string();
+        let ask = |url: Option<&String>| {
+            url.and_then(|u| fork_proxy::post(u, &body))
+                .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+        };
+        let first = ask(self.rpcs.get(&chain));
+        let witness = ask(self.witnesses.get(&chain));
+        vela_core::app::corroborate::corroborated_envelope(first.as_ref(), witness.as_ref(), false)
     }
 
     /// The executor's user operation, stood in for: each call sent from its
@@ -197,6 +215,15 @@ impl Shell {
                     detail,
                     refused: None,
                 },
+            },
+            Op::Rpc {
+                chain_id,
+                method,
+                params,
+                corroborate: true,
+                ..
+            } => Res::RpcCorroborated {
+                envelope: self.corroborated(*chain_id, method, params),
             },
             Op::Rpc {
                 chain_id,
@@ -296,6 +323,13 @@ impl Shell {
     }
 }
 
+/// R22: an honest, independent second node for chain 100 — a `fork_proxy`
+/// on its own loopback port in front of the same anvil.
+fn honest_witness(rpc: &str) -> BTreeMap<u64, String> {
+    let proxy = fork_proxy::Proxy::start(rpc, fork_proxy::Kind::Honest);
+    BTreeMap::from([(100, proxy.url)])
+}
+
 fn settle<A>(sut: &mut DomainDriver<A>, shell: &mut Shell)
 where
     A: crux_core::App + Default,
@@ -353,6 +387,7 @@ fn create_two_of_three_propose_approve_twice_execute() {
     let locals: Vec<LocalAccount> = (0..3).map(fixture).collect();
     let mut shell = Shell {
         service: service.clone(),
+        witnesses: honest_witness(&rpc),
         rpcs: BTreeMap::from([(100, rpc)]),
         store: BTreeMap::new(),
         locals: locals.clone(),
@@ -398,6 +433,7 @@ fn create_two_of_three_propose_approve_twice_execute() {
     let mut other_shell = Shell {
         service: service.clone(),
         rpcs: shell.rpcs.clone(),
+        witnesses: shell.witnesses.clone(),
         store: BTreeMap::new(),
         locals: Vec::new(),
         last_tx: None,
@@ -538,6 +574,118 @@ fn create_two_of_three_propose_approve_twice_execute() {
 }
 
 // ---------------------------------------------------------------------------
+// R22 (§36) — a lying node beside an honest one never yields a plain review
+// ---------------------------------------------------------------------------
+
+/// A member change of a real 2-of-3 on the fork, reviewed with the review's
+/// reads asked of (first node, witness) as given: the liar (`fork_proxy`)
+/// rewrites the state diff to "only the nonce moves" and refuses the state
+/// probe. Asked first or second, it never yields a plain verdict; two honest
+/// nodes do.
+#[test]
+#[ignore = "needs the fork harness (scripts/onchain/multisig-fork/up.sh) and VELA_MULTISIG_FORK=1"]
+fn a_lying_node_never_gives_a_member_change_a_plain_review() {
+    if std::env::var("VELA_MULTISIG_FORK").is_err() {
+        eprintln!("VELA_MULTISIG_FORK not set: skipped");
+        return;
+    }
+    let service = format!("http://127.0.0.1:{}", port("GENESIS_PORT", 8787));
+    let rpc = format!("http://127.0.0.1:{}", port("FORK_PORT", 8545));
+    let honest = fork_proxy::Proxy::start(&rpc, fork_proxy::Kind::Honest).url;
+    let honest2 = fork_proxy::Proxy::start(&rpc, fork_proxy::Kind::Honest).url;
+    let liar = fork_proxy::Proxy::start(&rpc, fork_proxy::Kind::Lying).url;
+    let locals: Vec<LocalAccount> = (0..3).map(fixture).collect();
+    let mut shell = Shell {
+        service: service.clone(),
+        rpcs: BTreeMap::from([(100, honest.clone())]),
+        witnesses: BTreeMap::from([(100, honest2.clone())]),
+        store: BTreeMap::new(),
+        locals: locals.clone(),
+        last_tx: None,
+        log: Vec::new(),
+    };
+    let mut acc = DomainDriver::<MultisigAccounts>::new();
+    acc.dispatch(accounts::Event::Start {
+        service_url: service.clone(),
+        accounts: locals.clone(),
+        networks: vec![100],
+    });
+    settle(&mut acc, &mut shell);
+    acc.dispatch(accounts::Event::NewDraft);
+    settle(&mut acc, &mut shell);
+    acc.dispatch(accounts::Event::Create {
+        choice: CreateChoice {
+            owners: locals.iter().map(|l| l.address.clone()).collect(),
+            threshold: 2,
+            name: "Truth Harbor".to_owned(),
+            chain_id: 100,
+            creator: locals[0].address.clone(),
+            members: BTreeMap::new(),
+        },
+    });
+    settle(&mut acc, &mut shell);
+    let view = acc.view();
+    assert_eq!(view.create.phase, Phase::Done, "{:?}", view.create);
+    let account: MultisigAccount = view.accounts[0].account.clone();
+    eprintln!("created {}", account.address);
+
+    let review = |shell: &mut Shell, first: &str, witness: &str| -> Value {
+        shell.rpcs.insert(100, first.to_owned());
+        shell.witnesses.insert(100, witness.to_owned());
+        let mut ms = DomainDriver::<MultisigProposals>::new();
+        ms.dispatch(proposals::Event::Start {
+            service_url: service.clone(),
+            accounts: locals.clone(),
+            networks: vec![100],
+            known: Vec::new(),
+        });
+        settle(&mut ms, shell);
+        ms.dispatch(proposals::Event::Follow {
+            account: Some(account.clone()),
+        });
+        settle(&mut ms, shell);
+        ms.dispatch(proposals::Event::Draft {
+            chain_id: 100,
+            proposal: ProposalKind::MemberChange {
+                change: vela_core::multisig::MemberChange::Add {
+                    owner: "0x000000000000000000000000000000000000dEaD".to_owned(),
+                    threshold: None,
+                },
+            },
+        });
+        settle(&mut ms, shell);
+        let draft = ms.view().draft.expect("a draft");
+        draft.review.expect("a review")
+    };
+
+    let plain = review(&mut shell, &honest, &honest2);
+    eprintln!(
+        "honest + honest: state {} · sign {}",
+        plain["state"], plain["sign"]
+    );
+    assert_eq!(plain["state"]["verdict"]["kind"], "declared", "{plain}");
+    assert_eq!(
+        plain["sign"],
+        json!({"allowed": true, "anyway": false}),
+        "{plain}"
+    );
+
+    for (first, witness, name) in [
+        (&liar, &honest, "liar first"),
+        (&honest, &liar, "liar second"),
+    ] {
+        let got = review(&mut shell, first, witness);
+        eprintln!("{name}: state {} · sign {}", got["state"], got["sign"]);
+        assert_ne!(
+            got["state"]["verdict"]["kind"], "unchanged",
+            "{name}: {got}"
+        );
+        assert_ne!(got["state"]["verdict"]["kind"], "declared", "{name}: {got}");
+        assert_eq!(got["sign"]["anyway"], true, "{name}: never plain: {got}");
+    }
+}
+
+// ---------------------------------------------------------------------------
 // §31 — the parent-Safe guard against the real contracts (APPENDIX-PARENT)
 // ---------------------------------------------------------------------------
 
@@ -619,25 +767,32 @@ mod parent {
         else {
             panic!("not a read: {op:?}");
         };
-        let answer = match shell.rpc(
+        // R22 (SEC-PARENT-3): the read is corroborated — the chain's node
+        // and its independent witness.
+        let envelope = shell.corroborated(
             u64::from(*chain_id),
             "eth_call",
-            json!([{"to": safe, "data": data}, "latest"]),
-        ) {
-            Ok(v) => SafeOwnerAnswer::Returned {
+            &json!([{"to": safe, "data": data}, "latest"]),
+        );
+        let answer_of = |e: &Value| match (e.get("result"), e.get("error")) {
+            (Some(v), _) => SafeOwnerAnswer::Returned {
                 data: v.as_str().unwrap_or("0x").to_owned(),
             },
-            Err((Some(code), message)) => SafeOwnerAnswer::RpcError {
-                code: Some(code),
-                message,
+            (None, Some(err)) if !err.is_null() => SafeOwnerAnswer::RpcError {
+                code: err["code"].as_i64(),
+                message: err["message"].as_str().unwrap_or("").to_owned(),
             },
-            Err((None, detail)) => SafeOwnerAnswer::Unreachable { detail },
+            _ => SafeOwnerAnswer::Unreachable {
+                detail: "no node answered".to_owned(),
+            },
         };
         SignShellResult::SafeOwnerRead {
             id: id.clone(),
             chain_id: *chain_id,
             safe: safe.clone(),
-            answer,
+            answer: answer_of(&envelope),
+            witness: vela_core::app::corroborate::witness_of(&envelope).map(answer_of),
+            own_node: None,
         }
     }
 
@@ -747,6 +902,7 @@ mod parent {
         let a = locals[0].address.clone();
         let mut shell = Shell {
             service: service.clone(),
+            witnesses: honest_witness(&rpc),
             rpcs: BTreeMap::from([(100, rpc)]),
             store: BTreeMap::new(),
             locals: locals.clone(),
@@ -962,6 +1118,7 @@ mod parent {
         let mut dead = Shell {
             service: service.clone(),
             rpcs: BTreeMap::from([(100, "http://127.0.0.1:9".to_owned())]),
+            witnesses: BTreeMap::new(),
             store: BTreeMap::new(),
             locals: Vec::new(),
             last_tx: None,

@@ -83,6 +83,7 @@ fn rpc_call(id: &str, method: &str, now: f64) -> Event {
         method: method.to_owned(),
         now_ms: now,
         person: false,
+        corroborate: false,
     }
 }
 
@@ -94,6 +95,7 @@ fn bundler_call(id: &str, now: f64) -> Event {
         method: "eth_sendUserOperation".to_owned(),
         now_ms: now,
         person: false,
+        corroborate: false,
     }
 }
 
@@ -207,6 +209,8 @@ fn respond(id: &str, url: &str) -> Op {
         verdict: RpcCallVerdict::Respond {
             url: url.to_owned(),
             maybe_delivered: false,
+            witness_url: None,
+            own_node: false,
         },
     }
 }
@@ -219,6 +223,8 @@ fn respond_after_loss(id: &str, url: &str) -> Op {
         verdict: RpcCallVerdict::Respond {
             url: url.to_owned(),
             maybe_delivered: true,
+            witness_url: None,
+            own_node: false,
         },
     }
 }
@@ -2478,7 +2484,9 @@ fn not_connected_fails_over_like_network() {
                 "c1",
                 RpcCallVerdict::Respond {
                     url: PUB1.to_owned(),
-                    maybe_delivered: delivered
+                    maybe_delivered: delivered,
+                    witness_url: None,
+                    own_node: false,
                 }
             )],
             "{out:?}"
@@ -2499,7 +2507,9 @@ fn old_json_without_the_new_fields_still_decodes() {
         respond,
         RpcCallVerdict::Respond {
             url: "https://a".to_owned(),
-            maybe_delivered: false
+            maybe_delivered: false,
+            witness_url: None,
+            own_node: false,
         }
     );
     let gave_up: RpcCallVerdict = serde_json::from_str(r#"{"type":"failed","rate_limited":true}"#)
@@ -3771,6 +3781,7 @@ fn person_call(id: &str, method: &str, now: f64) -> Event {
         method: method.to_owned(),
         now_ms: now,
         person: true,
+        corroborate: false,
     }
 }
 

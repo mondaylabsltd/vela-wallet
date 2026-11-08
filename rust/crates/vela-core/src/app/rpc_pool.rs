@@ -142,6 +142,24 @@
 //! ([`own_only_pool`]): nobody else is asked, and a failure is said as theirs
 //! ([`RpcPoolView::own_node_unreached_chains`]).
 //!
+//! # Corroborated reads (R22, docs/multisig-machines.md §36)
+//!
+//! A read a plain signing verdict stands on (a simulation, a state diff,
+//! `eth_getCode`, a multisig's authority) is asked with
+//! [`Event::CallRequested::corroborate`]. Once one endpoint answers, the
+//! machine asks a SECOND, independent one ([`super::corroborate::provider_of`]
+//! differs) the same question — at most [`WITNESS_MAX_ASKS`] of them, one
+//! pass, no backoff — and concludes [`RpcCallVerdict::Respond`] naming both
+//! (`witness_url`). The shell hands both bodies to the core, which compares
+//! what they mean. With "Only use my node" on, the person's node is trusted
+//! alone (`own_node`), and nobody else is asked. Every endpoint a corroborated
+//! read is answered by has reported this chain's id first
+//! ([`RpcOperation::ProbeChainId`], once per endpoint until the pool is
+//! reloaded): an endpoint that cannot say which chain it serves is no source
+//! for a verdict, and one that names another chain is never asked anything
+//! again. A corroborated read is never hedged (it is left out of
+//! [`RpcPoolView::pending_urls`]): an early answer would skip the witness.
+//!
 //! Time never originates here: every shell result carries `now_ms` (epoch
 //! milliseconds, f64). Randomness never originates here: the backoff jitter
 //! is drawn by the shell via [`RpcOperation::DrawJitter`]. The two global
@@ -216,6 +234,11 @@ pub const UNREACHED_MIN_SILENCE_MS: f64 = 5_000.0;
 /// (the most trusted first, then the oldest failure). A read is never failed
 /// without asking anyone; writes are not bound this way.
 pub const OUTAGE_PROBE_ENDPOINTS: usize = 2;
+/// R22: how many independent endpoints a corroborated read asks, at most,
+/// for the second answer (one pass, no backoff). Two bounds the extra load to
+/// two POSTs and two chain-id probes per read, and survives one witness that
+/// is down.
+pub const WITNESS_MAX_ASKS: usize = 2;
 /// Bundler JSON-RPC timeout — `NET_TIMEOUTS.bundlerRpc` (`net.ts:27`).
 pub const BUNDLER_RPC_TIMEOUT_MS: u32 = 15_000;
 /// Per-endpoint `eth_chainId` ping timeout — `NET_TIMEOUTS.rpcPing` (`net.ts:29`).
@@ -441,6 +464,20 @@ pub enum RpcCallVerdict {
         url: String,
         #[serde(default)]
         maybe_delivered: bool,
+        /// R22, a corroborated read only: the second, independent endpoint
+        /// that answered the same question — its body is held for
+        /// `(call_id, witness_url)` too, and the shell hands both to the
+        /// core. `None`: nobody independent answered (or the read was not
+        /// corroborated) — the core believes no plain verdict on it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        witness_url: Option<String>,
+        /// R22, a corroborated read only: the pool holds the person's own node
+        /// alone ("Only use my node") and it answered — trusted alone, by
+        /// their choice, and said so.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        own_node: bool,
     },
     /// `eth_getLogs` range/size cap (invariant ⑤): the caller splits the
     /// block range. `max_span` is the endpoint's stated block span, or 0 for
@@ -615,6 +652,12 @@ pub enum Event {
         /// is [`RpcOperation::JsonRpcPost::must_send`]. Absent: `false`.
         #[serde(default)]
         person: bool,
+        /// R22: a read a signing verdict stands on — answered by two
+        /// independent endpoints, each of which reported this chain's id
+        /// first (module doc, "Corroborated reads"). RPC calls only. Absent:
+        /// `false`.
+        #[serde(default)]
+        corroborate: bool,
     },
     /// Which bundler REST base `/v1/account` and `/v1/sponsor` must use —
     /// the same bundler the pool would submit to (invariant ③,
@@ -1107,6 +1150,10 @@ enum SessionState {
     WaitingPost {
         url: String,
     },
+    /// R22: a corroborated read waits for `url` to say which chain it serves.
+    WaitingVerify {
+        url: String,
+    },
     WaitingJitter,
     WaitingBackoff,
 }
@@ -1147,6 +1194,11 @@ struct CallSession {
     silent_probe: bool,
     /// r17-10: the person's own ask ([`Event::CallRequested::person`]).
     person: bool,
+    /// R22: a corroborated read ([`Event::CallRequested::corroborate`]).
+    corroborate: bool,
+    /// R22: the endpoint whose answer is being witnessed — set once the
+    /// first answer is in; the queue then holds the witness candidates.
+    witness_of: Option<String>,
 }
 
 /// The fastest-RPC ping race (`pickFastestRpcUrl`), run at most once per
@@ -1232,6 +1284,10 @@ pub struct Model {
     /// UserOp through the condemned node.
     wrong_chain: BTreeMap<u32, BTreeSet<String>>,
     probes: BTreeMap<u32, ProbeRace>,
+    /// R22: per chain, the endpoints that reported THIS chain's id — the
+    /// only ones a corroborated read is answered by. Cleared with
+    /// `wrong_chain` (a config change can put another node behind a URL).
+    verified: BTreeMap<u32, BTreeSet<String>>,
     calls: BTreeMap<String, CallSession>,
     /// Captured into every request. Never bumped: no event abandons the
     /// resident pool state — staleness is enforced per result by
@@ -1338,6 +1394,7 @@ impl App for RpcPool {
                 method,
                 now_ms,
                 person,
+                corroborate,
             } => {
                 if model.calls.contains_key(&call_id) {
                     // A duplicate correlation id could cross two callers'
@@ -1361,6 +1418,8 @@ impl App for RpcPool {
                         first_pass_all_transport: true,
                         silent_probe: false,
                         person,
+                        corroborate: corroborate && kind == RpcKind::Rpc,
+                        witness_of: None,
                     },
                 );
                 if person && kind == RpcKind::Rpc {
@@ -1396,11 +1455,13 @@ impl App for RpcPool {
                 // ride `X-Rpc-Url` for up to an hour.
                 model.fastest.clear();
                 model.wrong_chain.clear();
+                model.verified.clear();
                 Command::done()
             }
             Event::RefreshChain { chain_id } => {
                 model.fastest.remove(&chain_id);
                 model.wrong_chain.remove(&chain_id);
+                model.verified.remove(&chain_id);
                 let pool = model.pools.entry(chain_id).or_default();
                 pool.loaded_at_ms = None;
                 if pool.loading {
@@ -1442,7 +1503,9 @@ impl App for RpcPool {
             pending_urls: model
                 .calls
                 .iter()
-                .filter(|(_, session)| !session.queue.is_empty())
+                // R22: a corroborated read is never hedged — an early answer
+                // would skip its witness.
+                .filter(|(_, session)| !session.queue.is_empty() && !session.corroborate)
                 .map(|(call_id, session)| {
                     (call_id.clone(), session.queue.iter().cloned().collect())
                 })
@@ -1869,6 +1932,61 @@ fn handle_probe(
     latency_ms: f64,
     now_ms: f64,
 ) -> Command<RpcEffect, Event> {
+    // R22: what an endpoint says of its chain binds every read, and wakes the
+    // corroborated reads waiting on it.
+    match reported {
+        Some(id) if id == chain_id => {
+            model
+                .verified
+                .entry(chain_id)
+                .or_default()
+                .insert(url.to_owned());
+        }
+        Some(_) => {
+            model
+                .wrong_chain
+                .entry(chain_id)
+                .or_default()
+                .insert(url.to_owned());
+        }
+        None => {}
+    }
+    let waiting: Vec<String> = model
+        .calls
+        .iter()
+        .filter(|(_, session)| {
+            session.chain_id == chain_id
+                && matches!(&session.state, SessionState::WaitingVerify { url: u } if u == url)
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+    let mut woken = Vec::new();
+    for call_id in waiting {
+        woken.push(if reported == Some(chain_id) {
+            post_to(model, &call_id, url, now_ms)
+        } else {
+            // It named another chain, or would not say: no source for a
+            // verdict. The next endpoint is asked.
+            next_endpoint(model, &call_id, now_ms)
+        });
+    }
+    let raced = race_probe(model, chain_id, url, reported, latency_ms, now_ms);
+    if woken.is_empty() {
+        return raced;
+    }
+    woken.push(raced);
+    Command::all(woken)
+}
+
+/// The fastest-RPC race's half of [`handle_probe`].
+fn race_probe(
+    model: &mut Model,
+    chain_id: u32,
+    url: &str,
+    reported: Option<u32>,
+    latency_ms: f64,
+    now_ms: f64,
+) -> Command<RpcEffect, Event> {
     let Some(race) = model.probes.get_mut(&chain_id) else {
         return Command::done();
     };
@@ -2002,6 +2120,14 @@ fn start_pass(model: &mut Model, call_id: &str, now_ms: f64) -> Command<RpcEffec
 
     let pruned = prune_expired_bans(model, now_ms);
     let mut urls = select_with_rescue(model, chain_id, kind, now_ms);
+    // R22: an endpoint that reported another chain's id serves that chain —
+    // nothing about this one is asked of it (proof, never suspicion: a
+    // probe that got no answer changes nothing).
+    if kind == RpcKind::Rpc {
+        if let Some(wrong) = model.wrong_chain.get(&chain_id) {
+            urls.retain(|url| !wrong.contains(url));
+        }
+    }
     if outage_read {
         // r13-4, the half-open probe, one pass: the endpoints not silent yet
         // in this outage (a node that answers may be among them); none left,
@@ -2146,6 +2272,36 @@ fn revalidated_x_rpc_url(
     next
 }
 
+/// POST the call to `url` now.
+fn post_to(model: &mut Model, call_id: &str, url: &str, now_ms: f64) -> Command<RpcEffect, Event> {
+    let Some(session) = model.calls.get_mut(call_id) else {
+        return Command::done();
+    };
+    session.state = SessionState::WaitingPost {
+        url: url.to_owned(),
+    };
+    let method = session.method.clone();
+    let (kind, chain_id, must_send) = (session.kind, session.chain_id, session.person);
+    let (x_rpc_url, timeout_ms) = match kind {
+        RpcKind::Rpc => (None, RPC_READ_TIMEOUT_MS),
+        RpcKind::Bundler => (
+            revalidated_x_rpc_url(model, call_id, chain_id, now_ms),
+            BUNDLER_RPC_TIMEOUT_MS,
+        ),
+    };
+    request(
+        model,
+        RpcOperation::JsonRpcPost {
+            call_id: call_id.to_owned(),
+            url: url.to_owned(),
+            method,
+            x_rpc_url,
+            timeout_ms,
+            must_send,
+        },
+    )
+}
+
 /// Try the next endpoint of the current pass, or close the pass: another
 /// jittered-backoff pass while attempts remain, else the chain-level verdict.
 fn next_endpoint(model: &mut Model, call_id: &str, now_ms: f64) -> Command<RpcEffect, Event> {
@@ -2154,25 +2310,49 @@ fn next_endpoint(model: &mut Model, call_id: &str, now_ms: f64) -> Command<RpcEf
         return Command::done();
     };
     if let Some(url) = session.queue.pop_front() {
-        session.state = SessionState::WaitingPost { url: url.clone() };
-        let method = session.method.clone();
-        let (kind, chain_id, must_send) = (session.kind, session.chain_id, session.person);
-        let (x_rpc_url, timeout_ms) = match kind {
-            RpcKind::Rpc => (None, RPC_READ_TIMEOUT_MS),
-            RpcKind::Bundler => (
-                revalidated_x_rpc_url(model, call_id, chain_id, now_ms),
-                BUNDLER_RPC_TIMEOUT_MS,
-            ),
-        };
-        return request(
+        let (corroborate, chain_id) = (session.corroborate, session.chain_id);
+        if corroborate {
+            // R22: a source for a verdict says which chain it serves first.
+            if model
+                .wrong_chain
+                .get(&chain_id)
+                .is_some_and(|wrong| wrong.contains(&url))
+            {
+                return next_endpoint(model, call_id, now_ms);
+            }
+            let verified = model
+                .verified
+                .get(&chain_id)
+                .is_some_and(|ok| ok.contains(&url));
+            if !verified {
+                if let Some(session) = model.calls.get_mut(call_id) {
+                    session.state = SessionState::WaitingVerify { url: url.clone() };
+                }
+                return request(
+                    model,
+                    RpcOperation::ProbeChainId {
+                        chain_id,
+                        url,
+                        timeout_ms: PING_TIMEOUT_MS,
+                    },
+                );
+            }
+        }
+        return post_to(model, call_id, &url, now_ms);
+    }
+
+    // R22: no witness left to ask — the first answer goes back alone, and
+    // the core believes no plain verdict on it.
+    if let Some(primary) = session.witness_of.clone() {
+        let maybe_delivered = session.maybe_delivered;
+        return conclude(
             model,
-            RpcOperation::JsonRpcPost {
-                call_id: call_id.to_owned(),
-                url,
-                method,
-                x_rpc_url,
-                timeout_ms,
-                must_send,
+            call_id,
+            RpcCallVerdict::Respond {
+                url: primary,
+                maybe_delivered,
+                witness_url: None,
+                own_node: false,
             },
         );
     }
@@ -2476,6 +2656,8 @@ pub fn early_verdict(
         Route::Success if node_independent => Some(RpcCallVerdict::Respond {
             url: url.to_owned(),
             maybe_delivered: false,
+            witness_url: None,
+            own_node: false,
         }),
         _ => None,
     }
@@ -2489,7 +2671,7 @@ fn handle_outcome(
     latency_ms: f64,
     now_ms: f64,
 ) -> Command<RpcEffect, Event> {
-    let (kind, method, chain_id) = {
+    let (kind, method, chain_id, witness_of) = {
         let Some(session) = model.calls.get(call_id) else {
             return Command::done();
         };
@@ -2497,8 +2679,16 @@ fn handle_outcome(
             SessionState::WaitingPost { url: expected } if expected == url => {}
             _ => return Command::done(),
         }
-        (session.kind, session.method.clone(), session.chain_id)
+        (
+            session.kind,
+            session.method.clone(),
+            session.chain_id,
+            session.witness_of.clone(),
+        )
     };
+    if let Some(primary) = witness_of {
+        return handle_witness(model, call_id, url, &primary, outcome, latency_ms, now_ms);
+    }
 
     // Facts about this POST that outlive the route (spec 082 RA1, RF1).
     if let Some(session) = model.calls.get_mut(call_id) {
@@ -2525,18 +2715,24 @@ fn handle_outcome(
             if kind == RpcKind::Rpc {
                 note_answer_source(model, chain_id, url);
             }
+            if model.calls.get(call_id).is_some_and(|s| s.corroborate) {
+                return begin_witness(model, call_id, url, maybe_delivered, now_ms);
+            }
             conclude(
                 model,
                 call_id,
                 RpcCallVerdict::Respond {
                     url: url.to_owned(),
                     maybe_delivered,
+                    witness_url: None,
+                    own_node: false,
                 },
             )
         }
         Route::NotServed => {
             // An answer about the method, not the endpoint: the chain is
-            // reachable, the endpoint's record is untouched.
+            // reachable, the endpoint's record is untouched. Nothing to
+            // witness: a node that does not offer it said so.
             clear_chain_failure(model, chain_id, kind);
             conclude(
                 model,
@@ -2544,6 +2740,8 @@ fn handle_outcome(
                 RpcCallVerdict::Respond {
                     url: url.to_owned(),
                     maybe_delivered,
+                    witness_url: None,
+                    own_node: false,
                 },
             )
         }
@@ -2601,6 +2799,105 @@ fn handle_outcome(
             next_endpoint(model, call_id, now_ms)
         }
         Route::PlainFailure => {
+            touch_failure(model, chain_id, kind, url, now_ms);
+            next_endpoint(model, call_id, now_ms)
+        }
+    }
+}
+
+/// R22: the first answer to a corroborated read is in, from `url`. With "Only
+/// use my node" the person's node is trusted alone; otherwise the same
+/// question goes to an independent endpoint ([`WITNESS_MAX_ASKS`] at most, in
+/// the pool's order) — none left, the answer goes back alone.
+fn begin_witness(
+    model: &mut Model,
+    call_id: &str,
+    url: &str,
+    maybe_delivered: bool,
+    now_ms: f64,
+) -> Command<RpcEffect, Event> {
+    let Some(chain_id) = model.calls.get(call_id).map(|s| s.chain_id) else {
+        return Command::done();
+    };
+    let alone = |own_node| RpcCallVerdict::Respond {
+        url: url.to_owned(),
+        maybe_delivered,
+        witness_url: None,
+        own_node,
+    };
+    let Some(pool) = model.pools.get(&chain_id) else {
+        return conclude(model, call_id, alone(false));
+    };
+    if pool.own_only {
+        return conclude(model, call_id, alone(true));
+    }
+    let bans: Vec<RpcBanEntry> = model.bans.values().cloned().collect();
+    let wrong = model.wrong_chain.get(&chain_id);
+    let candidates: VecDeque<String> = select_urls(pool.list(RpcKind::Rpc), &bans, now_ms)
+        .into_iter()
+        .filter(|candidate| {
+            super::corroborate::independent(candidate, url)
+                && !wrong.is_some_and(|w| w.contains(candidate))
+        })
+        .take(WITNESS_MAX_ASKS)
+        .collect();
+    if candidates.is_empty() {
+        return conclude(model, call_id, alone(false));
+    }
+    if let Some(session) = model.calls.get_mut(call_id) {
+        session.witness_of = Some(url.to_owned());
+        session.queue = candidates;
+    }
+    next_endpoint(model, call_id, now_ms)
+}
+
+/// R22: a witness's outcome. An answer is the second word; anything else —
+/// a failure, a ban, a node that does not offer the method — and the next
+/// candidate is asked. A witness never classifies the chain: the chain
+/// already answered.
+fn handle_witness(
+    model: &mut Model,
+    call_id: &str,
+    url: &str,
+    primary: &str,
+    outcome: RpcTransportOutcome,
+    latency_ms: f64,
+    now_ms: f64,
+) -> Command<RpcEffect, Event> {
+    let Some((chain_id, kind, method)) = model
+        .calls
+        .get(call_id)
+        .map(|s| (s.chain_id, s.kind, s.method.clone()))
+    else {
+        return Command::done();
+    };
+    match route_of(kind, &method, &outcome) {
+        Route::Success => {
+            touch_success(model, chain_id, kind, url, latency_ms);
+            let maybe_delivered = model.calls.get(call_id).is_some_and(|s| s.maybe_delivered);
+            conclude(
+                model,
+                call_id,
+                RpcCallVerdict::Respond {
+                    url: primary.to_owned(),
+                    maybe_delivered,
+                    witness_url: Some(url.to_owned()),
+                    own_node: false,
+                },
+            )
+        }
+        Route::NotServed | Route::RangeCap(_) => next_endpoint(model, call_id, now_ms),
+        Route::Ban { .. } => {
+            touch_failure(model, chain_id, kind, url, now_ms);
+            ban_url(model, chain_id, kind, url, now_ms);
+            let entries: Vec<RpcBanEntry> = model.bans.values().cloned().collect();
+            Command::all([
+                request(model, RpcOperation::PersistBans { entries }),
+                render(),
+                next_endpoint(model, call_id, now_ms),
+            ])
+        }
+        Route::Transient { .. } | Route::RateLimited429 | Route::PlainFailure => {
             touch_failure(model, chain_id, kind, url, now_ms);
             next_endpoint(model, call_id, now_ms)
         }

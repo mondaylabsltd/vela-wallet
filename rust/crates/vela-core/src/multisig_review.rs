@@ -51,8 +51,9 @@ use alloy_primitives::{keccak256, Address, B256, U256};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
+use crate::app::corroborate::{self, Standing};
 use crate::app::multisig_outside::reading::TokenFacts;
-use crate::app::sim_outcome::{self, SimOutcome, SimReply, SimVerdict};
+use crate::app::sim_outcome::{self, SimOutcome, SimVerdict};
 use crate::app::token_trust::{TrustAssetDelta, TrustDeltaKind};
 use crate::error::CoreError;
 use crate::multisig::{
@@ -1082,6 +1083,7 @@ fn read_snapshot(w: &[U256], watched: usize, tokens: usize) -> Option<Snapshot> 
 }
 
 /// What the probe answered: both readings, and whether the inner call ran.
+#[derive(Clone)]
 struct ProbeAnswer {
     before: Snapshot,
     after: Snapshot,
@@ -1632,6 +1634,8 @@ pub fn sim_withheld() -> SimVerdict {
         notice_key: None,
         no_change_key: None,
         recheck: false,
+        source: None,
+        source_key: None,
     }
 }
 
@@ -1668,6 +1672,106 @@ fn probe_moves(p: &ProbeAnswer, tokens: &[Address]) -> SimVerdict {
         }
     }
     sim_outcome::verdict_of(SimOutcome::Deltas { deltas })
+}
+
+/// The probe's answer, and the second node's beside it (R22).
+struct Probed {
+    answer: ProbeAnswer,
+    witness: Option<ProbeAnswer>,
+    own_node: bool,
+}
+
+/// What the probe's balances say moves, believed only when a second,
+/// independent node's balances agree (or the person's own node answered
+/// alone): otherwise "couldn't confirm" — never "nothing moves" on one
+/// node's word.
+fn probe_moves_corroborated(p: &Probed, tokens: &[Address]) -> SimVerdict {
+    let first = probe_moves(&p.answer, tokens);
+    if first.kind != "deltas" {
+        return first;
+    }
+    if p.own_node {
+        let mut v = first;
+        v.source = Some("own_node".into());
+        v.source_key = Some(sim_outcome::KEY_OWN_NODE.into());
+        return v;
+    }
+    let unconfirmed = |disagreed| sim_outcome::verdict_of(SimOutcome::Unconfirmed { disagreed });
+    let Some(witness) = &p.witness else {
+        return unconfirmed(false);
+    };
+    let theirs = probe_moves(witness, tokens);
+    if theirs.kind != "deltas" {
+        return unconfirmed(theirs.kind == "reverts");
+    }
+    match sim_outcome::agreed_deltas(&first.deltas, &theirs.deltas) {
+        Some(deltas) => {
+            let mut v = sim_outcome::verdict_of(SimOutcome::Deltas { deltas });
+            v.source = Some("corroborated".into());
+            v
+        }
+        None => unconfirmed(true),
+    }
+}
+
+/// R22: one state source's reading — the first node's verdict and the
+/// second, independent node's, either of which may be missing.
+struct StateRead {
+    first: Option<StateVerdict>,
+    second: Option<StateVerdict>,
+    own_node: bool,
+}
+
+impl StateRead {
+    /// The source's reading of envelope `e` (`first` read from its first
+    /// answer; `again` reads the witness's); `None` when neither node gave
+    /// a verdict.
+    fn of(
+        e: &Value,
+        first: Option<StateVerdict>,
+        again: impl Fn(&Value) -> Option<StateVerdict>,
+    ) -> Option<Self> {
+        let second = corroborate::witness_of(e).and_then(again);
+        (first.is_some() || second.is_some()).then(|| Self {
+            first,
+            second,
+            own_node: corroborate::own_node(e),
+        })
+    }
+
+    /// What stands: a refusal (or a revert) EITHER node read — a lying node
+    /// cannot hide the honest one's "this changes who controls it" — else
+    /// the first node's verdict when the person's own node gave it alone or
+    /// the second node read the same; else nothing.
+    fn stands(&self) -> Option<StateVerdict> {
+        if let Some(v) = self
+            .first
+            .iter()
+            .chain(&self.second)
+            .find(|v| refuses_alone(v))
+        {
+            return Some(v.clone());
+        }
+        let first = self.first.as_ref()?;
+        (self.own_node || self.second.as_ref() == Some(first)).then(|| first.clone())
+    }
+
+    /// Who stands behind it (the could-not-check's reason).
+    fn standing(&self) -> Standing {
+        match (&self.first, &self.second) {
+            _ if self.own_node => Standing::OwnNode,
+            (Some(a), Some(b)) if a == b => Standing::Corroborated,
+            (Some(_), Some(_)) => Standing::Disagreed,
+            _ => Standing::Single,
+        }
+    }
+}
+
+/// A state verdict that needs no second word: a refusal (an undeclared
+/// change) or a revert. A lying node can only make Vela refuse or warn by
+/// it, never sign plainly.
+fn refuses_alone(v: &StateVerdict) -> bool {
+    matches!(v, StateVerdict::Undeclared { .. } | StateVerdict::Reverts)
 }
 
 /// The one review of `input.tx` for every member ([`MultisigReview`]).
@@ -1713,7 +1817,7 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
     // The guard.
     let reads = review_reads(r)?;
     let tokens: Vec<Address> = reads.tokens.iter().filter_map(|t| t.parse().ok()).collect();
-    let mut probe_read: Option<ProbeAnswer> = None;
+    let mut probe_read: Option<Probed> = None;
     let state = match placed(r, safe) {
         Err(p) => StateGuard {
             source: StateSource::None,
@@ -1745,12 +1849,12 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
             // A trace counts only when `execTransaction` ran: it always writes the
             // Safe (its nonce, at least). A reverted call leaves an EMPTY diff —
             // never "nothing changes" — and the probe speaks instead.
-            let traced = input.trace.as_ref().and_then(|t| {
+            let trace_of = |t: &Value| {
                 let res = t.get("result").filter(|v| !v.is_null())?;
                 let w = trace_writes(res, safe)?;
                 (!w.is_empty()).then(|| verdict(judge_trace(&w, &e, &watch), declares))
-            });
-            let probed = input.probe.as_ref().and_then(|p| {
+            };
+            let probe_of = |p: &Value| {
                 let answer = probe_answer(p, watch.len(), tokens.len())?;
                 let v = if !answer.success {
                     StateVerdict::Reverts
@@ -1762,10 +1866,29 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
                         },
                     }
                 };
-                probe_read = Some(answer);
-                Some(v)
+                Some((v, answer))
+            };
+            // R22 (review 1-2): each source is the first node's answer, and
+            // the second, independent node's beside it. Their verdicts are
+            // compared — never their bytes (two honest clients list
+            // different accounts in a prestate diff).
+            let traced = input.trace.as_ref().and_then(|t| {
+                StateRead::of(t, trace_of(&corroborate::first_answer(t)), |w| trace_of(w))
             });
-            match (traced, probed) {
+            let probed = input.probe.as_ref().and_then(|p| {
+                let first = probe_of(&corroborate::first_answer(p));
+                let witness = corroborate::witness_of(p).and_then(&probe_of);
+                if let Some((_, answer)) = &first {
+                    probe_read = Some(Probed {
+                        answer: answer.clone(),
+                        witness: witness.as_ref().map(|(_, a)| a.clone()),
+                        own_node: corroborate::own_node(p),
+                    });
+                }
+                StateRead::of(p, first.map(|(v, _)| v), |w| probe_of(w).map(|(v, _)| v))
+            });
+            let stands = |found: &Option<StateRead>| found.as_ref().and_then(StateRead::stands);
+            match (stands(&traced), stands(&probed)) {
                 (Some(v), _) => StateGuard {
                     source: StateSource::Trace,
                     verdict: v,
@@ -1774,6 +1897,24 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
                     source: StateSource::Probe,
                     verdict: v,
                 },
+                // An answer nobody independent confirmed: unread, and why.
+                (None, None) if traced.is_some() || probed.is_some() => {
+                    let disagreed = [&traced, &probed]
+                        .into_iter()
+                        .flatten()
+                        .any(|read| read.standing() == Standing::Disagreed);
+                    StateGuard {
+                        source: StateSource::None,
+                        verdict: StateVerdict::Unavailable {
+                            reason: if disagreed {
+                                corroborate::DISAGREED
+                            } else {
+                                corroborate::UNCORROBORATED
+                            }
+                            .into(),
+                        },
+                    }
+                }
                 (None, None) => {
                     let all: Vec<&RpcAnswer> =
                         [&input.trace, &input.probe].into_iter().flatten().collect();
@@ -1799,13 +1940,15 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
 
     // What moves: the signing sheet's simulation; where the network does
     // not offer one, the probe's balances.
+    // R22: the simulation's envelope carries the second node's answer; what
+    // moves is believed only when the two agree (`sim_outcome`).
     let simulated = input
         .sim_reply
         .as_deref()
-        .map(|reply| sim_outcome::verdict(SimReply::from_json(reply), &r.safe));
+        .map(|reply| sim_outcome::verdict_of_envelope_json(reply, &r.safe));
     let (simulation, simulation_source) = match (simulated, &probe_read) {
         (Some(v), _) if v.kind == "deltas" || v.kind == "reverts" => (v, "simulate"),
-        (_, Some(p)) => (probe_moves(p, &tokens), "probe"),
+        (_, Some(p)) => (probe_moves_corroborated(p, &tokens), "probe"),
         (Some(v), None) => (v, "none"),
         (None, None) => (sim_unavailable(), "none"),
     };
@@ -1946,9 +2089,17 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
         concerns.push(Concern::Unchecked);
     }
     let tone = concerns.iter().map(Concern::tone).max().unwrap_or(Tone::Ok);
+    // R22 (review 1-3): ANY safety check unread — the state diff, or what
+    // moves — is "… anyway", not only both. One of two read used to sign
+    // with a plain press.
+    let unread = concerns
+        .iter()
+        .any(|c| matches!(c, Concern::StateUnread { .. } | Concern::Unsimulated));
+    let allowed = tone != Tone::Refused;
     let sign = SignRule {
-        allowed: tone != Tone::Refused,
-        anyway: tone == Tone::Danger || blind,
+        allowed,
+        // A refusal has no "… anyway": nothing is signed, no override.
+        anyway: allowed && (tone == Tone::Danger || blind || unread),
     };
     // One refusal box (r10 follow-up): a batch too deep is refused for
     // being unreadable, so "Part of this batch can't be read" beside "Vela

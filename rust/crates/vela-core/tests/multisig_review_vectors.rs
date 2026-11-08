@@ -21,10 +21,30 @@ fn run(name: &str) -> (Value, Value) {
     let v: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     let out = call_json(
         "multisigReview",
-        &json!({ "input": v["input"] }).to_string(),
+        &json!({ "input": honest(&v["input"]) }).to_string(),
     )
     .unwrap();
     (serde_json::from_str(&out).unwrap(), v["expect"].clone())
+}
+
+/// R22: the captured answers as an honest network gives a corroborated read
+/// — each one witnessed alike by a second, independent node (anvil answered
+/// once; a second honest node answers the same).
+fn honest(input: &Value) -> Value {
+    let mut input = input.clone();
+    for key in ["trace", "probe"] {
+        if input[key].is_object() {
+            input[key]["witness"] = input[key].clone();
+        }
+    }
+    if let Some(reply) = input["simReply"].as_str() {
+        let mut v: Value = serde_json::from_str(reply).unwrap();
+        if v.get("result").is_some() || v.get("error").is_some() {
+            v["witness"] = v.clone();
+        }
+        input["simReply"] = json!(v.to_string());
+    }
+    input
 }
 
 #[test]

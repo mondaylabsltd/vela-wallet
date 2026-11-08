@@ -136,14 +136,20 @@ fn gate(sign: SignView) -> ConfirmState {
         fee: Some(fee),
         speed_tier: Some(FeeTier::Fast),
         message_unread: false,
+        sim: None,
+        refuse_blind: false,
     })
 }
 
+/// R22: the reading here is blind, so every state is "… anyway", held.
 fn held() -> ConfirmState {
     ConfirmState {
         enabled: false,
         block: Some(ConfirmBlock::SimChecking),
         key: Some(SIM_CHECKING_KEY.to_owned()),
+        anyway: true,
+        danger: false,
+        hold_ms: vela_core::app::sign_confirm::HOLD_TO_CONFIRM_MS,
     }
 }
 
@@ -152,6 +158,9 @@ fn open() -> ConfirmState {
         enabled: true,
         block: None,
         key: None,
+        anyway: true,
+        danger: false,
+        hold_ms: vela_core::app::sign_confirm::HOLD_TO_CONFIRM_MS,
     }
 }
 
@@ -378,6 +387,8 @@ fn the_checking_line_stands_only_when_the_verdict_is_all_that_is_missing() {
         fee: Some(fee),
         speed_tier: None,
         message_unread: false,
+        sim: None,
+        refuse_blind: false,
     };
     assert_eq!(confirm_state(&input).block, Some(ConfirmBlock::Reading));
     input.clear.resolving = false;

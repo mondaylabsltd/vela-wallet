@@ -1130,8 +1130,10 @@ fn a_page_executor_signs_one_operation_and_its_page_is_told_what_runs() {
     else {
         panic!("{:?}", world.purposes);
     };
-    // D1: a review one of whose checks read signs plainly.
-    assert!(!anyway);
+    // R22 (review 1-3): a review one of whose checks is unread (this
+    // world's state guard does not read) signs only "… anyway" — and the
+    // page is told so.
+    assert!(anyway);
     assert_eq!(multisig, account.address);
     assert_eq!(name.as_deref(), Some("Quiet Harbor"));
     assert_eq!(threshold, 2);
@@ -1686,7 +1688,9 @@ fn a_blind_review_says_sign_anyway_and_names_the_blind_concern() {
     };
     let plain = review(&mut sut, &mut world, false);
     assert!(!has_blind(&plain), "{plain}");
-    assert_eq!(plain["sign"]["anyway"], false, "{plain}");
+    // R22 (review 1-3): this world's state guard does not read, and one
+    // check unread is "… anyway" now — whatever `blind` says.
+    assert_eq!(plain["sign"]["anyway"], true, "{plain}");
     let blind = review(&mut sut, &mut world, true);
     assert!(has_blind(&blind), "{blind}");
     assert_eq!(blind["sign"]["anyway"], true, "{blind}");

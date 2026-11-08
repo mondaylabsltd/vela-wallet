@@ -1015,8 +1015,14 @@ pub fn typical_inclusion_seconds(chain_id: u32) -> u32 {
 /// every client reads: the four views' JSON, the speed in force, whether the
 /// message on the sheet has not been read to its end yet (cs-10), a
 /// `ConfirmState` JSON back (`undefined` when a view does not read).
+///
+/// R22: `sim_json` is the sheet's own simulation verdict as held (`simOutcome`'s
+/// record; `undefined` before it lands — a transaction without one is
+/// unread), `refuse_blind` the person's "Refuse blind signing". The state
+/// says the confirm's friction: `anyway`, `danger` and `hold_ms`.
 #[wasm_bindgen(js_name = signConfirmState)]
 #[must_use]
+#[allow(clippy::too_many_arguments)]
 pub fn sign_confirm_state(
     sign_json: &str,
     guard_json: &str,
@@ -1024,6 +1030,8 @@ pub fn sign_confirm_state(
     fee_json: Option<String>,
     speed_tier: Option<String>,
     message_unread: Option<bool>,
+    sim_json: Option<String>,
+    refuse_blind: Option<bool>,
 ) -> Option<String> {
     vela_core::app::sign_confirm::confirm_state_json(
         sign_json,
@@ -1032,7 +1040,57 @@ pub fn sign_confirm_state(
         fee_json.as_deref(),
         speed_tier.as_deref(),
         message_unread.unwrap_or(false),
+        sim_json.as_deref(),
+        refuse_blind.unwrap_or(false),
     )
+}
+
+/// R22: the one envelope a corroborated read hands the core — the first
+/// node's JSON-RPC body (`undefined`: the pool gave up), the second,
+/// independent node's (`undefined`: none answered) and whether the pool holds
+/// the person's own node alone ("Only use my node"). Pass it to `simOutcome`,
+/// or as a multisig `rpc_corroborated` answer. See `vela_core::app::corroborate`.
+#[wasm_bindgen(js_name = rpcCorroboratedEnvelope)]
+#[must_use]
+pub fn rpc_corroborated_envelope(
+    primary_json: Option<String>,
+    witness_json: Option<String>,
+    own_node: bool,
+) -> String {
+    vela_core::app::corroborate::corroborated_envelope_json(
+        primary_json.as_deref(),
+        witness_json.as_deref(),
+        own_node,
+    )
+}
+
+/// R22: the person's stored "Refuse blind signing" (`vela.refuseBlindSigning`,
+/// `on`/`off`) as a switch — off unless it is `on`.
+#[wasm_bindgen(js_name = refuseBlindSigning)]
+#[must_use]
+pub fn refuse_blind_signing(raw: Option<String>) -> bool {
+    vela_core::prefs::refuse_blind_signing(raw.as_deref())
+}
+
+/// R22: the store key of "Refuse blind signing".
+#[wasm_bindgen(js_name = refuseBlindSigningKey)]
+#[must_use]
+pub fn refuse_blind_signing_key() -> String {
+    vela_core::prefs::keys::REFUSE_BLIND_SIGNING.to_owned()
+}
+
+/// R22: how long a "… anyway" or danger confirm is held, in ms.
+#[wasm_bindgen(js_name = holdToConfirmMs)]
+#[must_use]
+pub fn hold_to_confirm_ms() -> u32 {
+    vela_core::app::sign_confirm::HOLD_TO_CONFIRM_MS
+}
+
+/// R22: the accessible equivalent's window — a second activation within it confirms.
+#[wasm_bindgen(js_name = confirmAgainWindowMs)]
+#[must_use]
+pub fn confirm_again_window_ms() -> u32 {
+    vela_core::app::sign_confirm::CONFIRM_AGAIN_WINDOW_MS
 }
 
 /// What the pool's `eth_simulateV1` answer means for `user` (the signing
@@ -2064,6 +2122,44 @@ pub fn attest_reviewed_safe_op_hash(
         let user_op = attest_operation(op, call_data)?;
         let review = vela_core::signed_review::from_json(review_json)?;
         vela_core::signed_review::reviewed_safe_op_hash(&user_op, chain_id, &review)
+    })()
+    .map_err(err)
+}
+
+/// R22 (review 1-5): the SafeOp hash for a site's transaction or
+/// `wallet_sendCalls` batch — only when the operation is exactly the request
+/// the person confirmed (`SignAndSubmit.review`, as JSON): its sender, chain
+/// and every call, then at most one fee leg to the quoted recipient. Anything
+/// else is refused and nothing is signed.
+#[wasm_bindgen(js_name = attestDappSafeOpHash)]
+pub fn attest_dapp_safe_op_hash(
+    op_json: &str,
+    review_json: &str,
+    chain_id: u64,
+) -> JsResult<Vec<u8>> {
+    (|| {
+        let op: AttestOp = serde_json::from_str(op_json)
+            .map_err(|e| vela_core::CoreError::Internal(format!("attest: operation: {e}")))?;
+        let call_data = attest_bytes(&op.call_data_hex)?;
+        let user_op = attest_operation(op, call_data)?;
+        let review = vela_core::signed_review::dapp_review_from_json(review_json)?;
+        vela_core::signed_review::dapp_safe_op_hash(&user_op, chain_id, &review)
+    })()
+    .map_err(err)
+}
+
+/// R22 (review 1-5): a site's signature digest (before the `SafeMessage`
+/// wrap) — `original_hash` back only when it is exactly the digest the sheet
+/// read for `account` (`SignAndSubmit.review`); anything else is refused.
+#[wasm_bindgen(js_name = attestDappMessageHash)]
+pub fn attest_dapp_message_hash(
+    original_hash: &[u8],
+    account: &str,
+    review_json: &str,
+) -> JsResult<Vec<u8>> {
+    (|| {
+        let review = vela_core::signed_review::dapp_review_from_json(review_json)?;
+        vela_core::signed_review::dapp_message_hash(original_hash, account, &review)
     })()
     .map_err(err)
 }

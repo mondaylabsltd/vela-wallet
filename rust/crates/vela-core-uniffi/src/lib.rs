@@ -682,6 +682,12 @@ pub fn browser_waiting_tab(dapp_view_json: String) -> Option<String> {
 /// control). A `ConfirmState` JSON out — `{enabled, block, key}`; `None` when
 /// a view does not read, and the confirm stays disabled. See
 /// `vela_core::app::sign_confirm`.
+///
+/// R22: `sim_json` is the sheet's own simulation verdict as held (the
+/// `sim_outcome` record's JSON, `None` before it lands — a transaction
+/// without one is unread); `refuse_blind` the person's "Refuse blind
+/// signing". The state carries the confirm's friction: `anyway`, `danger`,
+/// `hold_ms`.
 #[uniffi::export]
 #[must_use]
 pub fn sign_confirm_state(
@@ -690,6 +696,8 @@ pub fn sign_confirm_state(
     clear_json: String,
     fee_json: Option<String>,
     speed_tier: Option<String>,
+    sim_json: Option<String>,
+    refuse_blind: bool,
 ) -> Option<String> {
     vela_core::app::sign_confirm::confirm_state_json(
         &sign_json,
@@ -699,7 +707,58 @@ pub fn sign_confirm_state(
         speed_tier.as_deref(),
         // The apps do not observe a message's scroll yet (cs-10): nothing held.
         false,
+        sim_json.as_deref(),
+        refuse_blind,
     )
+}
+
+/// R22: the one envelope a corroborated read hands the core — the first
+/// node's JSON-RPC body (`None`: the pool gave up), the second, independent
+/// node's (`None`: none answered), and whether the pool holds the person's
+/// own node alone ("Only use my node"). Pass it to `sim_outcome`, or as a
+/// multisig `rpc_corroborated` answer's `envelope`. See
+/// `vela_core::app::corroborate`.
+#[uniffi::export]
+#[must_use]
+pub fn rpc_corroborated_envelope(
+    primary_json: Option<String>,
+    witness_json: Option<String>,
+    own_node: bool,
+) -> String {
+    vela_core::app::corroborate::corroborated_envelope_json(
+        primary_json.as_deref(),
+        witness_json.as_deref(),
+        own_node,
+    )
+}
+
+/// R22: the stored "Refuse blind signing" (`vela.refuseBlindSigning`,
+/// `on`/`off`) as a switch — off unless it is `on`.
+#[uniffi::export]
+#[must_use]
+pub fn refuse_blind_signing(raw: Option<String>) -> bool {
+    vela_core::prefs::refuse_blind_signing(raw.as_deref())
+}
+
+/// R22: the store key of "Refuse blind signing".
+#[uniffi::export]
+#[must_use]
+pub fn refuse_blind_signing_key() -> String {
+    vela_core::prefs::keys::REFUSE_BLIND_SIGNING.to_owned()
+}
+
+/// R22: how long a "… anyway" or danger confirm is held, in ms.
+#[uniffi::export]
+#[must_use]
+pub fn hold_to_confirm_ms() -> u32 {
+    vela_core::app::sign_confirm::HOLD_TO_CONFIRM_MS
+}
+
+/// R22: the accessible equivalent's window — a second activation within it confirms.
+#[uniffi::export]
+#[must_use]
+pub fn confirm_again_window_ms() -> u32 {
+    vela_core::app::sign_confirm::CONFIRM_AGAIN_WINDOW_MS
 }
 
 /// The hand-off card's compact fee + speed row (spec 102, D4): the fee view of
@@ -1976,6 +2035,42 @@ pub fn user_op_reviewed_safe_op_hash(
     )?)
 }
 
+/// R22 (review 1-5): the SafeOp hash for a site's transaction or
+/// `wallet_sendCalls` batch — only when the draft is exactly the request the
+/// person confirmed (`SignAndSubmit.review`, as JSON): its sender, chain and
+/// every call, then at most one fee leg to the quoted recipient. Anything
+/// else is refused and nothing is signed.
+#[uniffi::export]
+pub fn user_op_dapp_safe_op_hash(
+    draft: UserOpDraft,
+    chain_id: u32,
+    review_json: String,
+) -> Result<Vec<u8>, CoreError> {
+    let review = vela_core::signed_review::dapp_review_from_json(&review_json)?;
+    Ok(vela_core::signed_review::dapp_safe_op_hash(
+        &op_of(&draft)?,
+        u64::from(chain_id),
+        &review,
+    )?)
+}
+
+/// R22 (review 1-5): a site's signature digest (before the `SafeMessage`
+/// wrap) — `original_hash` back only when it is exactly the digest the sheet
+/// read for `account` (`SignAndSubmit.review`); anything else is refused.
+#[uniffi::export]
+pub fn dapp_message_hash(
+    original_hash: Vec<u8>,
+    account: String,
+    review_json: String,
+) -> Result<Vec<u8>, CoreError> {
+    let review = vela_core::signed_review::dapp_review_from_json(&review_json)?;
+    Ok(vela_core::signed_review::dapp_message_hash(
+        &original_hash,
+        &account,
+        &review,
+    )?)
+}
+
 /// The EntryPoint v0.7 `getUserOpHash` of the draft on `chain_id`, 0x-lower-case
 /// (spec 082 RA6). The signature is not part of it, so it is known before the
 /// passkey signs: a client computes it before the first submit POST and
@@ -2501,6 +2596,15 @@ pub struct SimOutcomeRecord {
     /// kind: a node that spoke and did not simulate would say the same.
     #[uniffi(default = false)]
     pub recheck: bool,
+    /// R22: who stands behind a checked answer — `corroborated` (two
+    /// independent nodes agreed) or `own_node` ("Only use my node"); `None`
+    /// for every other kind.
+    #[uniffi(default = None)]
+    pub source: Option<String>,
+    /// R22: the line the sheet says about `source` (`simOwnNode` when the
+    /// person's own node answered alone); `None` otherwise.
+    #[uniffi(default = None)]
+    pub source_key: Option<String>,
 }
 
 /// What the pool's `eth_simulateV1` answer means for `user` (the signing
@@ -2522,7 +2626,10 @@ pub fn sim_outcome(user: String, reply_json: String) -> SimOutcomeRecord {
             &user,
         )
     };
-    let read = verdict(SimReply::from_json(&reply_json), &user);
+    // R22: the reply is a corroborated envelope — the second node's answer
+    // beside the first (`rpc_corroborated_envelope`); without one, what moves
+    // is not believed.
+    let read = vela_core::app::sim_outcome::verdict_of_envelope_json(&reply_json, &user);
     // A list that cannot be written out is an answer nobody can read: the
     // could-not-check line, never an empty list that reads "nothing moves".
     let (read, deltas_json) = match serde_json::to_string(&read.deltas) {
@@ -2537,6 +2644,8 @@ pub fn sim_outcome(user: String, reply_json: String) -> SimOutcomeRecord {
         notice_key: read.notice_key,
         no_change_key: read.no_change_key,
         recheck: read.recheck,
+        source: read.source,
+        source_key: read.source_key,
     }
 }
 
@@ -3664,11 +3773,19 @@ mod tests_082 {
         assert_eq!(reverts.no_change_key, None);
         assert_eq!(crashed.no_change_key, None);
         assert_eq!(unreachable.no_change_key, None);
-        let nothing = sim_outcome(
-            user.into(),
-            json!({"result": [{"calls": [{"status": "0x1", "logs": []}]}]}).to_string(),
+        // R22: a checked answer is believed as two independent nodes gave it.
+        let empty = json!({"result": [{"calls": [{"status": "0x1", "logs": []}]}]});
+        let alone = sim_outcome(user.into(), empty.to_string());
+        assert_eq!(alone.kind, "unconfirmed");
+        assert_eq!(
+            alone.no_change_key, None,
+            "never \"No asset changes\" on one node's word"
         );
+        let mut both = empty.clone();
+        both["witness"] = empty.clone();
+        let nothing = sim_outcome(user.into(), both.to_string());
         assert_eq!(nothing.kind, "deltas");
+        assert_eq!(nothing.source.as_deref(), Some("corroborated"));
         assert_eq!(nothing.deltas_json, "[]");
         assert_eq!(
             nothing.no_change_key.as_deref(),
@@ -3685,9 +3802,14 @@ mod tests_082 {
             ],
             "data": format!("0x{:0>64}", "5"),
         });
-        let checked = sim_outcome(
-            user.into(),
-            json!({"result": [{"calls": [{"status": "0x1", "logs": [transfer]}]}]}).to_string(),
+        let moved = json!({"result": [{"calls": [{"status": "0x1", "logs": [transfer]}]}]});
+        let mut own = moved.clone();
+        own["ownNode"] = json!(true);
+        let checked = sim_outcome(user.into(), own.to_string());
+        assert_eq!(checked.source.as_deref(), Some("own_node"));
+        assert_eq!(
+            checked.source_key.as_deref(),
+            Some("componentsUi.signing.simOwnNode")
         );
         assert_eq!(checked.kind, "deltas");
         assert_eq!(checked.notice_risk, None);

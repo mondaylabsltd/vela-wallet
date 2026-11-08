@@ -18,6 +18,28 @@
 //! it: a short fee coin is said under the fee, where the other coins are
 //! (issue #438: "No token can pay this fee" twice, red over the fee and grey
 //! under the confirm).
+//!
+//! ## How hard the confirm is (R22, review 1-3)
+//!
+//! [`posture`] is the one rule for the confirm's friction, and the gate
+//! carries it ([`ConfirmState::anyway`], [`ConfirmState::danger`],
+//! [`ConfirmState::hold_ms`]):
+//!
+//! - **"… anyway"** whenever anything Vela checks could not be read: a call
+//!   or message nobody reads (the blind surfaces, a batch with one such leg),
+//!   and — for a transaction — a simulation that did not come back, that a
+//!   node did not offer, that nobody independent confirmed, or that says it
+//!   fails. A revert no longer signs with a plain press.
+//! - **Hold to confirm** ([`HOLD_TO_CONFIRM_MS`]) for every "… anyway" and every
+//!   danger. A shell whose person uses assistive technology (a screen
+//!   reader, switch control, the keyboard) offers the accessible equivalent:
+//!   the first activation arms the confirm and says
+//!   [`CONFIRM_AGAIN_KEY`]; a second one within [`CONFIRM_AGAIN_WINDOW_MS`]
+//!   confirms (WCAG 2.5.1 / 2.5.7: no path-based or held gesture is the only
+//!   way).
+//! - **"Refuse blind signing"** (the person's preference,
+//!   `prefs::keys::REFUSE_BLIND_SIGNING`): every "… anyway" is refused
+//!   instead ([`ConfirmBlock::BlindRefused`]).
 
 use serde::{Deserialize, Serialize};
 
@@ -25,9 +47,10 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::approval_guard::{GuardSurface, GuardView};
-use super::clear_signing::{ClearSignType, ClearSigningView, ClearSurface};
+use super::clear_signing::{ClearRisk, ClearSignType, ClearSigningView, ClearSurface};
 use super::fee_policy::{FeeTier, FeeView};
 use super::sign_request::SignView;
+use super::sim_outcome::SimVerdict;
 
 /// Which part of the gate is shut.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -92,6 +115,10 @@ pub enum ConfirmBlock {
     /// ([`ConfirmInput::message_unread`]); the gate is this. Asked only on
     /// [`ClearSurface::MessageSign`], and only once everything else is open.
     MessageUnread,
+    /// R22: the request signs only "… anyway" and the person turned on
+    /// "Refuse blind signing": refused, with the line that says why and where
+    /// the preference is ([`BLIND_REFUSED_KEY`]). Asked last.
+    BlindRefused,
 }
 
 /// The line while the account's previous transaction on this network is
@@ -107,6 +134,28 @@ pub const SIM_CHECKING_KEY: &str = "componentsUi.signing.confirmBlock.simCheckin
 /// The line under a confirm held until a message has been read to its end
 /// ([`ConfirmBlock::MessageUnread`]).
 pub const MESSAGE_UNREAD_KEY: &str = "componentsUi.signing.confirmBlock.messageUnread";
+
+/// R22: the line under a confirm the "Refuse blind signing" preference shut
+/// ([`ConfirmBlock::BlindRefused`]).
+pub const BLIND_REFUSED_KEY: &str = "componentsUi.signing.confirmBlock.blindRefused";
+
+/// R22: how long a "… anyway" or a danger confirm is held before it acts, in
+/// ms. 1.5 s: long enough that a tap, a double tap or a press made while the
+/// sheet is still arriving cannot sign (a deliberate long press, which the
+/// platforms put at 0.5 s, is not enough either), short enough not to read as
+/// broken — the range hold-to-confirm controls use (1–2 s).
+pub const HOLD_TO_CONFIRM_MS: u32 = 1_500;
+
+/// R22: the accessible equivalent of the hold — a second explicit activation
+/// within this window confirms; past it the confirm disarms.
+pub const CONFIRM_AGAIN_WINDOW_MS: u32 = 5_000;
+
+/// "Hold to confirm" — said on and beside a held confirm (and to a screen
+/// reader as its hint).
+pub const HOLD_KEY: &str = "componentsUi.signing.holdToConfirm";
+
+/// "Press again to confirm" — the armed state of the accessible equivalent.
+pub const CONFIRM_AGAIN_KEY: &str = "componentsUi.signing.confirmAgain";
 
 /// The title when the relay would not take an operation because the
 /// account's previous one on this network still holds the nonce, at submit
@@ -139,6 +188,14 @@ pub struct ConfirmInput {
     /// shell that does not observe it leaves it `false`, and nothing is held.
     #[serde(default)]
     pub message_unread: bool,
+    /// R22: the sheet's own simulation verdict as the shell holds it
+    /// (`sim_outcome::verdict_of_envelope`); `None` before it lands or for a
+    /// message. A transaction without one is unread.
+    #[serde(default)]
+    pub sim: Option<SimVerdict>,
+    /// R22: the person's "Refuse blind signing" preference.
+    #[serde(default)]
+    pub refuse_blind: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -152,6 +209,61 @@ pub struct ConfirmState {
     /// signing in progress, the funding sheet, a refusal's own panel, a short
     /// fee coin's line under the fee).
     pub key: Option<String>,
+    /// R22: the confirm is "… anyway" ("Sign anyway", in the danger style):
+    /// something Vela checks could not be read ([`posture`]).
+    #[serde(default)]
+    pub anyway: bool,
+    /// R22: the request is a danger (a drain's shape, an unlimited grant, a
+    /// revert, `eth_sign`): drawn in the danger style.
+    #[serde(default)]
+    pub danger: bool,
+    /// R22: hold the confirm this long before it acts ([`HOLD_TO_CONFIRM_MS`];
+    /// `0`: a plain press), or confirm twice through the accessible path.
+    #[serde(default)]
+    pub hold_ms: u32,
+}
+
+/// R22: how hard the confirm is ([`posture`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct Posture {
+    pub anyway: bool,
+    pub danger: bool,
+    pub hold_ms: u32,
+}
+
+/// R22 (review 1-3): the confirm's friction (module doc, "How hard the
+/// confirm is"). Pure; the same on every client.
+#[must_use]
+pub fn posture(sign: &SignView, clear: &ClearSigningView, sim: Option<&SimVerdict>) -> Posture {
+    let transaction = !off_chain(clear) && clear.surface != ClearSurface::None;
+    // A transaction's own simulation: anything but a checked answer (the
+    // verdict's `deltas`) — not yet back past its wait, not offered, nobody
+    // independent confirmed it, it fails — is a check Vela could not read.
+    let sim_unread = transaction
+        && (sign.sim_waited_out_key.is_some()
+            || sim.is_none_or(|verdict| verdict.kind != "deltas"));
+    let reverts = transaction && sim.is_some_and(|verdict| verdict.kind == "reverts");
+    let anyway = clear.sign_anyway || sim_unread;
+    let reading_danger = clear
+        .result
+        .as_ref()
+        .is_some_and(|result| result.risk == ClearRisk::Danger)
+        || clear
+            .batch
+            .as_ref()
+            .is_some_and(|batch| batch.risk == ClearRisk::Danger);
+    let danger =
+        reverts || reading_danger || clear.danger_haptic || clear.surface == ClearSurface::EthSign;
+    Posture {
+        anyway,
+        danger,
+        hold_ms: if anyway || danger {
+            HOLD_TO_CONFIRM_MS
+        } else {
+            0
+        },
+    }
 }
 
 impl ConfirmBlock {
@@ -174,6 +286,7 @@ impl ConfirmBlock {
             Self::FeeFailed => "componentsUi.signing.confirmBlock.feeFailed",
             Self::SimChecking => SIM_CHECKING_KEY,
             Self::MessageUnread => MESSAGE_UNREAD_KEY,
+            Self::BlindRefused => BLIND_REFUSED_KEY,
         })
     }
 }
@@ -212,7 +325,8 @@ pub fn fee_of_another_coin(fee: &FeeView) -> bool {
     fee.provisional
 }
 
-/// The one gate (module doc).
+/// The one gate (module doc), with its friction ([`posture`]) and the
+/// "Refuse blind signing" refusal, asked last.
 #[must_use]
 pub fn confirm_state(input: &ConfirmInput) -> ConfirmState {
     let state = confirm_state_of(
@@ -222,7 +336,33 @@ pub fn confirm_state(input: &ConfirmInput) -> ConfirmState {
         input.fee.as_ref(),
         input.speed_tier,
     );
-    message_read_gate(state, &input.clear, input.message_unread)
+    let state = message_read_gate(state, &input.clear, input.message_unread);
+    with_posture(
+        state,
+        posture(&input.sign, &input.clear, input.sim.as_ref()),
+        input.refuse_blind,
+    )
+}
+
+/// R22: the gate's state with its friction, and — the person refusing blind
+/// signing — every "… anyway" refused, once everything else is open.
+#[must_use]
+pub fn with_posture(state: ConfirmState, posture: Posture, refuse_blind: bool) -> ConfirmState {
+    let state = ConfirmState {
+        anyway: posture.anyway,
+        danger: posture.danger,
+        hold_ms: posture.hold_ms,
+        ..state
+    };
+    if !state.enabled || !refuse_blind || !posture.anyway {
+        return state;
+    }
+    ConfirmState {
+        enabled: false,
+        block: Some(ConfirmBlock::BlindRefused),
+        key: Some(BLIND_REFUSED_KEY.to_owned()),
+        ..state
+    }
 }
 
 /// cs-10: a message is signed only once the person could have read all of
@@ -241,6 +381,7 @@ pub fn message_read_gate(
         enabled: false,
         block: Some(ConfirmBlock::MessageUnread),
         key: ConfirmBlock::MessageUnread.key(false).map(str::to_owned),
+        ..state
     }
 }
 
@@ -258,6 +399,7 @@ pub fn confirm_state_of(
         enabled: false,
         block: Some(block),
         key: block.key(sign.failure_retryable).map(str::to_owned),
+        ..ConfirmState::default()
     };
     if !sign.confirm_gate_open {
         return shut(sign.confirm_block.unwrap_or(ConfirmBlock::NoRequest));
@@ -290,6 +432,7 @@ pub fn confirm_state_of(
                 enabled: false,
                 block: Some(ConfirmBlock::FeeFailed),
                 key: Some(failure.footer_key.clone()),
+                ..ConfirmState::default()
             };
         }
         if fee.busy || fee_of_another_tier(fee, speed_tier) || fee_of_another_coin(fee) {
@@ -322,6 +465,7 @@ pub fn confirm_state_of(
         enabled: true,
         block: None,
         key: None,
+        ..ConfirmState::default()
     }
 }
 
@@ -330,6 +474,7 @@ pub fn confirm_state_of(
 /// message on the sheet is still unread ([`ConfirmInput::message_unread`]).
 /// `None` when a view does not read — the shell keeps the confirm disabled.
 #[must_use]
+#[allow(clippy::too_many_arguments)]
 pub fn confirm_state_json(
     sign_json: &str,
     guard_json: &str,
@@ -337,6 +482,8 @@ pub fn confirm_state_json(
     fee_json: Option<&str>,
     speed_tier: Option<&str>,
     message_unread: bool,
+    sim_json: Option<&str>,
+    refuse_blind: bool,
 ) -> Option<String> {
     let input = ConfirmInput {
         sign: serde_json::from_str(sign_json).ok()?,
@@ -353,6 +500,10 @@ pub fn confirm_state_json(
             None => None,
         },
         message_unread,
+        // R22: a verdict that does not read is no verdict — the transaction
+        // is then unread, "… anyway".
+        sim: sim_json.and_then(|json| serde_json::from_str(json).ok()),
+        refuse_blind,
     };
     serde_json::to_string(&confirm_state(&input)).ok()
 }

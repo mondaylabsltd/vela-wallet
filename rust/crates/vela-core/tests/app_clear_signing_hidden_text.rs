@@ -163,6 +163,8 @@ fn message_input(clear_surface: ClearSurface, unread: bool) -> ConfirmInput {
         fee: None,
         speed_tier: None,
         message_unread: unread,
+        sim: None,
+        refuse_blind: false,
     }
 }
 
@@ -207,6 +209,8 @@ fn a_shell_that_does_not_observe_holds_nothing() {
         &serde_json::to_string(&input.guard).unwrap(),
         &serde_json::to_string(&input.clear).unwrap(),
         None,
+        None,
+        false,
         None,
         false,
     )

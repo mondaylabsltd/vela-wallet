@@ -4,6 +4,43 @@
 
 use super::*;
 
+/// R22: the review as an honest network gives it — each of the review's
+/// reads answered alike by a second, independent node (`witness`). These
+/// tests are about what the answers MEAN; corroboration has its own
+/// (`one_node_s_word_*`, `tests/r22_signing_truth.rs`).
+fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError> {
+    super::multisig_review(&honest(input))
+}
+
+/// `input` with every read's answer witnessed by its twin.
+fn honest(input: &ReviewInput) -> ReviewInput {
+    let twin = |e: &Option<Value>| {
+        e.as_ref().map(|e| {
+            let mut e = e.clone();
+            if e.get("result").is_some() || e.get("error").is_some() {
+                e[corroborate::WITNESS_KEY] = corroborate::first_answer(&e);
+            }
+            e
+        })
+    };
+    ReviewInput {
+        trace: twin(&input.trace),
+        probe: twin(&input.probe),
+        sim_reply: input.sim_reply.as_ref().map(|r| {
+            serde_json::from_str::<Value>(r)
+                .ok()
+                .and_then(|v| twin(&Some(v)))
+                .map_or_else(|| r.clone(), |v| v.to_string())
+        }),
+        ..input.clone()
+    }
+}
+
+/// R22: one node's word alone — the honest twin removed.
+fn one_node(input: &ReviewInput) -> MultisigReview {
+    super::multisig_review(input).unwrap()
+}
+
 const SAFE: &str = "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32";
 const A: &str = "0x1111111111111111111111111111111111111111";
 const B: &str = "0x2222222222222222222222222222222222222222";
@@ -1094,6 +1131,8 @@ fn one_check_unread_alone_stays_a_caution() {
     );
     assert_eq!(sim_unread.state.verdict, StateVerdict::Unchanged);
     assert!(sim_unread.concerns.contains(&Concern::Unsimulated));
+    // R22 (review 1-3): either one unread is still a caution, not the
+    // danger line — but it signs only "… anyway", held.
     for r in [guard_unread, sim_unread] {
         assert!(!r.concerns.contains(&Concern::Unchecked));
         assert_eq!(r.tone, Tone::Caution);
@@ -1101,12 +1140,52 @@ fn one_check_unread_alone_stays_a_caution() {
             r.sign,
             SignRule {
                 allowed: true,
-                anyway: false
+                anyway: true
             }
         );
         let door = ready_door(&r);
-        assert!(door.enabled && !door.anyway && !door.retry && door.reason_key.is_none());
+        assert!(door.enabled && door.anyway && !door.retry && door.reason_key.is_none());
+        assert_eq!(door.hold_ms, crate::app::sign_confirm::HOLD_TO_CONFIRM_MS);
     }
+}
+
+/// R22 (review 1-2): the same checks on one node's word alone are not
+/// believed — the state diff is unread ("uncorroborated"), what moves
+/// unconfirmed — and the review signs only "… anyway".
+#[test]
+fn one_node_s_word_alone_is_believed_by_nothing() {
+    let input = ReviewInput {
+        reads: reads(tx(A, "0x0", "0x", 0)),
+        trace: Some(diff(&[], &[(n(5), n(1))])),
+        probe: Some(json!({"unreachable": true})),
+        sim_reply: Some(SIM_OK.into()),
+        ..ReviewInput::default()
+    };
+    let alone = one_node(&input);
+    assert_eq!(
+        alone.state.verdict,
+        StateVerdict::Unavailable {
+            reason: corroborate::UNCORROBORATED.into()
+        }
+    );
+    assert_eq!(alone.simulation.kind, "unconfirmed");
+    assert!(alone.sign.allowed && alone.sign.anyway);
+    let honest = multisig_review(&input).unwrap();
+    assert_eq!(honest.state.verdict, StateVerdict::Unchanged);
+    assert_eq!(honest.simulation.kind, "deltas");
+    assert!(honest.sign.allowed && !honest.sign.anyway);
+    // The person's own node, alone by their choice: believed, and said.
+    let mut mine = input.clone();
+    if let Some(e) = mine.trace.as_mut() {
+        e[corroborate::OWN_NODE_KEY] = json!(true);
+    }
+    let mut sim: Value = serde_json::from_str(SIM_OK).unwrap();
+    sim[corroborate::OWN_NODE_KEY] = json!(true);
+    mine.sim_reply = Some(sim.to_string());
+    let mine = one_node(&mine);
+    assert_eq!(mine.state.verdict, StateVerdict::Unchanged);
+    assert_eq!(mine.simulation.source.as_deref(), Some("own_node"));
+    assert!(!mine.sign.anyway);
 }
 
 /// `review-state.json` `checks`: the review's own rule, state guard ×
@@ -1483,9 +1562,12 @@ fn the_gate_in_order() {
 #[test]
 fn call_json_doors() {
     let t = tx(SAFE, "0x0", &add_owner(C, 1), 0);
+    // R22: the trace as two independent nodes gave it.
+    let mut trace = add_owner_trace();
+    trace[corroborate::WITNESS_KEY] = trace.clone();
     let input = json!({
         "chainId": 100, "safe": SAFE, "tx": t, "owners": [A, B], "threshold": 1, "deployed": true,
-        "trace": add_owner_trace(),
+        "trace": trace,
         "simReply": "{\"unreachable\":true}"
     });
     let out: Value = serde_json::from_str(

@@ -713,6 +713,14 @@ pub enum SignOperation {
         max_fee_per_gas: Option<String>,
         gas_fee_token: Option<String>,
         quoted_fee: Option<SignQuotedFee>,
+        /// R22 (review 1-5): what the person confirmed, frozen at the confirm
+        /// — `signed_review::DappReview` as JSON, from these FINAL params.
+        /// The shell hashes only an operation that is exactly these calls
+        /// (`signed_review::dapp_safe_op_hash`) or a signature over exactly
+        /// this digest (`signed_review::dapp_message_hash`); `None` (a
+        /// request the core cannot read) is signed by no one.
+        #[serde(default)]
+        review: Option<String>,
     },
     /// Write a history record (`saveTransaction(buildSigningRecord(...))`).
     /// The shell must serialise Persist/Update per `record_id`.
@@ -932,6 +940,16 @@ pub enum SignShellResult {
         chain_id: u32,
         safe: String,
         answer: SafeOwnerAnswer,
+        /// R22 (SEC-PARENT-3): the same read, answered by a second,
+        /// independent node (the shell's corroborated pool read). A "not an
+        /// owner" stands only when it agrees — or when `own_node`.
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        witness: Option<SafeOwnerAnswer>,
+        /// R22: the person's own node answered alone ("Only use my node").
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        own_node: Option<bool>,
     },
 }
 
@@ -2995,7 +3013,7 @@ fn on_owner_read(
     id: &str,
     chain_id: u32,
     safe: &str,
-    answer: &SafeOwnerAnswer,
+    reading: parent_guard::OwnerReading,
 ) -> Command<SignEffect, Event> {
     let Some(pending) = model.pending.as_mut().filter(|p| p.id == id) else {
         // The request it was for is gone: nothing to decide.
@@ -3004,7 +3022,7 @@ fn on_owner_read(
     let fact = OwnerFact {
         chain_id,
         safe: safe.to_ascii_lowercase(),
-        reading: parent_guard::classify_owner_answer(answer),
+        reading,
     };
     if !pending
         .owner_facts
@@ -3533,6 +3551,14 @@ fn proceed_submit(model: &mut Model) -> Command<SignEffect, Event> {
     let command = request_op(
         model,
         SignOperation::SignAndSubmit {
+            // R22: the review, frozen from the params the sheet showed.
+            review: crate::signed_review::dapp_review_json(
+                &fl.method,
+                &fl.params_json,
+                fl.chain_id,
+                &fl.address,
+                fl.quoted_fee.as_ref().map(|fee| fee.recipient.as_str()),
+            ),
             id: fl.id,
             method: fl.method,
             params_json: fl.params_json,
@@ -4155,7 +4181,16 @@ fn accept(model: &mut Model, result: SignShellResult) -> Command<SignEffect, Eve
             chain_id,
             safe,
             answer,
-        } => on_owner_read(model, &id, chain_id, &safe, &answer),
+            witness,
+            own_node,
+        } => {
+            let reading = parent_guard::classify_corroborated(
+                &answer,
+                witness.as_ref(),
+                own_node.unwrap_or(false),
+            );
+            on_owner_read(model, &id, chain_id, &safe, reading)
+        }
         SignShellResult::RecordPersisted => on_record_persisted(model),
         SignShellResult::PreCheck { funding } => on_precheck(model, funding),
         SignShellResult::Sponsorship { outcome } => on_sponsorship(model, outcome),

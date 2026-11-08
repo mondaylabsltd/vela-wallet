@@ -2874,6 +2874,11 @@ async fn authorize_signing(
     chain_id: u64,
     tx: &SafeTx,
 ) -> Result<bool, Stop> {
+    // R22 (review 1-2, SEC-PARENT-3): who can act for the multisig, its
+    // members and nonce, and the review's checks — each read of two
+    // independent nodes (or the person's own node alone) before a signature.
+    // One node's word, or two that differ, is "couldn't check".
+    let io = &io.corroborating();
     let chain = lock(st).chain.clone();
     let found = async { shell::judge(io, chain_id, &account.address, &account.genesis).await };
     let rule = async {
