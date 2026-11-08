@@ -641,6 +641,7 @@ fn the_page_signs_a_message_as_the_wallet_hashes_it() {
                 },
                 &user_op::quiet,
                 &user_op::always_asked,
+                &user_op::account_code,
             )
         });
         let _stop = rig.guard();

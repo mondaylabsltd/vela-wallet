@@ -63,6 +63,9 @@ pub struct PanelActions {
     /// DR2L: "I Understand" on the pre-receive warning — the gate that has to
     /// be passed once per account before the address is handed over.
     pub acknowledge: Option<Click>,
+    /// §37: Receive's "Check again" for an account not yet confirmed
+    /// on-chain.
+    pub check_again: Option<Click>,
     /// DR2L: 保存图片 — the share card as a PNG.
     pub save_image: Option<Click>,
     /// DR2L: the "include network" switch under the code (spec 090).
@@ -438,6 +441,7 @@ pub fn render(
             actions.save_image,
             actions.include_network,
         ),
+        FlowBody::ReceiveHeld(model) => receive_held(theme, model, actions.check_again),
         FlowBody::History(model) => history(
             model,
             theme,
@@ -4384,6 +4388,59 @@ pub fn scan_modal(
                 )),
         )
         .child(tools)
+}
+
+/// §37: what stands where the address would be, for an account the chain
+/// has not confirmed (or has refuted). Not a cover over an address: there
+/// is no address behind it to read around.
+fn receive_held(
+    theme: &Theme,
+    held: &crate::flows::fixtures::ReceiveHeld,
+    act: Option<Click>,
+) -> Div {
+    let mut card = column()
+        .p(px(20.))
+        .rounded(px(16.))
+        .border_1()
+        .border_color(if held.refuted {
+            theme.error_base
+        } else {
+            theme.border_card
+        })
+        .child(
+            div()
+                .text_size(theme::text_row_title())
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(if held.refuted {
+                    theme.error_base
+                } else {
+                    theme.fg_base
+                })
+                .child(held.title.clone()),
+        )
+        .child(
+            div()
+                .text_size(theme::text_row_sub())
+                .line_height(gpui::relative(1.4))
+                .text_color(theme.fg_muted)
+                .child(crate::ui::prose(held.body.clone())),
+        );
+    if let Some(checking) = &held.checking {
+        card = card.child(
+            div()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_subtle)
+                .child(checking.clone()),
+        );
+    }
+    if let Some(label) = &held.check_again {
+        card = card.child(clickable(
+            "receive-check-again",
+            act,
+            ink_button(theme, label.clone()),
+        ));
+    }
+    column().child(card)
 }
 
 /// The warning that stands where the code will be.

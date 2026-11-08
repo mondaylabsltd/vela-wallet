@@ -242,6 +242,25 @@ pub struct ReceiveGate {
     pub loading: bool,
 }
 
+/// §37 (review 1-7): what Receive says in place of the address when the
+/// core's `receive_standing` says the account may not be received at — a
+/// multi-key group only the key index vouched for (`unconfirmed`), or one
+/// the chain proved another wallet's (`refuted`). No address, no code, no
+/// copy, no share, no request and no deposit watch behind it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReceiveHeld {
+    /// `receive.unconfirmed.title` / `receive.refuted.title` — the core's key.
+    pub title: SharedString,
+    pub body: SharedString,
+    /// "Checking on-chain…" while the chain is being asked.
+    pub checking: Option<SharedString>,
+    /// "Check again": offered when the core says `check_first` and nothing
+    /// is being asked.
+    pub check_again: Option<SharedString>,
+    /// The chain proved it another wallet: the danger tone.
+    pub refuted: bool,
+}
+
 /// The "include network" switch (spec 090), exactly as `payment_request`
 /// says: whether it is on, and the hint that rides under it while it is.
 #[derive(Clone)]
@@ -990,6 +1009,9 @@ pub enum ReceiptStage {
 pub enum FlowBody {
     Receive(ReceiveList),
     ReceiveQr(ReceiveQr),
+    /// §37: Receive (any of DR1–DR3) for an account that may not be
+    /// received at yet.
+    ReceiveHeld(ReceiveHeld),
     History(HistoryPanel),
     TxDetail(TxDetail),
     Assets(AssetsPanel),

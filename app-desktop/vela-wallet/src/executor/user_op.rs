@@ -1343,10 +1343,44 @@ fn at_least(nonce: String, floor: Option<u128>) -> String {
     }
 }
 
+/// Where a message signature reads the account's code on the request's
+/// chain (§37): [`account_code`] in the app, a fixed answer in a test.
+pub type CodeRead<'a> = &'a dyn Fn(u32, &str) -> Option<String>;
+
+/// `eth_getCode` of `address` on `chain_id` at the head, through the wallet's
+/// own RPC pool: the code (`"0x"` for none), or `None` when nobody answered
+/// it — which the core treats as undeployed (it wraps).
+pub fn account_code(chain_id: u32, address: &str) -> Option<String> {
+    let envelope = pool::call(
+        chain_id,
+        "eth_getCode",
+        serde_json::json!([address, "latest"]),
+    )
+    .ok()?;
+    if envelope.get("error").is_some() {
+        return None;
+    }
+    envelope
+        .get("result")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
+}
+
 /// A message (EIP-1271, spec 044 on the phones): the key signs the Safe's
 /// own `SafeMessage` hash over `original_hash` — a Safe verifies nothing
 /// else — and the envelope carries no validity window. One ceremony,
 /// nothing submitted. Answers the signature hex.
+///
+/// §37 (review 1-11, ERC-6492): the site gets the core's
+/// `message_signature` — the EIP-1271 signature as it is where the account
+/// holds code on the request's chain (`code`, read once it is signed), else
+/// its ERC-6492 envelope, which a verifier deploys in simulation before it
+/// asks `isValidSignature`. A counterfactual account's bare signature
+/// verifies nowhere.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the request, who signs, who hears the edges, whether it is still wanted and where its code is read"
+)]
 pub fn sign_message(
     chain_id: u32,
     safe: &str,
@@ -1355,6 +1389,7 @@ pub fn sign_message(
     mut signer: Signer<'_>,
     edges: Edges<'_>,
     asked: Asked<'_>,
+    code: CodeRead<'_>,
 ) -> Result<String, SubmitFailure> {
     let challenge = compute_safe_message_hash(original_hash, u64::from(chain_id), safe)
         .map_err(|e| other(e.to_string()))?;
@@ -1368,6 +1403,9 @@ pub fn sign_message(
         keys,
     )
     .map_err(|e| other(e.to_string()))?;
+    let code = code(chain_id, safe);
+    let signature = vela_core::user_op::message_signature(&signature, keys, safe, code.as_deref())
+        .map_err(|e| other(e.to_string()))?;
     Ok(to_hex(&signature, true))
 }
 
@@ -1610,6 +1648,7 @@ mod tests {
             sign_in_key: None,
             signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
             signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+            identity: Default::default(),
         }
     }
 
@@ -2721,6 +2760,7 @@ mod tests {
                 },
                 &quiet,
                 &always_asked,
+                &deployed,
             );
             let _ = answering.join();
             (signed, channel.ended())
@@ -2827,6 +2867,7 @@ mod tests {
             },
             &quiet,
             &always_asked,
+            &deployed,
         );
         let _ = answering.join();
         let signature = signed.unwrap_or_else(|failure| unreachable!("{failure:?}"));
@@ -2839,6 +2880,106 @@ mod tests {
                     .to_lowercase()
             ),
             "{signature}"
+        );
+    }
+
+    /// A Safe with code on the request's chain (`eth_getCode` answered).
+    fn deployed(_: u32, _: &str) -> Option<String> {
+        Some("0x6080604052".to_owned())
+    }
+
+    /// §37 (review 1-11, ERC-6492): a message signature from an account not
+    /// deployed on the request's chain comes back in ERC-6492's envelope —
+    /// `abi.encode(factory, factoryCalldata, signature) ‖ 0x6492…` with the
+    /// account's own deployment and the EIP-1271 signature inside — whether
+    /// the code read said "none" or nobody answered it; a deployed account's
+    /// is the EIP-1271 signature itself. Through the trusted page here; the
+    /// passkey route ends in the same `sign_message`. The code is asked of
+    /// the request's chain, for the account that signed.
+    #[test]
+    fn an_undeployed_account_signs_messages_in_erc6492s_envelope() {
+        use crate::executor::trusted_signer::tests::{
+            admitted, answers_once, page_result, signing_key, wallet_key,
+        };
+        admitted();
+        let credential = [0x11_u8, 0x22, 0x33];
+        let keys = vec![wallet_key(&signing_key(7), &credential)];
+        let point = vela_core::safe::parse_public_key(&keys[0].public_key_hex)
+            .unwrap_or_else(|e| unreachable!("{e}"));
+        let safe = vela_core::safe::compute_safe_address(&point.x, &point.y)
+            .unwrap_or_else(|e| unreachable!("{e}"))
+            .address;
+        let params = serde_json::json!(["0x68656c6c6f", safe]);
+        let original = vela_core::sign_message::original_hash("personal_sign", &params.to_string())
+            .unwrap_or_else(|| unreachable!("a message"));
+        let challenge = compute_safe_message_hash(&original, 100, &safe)
+            .unwrap_or_else(|e| unreachable!("{e}"));
+        let ask = Ask {
+            method: "personal_sign".to_owned(),
+            params: params.clone(),
+            origin: "https://app.example".to_owned(),
+            account_name: None,
+        };
+        let asked_of = std::sync::Mutex::new(Vec::new());
+        let sign_with = |code: Option<&'static str>| {
+            let (channel, _changed) = Channel::new();
+            let challenge = challenge.clone();
+            let answering = answers_once(&channel, move || {
+                page_result(&signing_key(7), &credential, &challenge)
+            });
+            let read = |chain_id: u32, address: &str| {
+                if let Ok(mut asked) = asked_of.lock() {
+                    asked.push((chain_id, address.to_owned()));
+                }
+                code.map(str::to_owned)
+            };
+            let signed = sign_message(
+                100,
+                &safe,
+                &original,
+                &keys,
+                Signer::TrustedPage {
+                    ask: &ask,
+                    page: "https://sign.getvela.app/".to_owned(),
+                    channel: &channel,
+                    key_route: None,
+                },
+                &quiet,
+                &always_asked,
+                &read,
+            );
+            let _ = answering.join();
+            signed.unwrap_or_else(|failure| unreachable!("{failure:?}"))
+        };
+        let magic = "6492".repeat(16);
+
+        let plain = sign_with(Some("0x6080604052"));
+        assert!(
+            !plain.ends_with(&magic),
+            "a deployed account's is EIP-1271's own"
+        );
+
+        for code in [Some("0x"), None] {
+            let wrapped = sign_with(code);
+            assert!(wrapped.ends_with(&magic), "{code:?}: {wrapped}");
+            // The EIP-1271 signature itself, inside.
+            assert!(
+                wrapped.contains(plain.trim_start_matches("0x")),
+                "{code:?}: the signature is not inside the envelope"
+            );
+            // And the factory the account's first operation deploys it with.
+            let init = build_init_code_for_keys(&[keys[0].public_key_hex.clone()])
+                .unwrap_or_else(|e| unreachable!("{e}"));
+            let factory = to_hex(&init[..20], false);
+            assert_eq!(&wrapped[2 + 24..2 + 64], factory, "{code:?}");
+        }
+        let asked = asked_of.lock().map(|a| a.clone()).unwrap_or_default();
+        assert!(!asked.is_empty());
+        assert!(
+            asked
+                .iter()
+                .all(|(chain, address)| *chain == 100 && *address == safe),
+            "{asked:?}"
         );
     }
 
