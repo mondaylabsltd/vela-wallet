@@ -1917,6 +1917,12 @@ struct AttestOp {
     max_fee_per_gas: String,
     max_priority_fee_per_gas: String,
     paymaster_and_data_hex: String,
+    /// The validity window, Unix seconds (§35) — `userOpValidityWindow`'s
+    /// pair. Absent is zero, which nothing signs.
+    #[serde(default)]
+    valid_after: u64,
+    #[serde(default)]
+    valid_until: u64,
 }
 
 fn attest_bytes(hex: &str) -> Result<Vec<u8>, vela_core::CoreError> {
@@ -1981,7 +1987,8 @@ fn attest_safe_op_hash_inner(
     }
 
     let user_op = attest_operation(op, call_data)?;
-    user_op::calculate_safe_op_hash(&user_op, chain_id)
+    // §35: only an operation that expires is signed.
+    user_op::signable_safe_op_hash(&user_op, chain_id)
 }
 
 /// The shell's operation as the core's `UserOperation`, the signature left
@@ -2003,10 +2010,33 @@ fn attest_operation(
             "maxPriorityFeePerGas",
         )?,
         paymaster_and_data: attest_bytes(&op.paymaster_and_data_hex)?,
+        valid_after: op.valid_after,
+        valid_until: op.valid_until,
         sender: op.sender,
         nonce: op.nonce,
         signature: Vec::new(),
     })
+}
+
+/// The window an operation stamped now is signed with (§35), `[validAfter,
+/// validUntil]` in Unix seconds — `user_op::validity_window`, the one rule:
+/// `validAfter` 0, `validUntil` `now_ms` (the shell's clock) + 30 minutes.
+/// The web stamps its final operation with it just before the hash.
+#[wasm_bindgen(js_name = userOpValidityWindow)]
+#[must_use]
+pub fn user_op_validity_window(now_ms: f64) -> Vec<f64> {
+    let (after, until) = vela_core::user_op::validity_window(now_ms);
+    #[allow(clippy::cast_precision_loss)]
+    let pair = vec![after as f64, until as f64];
+    pair
+}
+
+/// What a dApp is told when its operation expired before it was submitted
+/// (`RelayRejection::Expired`, §35).
+#[wasm_bindgen(js_name = userOpExpiredDetail)]
+#[must_use]
+pub fn user_op_expired_detail() -> String {
+    vela_core::user_op::EXPIRED_DETAIL.to_owned()
 }
 
 /// The SafeOp hash of `op_json`, on `chain_id` — after checking that its
@@ -3053,6 +3083,8 @@ mod core_082_exports {
                 paymaster_and_data: ok(vela_core::primitives::from_hex(
                     "3333333333333333333333333333333333333333abcd",
                 )),
+                valid_after: 0,
+                valid_until: 0,
                 signature: vec![0xcd; 65],
             },
             100,

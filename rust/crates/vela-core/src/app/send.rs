@@ -1038,6 +1038,11 @@ pub enum SendSubmitFailure {
     /// another transaction of this account landed first (a bare AA25, e.g.
     /// from another tab, send-15). Nothing was sent; "Try again" signs anew.
     NonceUsed,
+    /// §35: the operation's validity window closed before the EntryPoint saw
+    /// it — the relay's `AA22 expired or not due` (`RelayRejection::Expired`).
+    /// Nothing was sent and it can never land; "Try again" signs anew, with a
+    /// window of its own.
+    Expired,
     /// r5reg-3: the reads the operation needs before the passkey (nonce,
     /// deployment, gas, fee) did not answer within the shell's bound, or
     /// failed at the network — `busy` when its nodes answered "too many
@@ -1898,6 +1903,10 @@ pub enum SendTxErrorKey {
     /// ([`SendSubmitFailure::NonceUsed`]): "Not sent", calmly, over
     /// `componentsUi.signing.wentFirst` — and "Try again" signs anew.
     NonceUsed,
+    /// §35: it expired before it was submitted
+    /// ([`SendSubmitFailure::Expired`]): "Not sent", calmly, over
+    /// [`EXPIRED_KEY`] — and "Try again" signs anew.
+    Expired,
     /// Spec 102: the account cannot sign here — the line is
     /// [`SendView::tx_venue_block`]'s reason (`VenueBlock::key()`, with its
     /// domains), not a generic failure.
@@ -1934,6 +1943,11 @@ pub enum SendTxErrorKey {
     /// a mailbox that could not be read.
     ProposalNotSupported,
 }
+
+/// The corpus key of [`SendTxErrorKey::Expired`]'s line (§35): "It expired
+/// before it was submitted — nothing was sent." The signing sheet and the
+/// tracker say the same sentence.
+pub const EXPIRED_KEY: &str = super::tx_tracker::REFUSED_EXPIRED_KEY;
 
 /// The corpus key of [`SendTxErrorKey::ProposalNotSupported`]'s line.
 pub const PROPOSAL_NOT_SUPPORTED_KEY: &str = "send.txErrorProposalNotSupported";
@@ -8664,6 +8678,15 @@ fn submit_failed(model: &mut Model, gen: u64, failure: SendSubmitFailure) -> Cmd
             // first. Calm, like a held nonce; "Try again" signs anew.
             model.tx = SendTxStatus::Error;
             model.tx_error = Some(SendTxErrorKey::NonceUsed);
+            model.lock.end(gen);
+            render()
+        }
+        SendSubmitFailure::Expired => {
+            // §35: nothing was sent — the window closed before the
+            // EntryPoint saw it, so this operation can never land. Calm, like
+            // a used nonce; "Try again" signs anew with its own window.
+            model.tx = SendTxStatus::Error;
+            model.tx_error = Some(SendTxErrorKey::Expired);
             model.lock.end(gen);
             render()
         }

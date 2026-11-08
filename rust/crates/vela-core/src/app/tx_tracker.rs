@@ -362,6 +362,9 @@ pub enum RefusalReason {
     FeePaymentInvalid,
     /// Another operation of this account already used this nonce on-chain.
     NonceUsed,
+    /// §35: the operation's validity window closed before it was included —
+    /// the EntryPoint refuses it (`AA22`), so it can never land.
+    Expired,
     /// The operation fails when simulated.
     SimulationFailed,
     /// The queued payload is malformed.
@@ -387,6 +390,9 @@ pub const REFUSED_FEES_KEY: &str = "send.txRejectedFees";
 /// The sentence for [`RefusalReason::NonceUsed`]: another transaction of the
 /// account went first.
 pub const REFUSED_NONCE_KEY: &str = "componentsUi.signing.wentFirst";
+/// The sentence for [`RefusalReason::Expired`] (§35): it expired before it
+/// was submitted — nothing was sent.
+pub const REFUSED_EXPIRED_KEY: &str = "componentsUi.signing.expired";
 
 impl RefusalReason {
     /// The reason the relay named, else the one its executor stage implies
@@ -414,6 +420,7 @@ impl RefusalReason {
         match self {
             Self::FeeBelowMarket => REFUSED_FEES_KEY,
             Self::NonceUsed => REFUSED_NONCE_KEY,
+            Self::Expired => REFUSED_EXPIRED_KEY,
             _ => REFUSED_KEY,
         }
     }

@@ -175,6 +175,9 @@ fn sample_op() -> UserOperation {
         max_fee_per_gas: 1_500_000_007,
         max_priority_fee_per_gas: 1_500_000_000,
         paymaster_and_data: vec![],
+        // Stamped, as every spine stamps the operation it signs (§35).
+        valid_after: 0,
+        valid_until: 1_800_001_800,
         signature: vec![],
     }
 }
@@ -216,6 +219,9 @@ fn the_request_carries_the_operation_and_the_wallets_keys() {
     assert_eq!(operation["feeLegIndex"], 1);
     assert_eq!(operation["userOp"]["callData"], "0x7bb37428");
     assert_eq!(operation["userOp"]["maxFeePerGas"], "1500000007");
+    // §35: the window the digest covers travels to the page.
+    assert_eq!(operation["userOp"]["validAfter"], "0");
+    assert_eq!(operation["userOp"]["validUntil"], "1800001800");
     assert_eq!(operation["entryPoint"], vela_core::safe::ENTRY_POINT);
     // What the web holds as JSON reads back as the same operation.
     assert_eq!(
@@ -847,6 +853,18 @@ fn the_core_computes_what_the_page_must_have_signed() {
         trusted_signer::digest_of(&no_op),
         Err(TrustedSignerError::Malformed(_))
     ));
+    // §35: an operation that never expires is nothing the page signs.
+    let mut forever = op.clone();
+    forever.valid_until = 0;
+    let unstamped = signature_request(
+        "eth_sendTransaction",
+        json!([{ "to": SAFE }]),
+        Some(&forever),
+    );
+    assert!(matches!(
+        trusted_signer::digest_of(&unstamped),
+        Err(TrustedSignerError::Malformed(_))
+    ));
 }
 
 #[test]
@@ -877,6 +895,21 @@ fn the_pages_answer_is_accepted_only_over_the_cores_bytes_by_the_accounts_key() 
         trusted_signer::accept_signature(
             &built,
             &answer(&signing, &credential, &other_digest, UV),
+            &keys,
+            &digest
+        ),
+        Err(TrustedSignerError::WrongChallenge)
+    );
+    // §35: a page that hashed the operation without its window (an older
+    // page, `validAfter = validUntil = 0`) signed other bytes: refused.
+    let mut windowless = op.clone();
+    windowless.valid_until = 0;
+    let windowless_digest =
+        vela_core::user_op::calculate_safe_op_hash(&windowless, 5_042_002).expect("hashes");
+    assert_eq!(
+        trusted_signer::accept_signature(
+            &built,
+            &answer(&signing, &credential, &windowless_digest, UV),
             &keys,
             &digest
         ),

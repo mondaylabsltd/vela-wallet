@@ -1711,6 +1711,11 @@ pub struct UserOpDraft {
     pub max_fee_per_gas: String,
     pub max_priority_fee_per_gas: String,
     pub paymaster_and_data: Vec<u8>,
+    /// The SafeOp's validity window, Unix seconds (§35): zero on a draft,
+    /// stamped by [`user_op_stamp_validity`] just before the hash is asked
+    /// for. The hash and the signature both carry it.
+    pub valid_after: u64,
+    pub valid_until: u64,
     pub signature: Vec<u8>,
 }
 
@@ -1779,6 +1784,8 @@ fn draft_of(op: &vela_core::user_op::UserOperation) -> UserOpDraft {
         max_fee_per_gas: op.max_fee_per_gas.to_string(),
         max_priority_fee_per_gas: op.max_priority_fee_per_gas.to_string(),
         paymaster_and_data: op.paymaster_and_data.clone(),
+        valid_after: op.valid_after,
+        valid_until: op.valid_until,
         signature: op.signature.clone(),
     }
 }
@@ -1795,6 +1802,8 @@ fn op_of(draft: &UserOpDraft) -> Result<vela_core::user_op::UserOperation, CoreE
         max_fee_per_gas: u128_of(&draft.max_fee_per_gas, "maxFeePerGas")?,
         max_priority_fee_per_gas: u128_of(&draft.max_priority_fee_per_gas, "maxPriorityFeePerGas")?,
         paymaster_and_data: draft.paymaster_and_data.clone(),
+        valid_after: draft.valid_after,
+        valid_until: draft.valid_until,
         signature: draft.signature.clone(),
     })
 }
@@ -1929,10 +1938,21 @@ pub fn user_op_with_calls(
     Ok(draft_of(&op))
 }
 
-/// The SafeOp EIP-712 hash — the challenge the passkey signs.
+/// The draft stamped with the window it is signed with (§35): `valid_after`
+/// 0, `valid_until` `now_ms` (the shell's clock) + 30 minutes. Every spine
+/// calls it on the final operation, just before the hash.
+#[uniffi::export]
+pub fn user_op_stamp_validity(draft: UserOpDraft, now_ms: f64) -> Result<UserOpDraft, CoreError> {
+    let mut op = op_of(&draft)?;
+    vela_core::user_op::stamp_validity(&mut op, now_ms);
+    Ok(draft_of(&op))
+}
+
+/// The SafeOp EIP-712 hash — the challenge the passkey signs. Refused for a
+/// draft that never expires (§35: [`user_op_stamp_validity`] first).
 #[uniffi::export]
 pub fn user_op_safe_op_hash(draft: UserOpDraft, chain_id: u32) -> Result<Vec<u8>, CoreError> {
-    Ok(vela_core::user_op::calculate_safe_op_hash(
+    Ok(vela_core::user_op::signable_safe_op_hash(
         &op_of(&draft)?,
         u64::from(chain_id),
     )?)
@@ -1988,6 +2008,7 @@ pub fn user_op_sign(
         .collect();
     let mut op = op_of(&draft)?;
     op.signature = vela_core::user_op::envelope_signature(
+        &op,
         &assertion.authenticator_data,
         &assertion.client_data_json,
         &assertion.signature_der,
@@ -2099,6 +2120,11 @@ pub enum RelayRejection {
     /// (`SendSubmitFailure::NonceUsed`, "went first") and signs anew; a dApp
     /// hears [`user_op_nonce_used_detail`].
     NonceUsed,
+    /// §35: the operation expired before the EntryPoint saw it (the relay's
+    /// `AA22 expired or not due`). Nothing was sent; the send says so calmly
+    /// (`SendSubmitFailure::Expired`) and signs anew; a dApp hears
+    /// [`user_op_expired_detail`].
+    Expired,
     Other {
         message: String,
     },
@@ -2112,6 +2138,7 @@ impl From<vela_core::user_op::RelayRejection> for RelayRejection {
             R::BundlerUnderfunded => RelayRejection::BundlerUnderfunded,
             R::NonceHeld { user_op_hash } => RelayRejection::NonceHeld { user_op_hash },
             R::NonceUsed => RelayRejection::NonceUsed,
+            R::Expired => RelayRejection::Expired,
             R::Other(message) => RelayRejection::Other { message },
         }
     }
@@ -2130,6 +2157,14 @@ pub fn classify_relay_rejection(message: String) -> RelayRejection {
 #[must_use]
 pub fn user_op_nonce_used_detail() -> String {
     vela_core::user_op::NONCE_USED_DETAIL.to_owned()
+}
+
+/// The dApp's `-32603` detail for a request whose operation expired before it
+/// was submitted ([`RelayRejection::Expired`], §35) — a fixed sentence.
+#[uniffi::export]
+#[must_use]
+pub fn user_op_expired_detail() -> String {
+    vela_core::user_op::EXPIRED_DETAIL.to_owned()
 }
 
 /// `parseBundlerError`: the JSON-RPC `error` member as one sentence.
@@ -3365,6 +3400,8 @@ mod tests_082 {
             max_fee_per_gas: max_fee.to_string(),
             max_priority_fee_per_gas: priority.to_string(),
             paymaster_and_data: Vec::new(),
+            valid_after: 0,
+            valid_until: 0,
             signature: bytes(&f[8]),
         }
     }

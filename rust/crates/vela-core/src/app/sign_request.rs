@@ -2489,7 +2489,13 @@ impl App for SignRequest {
                 .and(model.sign_error_refusal_key)
                 .map(str::to_owned),
             failure_not_sent: model.sign_error.is_some()
-                && model.sign_error_refusal_key == Some(super::sign_confirm::NOT_SENT_BODY_KEY),
+                && matches!(
+                    model.sign_error_refusal_key,
+                    Some(
+                        super::sign_confirm::NOT_SENT_BODY_KEY
+                            | super::tx_tracker::REFUSED_EXPIRED_KEY
+                    )
+                ),
             passkey_note: model.passkey_note.as_ref().and_then(|(id, note)| {
                 (model.pending.as_ref().map(|p| &p.id) == Some(id) && model.inflight.is_none())
                     .then_some(*note)
@@ -4694,7 +4700,14 @@ fn on_submit_outcome(
             // Another operation of the account holds the nonce: every shell
             // answers it with the core's own detail for that (PR 2 note 9).
             let previous_pending = message == crate::user_op::PREVIOUS_PENDING_DETAIL;
-            let detail = if refused {
+            // §35: it expired before it was submitted — nothing was sent and
+            // it can never land, so the sheet says so calmly and offers Try
+            // again (a new signature, with its own window); the page hears
+            // the core's own sentence for it.
+            let expired = message == crate::user_op::EXPIRED_DETAIL;
+            let detail = if expired {
+                crate::user_op::EXPIRED_DETAIL.to_owned()
+            } else if refused {
                 crate::user_op::REFUSED_DAPP_DETAIL.to_owned()
             } else {
                 message
@@ -4708,9 +4721,11 @@ fn on_submit_outcome(
                 Some(super::FailureKind::Cancelled) | None => SignErrorKind::SubmitFailed,
             };
             let command = fail_inflight(model, CODE_INTERNAL, kind, Some(detail));
-            model.sign_error_refused = refused && model.sign_error.is_some();
+            model.sign_error_refused = refused && !expired && model.sign_error.is_some();
             model.sign_error_refusal_key = if previous_pending {
                 Some(super::sign_confirm::NOT_SENT_BODY_KEY)
+            } else if expired && model.sign_error.is_some() {
+                Some(super::tx_tracker::REFUSED_EXPIRED_KEY)
             } else if model.sign_error_refused {
                 Some(super::tx_tracker::REFUSED_KEY)
             } else {
