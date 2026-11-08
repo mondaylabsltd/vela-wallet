@@ -392,6 +392,175 @@ pub fn write_verdict_json(ask_json: &str) -> String {
     serde_json::to_string(&verdict).unwrap_or_default()
 }
 
+// ---------------------------------------------------------------------------
+// The relying party a build's passkeys live under (§35, review 0-1)
+// ---------------------------------------------------------------------------
+
+/// The release apps' relying party: every Vela account's passkeys are bound
+/// to it, and `getvela.app`'s association files (`assetlinks.json`,
+/// `apple-app-site-association`) list only the store apps — so only a
+/// release build can use them.
+pub const RELEASE_RP_ID: &str = "getvela.app";
+
+/// The web dev server's and a simulator's / emulator's relying party. A
+/// browser on `localhost` mints passkeys of its own there; a simulator's
+/// platform authenticator answers no association for it, so a simulator
+/// signs with the parallel space's fixture keys, as it always has.
+pub const LOCAL_RP_ID: &str = "localhost";
+
+/// The relying party a TEST build on a real device uses — a debug build, the
+/// Android `devicetest` flavour, the iOS "Vela Test" build, a desktop debug
+/// build. **A placeholder until the owner picks the domain** (go-live,
+/// `docs/security/hardening.md`): `None`. A build can also be given it
+/// without editing this line, through its `TEST_RP_DOMAIN` build setting
+/// (Android `-PvelaTestRpDomain=…` or the `TEST_RP_DOMAIN` environment
+/// variable at build time; iOS the `TEST_RP_DOMAIN` build setting → the
+/// `VelaTestRpDomain` Info.plist key; the desktop `TEST_RP_DOMAIN` at
+/// compile time). The domain must serve its own association files listing
+/// the test apps — and never be `getvela.app`.
+pub const TEST_RP_DOMAIN: Option<&str> = None;
+
+/// What a test build on a device says when it has no test domain: it will
+/// not fall back to `getvela.app` (whose association files no longer list
+/// it), and says how to set one.
+pub const TEST_RP_DOMAIN_UNSET: &str = "This test build has no passkey domain. getvela.app passkeys are for the store apps only, so a test build needs its own: set TEST_RP_DOMAIN (see docs/security/hardening.md, \"Test builds' passkey domain\").";
+
+/// Why a build has no relying party.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum RpIdError {
+    /// A test build on a device, and no [`TEST_RP_DOMAIN`] was set.
+    TestDomainUnset { message: String },
+    /// The configured test domain is not a bare host name — or it is
+    /// `getvela.app` itself, which a test build may never use.
+    TestDomainInvalid { domain: String, message: String },
+}
+
+impl RpIdError {
+    #[must_use]
+    pub fn message(&self) -> &str {
+        match self {
+            Self::TestDomainUnset { message } | Self::TestDomainInvalid { message, .. } => message,
+        }
+    }
+}
+
+/// A bare host name: lowercase letters, digits, `-` and `.`, at least one
+/// dot, no empty label, no scheme, port or path.
+fn is_host_name(domain: &str) -> bool {
+    !domain.is_empty()
+        && domain.len() <= 253
+        && domain.contains('.')
+        && domain.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        })
+}
+
+/// The relying party a NATIVE build's platform passkeys use — the one rule
+/// for Android, iOS and the desktop (§35):
+///
+/// - a release build → [`RELEASE_RP_ID`], always (the configured test domain
+///   is never read);
+/// - a test build on a simulator or emulator → [`LOCAL_RP_ID`];
+/// - a test build on a device → the configured test domain (`configured`,
+///   the build's `TEST_RP_DOMAIN` setting), else [`TEST_RP_DOMAIN`]; neither
+///   → [`RpIdError::TestDomainUnset`] — never a quiet fall-back to
+///   `getvela.app`.
+///
+/// `test_build` is [`BuildFacts::is_test_build`]. A security key reached over
+/// CTAP (USB, NFC, caBLE) is not gated by any association file — every CTAP
+/// client names its own relying party — so this rule is for the platform
+/// passkeys the association files gate.
+pub fn relying_party_id(
+    test_build: bool,
+    simulator: bool,
+    configured: Option<&str>,
+) -> Result<String, RpIdError> {
+    if !test_build {
+        return Ok(RELEASE_RP_ID.to_owned());
+    }
+    if simulator {
+        return Ok(LOCAL_RP_ID.to_owned());
+    }
+    let domain = configured
+        .map(str::trim)
+        .filter(|d| !d.is_empty())
+        .or(TEST_RP_DOMAIN)
+        .ok_or_else(|| RpIdError::TestDomainUnset {
+            message: TEST_RP_DOMAIN_UNSET.to_owned(),
+        })?;
+    if !is_host_name(domain) || domain == RELEASE_RP_ID {
+        return Err(RpIdError::TestDomainInvalid {
+            domain: domain.to_owned(),
+            message: format!(
+                "TEST_RP_DOMAIN \"{domain}\" is not a test passkey domain: give a bare host name (e.g. test.example.org) that is not getvela.app."
+            ),
+        });
+    }
+    Ok(domain.to_owned())
+}
+
+/// The relying party the WEB wallet uses on `host` (the page's hostname) —
+/// the rule `passkey.ts` `relyingPartyId` follows, replayed against the
+/// shared vector:
+///
+/// - a packaged extension (`chrome-extension://…`, `safari-web-extension://…`)
+///   → [`RELEASE_RP_ID`] (the manifest's `https://getvela.app/*` host
+///   permission is what lets it claim it);
+/// - `localhost`, `127.0.0.1` or any IPv4 address → itself (the dev server);
+/// - `getvela.app` or any host under it → [`RELEASE_RP_ID`];
+/// - anything else (a preview deployment, a self-hosted copy) → its own host,
+///   so a test deployment's passkeys are its own.
+#[must_use]
+pub fn web_relying_party_id(host: &str, packaged_extension: bool) -> String {
+    if packaged_extension {
+        return RELEASE_RP_ID.to_owned();
+    }
+    let host = host.trim().to_ascii_lowercase();
+    let ipv4 = host.split('.').count() == 4
+        && host
+            .split('.')
+            .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()));
+    if host == "localhost" || ipv4 {
+        return host;
+    }
+    if host == RELEASE_RP_ID || host.ends_with(".getvela.app") {
+        return RELEASE_RP_ID.to_owned();
+    }
+    host
+}
+
+/// One native build's ask, as JSON (the uniffi and wasm door, and the
+/// vector's `native` cases).
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct RpAsk {
+    pub test_build: bool,
+    pub simulator: bool,
+    pub test_domain: Option<String>,
+}
+
+/// [`relying_party_id`] over JSON: `{"rpId": …}` or `{"error": RpIdError}`.
+#[must_use]
+pub fn relying_party_json(ask_json: &str) -> String {
+    let answer = match serde_json::from_str::<RpAsk>(ask_json) {
+        Ok(ask) => relying_party_id(ask.test_build, ask.simulator, ask.test_domain.as_deref()),
+        Err(_) => Err(RpIdError::TestDomainUnset {
+            message: TEST_RP_DOMAIN_UNSET.to_owned(),
+        }),
+    };
+    match answer {
+        Ok(rp_id) => serde_json::json!({ "rpId": rp_id }).to_string(),
+        Err(error) => serde_json::json!({ "error": error }).to_string(),
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {

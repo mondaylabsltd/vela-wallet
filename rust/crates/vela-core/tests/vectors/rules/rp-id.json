@@ -1,0 +1,32 @@
+{
+  "about": "§35 (review 0-1 follow-up): the relying party a build's passkeys live under, one rule (service_defaults::relying_party_id for native builds, web_relying_party_id for the web wallet), replayed by every shell. getvela.app's association files list only the store apps, so a release build alone uses getvela.app; a test build on a simulator or emulator, and the web dev server, use localhost; a test build on a device uses its TEST_RP_DOMAIN and refuses, with TEST_RP_DOMAIN_UNSET, when it has none — never a quiet fall-back to getvela.app. A release build never reads the test domain.",
+  "release": "getvela.app",
+  "local": "localhost",
+  "native": [
+    { "name": "release", "ask": { "testBuild": false, "simulator": false, "testDomain": null }, "rpId": "getvela.app" },
+    { "name": "release ignores a stray test domain", "ask": { "testBuild": false, "simulator": false, "testDomain": "vela-test.example" }, "rpId": "getvela.app" },
+    { "name": "release on a simulator is still release", "ask": { "testBuild": false, "simulator": true, "testDomain": null }, "rpId": "getvela.app" },
+    { "name": "debug on a simulator or emulator", "ask": { "testBuild": true, "simulator": true, "testDomain": null }, "rpId": "localhost" },
+    { "name": "debug on a simulator ignores the test domain", "ask": { "testBuild": true, "simulator": true, "testDomain": "vela-test.example" }, "rpId": "localhost" },
+    { "name": "device test with its domain", "ask": { "testBuild": true, "simulator": false, "testDomain": "vela-test.example" }, "rpId": "vela-test.example" },
+    { "name": "device test, domain with spaces around it", "ask": { "testBuild": true, "simulator": false, "testDomain": "  passkeys.vela-test.example " }, "rpId": "passkeys.vela-test.example" },
+    { "name": "device test without a domain refuses", "ask": { "testBuild": true, "simulator": false, "testDomain": null }, "error": "test_domain_unset" },
+    { "name": "device test with an empty domain refuses", "ask": { "testBuild": true, "simulator": false, "testDomain": "" }, "error": "test_domain_unset" },
+    { "name": "a test build may never take getvela.app", "ask": { "testBuild": true, "simulator": false, "testDomain": "getvela.app" }, "error": "test_domain_invalid" },
+    { "name": "a URL is not a domain", "ask": { "testBuild": true, "simulator": false, "testDomain": "https://vela-test.example" }, "error": "test_domain_invalid" },
+    { "name": "a port is not a domain", "ask": { "testBuild": true, "simulator": false, "testDomain": "vela-test.example:443" }, "error": "test_domain_invalid" },
+    { "name": "upper case is not the canonical form", "ask": { "testBuild": true, "simulator": false, "testDomain": "Vela-Test.example" }, "error": "test_domain_invalid" },
+    { "name": "a bare label is not a domain", "ask": { "testBuild": true, "simulator": false, "testDomain": "localhost" }, "error": "test_domain_invalid" }
+  ],
+  "web": [
+    { "name": "the wallet", "host": "wallet.getvela.app", "packaged": false, "rpId": "getvela.app" },
+    { "name": "the apex", "host": "getvela.app", "packaged": false, "rpId": "getvela.app" },
+    { "name": "the Chrome extension (packaged)", "host": "abcdefghijklmnopabcdefghijklmnop", "packaged": true, "rpId": "getvela.app" },
+    { "name": "the dev server", "host": "localhost", "packaged": false, "rpId": "localhost" },
+    { "name": "the dev server on a loopback address", "host": "127.0.0.1", "packaged": false, "rpId": "127.0.0.1" },
+    { "name": "the dev server on a LAN address", "host": "192.168.1.20", "packaged": false, "rpId": "192.168.1.20" },
+    { "name": "a preview deployment's passkeys are its own", "host": "vela-wallet-web.pages.dev", "packaged": false, "rpId": "vela-wallet-web.pages.dev" },
+    { "name": "a look-alike is not under getvela.app", "host": "getvela.app.evil.example", "packaged": false, "rpId": "getvela.app.evil.example" },
+    { "name": "nor a suffix without the dot", "host": "notgetvela.app", "packaged": false, "rpId": "notgetvela.app" }
+  ]
+}
