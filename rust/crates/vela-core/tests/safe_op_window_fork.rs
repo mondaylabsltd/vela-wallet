@@ -124,10 +124,33 @@ impl Chain {
 
 const BUNDLER: &str = "0x6a3a1D2F2b1b2C7c9A1b6dF0e5f4d0c3B2a19876";
 
+/// A test-only key of this proof's own (a fixed P-256 scalar, no funds), so
+/// its single-key Safe is an address no other suite on the harness touches.
+/// (The parallel space's three fixtures are the multisig suites' members:
+/// `multisig_fork` sends from their addresses by impersonation, which gives
+/// them a nonce, and a CREATE2 deployment onto an address with a nonce fails
+/// AA13.) It signs through the fixture signer, as the parallel space does.
+const WINDOW_KEY: &str = "4b5f1a3e8d2c6b9f0e7a1d4c8b3f6e2a9d5c1b7e4f0a3d6c9b2e8f1a5d4c7b30";
+
 fn fixture() -> fixtures::FixtureAccount {
-    // The last fixture: the parallel space's flows use the first ones, and
-    // every case here is reverted anyway.
-    fixtures::account(fixtures::count() - 1).unwrap()
+    use p256::ecdsa::SigningKey;
+    let signing = SigningKey::from_slice(&primitives::from_hex(WINDOW_KEY).unwrap()).unwrap();
+    let public_key_hex = primitives::to_hex(
+        signing.verifying_key().to_sec1_point(false).as_bytes(),
+        false,
+    );
+    let key = vela_core::safe::parse_public_key(&public_key_hex).unwrap();
+    let address = vela_core::safe::compute_safe_address(&key.x, &key.y)
+        .unwrap()
+        .address;
+    fixtures::FixtureAccount {
+        index: 99,
+        credential_id_hex: primitives::to_hex(b"vela-r21-window", false),
+        name: "R21 window",
+        private_key_hex: WINDOW_KEY,
+        public_key_hex,
+        address,
+    }
 }
 
 /// The fixture account's first operation: deploy through `initCode`, one
