@@ -99,6 +99,9 @@ final class SigningController {
         var recordsPersisted: () -> Void = {}
         var nativeSymbol: (_ chainId: Int) -> String = { _ in "" }
         var knownChains: () -> [Int] = { [] }
+        /// VELA-2026-002: one `eth_call`, its answer as it came; `nil` = through the
+        /// pool. A test seam (`SignExecutor.Ports.ethCall`).
+        var ethCall: (@MainActor (_ chainId: Int, _ params: [Any]) async -> RpcOutcome)? = nil
         /// The descriptor endpoint base.
         var dataBase: () -> String = { "" }
         /// The simulated deltas, to the `token_trust` machine that judges them
@@ -322,7 +325,7 @@ final class SigningController {
         )
 
         self.spine = spine
-        let signExecutor = SignExecutor(spine: spine, relay: relay, store: store, timers: timers)
+        let signExecutor = SignExecutor(spine: spine, relay: relay, store: store, pool: pool, timers: timers)
         self.signExecutor = signExecutor
         let clearExecutor = ClearExecutor(dataBase: ports.dataBase, pool: pool)
         let guardExecutor = GuardExecutor(pool: pool)
@@ -419,7 +422,8 @@ final class SigningController {
                 guard let request = self?.request else { return false }
                 return !request.firstParty
             },
-            trustedSignerEnded: { [weak self] notice in self?.trustedSignerNotice = notice }
+            trustedSignerEnded: { [weak self] notice in self?.trustedSignerNotice = notice },
+            ethCall: ports.ethCall
         )
     }
 
@@ -724,6 +728,7 @@ final class SigningController {
     }
 
     func reject() { dispatchSign(["type": "reject_tapped"]) }
+
     func dismiss() { dispatchSign(["type": "dismiss_tapped"]) }
     /// Spec 096 F8: Try again on a failure that sent nothing — the core takes
     /// the request back to review, still unanswered.

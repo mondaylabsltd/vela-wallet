@@ -16881,6 +16881,18 @@ public func multicall3EncodeAggregate3(calls: [Multicall3Call])throws  -> Data  
 })
 }
 /**
+ * `parent_safe_guard::check` over JSON: a `CheckInput` in, a
+ * `ParentVerdict` out, or `{ "error": … }` for an input that does not read.
+ */
+public func parentSafeCheck(inputJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_parent_safe_check(
+        FfiConverterString.lower(inputJson),uniffiCallStatus
+    )
+})
+}
+/**
  * Settings' debug mode in force on this build (spec 091): `hidden` (no
  * switch — and debug mode is off), `off` or `on`. `developer_build` is the
  * shell's build fact — Android `BuildConfig.DEBUG`, iOS `#if DEBUG`, the
@@ -17983,6 +17995,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_multicall3_encode_aggregate3() != 41166) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_parent_safe_check() != 24720) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_prefs_debug_mode() != 14685) {

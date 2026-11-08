@@ -431,7 +431,14 @@ enum SigningLive {
         if let blocked = sign.blocked {
             blocks.append(.intent(text: s(loc, "selfCallBlockedTitle"), tone: .danger))
             let text: String
-            if blocked.function == "SafeTx" {
+            if let parent = blocked.parent {
+                // VELA-2026-002: it would have made this account act for a Safe it owns
+                // — or that could not be read.
+                // No confirm, no "anyway": the core already shut the gate.
+                text = s(loc, blocked.reason == .unchecked ? "parentSafeUnchecked" : "parentSafeBlocked", [
+                    "function": blocked.function, "safe": AddressText.short(parent),
+                ])
+            } else if blocked.function == "SafeTx" {
                 text = s(loc, "selfCallBlockedSafeTx")
             } else if let leg = blocked.legIndex {
                 text = s(loc, "selfCallBlockedLegBody", [
@@ -463,7 +470,7 @@ enum SigningLive {
             // 2026-09-26 it means the approval screen did not show the
             // unlimited approval — a wallet fault, not "unlimited is disabled".
             // The blocked sheet above already says it, in full.
-            case .selfCallBlocked: ""
+            case .selfCallBlocked, .parentSafeBlocked: ""
             case .unsupportedChain: loc.t("send.lock.netNotFound")
             // Neither of these is an error a person needs to read: one is
             // their own decision and the other is the wallet's.

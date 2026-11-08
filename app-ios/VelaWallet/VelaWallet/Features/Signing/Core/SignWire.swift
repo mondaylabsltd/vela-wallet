@@ -75,6 +75,11 @@ enum SignErrorKind: String, Decodable {
     /// -32603 — the request would have changed who controls the account
     /// (spec 081). Refused by the wallet, not by the person.
     case selfCallBlocked = "self_call_blocked"
+    /// -32603 — the request would have made this account act for a Safe it
+    /// owns (VELA-2026-002, `parent_safe_guard`) — or
+    /// whether it owns that Safe could not be read. Refused by the wallet,
+    /// never 4001, and there is no "anyway".
+    case parentSafeBlocked = "parent_safe_blocked"
     case fundingCancelled = "funding_cancelled"
     case submitFailed = "submit_failed"
     /// **No response is sent for this one.** The displayed fee quote went
@@ -315,6 +320,28 @@ struct SignBlockedViewWire: Decodable, Equatable {
     let selector: String
     let legIndex: Int?
     let nested: Bool
+    /// VELA-2026-002: the Safe this account owns that the request would have acted
+    /// for. `nil`: the account itself (spec 081).
+    var parent: String? = nil
+    /// VELA-2026-002: why `parent` refused it; `nil` with no `parent`.
+    var reason: SignParentReasonWire? = nil
+}
+
+/// VELA-2026-002 `ParentReason`: why a request that would act for a Safe this account
+/// owns was refused. The core decides it; the sheet only picks its sentence
+/// (`unchecked` → `parentSafeUnchecked`, any other → `parentSafeBlocked`).
+enum SignParentReasonWire: String, Decodable, Equatable {
+    /// The chain says this account is one of its owners.
+    case owner
+    /// Whether this account owns it could not be read — refused all the same.
+    case unchecked
+
+    /// A reason this build has never heard of is still a refusal: said as
+    /// the blocked sentence, never a view that cannot be drawn.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = SignParentReasonWire(rawValue: raw) ?? .owner
+    }
 }
 
 struct SignViewWire: Decodable, Equatable {
@@ -335,7 +362,8 @@ struct SignViewWire: Decodable, Equatable {
     /// Never set by the in-app browser — see `SignNoticeWire`.
     let notice: SignNoticeWire?
     let globalChainId: Int
-    /// Present when the self-call guard refused the request (spec 081).
+    /// Present when the self-call guard refused the request (spec 081), or
+    /// the parent-Safe guard did (VELA-2026-002: `blocked.parent` set).
     let blocked: SignBlockedViewWire?
     /// The sheet's words (spec 082 RA9) — read instead of `isSigning` /
     /// `isSubmitting`, which the core keeps only until every shell reads this.
