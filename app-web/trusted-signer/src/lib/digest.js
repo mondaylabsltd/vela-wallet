@@ -213,6 +213,13 @@ window.VelaCS = window.VelaCS || {};
       if (!operation || !operation.userOp || !context.chainId) {
         return { refuse: 'refuse.noSafeOp' };
       }
+      // §35: an operation that never expires (validUntil 0 or absent) is one a
+      // relay could hold and land at any time. The wallet stamps every
+      // operation it signs with a window; one without is refused here too,
+      // and so is a window that does not read (no digest is guessed).
+      var validity = ns.safeop.windowOf(operation.userOp);
+      if (!validity) return { refuse: 'refuse.badWindow' };
+      if (validity.until === BigInt(0)) return { refuse: 'refuse.noExpiry' };
       var result = {
         hash: ns.safeop.hash(operation.userOp, context.chainId, {
           entryPoint: operation.entryPoint,

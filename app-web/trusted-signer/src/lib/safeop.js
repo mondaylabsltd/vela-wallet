@@ -66,13 +66,52 @@ window.VelaCS = window.VelaCS || {};
     return keccak.hash(concat([new Uint8Array([0x19, 0x01]), separator, structHash]));
   }
 
+  // The largest `uint48` a window field holds.
+  var UINT48_MAX = (BigInt(1) << BigInt(48)) - BigInt(1);
+
   /**
-   * The SafeOp digest. `validAfter` and `validUntil` are always zero, matching
-   * the core — a request that wants a time window would need a protocol change,
-   * not a quiet extra field here.
+   * An operation's validity window (§35): `validAfter` and `validUntil` as
+   * the operation carries them, `null` when they do not read as the core
+   * reads them (`trusted_signer::user_op_from_json` + `check_window`): each a
+   * decimal or `0x` string or a whole JSON number, within `uint48`, and a
+   * window that does not open after it closes. Absent is zero ("never
+   * expires") — which the digest refuses to sign (`digest.js`). `BigInt`
+   * alone is too lenient here: it reads `true`, `[5]` and `" 5 "` as numbers.
+   */
+  function windowOf(op) {
+    var read = function (v) {
+      if (v === undefined || v === null) return BigInt(0);
+      var n;
+      if (typeof v === 'number') {
+        if (!Number.isSafeInteger(v) || v < 0) return null;
+        n = BigInt(v);
+      } else if (typeof v === 'string' && /^[0-9]+$/.test(v)) {
+        n = BigInt(v);
+      } else if (typeof v === 'string' && /^0[xX][0-9a-fA-F]*$/.test(v)) {
+        n = v.length > 2 ? BigInt('0x' + v.slice(2)) : BigInt(0);
+      } else {
+        return null;
+      }
+      return n > UINT48_MAX ? null : n;
+    };
+    if (!op || typeof op !== 'object') return null;
+    var after = read(op.validAfter);
+    var until = read(op.validUntil);
+    if (after === null || until === null) return null;
+    if (until !== BigInt(0) && after > until) return null;
+    return { after: after, until: until };
+  }
+
+  /**
+   * The SafeOp digest, over the operation's own validity window (§35, the
+   * core's `calculate_safe_op_hash`): `validAfter` and `validUntil` are hashed
+   * exactly as the Safe4337Module reads them from the signature's first 12
+   * bytes. A window that does not read throws: no digest is guessed.
    */
   function safeOpHash(op, chainId, options) {
     options = options || {};
+    var window = windowOf(op);
+    if (!window) throw new Error('validity window is not a uint48 pair');
     var entryPoint = options.entryPoint || ENTRY_POINT;
     var module = options.module || SAFE_4337_MODULE;
 
@@ -88,8 +127,8 @@ window.VelaCS = window.VelaCS || {};
       word(BigInt(op.maxPriorityFeePerGas)),
       word(BigInt(op.maxFeePerGas)),
       keccak.hash(fromHex(op.paymasterAndData || '0x')),
-      word(0), // validAfter
-      word(0), // validUntil
+      word(window.after),
+      word(window.until),
       addressWord(entryPoint),
     ]));
     return eip712(domainSeparator(chainId, module), structHash);
@@ -188,6 +227,7 @@ window.VelaCS = window.VelaCS || {};
     SAFE_4337_MODULE: SAFE_4337_MODULE,
     MULTI_SEND: MULTI_SEND,
     hash: safeOpHash,
+    windowOf: windowOf,
     messageHash: safeMessageHash,
     decodeCallData: decodeCallData,
     sameCall: sameCall,

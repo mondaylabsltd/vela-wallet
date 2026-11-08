@@ -147,6 +147,8 @@ window.VelaCS.i18n.register('tr', {
 
   'refuse.ethSign': 'Bu sayfa eth_sign imzalamaz. eth_sign okunamayan bir hash imzalar — açık imzalama tam da bunu ortadan kaldırmak için vardır.',
   'refuse.noSafeOp': 'İşlem özeti burada henüz çıkarılamıyor: bu, Safe 4337 SafeOp hash\'idir ve hesabı, EntryPoint\'i ve modül adresini gerektirir. Bu sayfa tahminle elde edilmiş bir özeti imzalamaz.',
+  'refuse.noExpiry': 'Bu işlemin süresi hiç dolmaz (validUntil yok): bir aktarıcı onu tutup istediği zaman gönderebilir. Vela yalnızca süresi dolan işlemleri imzalar. İmzalanmıyor.',
+  'refuse.badWindow': 'Bu işlemin geçerlilik aralığı (validAfter / validUntil) iki uint48 saniye olarak okunamıyor; neyin imzalanacağı belirlenemiyor. İmzalanmıyor.',
   'refuse.typedShape': 'Bu istek, tek bir hesap için tam olarak tek bir imzalanacak mesaj taşımıyor — gösterilen, imzalanacak olandan farklı olabilir. İmzalanmayacak.',
   'refuse.unknownMethod': 'Bu yöntem için imzalanacak özet çıkarılamıyor, bu yüzden imzalanmayacak.',
   'ui.cannotSign': 'Bu istek burada imzalanamaz — nedenleri yukarıda. Bu sayfayı kapatmak isteği reddeder.',

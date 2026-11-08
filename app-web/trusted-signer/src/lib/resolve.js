@@ -2221,6 +2221,16 @@ window.VelaCS = window.VelaCS || {};
   }
 
   /**
+   * When the operation stops being valid (§35), in the page's date form — or,
+   * past what a date can hold (a `uint48` second reaches year 8.9 million),
+   * the Unix second itself, so the card never says "NaN".
+   */
+  function expiryOf(until) {
+    var shown = formatDate(until.toString());
+    return shown.indexOf('NaN') >= 0 ? until.toString() : shown;
+  }
+
+  /**
    * When an assembled operation is present, IT is the subject: the digest
    * covers its calldata, so that is what must be on screen. The intent the
    * site sent is then only used to check that its call is really in there.
@@ -2229,6 +2239,16 @@ window.VelaCS = window.VelaCS || {};
     var operation = ctx.operation && ctx.operation.userOp;
     if (!operation) return intent;
 
+    // §35: the operation expires; one that never does is refused (the
+    // digest's own rule), and when it does the card says until when. A
+    // window that does not read is refused in its own words.
+    var validity = ns.safeop.windowOf(operation);
+    if (!validity || validity.until === BigInt(0)) {
+      view.refuse = true;
+      view.warnings.push({ tone: 'danger', key: validity ? 'refuse.noExpiry' : 'refuse.badWindow' });
+    } else {
+      view.expires = expiryOf(validity.until);
+    }
     var decoded = ns.safeop.decodeCallData(operation.callData);
     if (!decoded) {
       view.refuse = true;

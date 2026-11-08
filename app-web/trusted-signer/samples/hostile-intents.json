@@ -70,7 +70,9 @@
             "preVerificationGas": "0",
             "maxFeePerGas": "0",
             "maxPriorityFeePerGas": "0",
-            "paymasterAndData": "0x"
+            "paymasterAndData": "0x",
+            "validAfter": "0",
+            "validUntil": "1800001800"
           },
           "feeLegIndex": 1
         }

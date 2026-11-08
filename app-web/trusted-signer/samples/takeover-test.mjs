@@ -112,7 +112,8 @@ check('an ordinary token transfer is untouched', noTakeover(view));
 
 // --- the operation the app assembled -----------------------------------------
 
-const userOp = (callData) => ({ operation: { userOp: { sender: ACCOUNT, callData } } });
+// §35: stamped, as every operation Vela signs is.
+const userOp = (callData) => ({ operation: { userOp: { sender: ACCOUNT, callData, validAfter: '0', validUntil: '1800001800' } } });
 
 view = ns.resolve(tx(OTHER, transfer), {
   ...ctx,

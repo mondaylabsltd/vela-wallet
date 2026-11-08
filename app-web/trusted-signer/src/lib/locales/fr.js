@@ -147,6 +147,8 @@ window.VelaCS.i18n.register('fr', {
 
   'refuse.ethSign': 'Cette page ne signe pas eth_sign. Il fait signer un hash illisible — exactement ce que la signature claire existe pour abolir.',
   'refuse.noSafeOp': 'Le condensé de la transaction ne peut pas encore être calculé ici : c’est le hash SafeOp de Safe 4337, qui exige le compte, l’EntryPoint et l’adresse du module. Cette page ne signera pas un condensé deviné.',
+  'refuse.noExpiry': 'L’opération n’expire jamais (pas de validUntil) : un relais pourrait la garder et l’envoyer à tout moment. Vela ne signe que des opérations qui expirent. Pas de signature.',
+  'refuse.badWindow': 'La fenêtre de validité de cette opération (validAfter / validUntil) ne se lit pas comme deux secondes uint48 : impossible de savoir ce qui serait signé. Pas de signature.',
   'refuse.typedShape': 'Cette demande ne contient pas exactement un message signé pour un seul compte — ce qui est affiché pourrait différer de ce qui serait signé. Signature refusée.',
   'refuse.unknownMethod': 'Aucun condensé ne peut être calculé pour cette méthode, elle ne sera donc pas signée.',
   'ui.cannotSign': 'Cette demande ne peut pas être signée ici — les raisons sont indiquées ci-dessus. Fermer cette page la refuse.',

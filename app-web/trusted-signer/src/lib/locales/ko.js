@@ -147,6 +147,8 @@ window.VelaCS.i18n.register('ko', {
 
   'refuse.ethSign': '이 페이지는 eth_sign에 서명하지 않습니다. eth_sign은 읽을 수 없는 해시에 서명하는 것으로, Clear Signing이 없애려는 바로 그것입니다.',
   'refuse.noSafeOp': '여기서는 아직 거래 다이제스트를 도출할 수 없습니다. 이것은 Safe 4337 SafeOp 해시로, 계정·EntryPoint·모듈 주소가 필요합니다. 이 페이지는 추측한 다이제스트에 서명하지 않습니다.',
+  'refuse.noExpiry': '이 작업은 만료되지 않습니다(validUntil 없음). 릴레이가 붙잡아 두었다가 언제든 보낼 수 있습니다. Vela는 만료되는 작업에만 서명합니다. 서명하지 않습니다.',
+  'refuse.badWindow': '이 작업의 유효 기간(validAfter / validUntil)을 두 개의 uint48 초로 읽을 수 없어 무엇에 서명하게 되는지 알 수 없습니다. 서명하지 않습니다.',
   'refuse.typedShape': '이 요청에는 한 계정에 대한 서명 메시지가 정확히 하나만 들어 있지 않습니다 — 화면에 보이는 내용과 실제로 서명될 내용이 다를 수 있습니다. 서명하지 않습니다.',
   'refuse.unknownMethod': '이 메서드로는 다이제스트를 도출할 수 없으므로 서명하지 않습니다.',
   'ui.cannotSign': '이 요청은 여기서 서명할 수 없습니다 — 이유는 위에 있습니다. 이 페이지를 닫으면 거부됩니다.',

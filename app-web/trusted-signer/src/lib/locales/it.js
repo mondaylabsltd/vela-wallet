@@ -147,6 +147,8 @@ window.VelaCS.i18n.register('it', {
 
   'refuse.ethSign': 'Questa pagina non firma eth_sign: quel metodo firma un hash illeggibile — proprio ciò che la firma chiara esiste per eliminare.',
   'refuse.noSafeOp': 'Il digest della transazione non si può ancora ricavare qui: è l’hash SafeOp di Safe 4337, che richiede l’account, l’EntryPoint e l’indirizzo del modulo. Questa pagina non firmerà un digest tirato a indovinare.',
+  'refuse.noExpiry': 'L’operazione non scade mai (nessun validUntil): un relay potrebbe trattenerla e inviarla in qualsiasi momento. Vela firma solo operazioni che scadono. Nessuna firma.',
+  'refuse.badWindow': 'La finestra di validità di questa operazione (validAfter / validUntil) non si legge come due secondi uint48, quindi non si può stabilire cosa verrebbe firmato. Nessuna firma.',
   'refuse.typedShape': 'Questa richiesta non contiene esattamente un messaggio firmato per un solo account — ciò che vedi potrebbe essere diverso da ciò che verrebbe firmato. Non verrà firmato nulla.',
   'refuse.unknownMethod': 'Per questo metodo non si può ricavare alcun digest, quindi non verrà firmato.',
   'ui.cannotSign': 'Questa richiesta non può essere firmata qui — i motivi sono qui sopra. Chiudere questa pagina la rifiuta.',

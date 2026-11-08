@@ -52,6 +52,9 @@ function expectedSafeOpHash(op, chainId) {
     max_fee_per_gas: op.maxFeePerGas,
     max_priority_fee_per_gas: op.maxPriorityFeePerGas,
     paymaster_and_data_hex: op.paymasterAndData,
+    // §35: the window the digest covers.
+    valid_after: Number(op.validAfter || 0),
+    valid_until: Number(op.validUntil || 0),
   }), '', BigInt(chainId));
   return '0x' + Buffer.from(bytes).toString('hex');
 }
@@ -291,7 +294,7 @@ try {
       preVerificationGas: '110000',
       maxFeePerGas: '1500000007',
       maxPriorityFeePerGas: '1500000000',
-      paymasterAndData: '0x',
+      paymasterAndData: '0x', validAfter: '0', validUntil: '1800001800',
     };
     const context = {
       chainName: 'Ethereum', chainId: 1, account: SAFE,
@@ -343,7 +346,7 @@ try {
           sender: SAFE, nonce: '0x7', initCode: '0x',
           callData: lib.encode.call('executeUserOp(address,uint256,bytes,uint8)', [USDC, 0n, swapped, 0]),
           verificationGasLimit: '300000', callGasLimit: '200000', preVerificationGas: '110000',
-          maxFeePerGas: '1', maxPriorityFeePerGas: '1', paymasterAndData: '0x',
+          maxFeePerGas: '1', maxPriorityFeePerGas: '1', paymasterAndData: '0x', validAfter: '0', validUntil: '1800001800',
         },
       },
     };
@@ -390,7 +393,7 @@ try {
           sender: SAFE, nonce: '0x7', initCode: '0x',
           callData: lib.encode.call('executeUserOp(address,uint256,bytes,uint8)', [lib.safeop ? lib.safeop.MULTI_SEND : '0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526', 0n, batch, 1]),
           verificationGasLimit: '300000', callGasLimit: '200000', preVerificationGas: '110000',
-          maxFeePerGas: '1', maxPriorityFeePerGas: '1', paymasterAndData: '0x',
+          maxFeePerGas: '1', maxPriorityFeePerGas: '1', paymasterAndData: '0x', validAfter: '0', validUntil: '1800001800',
         },
       },
     };
@@ -459,7 +462,7 @@ try {
           sender: SAFE, nonce: '0x7', initCode: '0x',
           callData: lib.encode.call('executeUserOp(address,uint256,bytes,uint8)', [USDC, 0n, transferCall, 0]),
           verificationGasLimit: '300000', callGasLimit: '200000', preVerificationGas: '110000',
-          maxFeePerGas: '1', maxPriorityFeePerGas: '1', paymasterAndData: '0x',
+          maxFeePerGas: '1', maxPriorityFeePerGas: '1', paymasterAndData: '0x', validAfter: '0', validUntil: '1800001800',
         },
       },
     };

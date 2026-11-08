@@ -61,6 +61,17 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // §35 (review 1-6): every SafeOp expires. The page hashes the operation's
+    // own validAfter / validUntil (the core's `calculate_safe_op_hash`, read
+    // from the request's decimal strings) instead of a zero window, refuses an
+    // operation with no expiry (`refuse.noExpiry`, as `signable_safe_op_hash`
+    // does) and one whose window does not read as `user_op_from_json` +
+    // `check_window` read it (`refuse.badWindow`, fifteen locales), and says
+    // "Valid until <date>" in the fee note. Not LAUNCH: until LAUNCH moves here
+    // (after dist/ is deployed), the old LAUNCH page hashes a zero window and
+    // the core refuses its transaction signatures as WrongChallenge — nothing
+    // is sent.
+    "7ec6e9a3500bb769dafc041507858946a5510b51054207adf6f8a4220ff5adc3",
     // §31, the parent-Safe guard (disclosure 2026-09-29, APPENDIX-PARENT): a
     // site's request that would act for a Safe other than the account —
     // `execTransaction`, `approveHash`, an owner / threshold / module / guard

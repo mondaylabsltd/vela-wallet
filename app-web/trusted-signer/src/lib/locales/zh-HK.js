@@ -147,6 +147,8 @@ window.VelaCS.i18n.register('zh-HK', {
 
   'refuse.ethSign': '這一頁不會簽署 eth_sign。它簽的是一段無法解讀的雜湊——正是清晰簽署要消除的東西。',
   'refuse.noSafeOp': '這裏暫時無法推算交易摘要：它是 Safe 4337 的 SafeOp 雜湊，需要帳戶、EntryPoint 和模組地址。這一頁不會用猜測的摘要簽署。',
+  'refuse.noExpiry': '這筆操作永不過期（沒有 validUntil）：中繼可以一直扣著它，在任何時候發出。Vela 只簽會過期的操作。不簽。',
+  'refuse.badWindow': '這筆操作的有效期（validAfter / validUntil）讀不成兩個 uint48 秒數，算不出將要簽的是甚麼。不簽。',
   'refuse.typedShape': '這個請求並非恰好為一個帳戶附上一份待簽署的訊息——畫面顯示的內容可能與實際簽署的不同。不會簽署。',
   'refuse.unknownMethod': '這個方法無法推算出簽署摘要，因此不會簽署。',
   'ui.cannotSign': '這個請求無法在這裏簽署——原因見上方。關閉這一頁即表示拒絕。',

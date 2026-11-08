@@ -606,11 +606,26 @@ SafeOp 哈希覆盖的是**组装好的 UserOperation**，不是站点请求的�
       "verificationGasLimit": "300000", "callGasLimit": "200000",
       "preVerificationGas": "110000",
       "maxFeePerGas": "1500000007", "maxPriorityFeePerGas": "1500000000",
-      "paymasterAndData": "0x"
+      "paymasterAndData": "0x",
+      "validAfter": "0", "validUntil": "1800001800"
     }
   }
 }
 ```
+
+**有效期（§35，第二十一轮）。** `validAfter` / `validUntil` 是这笔操作的有效期（Unix 秒，十进制字符串，
+vela-core `trusted_signer::user_op_json` 从操作本身写出）。它们进 SafeOp 哈希（`uint48 validAfter,uint48 validUntil`，
+与 `calculate_safe_op_hash` 逐字节一致），也是 4337 签名的前 12 字节（`validAfter(6) ‖ validUntil(6)`）：过了
+`validUntil`，EntryPoint 拒收（`AA22 expired or not due`），中继扣着签名也没用。核心给每一笔要签的操作盖上
+`validAfter = 0`、`validUntil = 现在 + 1800`，每次重签重新盖。
+
+- **永不过期的操作，本页拒签**（`refuse.noExpiry`）：`validUntil` 缺失、`null`、`"0"` 或 `"0x"` 都是 0 = 永不过期。
+  与核心 `signable_safe_op_hash` 同一条线：核心也不签它。
+- **读不出的有效期，本页拒签**（`refuse.badWindow`），不猜摘要：每个值必须是十进制或 `0x` 字符串、或 JSON 整数，
+  且在 `uint48` 之内；`validAfter` 不能晚于 `validUntil`（与核心 `user_op_from_json` + `check_window` 同一读法）。
+  负数、超出 `uint48`、文字、`true`、带空格、空字符串一律拒 —— `BigInt` 会把其中几种读成数字，所以本页不用它来读。
+- 卡上，网络费展开后的说明里有一行「有效至 <日期>」（`field.validUntil`，本机时区，与 permit 的期限同一写法；
+  超出日期能表示的范围就写原始秒数）。网络费读不出时这一行也在。
 
 而签名页做两件事，缺一不可：
 
