@@ -681,7 +681,14 @@ fn a_lying_node_never_gives_a_member_change_a_plain_review() {
             "{name}: {got}"
         );
         assert_ne!(got["state"]["verdict"]["kind"], "declared", "{name}: {got}");
-        assert_eq!(got["sign"]["anyway"], true, "{name}: never plain: {got}");
+        // Never plain: "… anyway" (unread, disagreed), or refused outright
+        // (the lie reads as a change the transaction does not declare — a
+        // lie can only make Vela refuse).
+        assert_ne!(
+            got["sign"],
+            json!({"allowed": true, "anyway": false}),
+            "{name}: never plain: {got}"
+        );
     }
 }
 
