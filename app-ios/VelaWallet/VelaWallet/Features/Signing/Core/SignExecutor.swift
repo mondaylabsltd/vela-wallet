@@ -135,10 +135,10 @@ final class SignExecutor {
         /// cancelled ceremony — the request stays open and may be signed
         /// another way — and the sheet says which sentence applies.
         var trustedSignerEnded: (TrustedSignerNotice) -> Void = { _ in }
-        /// §31: one `eth_call` (`[{to, data}, "latest"]`) on `chainId`, its
-        /// answer as it came; `nil` = through the pool. A test seam — the
-        /// app's reads go through the pool.
-        var ethCall: (@MainActor (_ chainId: Int, _ params: [Any]) async -> RpcOutcome)? = nil
+        /// §31: one `eth_call` (`[{to, data}, "latest"]`) on `chainId`, as two
+        /// independent nodes answered it (R22: a corroborated read); `nil` =
+        /// through the pool. A test seam — the app's reads go through the pool.
+        var ethCall: (@MainActor (_ chainId: Int, _ params: [Any]) async -> RpcCorroborated)? = nil
     }
 
     private let spine: UserOpSpine
@@ -323,12 +323,15 @@ final class SignExecutor {
             ]
             let call = ports.ethCall
             let pool = self.pool
-            let outcome = await Self.within(seconds: ownerReadSeconds) { () async -> RpcOutcome in
+            // R22 (SEC-PARENT-3): a corroborated read — a "not an owner"
+            // stands only when a second, independent node says the same (or
+            // the person's own node answered alone). The core compares.
+            let read = await Self.within(seconds: ownerReadSeconds) { () async -> RpcCorroborated in
                 if let call { return await call(chainId, params) }
-                guard let pool else { return .failed(rateLimited: false) }
-                return await pool.call(chainId: chainId, method: "eth_call", params: params)
+                guard let pool else { return .unreachable }
+                return await pool.callCorroborated(chainId: chainId, method: "eth_call", params: params)
             }
-            return Self.safeOwnerRead(operation, answer: Self.safeOwnerAnswer(outcome))
+            return Self.safeOwnerRead(operation, read: read)
 
         default:
             VelaLog.failure(.sign, kind: "unhandled_operation", "\(operation["type"] ?? "?")")
@@ -366,14 +369,36 @@ final class SignExecutor {
     /// `read_safe_owner`'s answer (`SignShellResult::SafeOwnerRead`): the
     /// operation's own `id`, `chain_id` and `safe`, and what the read came
     /// back as.
-    static func safeOwnerRead(_ operation: [String: Any], answer: [String: Any]) -> String {
+    static func safeOwnerRead(
+        _ operation: [String: Any], answer: [String: Any],
+        witness: [String: Any]? = nil, ownNode: Bool = false
+    ) -> String {
         CoreJSON.string([
             "type": "safe_owner_read",
             "id": operation["id"] as? String ?? "",
             "chain_id": (operation["chain_id"] as? NSNumber)?.intValue ?? 0,
             "safe": operation["safe"] as? String ?? "",
             "answer": answer,
+            // R22: the same read by a second, independent node, in the same
+            // shape — or the person's own node alone (`own_node`).
+            "witness": witness.map { $0 as Any } ?? NSNull(),
+            "own_node": ownNode,
         ])
+    }
+
+    /// A corroborated `read_safe_owner` (`nil`: it ran out of time) as the
+    /// core's `SafeOwnerRead`: the first node's answer, the witness's, and
+    /// whether the person's own node answered alone. Nothing judged here.
+    static func safeOwnerRead(_ operation: [String: Any], read: RpcCorroborated?) -> String {
+        guard let read else {
+            return safeOwnerRead(operation, answer: safeOwnerAnswer(nil))
+        }
+        return safeOwnerRead(
+            operation,
+            answer: safeOwnerAnswer(read.primaryOutcome),
+            witness: read.witnessOutcome.map { safeOwnerAnswer($0) },
+            ownNode: read.ownNode
+        )
     }
 
     /// The pool's outcome as the core's `SafeOwnerAnswer`, decided nothing
@@ -416,9 +441,14 @@ final class SignExecutor {
         let chainId = (operation["chain_id"] as? NSNumber)?.intValue ?? 0
         let address = operation["address"] as? String ?? ""
         let id = operation["id"] as? String ?? ""
+        // R22 (review 1-5): what the person confirmed, frozen by the core
+        // from these FINAL params — the only request that is signed.
+        let review = UserOpSpine.DappReview(json: operation["review"] as? String)
 
         if method == "personal_sign" || method == "eth_sign" || method.contains("signTypedData") {
-            return await signMessage(id: id, method: method, paramsJson: paramsJson, chainId: chainId, address: address)
+            return await signMessage(
+                id: id, method: method, paramsJson: paramsJson, chainId: chainId, address: address, review: review
+            )
         }
 
         guard let calls = Self.callsOf(method: method, paramsJson: paramsJson) else {
@@ -441,6 +471,7 @@ final class SignExecutor {
                 calls: calls,
                 gasFeeToken: operation["gas_fee_token"] as? String,
                 quotedFee: quoted,
+                dappReview: review,
                 // The FINAL params — a guard's rewrite included — are what the
                 // page decodes, as they are what is signed.
                 asked: UserOpSpine.Asked(
@@ -596,7 +627,8 @@ final class SignExecutor {
     /// A message: hashed the way the page's verifier hashes it, signed once,
     /// answered as the EIP-1271 envelope.
     private func signMessage(
-        id: String, method: String, paramsJson: String, chainId: Int, address: String
+        id: String, method: String, paramsJson: String, chainId: Int, address: String,
+        review: UserOpSpine.DappReview
     ) async -> [String: Any] {
         guard let original = Self.messageHash(method: method, paramsJson: paramsJson) else {
             return Self.failed("\(method) carried nothing this wallet could sign")
@@ -606,6 +638,7 @@ final class SignExecutor {
                 chainId: chainId,
                 account: address,
                 originalHash: original,
+                dappReview: review,
                 asked: UserOpSpine.Asked(
                     method: method, paramsJson: paramsJson, origin: ports.origin(),
                     seenByBrowser: ports.originSeenByBrowser()

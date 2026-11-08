@@ -132,7 +132,7 @@ final class SigningController {
         var knownMultisigs: () -> [String] = { [] }
         /// §31: one `eth_call`, its answer as it came; `nil` = through the
         /// pool. A test seam (`SignExecutor.Ports.ethCall`).
-        var ethCall: (@MainActor (_ chainId: Int, _ params: [Any]) async -> RpcOutcome)? = nil
+        var ethCall: (@MainActor (_ chainId: Int, _ params: [Any]) async -> RpcCorroborated)? = nil
         /// The descriptor endpoint base.
         var dataBase: () -> String = { "" }
         /// The simulated deltas, to the `token_trust` machine that judges them
@@ -145,12 +145,17 @@ final class SigningController {
         /// `simulate`.
         var simJudged: (@MainActor (_ address: String, _ chainId: Int, _ deltas: [[String: Any]]) async
             -> TrustSimViewWire?)? = nil
-        /// `eth_simulateV1` with these params, its answer as it came; `nil` =
-        /// through the pool (the Android twin's `Ports.simulate`). What the
-        /// answer MEANS stays the core's (`simOutcome`). `@MainActor`: the
-        /// controller calls it there, and an unannotated async function type
-        /// is a call to NULL on iOS 17 (087 F33).
-        var simulate: (@MainActor (_ chainId: Int, _ params: [Any]) async -> RpcOutcome)? = nil
+        /// `eth_simulateV1` with these params, as two independent nodes
+        /// answered it (R22: a corroborated read); `nil` = through the pool
+        /// (the Android twin's `Ports.simulate`). What the answers MEAN, and
+        /// whether they agree, stays the core's (`simOutcome`). `@MainActor`:
+        /// the controller calls it there, and an unannotated async function
+        /// type is a call to NULL on iOS 17 (087 F33).
+        var simulate: (@MainActor (_ chainId: Int, _ params: [Any]) async -> RpcCorroborated)? = nil
+        /// R22: the person's "Refuse blind signing" (`refuse_blind_signing`
+        /// over the stored `vela.refuseBlindSigning`) — read at every gate,
+        /// so a change in Settings holds at once. Off unless turned on.
+        var refuseBlind: () -> Bool = { false }
     }
 
     private(set) var sign: SignViewWire = .empty
@@ -616,7 +621,7 @@ final class SigningController {
             // Nothing could be asked, so nothing is: the place says the
             // core's could-not-check line from its first frame, and the core
             // is told of no simulation — the confirm waits for none.
-            let record = simOutcome(user: wallet.address, replyJson: #"{"unreachable":true}"#)
+            let record = simOutcome(user: wallet.address, replyJson: RpcCorroborated.unreachable.envelopeJson)
             simulation = Self.simulation(of: record)
             simRecord = record
             simRechecking = false
@@ -627,12 +632,16 @@ final class SigningController {
         Task { [weak self] in
             guard let self else { return }
             defer { simulationsOut -= 1 }
-            let answer: RpcOutcome
+            // R22 (review 1-2): the sheet's own simulation is a corroborated
+            // read — two independent nodes, or the person's own alone — and
+            // the core reads the two answers together (`sim_outcome` over
+            // the envelope): one node's word alone is `unconfirmed`.
+            let answer: RpcCorroborated
             if let simulate = ports.simulate {
                 answer = await simulate(chainId, payload)
             } else {
-                answer = await pool.call(
-                    chainId: chainId, method: "eth_simulateV1", params: payload, kind: "rpc"
+                answer = await pool.callCorroborated(
+                    chainId: chainId, method: "eth_simulateV1", params: payload
                 )
             }
             // A request that left the sheet while the node answered: its
@@ -647,7 +656,10 @@ final class SigningController {
                 // The notice is the verdict, and it is on the sheet now.
                 simSettled(id)
                 // About the network (dapp-15): asked again once it answers.
-                if outcome.recheck { watchForNode(id: id, chainId: chainId) }
+                // R22: one node's word is no network outage — a chain that
+                // answers says nothing about a second node, so the sheet
+                // offers "Check again" and does not ask by itself.
+                if outcome.recheck, outcome.kind != "unconfirmed" { watchForNode(id: id, chainId: chainId) }
                 return
             }
             simulation = Self.simulation(of: outcome)
@@ -674,7 +686,7 @@ final class SigningController {
                 // sheet cannot report. The core's could-not-check verdict,
                 // now — never "Checking…" until the deadline.
                 simulation = Self.simulation(
-                    of: simOutcome(user: wallet.address, replyJson: #"{"unreachable":true}"#)
+                    of: simOutcome(user: wallet.address, replyJson: RpcCorroborated.unreachable.envelopeJson)
                 )
                 simRechecking = false
                 simSettled(id)
@@ -752,16 +764,7 @@ final class SigningController {
         ]
         if onChain {
             if let record = simRecord, !simRechecking {
-                let deltas = (try? JSONSerialization.jsonObject(with: Data(record.deltasJson.utf8))) ?? []
-                let verdict: [String: Any] = [
-                    "kind": record.kind,
-                    "deltas": deltas,
-                    "revert_reason": record.revertReason.map { $0 as Any } ?? NSNull(),
-                    "notice_risk": record.noticeRisk.map { $0 as Any } ?? NSNull(),
-                    "notice_key": record.noticeKey.map { $0 as Any } ?? NSNull(),
-                    "no_change_key": record.noChangeKey.map { $0 as Any } ?? NSNull(),
-                    "recheck": record.recheck,
-                ]
+                let verdict = Self.simVerdictObject(of: record)
                 // A checked answer is the sheet's only once it is judged.
                 let ended = record.kind != "deltas" || simVerdict != nil
                 if ended {
@@ -795,20 +798,56 @@ final class SigningController {
     /// How many simulation deadlines a stopped clock holds (tests).
     var heldSimVerdictTimers: Int { signExecutor.heldSimVerdictTimers }
 
-    /// The pool's answer, normalised into the reply `simOutcome` reads:
-    /// `{"result": …}`, `{"error": {code, message}}` or `{"unreachable": true}`.
-    /// Nothing is judged here — a revert inside a result, a node that cannot
-    /// simulate and a node nobody reached are the core's to tell apart.
-    static func simReply(_ answer: RpcOutcome) -> String {
-        switch answer {
-        case .ok(let body):
-            return CoreJSON.string(["result": body ?? NSNull()])
-        case .rpcError(let code, let message):
-            return CoreJSON.string(["error": ["code": code.map { $0 as Any } ?? NSNull(), "message": message]])
-        case .failed, .rangeCap:
-            return #"{"unreachable":true}"#
-        }
+    /// The pool's corroborated answer, as the one envelope `simOutcome`
+    /// reads (R22): the first node's `{"result"}` / `{"error"}` (or
+    /// `{"unreachable": true}`), its independent witness, and whether the
+    /// person's own node answered alone — built by the core's helper
+    /// (`rpc_corroborated_envelope`). Nothing is judged here: a revert, a
+    /// node that cannot simulate, nobody reached, two nodes that disagree
+    /// are the core's to tell apart.
+    static func simReply(_ answer: RpcCorroborated) -> String {
+        answer.envelopeJson
     }
+
+    /// The core's `SimVerdict` as JSON from the record it wrote — the shape
+    /// `signConfirmState` and the agent's `SheetFacts` read (the record's
+    /// `deltas_json` as the parsed array it is).
+    static func simVerdictObject(of record: SimOutcomeRecord) -> [String: Any] {
+        let deltas = (try? JSONSerialization.jsonObject(with: Data(record.deltasJson.utf8))) ?? []
+        var verdict: [String: Any] = [
+            "kind": record.kind,
+            "deltas": deltas,
+            "revert_reason": record.revertReason.map { $0 as Any } ?? NSNull(),
+            "notice_risk": record.noticeRisk.map { $0 as Any } ?? NSNull(),
+            "notice_key": record.noticeKey.map { $0 as Any } ?? NSNull(),
+            "no_change_key": record.noChangeKey.map { $0 as Any } ?? NSNull(),
+            "recheck": record.recheck,
+        ]
+        // R22: who stands behind a checked answer, and the line said of it.
+        if let source = record.source { verdict["source"] = source }
+        if let key = record.sourceKey { verdict["source_key"] = key }
+        return verdict
+    }
+
+    /// R22: the sheet's own simulation verdict as the confirm's gate reads
+    /// it (`sign_confirm_state`'s `sim_json`); `nil` before it lands — a
+    /// transaction without one is unread, "… anyway".
+    var simVerdictJson: String? {
+        simRecord.map { CoreJSON.string(Self.simVerdictObject(of: $0)) }
+    }
+
+    /// R22 (2a): the quiet line under the balance changes when the person's
+    /// own node answered alone ("Checked by your own node only") — the
+    /// core's `source_key`; `nil` otherwise.
+    var simSourceKey: String? {
+        guard simulation == .answered, simVerdict != nil else { return nil }
+        return simRecord?.sourceKey
+    }
+
+    /// R22 (2a): one node's word, or two that disagree — the sheet adds how
+    /// to check with a node the person trusts (`ownNodeHint`), with the way
+    /// to this network's RPC settings.
+    var simOwnNodeHint: Bool { simRecord?.kind == "unconfirmed" && simulation != .answered }
 
     /// The sheet's state for the core's verdict.
     static func simulation(of outcome: SimOutcomeRecord) -> Simulation {
@@ -1043,7 +1082,10 @@ final class SigningController {
     var confirmState: SignConfirmStateWire {
         SignConfirmStateWire.of(
             sign: shownSignJson, guard: guardJson, clear: clearJson,
-            fee: fees.viewJson, speedTier: speed?.tier
+            fee: fees.viewJson, speedTier: speed?.tier,
+            // R22: the sheet's own simulation verdict and the person's
+            // "Refuse blind signing" — the confirm's friction is the core's.
+            sim: simVerdictJson, refuseBlind: ports.refuseBlind()
         )
     }
 

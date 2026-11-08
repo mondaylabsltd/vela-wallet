@@ -137,6 +137,8 @@ struct RootView: View {
     /// The settings page a screen elsewhere is sending somebody to. Cleared
     /// the moment settings opens, so it steers exactly one visit.
     @State private var pendingSettingsPage: SettingsPage?
+    /// R22 (2a): with `.networkDetail`, the network the page opens on.
+    @State private var pendingSettingsNetwork: Int?
     /// Bumped to draw Settings afresh — the AI agent opening one of its pages
     /// while Settings is already up (the screen seeds its page once).
     @State private var settingsVisit = 0
@@ -1610,6 +1612,7 @@ struct RootView: View {
                         // reason.
                         .onAppear {
                             pendingSettingsPage = nil
+                            pendingSettingsNetwork = nil
                             wallet.note(address: session.view.address)
                         }
                         .id(settingsVisit)
@@ -1671,6 +1674,7 @@ struct RootView: View {
                         onRefreshFee: { signing?.refreshFee() },
                         onSigningRetry: { signing?.retry() },
                         onSimRecheck: { signing?.simulateAgain() },
+                        onOwnNodeSettings: { openOwnNodeSettings() },
                         chainNotice: ExploreLive.chainNotice(
                             chainId: browser.current == nil ? nil : browser.currentTab?.chainId,
                             failed: pool.failedChains, unreached: pool.unreachedChains,
@@ -1958,6 +1962,20 @@ struct RootView: View {
         signingEnding = SigningEnding(aftercare: aftercare, header: header)
     }
 
+    /// R22 (2a): "Network settings" under the could-not-confirm line — the
+    /// request's network's own RPC settings, where "Only use my node" is.
+    /// The sheet is closed the person's own way first (its ✕: nothing is
+    /// signed, the site hears the refusal and may ask again), because the
+    /// network's page is not something a request can wait open over.
+    private func openOwnNodeSettings() {
+        guard let chainId = liveSigning?.request?.chainId else { return }
+        closeSigningSheet()
+        settings.expandNetwork(chainId: chainId)
+        pendingSettingsNetwork = chainId
+        pendingSettingsPage = .networkDetail
+        if section == .settings { settingsVisit += 1 } else { section = .settings }
+    }
+
     /// The sheet's ✕ (and its receipt's button): the live request's close,
     /// which the core routes by phase, or the ending's.
     private func closeSigningSheet() {
@@ -2173,7 +2191,9 @@ struct RootView: View {
                 // and what its record keeps (spec 093).
                 simJudged: { [trust] address, chainId, deltas in
                     await trust.simJudged(address: address, chainId: chainId, deltas: deltas)
-                }
+                },
+                // R22: "Refuse blind signing", read at every gate.
+                refuseBlind: { [shelf] in Preferences.refuseBlind(shelf) }
             )
         )
         signing = controller
@@ -3528,6 +3548,9 @@ struct RootView: View {
             simulation: live?.simulation ?? .pending,
             simRecheck: live?.simRecheck ?? false,
             simRechecking: live?.simRechecking ?? false,
+            // R22 (2a): who the check stood on, and the own-node hint.
+            simSourceKey: live?.simSourceKey,
+            simOwnNodeHint: live?.simOwnNodeHint ?? false,
             feeOpen: live?.feeOpen ?? false,
             trustedSignerNotice: live?.trustedSignerNotice,
             // Spec 079: the receipt — the explorer for its link, the tracker's
@@ -4206,7 +4229,9 @@ struct RootView: View {
                 onTrustPage: { url, version in
                     Task { await SignerPageChecks.shared.trust(url, version: version) }
                 },
-                onPagesShown: { primeSigningPages() }
+                onPagesShown: { primeSigningPages() },
+                // R22: "Refuse blind signing", stored by the core's key.
+                onRefuseBlind: { on in preferences.setRefuseBlindSigning(on) }
             ),
             onOpenLink: { openExternal($0) },
             // Settings' hidden debug mode (spec 091): the preference and the
@@ -4241,7 +4266,8 @@ struct RootView: View {
                     onExplorer: { openSigningExplorer() },
                     onRefreshFee: { signing?.refreshFee() },
                     onRetry: { signing?.retry() },
-                    onSimRecheck: { signing?.simulateAgain() }
+                    onSimRecheck: { signing?.simulateAgain() },
+                    onOwnNodeSettings: { openOwnNodeSettings() }
                 )
                     .presentationDragIndicator(.hidden)
                     .presentationDetents([.large])
@@ -4382,6 +4408,7 @@ struct RootView: View {
         // The preferences last: they have no machine to wait for, and every
         // surface they touch is one this page draws.
         model = SettingsLive.withPreferences(preferences, on: model, loc: loc)
+        model = SettingsLive.withSecurity(refuseBlind: preferences.refuseBlindSigning, on: model, loc: loc)
         model = SettingsLive.withEraseFailure(eraseFailed, on: model, loc: loc)
         // Somebody was sent here for one page in particular. `SettingsScreen`
         // seeds its own state from this once, at init, and owns it from then
@@ -4389,6 +4416,7 @@ struct RootView: View {
         // visit opens where settings normally opens.
         if let pendingSettingsPage {
             model.page = pendingSettingsPage
+            model.openNetworkChain = pendingSettingsPage == .networkDetail ? pendingSettingsNetwork : nil
         }
         // Measured, not drawn (058). `storageTick` is what makes a clear show
         // up: the report is read here, so the page has to be asked to build

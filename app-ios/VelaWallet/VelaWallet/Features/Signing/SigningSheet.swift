@@ -74,6 +74,9 @@ struct SigningSheet: View {
     var onRetry: (() -> Void)?
     /// dapp-15: the verdict's "Check again".
     var onSimRecheck: () -> Void = {}
+    /// R22 (2a): the own-node hint's action — this network's RPC settings,
+    /// where "Only use my node" is. `nil`: no way there from this host.
+    var onOwnNodeSettings: (() -> Void)?
 
     @State private var techOverride: Bool?
     /// The confirm's note, the last time it was said. The note comes and goes
@@ -215,6 +218,21 @@ struct SigningSheet: View {
                                        action: onSimRecheck)
                                 .accessibilityIdentifier("signing.simRecheck")
                         }
+                        // R22 (2a): one node's word — how to check with a
+                        // node the person trusts, and the way there.
+                        if let ownNode = model.simOwnNode {
+                            VStack(alignment: .leading, spacing: Tokens.Space.s8) {
+                                Text(prose: ownNode.hint)
+                                    .typeRole(Typography.flowCaption)
+                                    .foregroundStyle(theme.fgMuted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .accessibilityIdentifier("signing.ownNodeHint")
+                                if let onOwnNodeSettings {
+                                    VelaButton(title: ownNode.action, kind: .secondary, action: onOwnNodeSettings)
+                                        .accessibilityIdentifier("signing.ownNodeSettings")
+                                }
+                            }
+                        }
                     }
                     .id(SigningFormItem.verdictId)
                     .onGeometryChange(for: VerdictSeen.self) { place in
@@ -279,9 +297,14 @@ struct SigningSheet: View {
                     // page's slide is the consent.
                     // The value tap feels like one (`confirm`); the Trusted
                     // Signer's button only opens a page, so it is a press.
-                    VelaButton(title: model.confirmAsButton ? model.confirmButtonLabel : confirm.action,
-                               kind: .primary, enabled: confirm.enabled,
-                               haptic: model.confirmAsButton ? .press : .confirm, action: onConfirm)
+                    // R22: the core's friction — "… anyway" and danger in
+                    // the danger style, held for its `hold_ms` (or pressed
+                    // twice with assistive technology). The hand-off's Open
+                    // is this same confirm.
+                    HoldConfirmButton(title: model.confirmAsButton ? model.confirmButtonLabel : confirm.action,
+                                      kind: model.confirmPress.danger ? .danger : .primary,
+                                      enabled: confirm.enabled, showsHint: false, press: model.confirmPress,
+                                      haptic: model.confirmAsButton ? .press : .confirm, action: onConfirm)
                         // The Trusted Signer route's button opens a page; it
                         // signs nothing here, so it carries its own hook
                         // (Android and desktop: `signing-open-signer`).
@@ -292,6 +315,16 @@ struct SigningSheet: View {
                     if let note {
                         confirmNote(note)
                             .accessibilityIdentifier(confirm.enabled ? "signing.passkeyNote" : "signing.confirmBlock")
+                    } else if confirm.enabled, model.confirmPress.held {
+                        // R22: "Hold to confirm", in the line's own room —
+                        // the confirm stays at one y. Its words are the
+                        // button's accessibility hint already.
+                        ZStack {
+                            confirmNote(heldNote ?? " ").hidden()
+                            confirmNote(model.confirmPress.holdHint)
+                                .accessibilityIdentifier("signing.holdHint")
+                        }
+                        .accessibilityHidden(true)
                     } else {
                         confirmNote(heldNote ?? " ")
                             .hidden()

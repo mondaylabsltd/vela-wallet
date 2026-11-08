@@ -123,13 +123,23 @@ enum MsRules {
     /// follows (`review.door`): a review's state (`nil`: not asked yet) and
     /// the review (`nil` or `null`: none) in, what the sheet draws and
     /// whether the button may be pressed out.
-    static func reviewDoor(state: MsJSON?, review: MsJSON?) -> MsSignDoor {
+    ///
+    /// R22: with the person's "Refuse blind signing" (`refuseBlind`, read
+    /// from the store by default), a review that signs only "… anyway" is
+    /// refused (`home.multisig.review.blindRefused`); the door says how long
+    /// its press is held (`hold_ms`).
+    static func reviewDoor(state: MsJSON?, review: MsJSON?, refuseBlind: Bool? = nil) -> MsSignDoor {
         let answer = call("review.door", [
             "state": state.map(\.any) ?? NSNull(),
             "review": review.map(\.any) ?? NSNull(),
+            "refuseBlind": refuseBlind ?? Self.refuseBlind(),
         ])
         return MsSignDoor(answer: answer)
     }
+
+    /// R22: the person's "Refuse blind signing", as stored — the app's
+    /// graph points it at its store (`AppGraph`); off until then.
+    nonisolated(unsafe) static var refuseBlind: () -> Bool = { false }
 
     /// What `review.missing` says while the list is still being read.
     static let missingOpening = "home.multisig.proposal.opening"
@@ -205,6 +215,15 @@ struct MsSignDoor: Equatable {
     let reasonKey: String?
     /// `failed`: offer "Try again" (`review_again`).
     let retry: Bool
+    /// R22: hold the button this long before it acts (every "… anyway" and
+    /// every danger review), or press it twice with assistive technology;
+    /// `0`: a plain press.
+    var holdMs: Int = 0
+
+    /// R22: "Refuse blind signing" refused this review — its reason is said
+    /// above the review, where the unchecked line goes.
+    var blindRefused: Bool { reasonKey == MsSignDoor.blindRefusedKey }
+    static let blindRefusedKey = "home.multisig.review.blindRefused"
 
     /// D1 (real-device pass 2): the review is drawn, but neither its
     /// state-change check nor its simulation was read — the core's danger
@@ -212,12 +231,13 @@ struct MsSignDoor: Equatable {
     /// "… anyway" (`anyway`).
     var unchecked: Bool { shows == .review && !(reasonKey ?? "").isEmpty }
 
-    init(shows: Shows, enabled: Bool, anyway: Bool, reasonKey: String?, retry: Bool) {
+    init(shows: Shows, enabled: Bool, anyway: Bool, reasonKey: String?, retry: Bool, holdMs: Int = 0) {
         self.shows = shows
         self.enabled = enabled
         self.anyway = anyway
         self.reasonKey = reasonKey
         self.retry = retry
+        self.holdMs = holdMs
     }
 
     /// The door's answer as the core wrote it. One the core did not give (it
@@ -234,6 +254,7 @@ struct MsSignDoor: Equatable {
         anyway = object["anyway"] as? Bool == true
         reasonKey = object["reason_key"] as? String
         retry = object["retry"] as? Bool == true
+        holdMs = (object["hold_ms"] as? NSNumber)?.intValue ?? 0
     }
 
     /// No answer from the door: nothing is signed, and the person can ask again.

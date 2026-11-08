@@ -131,6 +131,19 @@ final class UserOpSpine {
         func name(of address: String) async -> String?
     }
 
+    /// R22 (review 1-5): a site's request as the person confirmed it — the
+    /// core's `SignAndSubmit.review` (`signed_review::DappReview` JSON), frozen
+    /// from the FINAL params the sheet showed. `json` `nil` (a request the
+    /// core could not read) is signed by no one.
+    struct DappReview: Equatable {
+        let json: String?
+    }
+
+    /// The refusal of anything that is not the reviewed request.
+    static let notReviewedSentence = "The operation is not the one you reviewed. Nothing was signed."
+    private struct NotReviewed: Error {}
+    static let notReviewed: Error = NotReviewed()
+
     /// What a site asked for, as the Trusted Signer's page is told it (spec
     /// 071): its own method and params, and the origin the browser observed.
     /// `nil` is the wallet's own send, which the core describes from its calls
@@ -340,6 +353,7 @@ final class UserOpSpine {
         chainId: Int,
         account: String,
         originalHash: Data,
+        dappReview: DappReview? = nil,
         asked: Asked? = nil,
         signingStarted: () -> Void = {},
         signingDone: () -> Void = {},
@@ -349,10 +363,25 @@ final class UserOpSpine {
         guard let pinned = keys.first else {
             throw other("No passkey credential for the active account")
         }
+        // R22 (review 1-5): a site's signature wraps only the digest the
+        // sheet read, for the account it showed (`dapp_message_hash`) —
+        // anything else is refused before any prompt, nothing signed.
+        let original: Data
+        if let dappReview {
+            do {
+                guard let json = dappReview.json else { throw Self.notReviewed }
+                original = try dappMessageHash(originalHash: originalHash, account: account, reviewJson: json)
+            } catch {
+                VelaLog.failure(.sign, kind: "not_the_review", "\(error)")
+                throw other(Self.notReviewedSentence)
+            }
+        } else {
+            original = originalHash
+        }
         let challenge: Data
         do {
             challenge = try safeMessageHash(
-                originalHash: originalHash, chainId: UInt64(chainId), safeAddress: account
+                originalHash: original, chainId: UInt64(chainId), safeAddress: account
             )
         } catch {
             throw other("The message could not be hashed")
@@ -418,6 +447,7 @@ final class UserOpSpine {
         gasFeeToken: String?,
         quotedFee: Quoted?,
         review: String? = nil,
+        dappReview: DappReview? = nil,
         prepared: Prepared? = nil,
         asked: Asked? = nil,
         signingStarted: () -> Void = {},
@@ -542,18 +572,28 @@ final class UserOpSpine {
         // A send's hash is computed only for the operation that is exactly
         // the review the person confirmed (`SubmitUserOp.review`); a dApp's
         // request was reviewed on the signing sheet.
+        //
+        // R22 (review 1-5): a site's transaction or `wallet_sendCalls` batch
+        // is hashed ONLY when the operation is exactly what the sheet showed
+        // (`user_op_dapp_safe_op_hash` over `SignAndSubmit.review`): its
+        // calls in order, then at most the one fee leg to the quoted
+        // recipient. A drifted operation, or no review at all, is refused
+        // here — before any prompt, nothing signed.
         let challenge: Data
         do {
-            if let review {
+            if let dappReview {
+                guard let json = dappReview.json else { throw Self.notReviewed }
+                challenge = try userOpDappSafeOpHash(draft: draft, chainId: UInt32(chainId), reviewJson: json)
+            } else if let review {
                 challenge = try userOpReviewedSafeOpHash(draft: draft, chainId: UInt32(chainId), reviewJson: review)
             } else {
                 challenge = try userOpSafeOpHash(draft: draft, chainId: UInt32(chainId))
             }
         } catch {
             VelaLog.failure(.sign, kind: "not_the_review", "\(error)")
-            throw other(review == nil
+            throw other(review == nil && dappReview == nil
                 ? "The operation could not be hashed."
-                : "The operation is not the one you reviewed. Nothing was signed.")
+                : Self.notReviewedSentence)
         }
         guard askerLive() else { throw Refused(failure: .askerGone) }
         signingStarted()

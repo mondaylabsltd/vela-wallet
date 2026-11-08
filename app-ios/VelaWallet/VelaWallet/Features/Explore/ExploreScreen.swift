@@ -61,6 +61,8 @@ struct ExploreScreen: View {
     var onSigningRetry: (() -> Void)?
     /// dapp-15: the signing verdict's "Check again".
     var onSimRecheck: () -> Void = {}
+    /// R22 (2a): the signing sheet's own-node hint's action.
+    var onOwnNodeSettings: (() -> Void)?
     /// Spec 079 US4: "暂时连不上 {chain}…" when the page's chain cannot be
     /// reached (`ExploreLive.chainNotice`), and its Retry — one read through
     /// the pool; an answer clears it.
@@ -625,7 +627,8 @@ struct ExploreScreen: View {
                     onExplorer: onSigningExplorer,
                     onRefreshFee: onRefreshFee,
                     onRetry: onSigningRetry,
-                    onSimRecheck: onSimRecheck
+                    onSimRecheck: onSimRecheck,
+                    onOwnNodeSettings: onOwnNodeSettings
                 )
                     .presentationDragIndicator(.hidden)
                     .presentationDetents([.large])

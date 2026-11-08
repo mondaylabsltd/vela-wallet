@@ -181,6 +181,10 @@ struct SettingsScreen: View {
         // Seeds, not bindings: a gallery state pins where this opens, and a
         // person tapping owns it from then on.
         _page = State(initialValue: model.page)
+        // R22 (2a): sent here for one network's RPC settings.
+        _selectedNetwork = State(initialValue: model.openNetworkChain.flatMap { chain in
+            model.networks.first { $0.chainId == chain }?.id
+        })
         _overlay = State(initialValue: model.overlay)
         _advancedOpen = State(initialValue: model.state == .st1b)
     }
@@ -500,6 +504,19 @@ struct SettingsScreen: View {
         if let venue = model.venue {
             SettingsRow(row: venue.row, divider: false, onTap: select)
                 .accessibilityIdentifier("settings.venue")
+        }
+
+        // R22: "Security" — "Refuse blind signing", high on the page,
+        // beside where the account signs, above Advanced and Developer.
+        if let security = model.security {
+            SettingsSectionLabel(label: security.label, collapsible: false, collapsed: false, onToggle: {})
+            SettingsSwitchRow(
+                title: security.title,
+                detail: security.detail,
+                isOn: security.on,
+                onChange: signingActions?.onRefuseBlind
+            )
+            .accessibilityIdentifier("settings.refuseBlind")
         }
 
         ForEach(model.sections) { section in
@@ -822,11 +839,9 @@ private struct NetworkDetailBody: View {
                 StatusPill(pill: detail.badge)
             }
             field(detail.rpc)
-            if let callout = detail.callout { SettingsCallout(callout: callout) }
-            // The pool's word on the person's node, beside the field it is
-            // about (owner decision 2026-10-28).
-            if let node = detail.nodeCallout { SettingsCallout(callout: node) }
-            // "Only use my node" — only where the RPC is the person's own.
+            // "Only use my node" — only where the RPC is the person's own,
+            // and right under it (R22: said prominently, with what it means
+            // for the safety checks).
             if let only = detail.onlyMine {
                 SettingsSwitchRow(
                     title: only.title,
@@ -837,7 +852,18 @@ private struct NetworkDetailBody: View {
                     } : nil
                 )
                 .accessibilityIdentifier("only-mine")
+                if !only.trust.isEmpty {
+                    Text(prose: only.trust)
+                        .typeRole(Typography.flowCaption)
+                        .foregroundStyle(theme.fgSubtle)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("only-mine.trust")
+                }
             }
+            if let callout = detail.callout { SettingsCallout(callout: callout) }
+            // The pool's word on the person's node, beside the field it is
+            // about (owner decision 2026-10-28).
+            if let node = detail.nodeCallout { SettingsCallout(callout: node) }
             field(detail.explorer)
         }
     }

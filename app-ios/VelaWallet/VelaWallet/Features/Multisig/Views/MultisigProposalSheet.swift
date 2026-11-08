@@ -175,6 +175,11 @@ struct MsProposalModel {
     var signable: Bool { door.enabled }
     /// Only with the "… anyway" friction (the door's `anyway`).
     var signAnyway: Bool { door.anyway }
+    /// R22: how the press is made — held for the door's `hold_ms` (every
+    /// "… anyway" and danger review), or twice with assistive technology.
+    var press: ConfirmPress {
+        ConfirmPress.door(holdMs: door.holdMs, danger: signAnyway || review?["tone"]?.string == "danger", loc: words.loc)
+    }
 
     /// The label a signing control wears: "… anyway" when the core asks
     /// for that friction (the web's `anywayLabel`).
@@ -342,12 +347,14 @@ struct MsProposalModel {
     /// — the core's words (`actionFailure`), each said once.
     func pressFailures(at area: PressArea) -> [(text: String, tone: MsNote.Tone, id: String)] {
         var out: [(text: String, tone: MsNote.Tone, id: String)] = []
+        // r21-1: an execution that expired is "Not sent", calmly — the
+        // button under it is the Try again, and it signs anew.
         if approveArea == area, let failure = words.actionFailure(approveState, chainId: chainId) {
-            out.append((failure, .danger, "approveFailed"))
+            out.append((failure, MsWords.expired(approveState) ? .warning : .danger, "approveFailed"))
         }
         if executeArea == area, let failure = words.actionFailure(executeState, chainId: chainId),
            !out.contains(where: { $0.text == failure }) {
-            out.append((failure, .danger, "executeFailed"))
+            out.append((failure, MsWords.expired(executeState) ? .warning : .danger, "executeFailed"))
         }
         return out
     }
@@ -483,7 +490,8 @@ struct MsProposalModel {
             let fee = preview["fee"]
             let amount = fee?["amount"]?.string ?? "0"
             let symbol = words.symbol(chainId)
-            let feeText = "\(MsRules.formatUnits(amount, decimals: MsWords.coinDecimals)) \(symbol)"
+            // r21-2: the core's fee figure, rounded UP — never below the charge.
+            let feeText = "\(SendLive.feeFromBase(amount, decimals: MsWords.coinDecimals)) \(symbol)"
             if preview["canPay"]?.bool == false {
                 return (words.t("proposal.cannotPay", [
                     "name": words.label(executor), "symbol": symbol, "fee": feeText,
@@ -1137,11 +1145,12 @@ struct MultisigProposalSheet: View {
                         ForEach(model.setupLines(for: presser), id: \.self) { line in
                             MsNote(text: line)
                         }
-                        VelaButton(
+                        HoldConfirmButton(
                             title: model.signLabel("proposal.approveAndExecute", anyway: "review.approveExecuteAnyway"),
                             kind: model.signAnyway ? .danger : .primary,
                             enabled: model.signable,
                             loading: approving || executing,
+                            press: model.press,
                             haptic: .confirm
                         ) {
                             let executor = model.oneTouchExecutor(chosen: member) ?? oneTouch[0]
@@ -1157,7 +1166,7 @@ struct MultisigProposalSheet: View {
                         // said why (cannot pay, would fail), never silently.
                         MsNote(text: why.text, tone: why.tone, identifier: "multisig.proposal.approveOnly")
                     }
-                    VelaButton(
+                    HoldConfirmButton(
                         // Approving alone beside the one press is the second
                         // choice; either way it wears the review's rule — D1:
                         // "Approve anyway" in danger, never a plain Approve
@@ -1166,6 +1175,7 @@ struct MultisigProposalSheet: View {
                         kind: model.signAnyway ? .danger : (completes ? .secondary : .primary),
                         enabled: model.signable,
                         loading: approving && !completes,
+                        press: model.press,
                         haptic: .confirm
                     ) {
                         signing(model, .approve) { approve(model) }
@@ -1200,11 +1210,12 @@ struct MultisigProposalSheet: View {
                             MsNote(text: line)
                         }
                     }
-                    VelaButton(
+                    HoldConfirmButton(
                         title: model.signLabel("proposal.execute", anyway: "review.executeAnyway"),
                         kind: model.signAnyway ? .danger : .primary,
                         enabled: !model.executeHeld(by: chosen) && model.signable,
                         loading: executing,
+                        press: model.press,
                         haptic: .confirm
                     ) {
                         signing(model, .execute) { execute(model, executor: chosen) }

@@ -179,6 +179,8 @@ private let CALLS: [String: Place] = [
     "paymentRequest.pickAsset": .step("show"),
     "paymentRequest.start": .step("show"),
     "pool.call": .machine(READ),
+    // R22: what the signer refuses is the person's alone to lower.
+    "preferences.setRefuseBlindSigning": .none("the person's own \"Refuse blind signing\" (R22): never an agent's to change"),
     "relayClient.clearCaches": .step("erase_device"),
     "send.advance": .step("prepare_transfer"),
     "send.appendSplitRecipients": .step("prepare_batch_transfer"),

@@ -89,6 +89,11 @@ struct MultisigDraftReviewSheet: View {
         let allowed = rule.enabled
         let anyway = rule.anyway
         let working = state?.kind == "working"
+        // R22: held for the door's `hold_ms` (every "… anyway" and danger
+        // review), or pressed twice with assistive technology.
+        let press = ConfirmPress.door(
+            holdMs: rule.holdMs, danger: anyway || draft.review["tone"]?.string == "danger", loc: words.loc
+        )
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
             if draft.membersHere.count > 1 {
                 Picker(words.t("proposal.as"), selection: Binding(
@@ -107,11 +112,12 @@ struct MultisigDraftReviewSheet: View {
             // transaction) — proposed and executed in one press.
             if draft.executeNow, !draft.membersHere.isEmpty {
                 let title = words.t(anyway ? "review.approveExecuteAnyway" : "proposal.approveAndExecute")
-                VelaButton(
+                HoldConfirmButton(
                     title: title,
                     kind: anyway ? .danger : .primary,
                     enabled: allowed,
                     loading: working,
+                    press: press,
                     haptic: .confirm
                 ) {
                     signing(rule, title: title, draft: draft) {
@@ -122,11 +128,12 @@ struct MultisigDraftReviewSheet: View {
                 MsNote(text: words.t("proposal.feeNote"))
             }
             let proposeTitle = words.t(draft.membersHere.isEmpty ? "send.proposeOnly" : (anyway ? "review.proposeAnyway" : "send.propose"))
-            VelaButton(
+            HoldConfirmButton(
                 title: proposeTitle,
                 kind: draft.executeNow && !draft.membersHere.isEmpty ? .secondary : (anyway ? .danger : .primary),
                 enabled: allowed,
                 loading: working && !draft.executeNow,
+                press: press,
                 haptic: .confirm
             ) {
                 signing(rule, title: words.t(draft.membersHere.isEmpty ? "send.proposeOnly" : "review.proposeAnyway"), draft: draft) {

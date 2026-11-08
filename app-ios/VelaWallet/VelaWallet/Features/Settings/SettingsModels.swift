@@ -316,6 +316,19 @@ struct OnlyMineSwitchModel {
     let title: String
     let detail: String
     let on: Bool
+    /// R22: what turning it on means for Vela's safety checks
+    /// (`settingsModals.network.onlyMineTrust`) — said under the switch.
+    var trust: String = ""
+}
+
+/// R22 (review 1-3): Settings' "Security" section — "Refuse blind signing".
+struct SecuritySettingModel {
+    /// `settings.sections.security`.
+    let label: String
+    /// `settings.refuseBlind.title` / `.subtitle`.
+    let title: String
+    let detail: String
+    let on: Bool
 }
 
 struct CheckItemModel: Identifiable {
@@ -735,6 +748,12 @@ struct SettingsScreenContent {
     /// "add the network that coin lives on" — and landing them on the settings
     /// home to find it themselves is most of the way to not going at all.
     var page: SettingsPage
+    /// R22 (2a): with `page` `.networkDetail`, the network it opens on (a
+    /// chain id) — the signing sheet's "Network settings". `nil`: none.
+    var openNetworkChain: Int? = nil
+    /// R22: the "Security" section ("Refuse blind signing"); `nil` on the
+    /// boards that draw none.
+    var security: SecuritySettingModel? = nil
     let overlay: SettingsOverlay
     /// SR states sit on the 钱包 tab, over another screen.
     let rescue: Bool

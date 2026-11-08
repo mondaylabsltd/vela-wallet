@@ -257,6 +257,21 @@ final class MsSimWorld: MultisigPorts {
         return ["status": status, "proposal": mailbox.first(where: same) ?? [:]]
     }
 
+    /// R22: a guard's read, corroborated — this world's chain is one truth,
+    /// so its two independent nodes say the same thing.
+    func rpcCorroborated(chainId: Int, method: String, params: Any) async -> [String: Any] {
+        let body: [String: Any]?
+        switch await rpc(chainId: chainId, method: method, params: params) {
+        case .result(let value): body = ["result": value ?? NSNull()]
+        case .error(let code, let message, let data):
+            var error: [String: Any] = ["code": code.map { $0 as Any } ?? NSNull(), "message": message]
+            if let data, !(data is NSNull) { error["data"] = data }
+            body = ["error": error]
+        case .unanswered: body = nil
+        }
+        return RpcCorroborated(primary: body, witness: body, ownNode: false).envelope
+    }
+
     func rpc(chainId: Int, method: String, params: Any) async -> MultisigRpcReply {
         rpcLog.append("\(chainId) \(method)")
         let list = params as? [Any] ?? []

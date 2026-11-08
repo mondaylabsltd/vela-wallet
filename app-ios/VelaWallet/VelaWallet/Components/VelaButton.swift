@@ -89,7 +89,7 @@ struct VelaButton: View {
     }
 }
 
-private struct VelaButtonStyle: ButtonStyle {
+struct VelaButtonStyle: ButtonStyle {
     @Environment(\.theme) private var theme
     let kind: VelaButton.Kind
     var loading: Bool = false

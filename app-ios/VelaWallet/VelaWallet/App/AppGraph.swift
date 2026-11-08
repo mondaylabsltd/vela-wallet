@@ -484,6 +484,8 @@ final class AppGraph {
         // The multisig: its own fee session (a quote here never supersedes the
         // send screen's), the one spine, the one trusted page, the pool.
         let multisigFees = FeeStore(relay: relay, accounts: port, measureCall: FeeExecutor.measuring(with: pool))
+        // R22: every multisig door reads the person's "Refuse blind signing".
+        MsRules.refuseBlind = { [shelf] in Preferences.refuseBlind(shelf) }
         let multisigLive = MultisigLive(
             deps: MultisigLive.Deps(
                 pool: pool, relay: relay, spine: spine, accounts: store, accountPort: port,

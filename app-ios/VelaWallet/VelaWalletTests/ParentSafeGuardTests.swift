@@ -106,7 +106,8 @@ struct SafeOwnerReadTests {
         let accounts = ScriptedAccounts()
         let store = VelaStore(defaults: UserDefaults(suiteName: "vela.tests.p0g.\(UUID().uuidString)")!)
         var ports = SignExecutor.Ports()
-        ports.ethCall = call
+        // R22: the seam is a corroborated read — here two nodes that agree.
+        ports.ethCall = call.map { read in { chainId, params in .agreed(await read(chainId, params)) } }
         return SignExecutor(
             spine: UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() }),
             relay: relay, store: store, pool: pool, ports: ports, ownerReadSeconds: seconds
@@ -239,7 +240,9 @@ final class ParentSafeRig {
                 respond: { transportId, id, payload, _ in answer?(transportId, id, payload) },
                 knownChains: { [Self.chain] },
                 knownMultisigs: { multisigs },
-                ethCall: { chainId, params in await read?(chainId, params) ?? .failed(rateLimited: false) }
+                // Two independent nodes that agree (R22): what a single read
+                // here answers, both say.
+                ethCall: { chainId, params in .agreed(await read?(chainId, params) ?? .failed(rateLimited: false)) }
             ),
             timers: .stopped
         )

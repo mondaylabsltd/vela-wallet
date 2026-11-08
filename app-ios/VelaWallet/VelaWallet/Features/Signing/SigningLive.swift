@@ -45,6 +45,14 @@ enum SigningLive {
         var simRecheck = false
         /// dapp-15: a new check is out; the last line stays, marked stale.
         var simRechecking = false
+        /// R22 (2a): the core's line about who checked a checked answer
+        /// (`source_key` — `simOwnNode`, the person's own node alone); drawn
+        /// quietly under the balance changes. `nil` otherwise.
+        var simSourceKey: String? = nil
+        /// R22 (2a): the check stands on one node's word, or two that
+        /// disagree (`unconfirmed`) — the sheet says how to check with a
+        /// node the person trusts, with the way to this network's settings.
+        var simOwnNodeHint = false
         /// Whether the fee row's coin list is open (issue #262).
         var feeOpen = false
         /// How the Trusted Signer last ended for this request without signing.
@@ -356,7 +364,10 @@ enum SigningLive {
                      seed: context.walletAddress),
             confirm: refused
                 ? nil
-                : (action: confirmLabel(clear: clear, loc: loc),
+                // R22: "Sign anyway" exactly when the core's posture says
+                // something it checks could not be read (`anyway`) — the
+                // core's rule, never one kept here.
+                : (action: (gate ?? .shut).anyway ? s(loc, "certain.signAnyway") : confirmLabel(clear: clear, loc: loc),
                    enabled: (gate ?? .shut).enabled && (handoff?.opens ?? true)),
             panelTitle: s(loc, "signatureRequest")
         )
@@ -365,6 +376,21 @@ enum SigningLive {
         model.closeLabel = loc.t("onboarding.common.close")
         model.confirmAsButton = !refused && context.trustedSignerRoute
         model.confirmButtonLabel = s(loc, "openSigner")
+        // R22 (review 1-3): the confirm's friction is the core's — the danger
+        // style for every "… anyway" and every danger, held for `hold_ms`
+        // (or pressed twice through the accessible path). The hand-off card's
+        // Open is this same confirm (spec 102 D4) and follows the same.
+        if !refused, let gate {
+            model.confirmPress = ConfirmPress(
+                danger: gate.dangerStyle, holdMs: gate.holdMs,
+                holdHint: s(loc, "holdToConfirm"), confirmAgain: s(loc, "confirmAgain")
+            )
+        }
+        // R22 (2a): one node's word, or two that disagree — how to check with
+        // a node the person trusts, and the way to this network's settings.
+        if !refused, context.simOwnNodeHint, facts != nil {
+            model.simOwnNode = (hint: s(loc, "ownNodeHint"), action: loc.t("home.nodeFallbackOpen"))
+        }
         if let handoff {
             model.handoff = handoff
             // Minimal context only: where the request stands, how the page
@@ -975,6 +1001,9 @@ enum SigningLive {
         guard let sim = context.sim, sim.ready, context.simulation == .answered else {
             return waitedOutKey.map { [.warning(tone: .caution, text: loc.t($0))] } ?? []
         }
+        // R22 (2a): who the check stood on, when it was the person's own
+        // node alone — a quiet line under the balance changes.
+        let source: [SigningBlock] = context.simSourceKey.map { [.source(text: loc.t($0), tone: .neutral)] } ?? []
         // Nothing moves — said out loud, in the card's own outline, exactly
         // when the core says so and in its sentence.
         if let line = noChangeLine(context) {
@@ -983,7 +1012,7 @@ enum SigningLive {
                 rows: [],
                 note: line,
                 noteTone: .neutral
-            )]
+            )] + source
         }
         // A zero change is not a change: the core writes none (RJ15), and
         // the row is not drawn.
@@ -1008,7 +1037,7 @@ enum SigningLive {
             rows: rows,
             note: unverified ? s(loc, "unverifiedWarning") : nil,
             noteTone: unverified ? .caution : .neutral
-        )]
+        )] + source
     }
 
     /// What the verdict's place holds while the simulation is out (final
@@ -1708,7 +1737,7 @@ enum SigningLive {
                     name: option.symbol,
                     balance: "\(SendLive.trim(SendLive.fromBase(option.balance, decimals: option.decimals))) \(option.symbol)",
                     fee: option.amount.map {
-                        "~\(SendLive.feeFromBase($0, decimals: option.decimals)) \(option.symbol)"
+                        "~\(SendLive.feeFromBase($0, decimals: option.decimals, shown: option.contract == nil ? SendLive.nativeFeePlaces : SendLive.tokenFeePlaces)) \(option.symbol)"
                     } ?? "—",
                     selected: option.selected,
                     disabled: option.insufficient,

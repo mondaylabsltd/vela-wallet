@@ -596,7 +596,9 @@ struct R19NativeTests {
             "actions": working, "previews": #"{"100:\#(Self.hash):\#(Self.two.lowercased())":\#(look)}"#,
         ], oneTouch: [Self.two])
         let line = try #require(pressed.feeLine(for: Self.two))
-        #expect(line.text.contains("0.248201"), "\(line.text)")
+        // r21-2: the figure is the core's, rounded UP — never below the
+        // charge (0.248201775 is drawn 0.248202).
+        #expect(line.text.contains("0.248202"), "\(line.text)")
         let mark = try #require(pressed.feeSigning(for: Self.two))
         #expect(mark == words.t("proposal.feeSigning"))
         #expect(mark != "home.multisig.proposal.feeSigning", "the corpus has it")

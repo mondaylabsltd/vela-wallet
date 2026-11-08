@@ -318,6 +318,13 @@ struct SigningModel {
     /// says so (`confirmButtonLabel`, "去签名页确认") instead of the action.
     var confirmAsButton = false
     var confirmButtonLabel = ""
+    /// R22 (review 1-3): how the confirm is pressed — the core's posture
+    /// (`ConfirmState.anyway/danger/hold_ms`). A plain press by default.
+    var confirmPress = ConfirmPress.plain
+    /// R22 (2a): the could-not-confirm line's companion — how to check with
+    /// a node the person trusts (`componentsUi.signing.ownNodeHint`) and the
+    /// action that opens this network's settings. `nil` otherwise.
+    var simOwnNode: (hint: String, action: String)?
     /// Spec 102 D4: this account reviews and signs on a trusted page, so the
     /// sheet is the hand-off card — which page, which key, its integrity
     /// line — and not a second preview: the page is the authority.

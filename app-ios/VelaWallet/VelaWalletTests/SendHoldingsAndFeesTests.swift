@@ -963,9 +963,13 @@ struct SendHoldingsAndFeesTests {
             return
         }
         let model = SendLive.form(view, fee: fees.view, display: .usd, on: drawn, loc: loc)
-        #expect(view.amount == "12.3457", "Max wrote \(view.amount)")
+        // r21-2 (§36): Max sends exactly the figure it shows — the sendable
+        // amount cut DOWN to the field's places, never a digit more than
+        // is sent (`send::max_shown_exact`). The card's balance is a
+        // balance, read by its own ladder.
+        #expect(view.amount == "12.3456", "Max wrote \(view.amount)")
         #expect(model.token?.detail == "Gnosis · Balance 12.3457")
-        #expect(view.tokenAmount == "12.345678", "the exact amount stays behind the figure")
+        #expect(view.tokenAmount == "12.3456", "Max sends what it shows")
         if case .erc20(let token, _, _, _)? = view.fee?.feeAsset {
             #expect(token.lowercased() == usdc.lowercased(), "the fee was paid in the coin not being sent")
         } else {

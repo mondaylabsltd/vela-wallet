@@ -121,7 +121,7 @@ struct SigningFeeCoinTests {
                 simJudged: { address, chainId, deltas in
                     await trust.simJudged(address: address, chainId: chainId, deltas: deltas)
                 },
-                simulate: { _, _ in simulate() }
+                simulate: { _, _ in .agreed(simulate()) }
             )
         )
     }
