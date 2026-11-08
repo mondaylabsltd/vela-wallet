@@ -112,6 +112,22 @@
 	  `getvela.app` ride the `applinks:` entitlement, which has been there since
 	  019 with nothing behind it.
 	-->
+	<!--
+	  §35 (review 0-1): the passkey domain of a TEST build on a real device.
+	  getvela.app's apple-app-site-association lists the store app only, so
+	  only a release build may use getvela.app passkeys; a test build on the
+	  simulator uses localhost, and one on a phone (the "Vela Test" device-test
+	  build) uses this domain — the build setting, empty by default:
+
+	      xcodebuild … TEST_RP_DOMAIN=passkeys.example.org
+
+	  The rule is the core's (`relying_party_id`): empty on a device, the
+	  ceremony fails with the core's sentence saying how to set it — never a
+	  fall-back to getvela.app. A release build never reads it, and
+	  `check-ios-store-binary.sh` holds a store build's to empty.
+	-->
+	<key>VelaTestRpDomain</key>
+	<string>$(TEST_RP_DOMAIN)</string>
 	<key>VelaClientMCPSite</key>
 	<string>$(VELA_CLIENTMCP_SITE)</string>
 	<key>CFBundleURLTypes</key>

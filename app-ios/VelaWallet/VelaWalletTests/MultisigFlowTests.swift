@@ -1430,4 +1430,99 @@ extension MultisigFlowTests {
         #expect(world.passkeys.isEmpty && world.submits.isEmpty)
     }
 }
+
+// MARK: - §35 (SEC-PARENT-2): a site never makes a multisig call itself
+
+extension MultisigFlowTests {
+
+    private static let selfCallVector = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("rust/crates/vela-core/tests/vectors/rules/multisig-self-call.json")
+
+    /// The vector's calls with `SELF` as `safe` (`SELF_UPPER` in upper case,
+    /// `SELFADDR` inside data its 20 bytes, lower-case hex, no 0x).
+    private static func selfCalls(_ item: [String: Any], safe: String) -> [[String: Any]] {
+        let bare = String(safe.dropFirst(2)).lowercased()
+        return (item["calls"] as? [[String: Any]] ?? []).map { call in
+            let to: String = switch call["to"] as? String ?? "" {
+            case "SELF": safe
+            case "SELF_UPPER": "0x" + bare.uppercased()
+            case let other: other
+            }
+            return [
+                "to": to, "value": call["value"] ?? "0x0",
+                "data": (call["data"] as? String ?? "0x").replacingOccurrences(of: "SELFADDR", with: bare),
+            ]
+        }
+    }
+
+    /// The shared vector (`rules/multisig-self-call.json`), replayed through
+    /// the browser's multisig entry (`MultisigHub.dappRequest`) on the REAL
+    /// proposals machine: a site's `wallet_sendCalls` that would make the
+    /// multisig call ITSELF with an admin selector is refused at once —
+    /// `self_call`, the function and the leg the vector names, nothing
+    /// drafted, nothing signed — said in its own sentence, and its close
+    /// answers -32603. A plain transfer to itself, or a token transfer, is
+    /// drafted as any other request.
+    @Test func theSelfCallVectorIsRefusedAtTheMultisigsDappEntry() async throws {
+        let vector = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: Self.selfCallVector)) as? [String: Any])
+        let cases = try #require(vector["cases"] as? [[String: Any]])
+        #expect(cases.count == 13)
+        for (index, item) in cases.enumerated() {
+            let name = item["name"] as? String ?? "?"
+            let world = try MsSimWorld()
+            let (hub, record, safe, _) = try await Self.hubFollowing(world, salt: "0x7\(String(index, radix: 16))")
+            defer { hub.proposals.dispose(); hub.accounts.dispose(); hub.members.dispose() }
+            world.store["vela.multisigAccounts"] = MsSimWorld.text([record])
+            hub.accounts.dispatch([
+                "type": "start", "service_url": MsSimWorld.service, "accounts": world.localsJson, "networks": [100, 8453],
+            ])
+            await Wait.until({ hub.isMultisig(safe) }, orIdle: { hub.accounts.isIdle })
+            try #require(hub.isMultisig(safe), "\(name): the multisig is on this device")
+
+            var answers: [[String: Any]] = []
+            let params = MsSimWorld.text([[
+                "version": "2.0.0", "chainId": "0x64", "from": safe, "calls": Self.selfCalls(item, safe: safe),
+            ] as [String: Any]])
+            hub.dappRequest(
+                id: "site-s", address: safe, method: "wallet_sendCalls", paramsJson: params,
+                origin: "https://evil.example", chainId: 100, answer: { answers.append($0) }
+            )
+            if let function = item["refused"] as? String {
+                await Wait.until({ hub.proposalsView.dapp["site-s"]?["stage"]?.string == "refused" }, orIdle: { hub.proposals.isIdle })
+                let held = try #require(hub.proposalsView.dapp["site-s"], "\(name)")
+                #expect(held["stage"]?.string == "refused", "\(name): \(held)")
+                let data = held["refusal"]?["data"]
+                #expect(held["refusal"]?["code"]?.int == -32603, "\(name)")
+                #expect(data?["reason"]?.string == "self_call", "\(name)")
+                #expect(data?["function"]?.string == function, "\(name)")
+                #expect(data?["leg"]?.int == item["leg"] as? Int, "\(name)")
+                #expect(data?["key"]?.string == vector["key"] as? String, "\(name)")
+                #expect(data?["safe"]?.string?.lowercased() == safe.lowercased(), "\(name)")
+                #expect(hub.proposalsView.draft == nil, "\(name): nothing drafted")
+                let words = MsWords(loc: hub.loc, hub: nil)
+                #expect(MultisigDappSheet.refusalText(held["refusal"], words: words)
+                        == hub.loc.t("componentsUi.signing.multisigSelfCallBlocked", vars: ["function": function]), "\(name)")
+                #expect(MultisigDappSheet.refusalTitle(held["refusal"], words: words)
+                        == hub.loc.t("componentsUi.signing.selfCallBlockedTitle"), "\(name)")
+                #expect(answers.isEmpty, "\(name): answered once read")
+
+                hub.dappLeave("site-s")
+                await Wait.until({ !answers.isEmpty }, orIdle: { hub.proposals.isIdle })
+                let error = answers.first?["error"] as? [String: Any]
+                #expect((error?["code"] as? NSNumber)?.intValue == -32603, "\(name): \(answers)")
+            } else {
+                await Wait.until(
+                    { hub.proposalsView.draft != nil || hub.proposalsView.dapp["site-s"]?["stage"]?.string == "refused" },
+                    orIdle: { hub.proposals.isIdle }
+                )
+                let held = hub.proposalsView.dapp["site-s"]
+                #expect(held?["stage"]?.string != "refused", "\(name): a clear request was refused: \(String(describing: held))")
+                #expect(hub.proposalsView.draft != nil, "\(name): drafted")
+            }
+            #expect(world.passkeys.isEmpty && world.submits.isEmpty, "\(name): nothing signed, nothing sent")
+        }
+    }
+}
 #endif

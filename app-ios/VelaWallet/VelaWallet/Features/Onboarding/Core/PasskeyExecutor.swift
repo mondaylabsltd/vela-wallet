@@ -72,6 +72,77 @@ struct PasskeyErrorFacts: Equatable {
     }
 }
 
+/// §35 (review 0-1): the relying party this build's platform passkeys live
+/// under — the core's rule (`relying_party_id`), never a shell's. A release
+/// build is `getvela.app` (and never reads the test domain); a test build —
+/// Debug, which the "Vela Test" device-test build is too — on the simulator
+/// is `localhost`; a test build on a device is the build's `TEST_RP_DOMAIN`
+/// (the build setting, through the `VelaTestRpDomain` Info.plist key), and
+/// without one it is the core's error, said as the ceremony's failure —
+/// never a quiet fall-back to `getvela.app`, whose association file lists
+/// the store app only.
+nonisolated enum PasskeyRelyingParty {
+    /// Why this build has no relying party: the core's sentence.
+    struct Unavailable: Error, Equatable, Sendable {
+        let message: String
+    }
+
+    /// The Info.plist key the `TEST_RP_DOMAIN` build setting reaches the
+    /// app through (empty when the setting is).
+    static let infoKey = "VelaTestRpDomain"
+
+    /// A test build, by the core's notion (`is_test_build`): every Debug
+    /// build — the simulator's, the parallel space's and the device-test
+    /// build alike. Release is not.
+    static var testBuild: Bool {
+        #if DEBUG
+        true
+        #else
+        false
+        #endif
+    }
+
+    /// Running on the simulator, whose platform authenticator answers no
+    /// association: it signs with the parallel space's fixture keys.
+    static var simulator: Bool {
+        #if targetEnvironment(simulator)
+        true
+        #else
+        false
+        #endif
+    }
+
+    /// The build's `TEST_RP_DOMAIN`, `nil` when it is empty. A release build
+    /// never reads it — the core would not either.
+    static func configuredDomain(_ info: [String: Any]?) -> String? {
+        guard testBuild else { return nil }
+        guard let domain = info?[infoKey] as? String, !domain.isEmpty else { return nil }
+        return domain
+    }
+
+    /// The core's answer for these facts.
+    static func resolve(testBuild: Bool, simulator: Bool, testDomain: String?) -> Result<String, Unavailable> {
+        do {
+            return .success(try relyingPartyId(testBuild: testBuild, simulator: simulator, testDomain: testDomain))
+        } catch {
+            return .failure(Unavailable(message: coreMessage(error)))
+        }
+    }
+
+    /// This build's: read once, at first use.
+    static let thisBuild: Result<String, Unavailable> = resolve(
+        testBuild: testBuild, simulator: simulator,
+        testDomain: configuredDomain(Bundle.main.infoDictionary)
+    )
+
+    /// The core's sentence out of its error — `CoreError::Internal`'s text
+    /// as it is, never a Swift rendering of the enum.
+    private static func coreMessage(_ error: Error) -> String {
+        if case CoreError.Internal(let message) = error { return message }
+        return "\(error)"
+    }
+}
+
 /// A completed registration, in the core's hex vocabulary.
 struct Registration {
     let credentialIdHex: String
@@ -94,12 +165,34 @@ struct Assertion {
 @MainActor
 final class PasskeyExecutor: NSObject {
 
-    /// The relying party. A passkey is bound to it: change it and every existing
-    /// wallet becomes unreachable from this app. It must match the
-    /// `webcredentials:` entitlement and the apple-app-site-association file.
-    static let relyingParty = "getvela.app"
+    /// This build's relying party, by name (§35, `PasskeyRelyingParty`): a
+    /// passkey is bound to it — change it and every existing wallet becomes
+    /// unreachable from this app — and the release build's must match the
+    /// `webcredentials:` entitlement and getvela.app's
+    /// apple-app-site-association file. Empty only for a test build on a
+    /// device with no `TEST_RP_DOMAIN`, whose every ceremony fails with the
+    /// core's sentence before a request is made.
+    nonisolated static var relyingParty: String { (try? PasskeyRelyingParty.thisBuild.get()) ?? "" }
 
-    let relyingPartyId: String
+    /// The core's answer for this executor: the relying party, or why there
+    /// is none.
+    let relyingPartyAnswer: Result<String, PasskeyRelyingParty.Unavailable>
+
+    /// The relying party a request is made for — empty when there is none
+    /// (no request is then made: `platformRelyingParty()` throws first).
+    var relyingPartyId: String { (try? relyingPartyAnswer.get()) ?? "" }
+
+    /// The relying party for a system-sheet request, or — a test build on a
+    /// device with no test domain — the ceremony's failure in the core's
+    /// words. The app-owned CTAP paths (USB CCID, caBLE) name their own
+    /// party in the core and are not gated by an association file.
+    private func platformRelyingParty() throws -> String {
+        switch relyingPartyAnswer {
+        case .success(let rpId): return rpId
+        case .failure(let unavailable):
+            throw PasskeyFailure(kind: .notSupported, message: unavailable.message)
+        }
+    }
 
     private var continuation: CheckedContinuation<ASAuthorization, Error>?
     private var controller: ASAuthorizationController?
@@ -135,8 +228,8 @@ final class PasskeyExecutor: NSObject {
     /// on surfaces with no UI (previews, the gallery).
     var hybrid: HybridCeremony?
 
-    init(relyingPartyId: String = PasskeyExecutor.relyingParty) {
-        self.relyingPartyId = relyingPartyId
+    init(relyingParty: Result<String, PasskeyRelyingParty.Unavailable> = PasskeyRelyingParty.thisBuild) {
+        self.relyingPartyAnswer = relyingParty
         super.init()
     }
 
@@ -210,6 +303,7 @@ final class PasskeyExecutor: NSObject {
             return try await hybrid.register(name: name, excludeCredentialIds: excludeCredentialIds)
         }
 
+        let relyingPartyId = try platformRelyingParty()
         let challenge = Self.random(32)
         let userId = Data(Self.encodeUserHandle(name).utf8)
         let excluded = try excludeCredentialIds.map { hex in
@@ -430,6 +524,7 @@ final class PasskeyExecutor: NSObject {
     func systemRequests(
         challenge: Data, credentialIdHex: String?, transports: String, securityKeyOnly: Bool = false
     ) throws -> [ASAuthorizationRequest] {
+        let relyingPartyId = try platformRelyingParty()
         var requests: [ASAuthorizationRequest] = []
         if !securityKeyOnly {
             let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(

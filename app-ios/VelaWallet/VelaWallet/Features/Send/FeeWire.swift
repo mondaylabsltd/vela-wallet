@@ -257,7 +257,9 @@ struct FeeViewWire: Decodable, Equatable {
     let busy: Bool
     /// `missing_public_key` / `fee_token_unavailable` / `quote_unavailable` /
     /// `calculation_failed` / `estimate_failed` / `gas_quote_too_high` /
-    /// `would_fail` / `internal` — or, since spec 082 (RJ13), the object form
+    /// `settlement_gas_too_high` (§35: the relay billed more gas than the
+    /// operation can use — a quote Vela won't accept, re-asked on the relay's
+    /// schedule) / `would_fail` / `internal` — or, since spec 082 (RJ13), the object form
     /// `{"chain_read":{"rate_limited":…}}` kept as its JSON text, as the
     /// core's own functions take it back (`FeeFailureText`). What the row and
     /// the footer SAY of it is `failure`'s, never worked out from this.

@@ -964,6 +964,10 @@ final class SendExecutor {
         // send-15: another transaction of this account went first. Nothing
         // was sent: "Not sent", "went first", Review again (`nonce_used`).
         case .nonceUsed: return ["type": "nonce_used"]
+        // §35: it expired before it was submitted (the relay's AA22). Nothing
+        // was sent: "Not sent", calmly, and Review again signs anew with a
+        // window of its own (`expired`).
+        case .expired: return ["type": "expired"]
         // Closed unsigned: the core's cancelled ceremony, which keeps the
         // confirmation on screen. Anything else the page did not sign is the
         // core's to word (round 7, `SendSubmitFailure::PageFailed`).

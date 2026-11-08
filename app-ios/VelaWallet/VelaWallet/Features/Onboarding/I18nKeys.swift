@@ -245,12 +245,30 @@ enum I18nKeys {
         /// confirm, a fact asking for no tap.
         static let payWithAnotherCoin = "componentsUi.gas.payWithAnotherCoin"
         static let feeWouldFail = "componentsUi.signing.confirmBlock.feeWouldFail"
+        /// §35: it expired before it was submitted — nothing was sent. Send's
+        /// confirm (`tx_error` `expired`), the signing sheet
+        /// (`SignView.failure_refusal_key`) and the tracker's refusal
+        /// (`RefusalReason::Expired`) say the same sentence.
+        static let expired = "componentsUi.signing.expired"
+        /// §35: the relay billed more gas than the operation can use
+        /// (`FeeFailure::SettlementGasTooHigh`): the fee row's reason, and
+        /// the stopped form Continue's alert says
+        /// (`sendEstimateFailureBodyKey`).
+        static let reasonSettlementHigh = "componentsUi.gas.reasonSettlementHigh"
+        static let reasonSettlementHighStopped = "componentsUi.gas.reasonSettlementHighStopped"
+        /// §35 (SEC-PARENT-2): a site asking a multisig to change who
+        /// controls it — the refused request's title and its sentence
+        /// (`data.reason == "self_call"`, `{{function}}`).
+        static let selfCallBlockedTitle = "componentsUi.signing.selfCallBlockedTitle"
+        static let multisigSelfCallBlocked = "componentsUi.signing.multisigSelfCallBlocked"
 
         static let all = [
             feeRetrying, feeFailed, estimateFailed, reasonChainDown, reasonInternal,
             alertEstimateFailedTitle, alertEstimateFailedBody, alertEstimateChainDownBody,
             previousPending, refused, wentFirst, rejectedFees, balanceUnreachable,
             notSentTitle, notSentBody, payWithAnotherCoin, feeWouldFail,
+            expired, reasonSettlementHigh, reasonSettlementHighStopped,
+            selfCallBlockedTitle, multisigSelfCallBlocked,
         ]
     }
 

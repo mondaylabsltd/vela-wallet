@@ -33,6 +33,12 @@ What the device-test build gives up, and why that is right:
   signs instead; `VELA_PARALLEL_ACCOUNT=n` makes the space fixture key n's own
   Safe, so two phones can be two members of a multisig. A real passkey on a
   phone needs the store id, which only a phone WITHOUT Vela may be given.
+  §35: the relying party is the core's rule (`relying_party_id`) — a Debug
+  build on a phone uses the `TEST_RP_DOMAIN` build setting (add
+  `TEST_RP_DOMAIN=<domain>` to the `xcodebuild` line; the domain must serve
+  its own apple-app-site-association listing this id), never getvela.app.
+  Without one, a passkey ceremony fails with the core's sentence saying how
+  to set it; the parallel space signs as before.
 - **Universal links** open in Safari; `VELA_OPEN_LINK=<url>` hands one to the
   app at launch.
 - **Widgets** read nothing (no app group — the store app's group would show

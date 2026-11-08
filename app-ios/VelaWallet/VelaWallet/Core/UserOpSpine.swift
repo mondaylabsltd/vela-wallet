@@ -11,8 +11,8 @@
 //
 //      keys → the Tempo branch → isDeployed → nonce → floors → the quote gate
 //      → a placeholder fee leg → draft → estimate → apply → the SETTLED fee
-//      leg → the SafeOp hash IS the challenge → the assertion → the envelope
-//      → the relay
+//      leg → the validity window (§35) → the SafeOp hash IS the challenge →
+//      the assertion → the envelope → the relay
 //
 //  The assembly is the core's (`user_op_*` through uniffi); the transports are
 //  `RelayClient`'s; the one seam the core cannot have is `UserOpSigner`.
@@ -190,6 +190,13 @@ final class UserOpSpine {
         /// sent. Send says "went first" with Review again (`nonce_used`); a
         /// page is answered the core's fixed `NONCE_USED_DETAIL`.
         case nonceUsed
+        /// §35: the operation's validity window closed before the EntryPoint
+        /// saw it (the core's `RelayRejection::Expired`, the relay's `AA22
+        /// expired or not due`). Nothing was sent and it can never land.
+        /// Send says so calmly with Review again (`expired`), which signs
+        /// anew with a window of its own; a page is answered the core's fixed
+        /// `EXPIRED_DETAIL`.
+        case expired
         /// The passkey prompt ran out of the core's time
         /// (`passkey_sign_timeout_ms`, read by `passkey_ceremony_end`):
         /// nothing was signed. The same refusal as `passkeyCancelled` to
@@ -228,17 +235,23 @@ final class UserOpSpine {
     /// call does. Measured from the Safe's address instead, a codeless account
     /// estimates like any other. The rule is the core's (`userOpRaiseCallGas`).
     private let measureCall: @MainActor (_ chainId: Int, _ from: String, _ to: String, _ valueHex: String, _ data: String) async -> String?
+    /// The wall clock, in ms since the epoch — what the validity window is
+    /// stamped from (§35: `userOpStampValidity`, now + 30 minutes). A seam
+    /// so a test can read the window it signed.
+    private let now: () -> Double
 
     init(
         relay: RelayClient,
         accounts: AccountPort,
         signer: @escaping () -> UserOpSigner,
-        measureCall: @escaping @MainActor (Int, String, String, String, String) async -> String? = { _, _, _, _, _ in nil }
+        measureCall: @escaping @MainActor (Int, String, String, String, String) async -> String? = { _, _, _, _, _ in nil },
+        now: @escaping () -> Double = { Date().timeIntervalSince1970 * 1000 }
     ) {
         self.relay = relay
         self.accounts = accounts
         self.signer = signer
         self.measureCall = measureCall
+        self.now = now
     }
 
     /// Every real contract call measured from the Safe's own address; the draft's
@@ -514,6 +527,17 @@ final class UserOpSpine {
         } catch {
             throw other("The operation could not be assembled.")
         }
+        // §35: the FINAL operation — its settled fee leg in — stamped with
+        // the window it is signed with (validAfter 0, validUntil now + 30
+        // minutes), right before its hash. Each submit is a new attempt and
+        // stamps anew. The core refuses to hash, digest or envelope an
+        // operation that never expires, so a spine that forgot this would
+        // sign nothing.
+        do {
+            draft = try userOpStampValidity(draft: draft, nowMs: now())
+        } catch {
+            throw other("The operation could not be assembled.")
+        }
 
         // A send's hash is computed only for the operation that is exactly
         // the review the person confirmed (`SubmitUserOp.review`); a dApp's
@@ -619,6 +643,12 @@ final class UserOpSpine {
             // says "went first" and offers Review again (`nonce_used`); a page
             // hears the core's fixed detail.
             throw Refused(failure: .nonceUsed)
+        case .notSent(.expired?):
+            // §35: the relay's AA22 — the window closed before the
+            // EntryPoint saw it. Nothing was sent and this op can never land;
+            // Send says so calmly and signs anew, a page hears the core's
+            // fixed `EXPIRED_DETAIL`.
+            throw Refused(failure: .expired)
         case .notSent(.nonceHeld?):
             // 083: another operation of the account holds the nonce — its
             // hash is never this request's; nothing of this one went out.

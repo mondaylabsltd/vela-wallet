@@ -655,6 +655,7 @@ final class RelayClient {
         case .bundlerUnderfunded: return "bundler_underfunded"
         case .nonceHeld: return "nonce_held"
         case .nonceUsed: return "nonce_used"
+        case .expired: return "expired"
         case .other: return "other"
         }
     }

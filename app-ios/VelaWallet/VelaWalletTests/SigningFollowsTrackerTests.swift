@@ -414,6 +414,40 @@ struct SigningFollowsTrackerTests {
         #expect(run.seen.answers.isEmpty, "held while the sheet shows it")
     }
 
+    /// §35: the relay's `AA22 expired or not due` — the window closed before
+    /// the EntryPoint saw it. The shell answers the core's fixed sentence as
+    /// a refusal (`user_op_expired_detail`, refused); the REAL core then says
+    /// it calmly — not sent, no refusal, Try again (a new signature, with its
+    /// own window) — in `componentsUi.signing.expired`, and the page hears
+    /// the same fixed sentence on the close.
+    @Test func anOperationThatExpiredAtTheSubmitIsNotSentCalmlyAndTriedAgain() async throws {
+        let run = try await approved(post: { _, _ in
+            RpcCallResult(
+                outcome: .rpcError(code: -32500, message: "AA22 expired or not due"),
+                maybeDelivered: false, heldErrorJson: nil
+            )
+        })
+        await Wait.until { run.controller.sign.notSent }
+        let sign = run.controller.sign
+        #expect(sign.notSent, "\(String(describing: sign.failureRefusalKey))")
+        #expect(sign.failureRefusalKey == "componentsUi.signing.expired")
+        #expect(!sign.failureRefused, "nothing was refused")
+        #expect(sign.failureRetryable, "Try again signs anew")
+        #expect(SigningLive.refusalReason(sign, loc: Self.loc) == "It expired before it was submitted — nothing was sent.")
+        let receipt = try #require(SigningLive.receipt(sign: sign, blocks: [], context: Self.receiptContext()))
+        #expect(receipt.stage == .notSent)
+        #expect(receipt.captions.contains(Self.loc.t("componentsUi.signing.expired")))
+        #expect(receipt.retry == Self.loc.t("send.txRetryBtn"))
+        #expect(run.seen.answers.isEmpty, "held while the sheet shows it")
+
+        run.controller.swipeDismissed()
+        await Wait.until { !run.seen.answers.isEmpty }
+        let answer = try #require(run.seen.answers.first)
+        #expect((answer["code"] as? NSNumber)?.intValue == -32603)
+        #expect(answer["message"] as? String == userOpExpiredDetail(), "\(answer)")
+        #expect(run.port.posts == 1)
+    }
+
     /// The ✕ after the confirm refuses nothing (spec 079): the op written ahead
     /// is still POSTed, and the page still gets its one answer from the
     /// tracker's verdict.
