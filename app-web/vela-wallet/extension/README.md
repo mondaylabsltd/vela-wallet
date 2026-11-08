@@ -159,9 +159,11 @@ package does about each:
 | the extension's origin is `safari-web-extension://<UUID>`, a new UUID per install and per Safari launch (three seen in one session); `localStorage` / `storage.local` survive it | nothing keys on the origin: the wallet's state is per extension. The signing page cannot list the origin, so Vela's content script on it **attests** the current one (`safari/attest.js`)                                                |
 | **a page an extension page opens has no `window.opener`**                                                                                                                        | the signing page's hand-off goes through a tab and that same content script (`src/lib/extension/safari-signer.ts`; the page's side is `app-web/trusted-signer` PROTOCOL.md §13.5)                                                        |
 
-Usage analytics stay off: the gate answers `chrome-extension:` pages only
-(`$lib/analytics/gate.ts`), like the native apps, and the Safari package does
-not draw the "get the app" prompt (it ships inside the app).
+Usage analytics are opt-in (§35, review 1-8): off until the person switches
+them on in Settings, and never for a transaction's outcome. The gate answers
+`chrome-extension:` pages only (`$lib/analytics/gate.ts`), so the Safari
+package sends none, like the native apps, and it does not draw the "get the
+app" prompt (it ships inside the app).
 
 **The harness doorway (development package only).** Safari makes up the
 extension's origin, so a test cannot type a URL into the package. On loopback

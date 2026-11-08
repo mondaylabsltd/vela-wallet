@@ -191,7 +191,6 @@
 		trackSubmitted
 	} from '$lib/wallet/core/tracker-resident';
 	import { track } from '$lib/analytics';
-	import { watchSendOutcome } from '$lib/analytics/send-outcome';
 	import AppPrompt from '$lib/app-prompt/AppPrompt.svelte';
 	import SigningHost from '$lib/signing/SigningHost.svelte';
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
@@ -837,12 +836,9 @@
 				// on this network until it lands (correctness batch item 3).
 				handoff.sender
 			);
-			// Usage statistics: the op is with the relay; the tracker says how it ends.
-			track('send_submitted', { chain: handoff.chainId });
 			// r10 follow-up: a send left this account — the incoming check
 			// looks at once and its back-off starts again.
 			feed.sent();
-			watchSendOutcome(handoff.userOpHash, handoff.chainId);
 		});
 		startTxTracker();
 		const account = identity.address;
@@ -854,7 +850,6 @@
 			: (session.view.accounts[session.view.active_index]?.account.id ?? '');
 		sendSession = createSendSession({
 			onView: (view) => {
-				noteSendFailure(sendView, view);
 				const proposed = view.proposed && !sendView?.proposed ? view.proposed : null;
 				sendView = view;
 				// Proposed: the send is done here; the transaction's own sheet
@@ -977,26 +972,6 @@
 			sendSession?.dispatch({ type: 'in_flight_ops', ops })
 		);
 		track('send_opened');
-	}
-
-	/**
-	 * A send that failed before the relay took it, for usage statistics: the
-	 * confirm screen's error, or a passkey prompt dismissed (signing → idle
-	 * with no error). After the relay took it, the tracker decides
-	 * (`watchSendOutcome`).
-	 */
-	function noteSendFailure(prev: SendView | null, next: SendView): void {
-		if (prev === null || prev.tx_status === next.tx_status) return;
-		const chain = next.selected_token?.chain_id ?? next.multi_chain_id ?? undefined;
-		if (next.tx_status === 'error') {
-			track('send_failed', { chain, reason: next.tx_error === 'bundler_fund' ? 'relay' : 'error' });
-		} else if (
-			prev.tx_status === 'signing' &&
-			next.tx_status === 'idle' &&
-			next.tx_error === null
-		) {
-			track('send_failed', { chain, reason: 'cancelled' });
-		}
 	}
 
 	function closeSend(): void {
