@@ -19,6 +19,8 @@ import type { Assertion } from '$lib/onboarding/core/passkey';
 import type { IntegrityLine } from '$lib/core/generated/IntegrityLine';
 import type { SigningPage } from '$lib/core/generated/SigningPage';
 import type { SigningPlan } from '$lib/core/generated/SigningPlan';
+import type { Account } from '$lib/core/generated/Account';
+import type { Identity } from '$lib/core/generated/Identity';
 import type { SigningRoute } from '$lib/core/generated/SigningRoute';
 import type { SigningSurface } from '$lib/core/generated/SigningSurface';
 import type { KeyLabel } from '$lib/core/generated/KeyLabel';
@@ -929,6 +931,62 @@ export function trustedSignerFromBytes(): string[] {
 export function signingPlan(account: unknown): SigningPlan | null {
 	const plan = wasm.signingPlan(JSON.stringify(account));
 	return plan === undefined ? null : (JSON.parse(plan) as SigningPlan);
+}
+
+/**
+ * `vela_core::app::ReceiveStanding`, as its JSON reads. Hand-written: no
+ * bindings target exports it yet (it derives `TS`, but no generator names it
+ * as a root) — the one wire shape here not generated.
+ */
+export interface ReceiveStanding {
+	/** Show the address, its QR code and the payment request. */
+	receivable: boolean;
+	identity: Identity;
+	/** What the screen says instead (`receive.unconfirmed.*` / `receive.refuted.*`). */
+	title_key?: string | null;
+	body_key?: string | null;
+	/** Check the chain again before the screen shows anything — and offer Check again. */
+	check_first: boolean;
+}
+
+/**
+ * §37 (review 1-7): may the stored account be received at, and what Receive
+ * says when it may not — `vela_core::app::receive_standing`. `account` is the
+ * record as STORED. `null` for a record this build cannot read: the shell
+ * then shows no address either.
+ */
+export function receiveStanding(account: unknown): ReceiveStanding | null {
+	const standing = wasm.receiveStanding(JSON.stringify(account));
+	return standing === undefined ? null : (JSON.parse(standing) as ReceiveStanding);
+}
+
+/**
+ * §37: the stored account with `identity` replaced — what a confirm walk
+ * found — and nothing else changed (`account_with_identity_json`). `null`
+ * for a record this build cannot read, or an identity it does not know.
+ */
+export function accountWithIdentity(account: unknown, identity: Identity): Account | null {
+	const next = wasm.accountWithIdentity(JSON.stringify(account), identity);
+	return next === undefined ? null : (JSON.parse(next) as Account);
+}
+
+/**
+ * §37 (review 1-11, ERC-6492): the signature a site gets for a message —
+ * `signatureHex` (the account's EIP-1271 signature) as it is when the account
+ * holds code on the request's chain (`codeHex`, its `eth_getCode` there),
+ * else in its ERC-6492 envelope. An unread code (`null`) wraps too. `keys`
+ * are the founding keys, in order; the core refuses keys that do not make
+ * `account`.
+ */
+export function messageSignature(
+	signatureHex: string,
+	keys: { credential_id: string; public_key_hex: string }[],
+	account: string,
+	codeHex: string | null
+): string {
+	return translated(() =>
+		wasm.messageSignature(signatureHex, JSON.stringify(keys), account, codeHex ?? undefined)
+	);
 }
 
 /**

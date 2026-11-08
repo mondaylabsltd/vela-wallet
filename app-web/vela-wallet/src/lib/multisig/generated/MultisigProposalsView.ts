@@ -121,6 +121,21 @@ standings: { [key in string]: MultisigStanding },
  */
 waiting_note: MultisigWaitingNote | null, 
 /**
+ * §37 (review 1-13 b): how many open proposals no member of the
+ * multisig vouches for are left out of [`Self::items`] (and of every
+ * count). Non-zero: the list ends with the disclosure
+ * `home.multisig.panel.nonMembersShow` (`{{total}}`) — once opened,
+ * `home.multisig.panel.nonMembersHide`; opened
+ * ([`Event::ShowNonMembers`]), they are in `items`, each one flagged
+ * [`ProposalItem::from_non_member`] and drawn under
+ * `home.multisig.panel.nonMembersWarning`.
+ */
+non_members: number, 
+/**
+ * The disclosure is open: the non-members' proposals are in `items`.
+ */
+showing_non_members: boolean, 
+/**
  * Each proposal's story, per `<chainId>:<safeTxHash>`.
  */
 timelines: { [key in string]: Array<MultisigTimelineStep> }, 

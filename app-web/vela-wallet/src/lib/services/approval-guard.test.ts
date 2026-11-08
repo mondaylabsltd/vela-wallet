@@ -119,6 +119,14 @@ describe('approval-guard', () => {
 			expect(isUnboundedAmount(MAX_U160, 160)).toBe(true);
 			expect(isUnboundedAmount(UNLIMITED_CAP_160, 160)).toBe(true);
 		});
+		test('§37: the line is 2^128 for every width, as the core draws it', () => {
+			expect(UNLIMITED_CAP_256).toBe(1n << 128n);
+			expect(UNLIMITED_CAP_160).toBe(1n << 128n);
+			expect(isUnboundedAmount(1n << 128n, 256)).toBe(true);
+			expect(isUnboundedAmount((1n << 128n) - 1n, 256)).toBe(false);
+			expect(isUnboundedAmount(1n << 128n, 160)).toBe(true);
+			expect(isUnboundedAmount((1n << 128n) - 1n, 160)).toBe(false);
+		});
 		test('large-but-legit amounts are NOT unbounded', () => {
 			// 1 quadrillion tokens * 1e18 ≈ 2^110 — well under the cap
 			expect(isUnboundedAmount(10n ** 33n, 256)).toBe(false);
@@ -128,7 +136,7 @@ describe('approval-guard', () => {
 		test('a "cap at balance" (issue #86) is always finite — even a whale balance', () => {
 			// The one-tap Balance cap sets the allowance to the user's actual balance.
 			// A whale holding 1e9 USDT (6 dp) = 1e15 ≈ 2^50; even 1e12 ETH-equiv @18dp
-			// ≈ 2^100 — both are far below UNLIMITED_CAP_256 (2^200) / _160 (2^152), so
+			// ≈ 2^100 — both are below the core's line, 2^128 for every width (§37), so
 			// the finite Balance cap ALWAYS passes the never-unlimited guard.
 			const whaleUsdt = 1_000_000_000n * 10n ** 6n; // 1e15
 			const whaleEth = 1_000_000_000_000n * 10n ** 18n; // 1e30

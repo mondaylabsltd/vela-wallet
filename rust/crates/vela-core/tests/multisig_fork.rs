@@ -541,6 +541,150 @@ fn create_two_of_three_propose_approve_twice_execute() {
 // §31 — the parent-Safe guard against the real contracts (APPENDIX-PARENT)
 // ---------------------------------------------------------------------------
 
+/// §37 (review 1-13 a/b), proved against the real mailbox and chain: a
+/// stranger — a plain account that is no member — posts a proposal it
+/// signed for the multisig at nonce + 1000. The next proposal a member makes
+/// still takes the multisig's next free number (nothing waits behind 1000
+/// numbers nobody can fill), and the stranger's is out of the default list
+/// and every count, shown only behind the disclosure.
+#[test]
+#[ignore = "needs the fork harness (scripts/onchain/multisig-fork/up.sh) and VELA_MULTISIG_FORK=1"]
+fn a_strangers_far_proposal_does_not_stall_the_multisig() {
+    if std::env::var("VELA_MULTISIG_FORK").is_err() {
+        eprintln!("VELA_MULTISIG_FORK not set: skipped");
+        return;
+    }
+    let service = format!("http://127.0.0.1:{}", port("GENESIS_PORT", 8787));
+    let rpc = format!("http://127.0.0.1:{}", port("FORK_PORT", 8545));
+    let locals: Vec<LocalAccount> = (0..3).map(fixture).collect();
+    let mut shell = Shell {
+        service: service.clone(),
+        rpcs: BTreeMap::from([(100, rpc)]),
+        store: BTreeMap::new(),
+        locals: locals.clone(),
+        last_tx: None,
+        log: Vec::new(),
+    };
+
+    // A 2-of-3 of the three accounts, recorded by the service.
+    let mut acc = DomainDriver::<MultisigAccounts>::new();
+    acc.dispatch(accounts::Event::Start {
+        service_url: service.clone(),
+        accounts: locals.clone(),
+        networks: vec![100],
+    });
+    settle(&mut acc, &mut shell);
+    acc.dispatch(accounts::Event::NewDraft);
+    settle(&mut acc, &mut shell);
+    acc.dispatch(accounts::Event::Create {
+        choice: CreateChoice {
+            owners: locals.iter().map(|l| l.address.clone()).collect(),
+            threshold: 2,
+            name: "Griefed Harbor".to_owned(),
+            chain_id: 100,
+            creator: locals[0].address.clone(),
+            members: BTreeMap::new(),
+        },
+    });
+    settle(&mut acc, &mut shell);
+    let view = acc.view();
+    assert_eq!(view.create.phase, Phase::Done, "{:?}", view.create);
+    let account: MultisigAccount = view.accounts[0].account.clone();
+    let safe = account.address.clone();
+
+    // The stranger: a key of its own, signing its proposal's safeTxHash as a
+    // plain account signs (EIP-712 of the SafeTx, v 27/28).
+    let stranger = k256::ecdsa::SigningKey::from_slice(&[0x5a; 32]).unwrap();
+    let point = stranger.verifying_key().to_sec1_point(false);
+    let owner = format!(
+        "0x{}",
+        vela_core::primitives::to_hex(
+            &vela_core::primitives::keccak256(&point.as_bytes()[1..])[12..],
+            false
+        )
+    );
+    let post = |nonce: &str| -> (u16, String) {
+        let tx = vela_core::multisig::cancel_tx(&safe, nonce).unwrap();
+        let hash = vela_core::multisig::safe_tx_hash(100, &safe, &tx).unwrap();
+        let digest = vela_core::primitives::from_hex(&hash).unwrap();
+        let (sig, id) = stranger.sign_prehash_recoverable(&digest);
+        let mut bytes = sig.to_bytes().to_vec();
+        bytes.push(27 + id.to_byte());
+        let body = json!({
+            "chainId": 100, "safe": safe, "safeTx": tx,
+            "approval": { "owner": owner, "signature": vela_core::primitives::to_hex(&bytes, true) },
+            "genesis": account.genesis,
+        });
+        let (status, _, text) = http(
+            "POST",
+            &format!("{service}/api/proposals"),
+            Some(&body.to_string()),
+        )
+        .unwrap();
+        (status, text)
+    };
+    let (status, text) = post("0x3e8");
+    eprintln!("the mailbox's answer to a stranger at nonce 1000: {status} {text}");
+    // The service may refuse it (a server-side bound); the wallet must not
+    // depend on that — a stranger's post the service takes is the case here.
+    let far_held = (200..300).contains(&status);
+    let (near_status, near_text) = post("0x2");
+    eprintln!("…and at nonce 2: {near_status} {near_text}");
+    assert!(
+        far_held || (200..300).contains(&near_status),
+        "the mailbox took no stranger's post at all; nothing to prove the wallet's rule against"
+    );
+
+    let mut ms = DomainDriver::<MultisigProposals>::new();
+    ms.dispatch(proposals::Event::Start {
+        service_url: service.clone(),
+        accounts: locals.clone(),
+        networks: vec![100],
+        known: Vec::new(),
+    });
+    settle(&mut ms, &mut shell);
+    ms.dispatch(proposals::Event::Follow {
+        account: Some(account.clone()),
+    });
+    settle(&mut ms, &mut shell);
+    let view = ms.view();
+    assert!(
+        view.non_members >= 1,
+        "the stranger's post was read: {view:?}"
+    );
+    assert!(view.items.iter().all(|i| !i.from_non_member));
+    assert_eq!(view.open_count, 0, "nothing a member vouches for waits");
+    assert_eq!(view.waiting_on_me, 0, "a stranger's post waits on nobody");
+
+    ms.dispatch(proposals::Event::Draft {
+        chain_id: 100,
+        proposal: ProposalKind::Transfers {
+            transfers: vec![vela_core::multisig::Transfer {
+                token: None,
+                to: "0x00000000000000000000000000000000000000bb".to_owned(),
+                amount: "1".to_owned(),
+            }],
+        },
+    });
+    settle(&mut ms, &mut shell);
+    let draft = ms
+        .view()
+        .draft
+        .unwrap_or_else(|| panic!("{:?}", ms.view().actions));
+    assert_eq!(
+        draft.item.tx.nonce, "0x0",
+        "the member's proposal takes the multisig's next free number, not 1001"
+    );
+    eprintln!(
+        "next nonce 0x0 with {} stranger post(s) in the mailbox",
+        view.non_members
+    );
+
+    ms.dispatch(proposals::Event::ShowNonMembers { show: true });
+    settle(&mut ms, &mut shell);
+    assert!(ms.view().items.iter().any(|i| i.from_non_member));
+}
+
 mod parent {
     use super::*;
     use vela_core::app::parent_safe_guard::{ParentReason, SafeOwnerAnswer};

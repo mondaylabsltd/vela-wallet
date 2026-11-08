@@ -98,6 +98,12 @@ export interface ProposalItem {
 	 */
 	renameUndeployed: boolean;
 	/**
+	 * §37 (review 1-13): no member of the multisig has approved it — anyone
+	 * can post to the mailbox. Listed only while the person asked to see
+	 * them (`showing_non_members`), with the warning on it.
+	 */
+	fromNonMember: boolean;
+	/**
 	 * r11 S4: every number a queued one waits behind (the core's rule,
 	 * `ProposalItem.waits_for`) — the same numbers on every surface.
 	 */
@@ -159,6 +165,7 @@ export function itemOf(i: MultisigProposalItem): ProposalItem {
 		createdMs: i.createdMs,
 		unsent: i.unsent,
 		renameUndeployed: i.renameUndeployed,
+		fromNonMember: i.fromNonMember,
 		waitsFor: (i.waitsFor ?? []).map((n) => BigInt(n))
 	};
 }
@@ -432,6 +439,24 @@ class Proposals {
 			}, this.pace);
 		};
 		round();
+	}
+
+	/**
+	 * §37 (review 1-13): how many proposals no member approved the core left
+	 * out of the list and every count (`non_members`).
+	 */
+	get nonMembers(): number {
+		return this.view?.non_members ?? 0;
+	}
+
+	/** They are listed now, each with its warning (`showing_non_members`). */
+	get showingNonMembers(): boolean {
+		return this.view?.showing_non_members ?? false;
+	}
+
+	/** The list's last row: show them, or hide them again (`show_non_members`). */
+	showNonMembers(show: boolean): void {
+		proposalsHost.send({ type: 'show_non_members', show });
 	}
 
 	/** The person's Retry (or `online`): ask the service now, whatever its schedule. */

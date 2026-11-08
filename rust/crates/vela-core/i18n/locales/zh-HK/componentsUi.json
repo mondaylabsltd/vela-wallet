@@ -325,7 +325,16 @@
       "intentChangeThreshold": "修改需要的批准數",
       "labelMember": "成員",
       "labelNewMember": "新成員",
-      "labelApprovalsRequired": "需要的批准數"
+      "labelApprovalsRequired": "需要的批准數",
+      "farAboveBalanceWarning": "超過你餘額的 100 倍——此合約可花掉你持有的全部，以及之後到賬的更多",
+      "signIn": {
+        "refusedTitle": "Vela 不會簽署此登入",
+        "wrongDomain": "此登入是給 {{domain}} 的，但發起請求的是 {{origin}}。要求你登入其他網站的網站，是想接管你在那裏的帳戶。",
+        "wrongUri": "此登入指定的是 {{uri}}，而不是發起請求的網站 {{origin}}。",
+        "wrongChain": "此登入針對鏈 {{chain}}，但此網站連接在鏈 {{connected}} 上。請切換網絡後重新請求。",
+        "incomplete": "此登入缺少 {{field}}，Vela 無法核對它讓你登入到哪裏。",
+        "noOrigin": "Vela 無法判斷是哪個網站在請求，因此不會簽署此登入。"
+      }
     },
     "currency": {
       "title": "顯示貨幣",

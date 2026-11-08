@@ -79,12 +79,34 @@ struct MultisigHomeCard: View {
                     }
                 }
             }
-            if following, !openItems.isEmpty {
+            if following, !openItems.isEmpty || view.nonMembers > 0 {
                 MsSection(title: words.t("panel.pending")) {
                     VStack(alignment: .leading, spacing: Tokens.Space.s0) {
                         ForEach(openItems) { item in
                             proposalRow(item)
                             MsDivider()
+                        }
+                        // §37 (review 1-13): what no member vouches for is
+                        // left out until asked for — the list ends with the
+                        // core's disclosure.
+                        if let disclosure = Self.nonMembersDisclosure(view, words: words) {
+                            Button {
+                                hub.sendProposal(["type": "show_non_members", "show": !view.showingNonMembers])
+                            } label: {
+                                HStack {
+                                    Text(prose: disclosure)
+                                        .typeRole(Typography.rowSub.scaled(textScale))
+                                        .foregroundStyle(theme.fgMuted)
+                                    Spacer()
+                                    LucideIcon(.chevronDown, size: LucideIconSize.smallChevron)
+                                        .rotationEffect(.degrees(view.showingNonMembers ? 180 : 0))
+                                        .foregroundStyle(theme.fgSubtle)
+                                }
+                                .padding(.vertical, Tokens.Space.s12)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("multisig.home.nonMembers")
                         }
                     }
                 }
@@ -197,6 +219,16 @@ struct MultisigHomeCard: View {
         view.items.filter { $0.status != "done" }
     }
 
+    /// §37 (review 1-13): the list's last row while proposals from
+    /// non-members exist — "Show proposals from non-members (n)", or "Hide …"
+    /// once shown; `nil` with none. Pure.
+    static func nonMembersDisclosure(_ view: MsProposalsView, words: MsWords) -> String? {
+        guard view.nonMembers > 0 else { return nil }
+        return view.showingNonMembers
+            ? words.t("panel.nonMembersHide")
+            : words.t("panel.nonMembersShow", ["total": String(view.nonMembers)])
+    }
+
     private func proposalRow(_ item: MsProposalItem) -> some View {
         Button { onOpen(.proposal(chainId: item.chainId, safeTxHash: item.safeTxHash)) } label: {
             HStack(spacing: Tokens.Space.s12) {
@@ -209,6 +241,12 @@ struct MultisigHomeCard: View {
                         .typeRole(Typography.rowSub.scaled(textScale))
                         .foregroundStyle(view.standing(item)?.kind == "yourTurn" ? theme.fgBase : theme.fgSubtle)
                         .lineLimit(2)
+                    // §37: anyone can post to the mailbox — said on every
+                    // proposal no member vouches for.
+                    if item.fromNonMember {
+                        MsNote(text: words.t("panel.nonMembersWarning"), tone: .warning,
+                               identifier: "multisig.home.nonMemberWarning")
+                    }
                 }
                 Spacer(minLength: Tokens.Space.s8)
                 Text(prose: "\(item.approved)/\(item.threshold)")

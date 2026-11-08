@@ -572,6 +572,33 @@ pub fn registry_resolve_unit_step(unit_id: u32, source: String, answers_json: St
     vela_core::registry_resolve::unit_step_json(u64::from(unit_id), &source, &answers_json)
 }
 
+/// §37 (review 1-7): re-check an unconfirmed account on the chain alone.
+/// See `vela_core::registry_resolve::confirm_step`.
+#[uniffi::export]
+#[must_use]
+pub fn registry_resolve_confirm_step(
+    public_key_hex: String,
+    address: String,
+    answers_json: String,
+) -> String {
+    vela_core::registry_resolve::confirm_step_json(&public_key_hex, &address, &answers_json)
+}
+
+/// §37: may the stored account be received at (`ReceiveStanding` JSON);
+/// `None` for a record this build cannot read.
+#[uniffi::export]
+#[must_use]
+pub fn receive_standing(account_json: String) -> Option<String> {
+    vela_core::app::receive_standing_json(&account_json)
+}
+
+/// §37: the stored account with `identity` replaced, nothing else touched.
+#[uniffi::export]
+#[must_use]
+pub fn account_with_identity(account_json: String, identity: String) -> Option<String> {
+    vela_core::app::account_with_identity_json(&account_json, &identity)
+}
+
 /// "Sign with": which credential a ceremony is pinned to and where it lives
 /// (a key route: `{credential_id, method, transports, hints}`), for the place
 /// the person chose — `None` for `auto` and anything else. See
@@ -3115,6 +3142,28 @@ pub fn eip1271_signature(
         &keys,
     )
     .map_err(Into::into)
+}
+
+/// §37 (review 1-11): the signature a site gets for a message — `signature`
+/// (from [`eip1271_signature`]) as it is when the account holds code on the
+/// request's chain (`code`, its `eth_getCode`; `None` when unread), else in
+/// its ERC-6492 envelope. `keys`: the founding keys, in order.
+#[uniffi::export]
+pub fn message_signature(
+    signature: Vec<u8>,
+    keys: Vec<WalletKeyRecord>,
+    account: String,
+    code: Option<String>,
+) -> Result<Vec<u8>, CoreError> {
+    let keys: Vec<vela_core::user_op::WalletKey> = keys
+        .into_iter()
+        .map(|key| vela_core::user_op::WalletKey {
+            credential_id: key.credential_id,
+            public_key_hex: key.public_key_hex,
+        })
+        .collect();
+    vela_core::user_op::message_signature(&signature, &keys, &account, code.as_deref())
+        .map_err(Into::into)
 }
 
 /// The EntryPoint every Vela operation is submitted against.

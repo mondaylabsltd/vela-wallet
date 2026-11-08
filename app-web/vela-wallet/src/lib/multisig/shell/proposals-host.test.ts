@@ -13,6 +13,7 @@
  */
 import '$lib/i18n/wasm-init.server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { secp256k1 } from '@noble/curves/secp256k1';
 import { cancelTx, safeTxHash } from '../core/kernel';
 import type { MultisigShellDeps } from './handler';
 
@@ -20,6 +21,25 @@ const SERVICE = 'http://service.test';
 const SHOWN = '0x00000000000000000000000000000000000000a1';
 const OTHER = '0x00000000000000000000000000000000000000b2';
 const ME = '0x00000000000000000000000000000000000000aa';
+/**
+ * §37 (review 1-13): the other member — Hardhat's second dev account — whose
+ * approval makes a kept proposal a member's. One no member approved is left
+ * out of every count, as the mailbox takes a post from anyone.
+ */
+const PEER_KEY = '59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
+const PEER = '0x70997970c51812dc3a010c7d01b50e0d17dc79c8';
+const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+const bytes = (h: string) =>
+	Uint8Array.from((h.replace(/^0x/, '').match(/../g) ?? []).map((x) => parseInt(x, 16)));
+/** PEER's approval of `hash`: its ECDSA signature, `r ‖ s ‖ v`. */
+function peerApproval(hash: string) {
+	const sig = secp256k1.sign(bytes(hash), bytes(PEER_KEY));
+	return {
+		owner: PEER,
+		signature: `0x${hex(sig.toCompactRawBytes())}${(27 + sig.recovery).toString(16)}`,
+		createdMs: 1
+	};
+}
 
 const page = new EventTarget();
 const doc = Object.assign(new EventTarget(), { visibilityState: 'visible' });
@@ -89,8 +109,8 @@ function deps(store: ReturnType<typeof memoryStore>, http: string[]): MultisigSh
 const account = (address: string) => ({
 	address,
 	genesis: { factory: '0x01', singleton: '0x02', saltNonce: '0x1', initializer: '0x' },
-	owners: [ME],
-	threshold: 1,
+	owners: [ME, PEER],
+	threshold: 2,
 	recorded: true,
 	chainIds: [100],
 	addedMs: 1
@@ -106,7 +126,7 @@ async function keptList(safe: string) {
 		chains: [
 			{
 				chainId: 100,
-				members: { deployed: true, owners: [ME], threshold: 1, nonce: '0' },
+				members: { deployed: true, owners: [ME, PEER], threshold: 2, nonce: '0' },
 				proposals: [
 					{
 						chainId: 100,
@@ -114,7 +134,8 @@ async function keptList(safe: string) {
 						safeTxHash: hash,
 						safeTx: tx,
 						proposer: ME,
-						approvals: [],
+						// A member's, so it is listed and counted (§37).
+						approvals: [peerApproval(hash)],
 						createdMs: 1,
 						updatedMs: 1
 					}

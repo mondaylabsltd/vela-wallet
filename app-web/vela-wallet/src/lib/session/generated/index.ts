@@ -2,6 +2,7 @@
 export * from './Account';
 export * from './AccountKey';
 export * from './CompletionMode';
+export * from './Identity';
 export * from './KeyMethod';
 export * from './OutboxRecord';
 export * from './PendingPublish';

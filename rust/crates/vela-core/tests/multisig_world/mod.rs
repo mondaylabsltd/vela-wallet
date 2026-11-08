@@ -475,6 +475,37 @@ pub fn fixture(index: usize) -> LocalAccount {
     }
 }
 
+/// §37: fixture `index`'s own passkey approval of `safe_tx_hash` for the
+/// multisig `safe` on `chain` — the mailbox entry a member's approval is, so
+/// a stored proposal is one a member vouches for (one with no approval at
+/// all is a stranger's, out of the default list).
+pub fn member_approval(index: usize, chain: u64, safe_tx_hash: &str) -> serde_json::Value {
+    let f = vela_core::dev_fixtures::account(index).unwrap();
+    let challenge = multisig::approval_challenge(chain, &f.address, safe_tx_hash).unwrap();
+    let a = vela_core::dev_fixtures::build_assertion(
+        &f,
+        &vela_core::primitives::from_hex(&challenge).unwrap(),
+        vela_core::dev_fixtures::RP_ID,
+        vela_core::dev_fixtures::ORIGIN,
+    )
+    .unwrap();
+    let keys = [vela_core::user_op::WalletKey {
+        credential_id: f.credential_id_hex.clone(),
+        public_key_hex: f.public_key_hex.clone(),
+    }];
+    let approval = multisig::approval_from_assertion(
+        &keys,
+        &f.credential_id_hex,
+        &a.authenticator_data_hex,
+        &a.client_data_json_hex,
+        &a.signature_der_hex,
+    )
+    .unwrap();
+    let mut value = serde_json::to_value(multisig::Approval::Passkey(Box::new(approval))).unwrap();
+    value["createdMs"] = serde_json::json!(1);
+    value
+}
+
 /// A multisig genesis for these owners (the name "Quiet Harbor").
 pub fn genesis(owners: &[&str], threshold: u64, salt: &str) -> multisig::MultisigGenesis {
     let owners: Vec<String> = owners.iter().map(|o| (*o).to_owned()).collect();

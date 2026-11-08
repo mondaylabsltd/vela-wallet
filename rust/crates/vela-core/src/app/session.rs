@@ -302,6 +302,10 @@ pub enum SessionEffect {
 // Events
 // ---------------------------------------------------------------------------
 
+// The account a completion carries is the large variant (§37's `identity`
+// took it past the lint's line); events are sent once a sign-in, and boxing
+// it would change the JSON wire every shell speaks for no measurable gain.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "SessionEvent"))]

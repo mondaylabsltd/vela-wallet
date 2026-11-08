@@ -416,8 +416,27 @@ pub fn passkey_error_words(
     code: Option<i32>,
     message: String,
 ) -> PasskeyErrorWords {
-    let words =
-        vela_core::app::passkey_error::passkey_error_words(&platform, &domain, code, &message);
+    passkey_error_words_on(platform, domain, code, message, false)
+}
+
+/// [`passkey_error_words`] for the build it runs in (R21-3, §37):
+/// `test_build` — the flag handed to `relying_party_id` — says an association
+/// failure as the test build's own passkey domain not being set up
+/// (`onboarding.common.passkeyError.testDomainNotAssociated`); a release
+/// build's words are unchanged.
+#[uniffi::export]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn passkey_error_words_on(
+    platform: String,
+    domain: String,
+    code: Option<i32>,
+    message: String,
+    test_build: bool,
+) -> PasskeyErrorWords {
+    let words = vela_core::app::passkey_error::passkey_error_words_on(
+        &platform, &domain, code, &message, test_build,
+    );
     PasskeyErrorWords {
         kind: words.kind.into(),
         key: words.key,

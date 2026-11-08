@@ -46,6 +46,12 @@ export const PROPOSAL_ROW_PREFIX = ROW_PREFIX;
 /** The waiting group's action while the multisig service (or a network) is away: ask it now. */
 export const MULTISIG_RETRY = 'multisig-retry';
 
+/**
+ * §37 (review 1-13): the id of the list's last row while the core leaves
+ * proposals no member approved out — a tap shows them (or hides them again).
+ */
+export const MULTISIG_NON_MEMBERS = 'multisig-non-members';
+
 export function proposalRowId(item: Pick<ProposalItem, 'chainId' | 'safeTxHash'>): string {
 	return waitingRowId(item.chainId, item.safeTxHash);
 }
@@ -227,7 +233,10 @@ class WaitingRows {
 			open.length === 0 &&
 			missing.length === 0;
 		const said = !!waitingNote && !noteSaidElsewhere;
-		if (open.length === 0 && missing.length === 0 && !said) return null;
+		// §37: proposals no member approved are out of the list and every
+		// count (the core's); the group still ends with the way to see them.
+		const nonMembers = proposals.nonMembers;
+		if (open.length === 0 && missing.length === 0 && !said && nonMembers === 0) return null;
 		const rows: ActivityRowModel[] = open.map((item) => {
 			const drawn = this.#drawn[proposalRowId(item)];
 			const change = memberChangeOf(m, item);
@@ -262,11 +271,11 @@ class WaitingRows {
 				// What must be read first: it changes who controls the multisig,
 				// or it sends a token nobody vouches for (its contract, and a
 				// lookalike's "not the real USDC").
-				...(change
-					? { caution: m.change.rowCaution }
-					: note
-						? { caution: `${note.text} · ${note.short}` }
-						: {}),
+				...cautionOf(
+					change ? m.change.rowCaution : note ? `${note.text} · ${note.short}` : null,
+					// §37: no member approved it — anyone can post to the mailbox.
+					item.fromNonMember ? m.panel.nonMembersWarning : null
+				),
 				// The typographic minus every other row's amount carries (vis-18).
 				amount: drawn?.amount
 					? drawn.amount.startsWith('<')
@@ -298,6 +307,24 @@ class WaitingRows {
 				badgeColor: chainColor(gap.chainId)
 			});
 		}
+		// §37: the list ends with its non-members' disclosure — "Show proposals
+		// from non-members (2)", then "Hide …" while they are listed.
+		if (nonMembers > 0) {
+			rows.push({
+				id: MULTISIG_NON_MEMBERS,
+				kind: 'sent',
+				disclosure: true,
+				title: proposals.showingNonMembers
+					? m.panel.nonMembersHide
+					: fillTemplate(m.panel.nonMembersShow, { total: nonMembers }),
+				subtitle: '',
+				amount: '',
+				unit: '',
+				positive: false,
+				masked: false,
+				badgeColor: ''
+			});
+		}
 		const retry = () => ({ id: MULTISIG_RETRY, label: m.service.retry });
 		// What the group says of its list is the machine's one note (offline,
 		// the service away, a network unanswered, the list kept, stale, the
@@ -312,6 +339,21 @@ class WaitingRows {
 		}
 		return { label: m.panel.pending, rows };
 	}
+}
+
+/**
+ * A row's caution: what changes who controls it or poses as another token
+ * (danger), and that no member approved it (§37, warning) — both said when
+ * both hold, in the danger tone.
+ */
+function cautionOf(
+	danger: string | null,
+	warning: string | null
+): Pick<ActivityRowModel, 'caution' | 'cautionTone'> {
+	if (danger !== null && warning !== null) return { caution: `${danger} · ${warning}` };
+	if (danger !== null) return { caution: danger };
+	if (warning !== null) return { caution: warning, cautionTone: 'warning' };
+	return {};
 }
 
 /**

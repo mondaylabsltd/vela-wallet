@@ -4405,7 +4405,22 @@ pub mod page {
         };
         let mut deploy_facts = None;
         if let Some(g) = &deploy_multisig {
-            let facts = shell::counterfactual_facts(io, v.chain_id, &v.safe, g).await;
+            // §37: every passkey approval brings its member's genesis — the
+            // outside page holds no Vela account of its own.
+            let geneses: Vec<multisig::Genesis> = v
+                .item
+                .approvals
+                .iter()
+                .filter_map(|a| match &a.approval {
+                    Approval::Passkey(k) => Some(k.owner_genesis.clone()),
+                    _ => None,
+                })
+                .collect();
+            let binding = shell::Binding {
+                geneses,
+                elsewhere: Vec::new(),
+            };
+            let facts = shell::counterfactual_facts(io, v.chain_id, &v.safe, g, &binding).await;
             match multisig::counterfactual_authority(g, &v.safe, &facts) {
                 Ok(multisig::Authority::Verified { .. }) => {}
                 Ok(multisig::Authority::Unknown { .. }) | Err(_) => {

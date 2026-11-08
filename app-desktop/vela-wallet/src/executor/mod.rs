@@ -73,6 +73,7 @@ pub mod proxy;
 #[cfg(target_os = "macos")]
 pub mod proxy_macos;
 pub mod qr;
+pub mod receive_identity;
 pub mod receive_watch;
 pub mod registry;
 pub mod relay;
@@ -357,6 +358,8 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
             Ok(unit) => ShellResult::RegistryUnit {
                 metadata_hex: unit.metadata_hex,
                 members: unit.members,
+                // §37: the resolver's own word on these members, untouched.
+                verified_by: unit.verified_by,
             },
             Err(error) => index_failed(error),
         },

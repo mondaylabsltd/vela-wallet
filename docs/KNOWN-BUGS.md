@@ -1,5 +1,19 @@
 # Known bugs
 
+## R22-PLAN-1 (planned, feature, every surface; from review 1-12, 2026-11-07) — no allowance list, no revoke screen
+
+**Platform:** every surface. **Gap:** Vela shows and caps an approval when a site asks
+for one (§37: carried approvals, witness permits, a waiver per leg, unlimited from
+2^128), but nowhere lists the allowances an account has already granted, or offers to
+revoke one. A reviewer expects one: a standing unlimited approval from months ago is
+still a drainer's way in. **Status:** a feature, so out of the frozen Round 22; planned
+— one core machine that reads `Approval` / `ApprovalForAll` logs and Permit2's
+`allowance` per token and spender, through the wallet's own RPC (never a service's
+word), and builds the revoke as an ordinary send (`approve(spender, 0)`,
+`setApprovalForAll(operator, false)`, Permit2 `lockdown`), with a row per platform.
+**Workaround:** revoke from the token's own site, or a block explorer's token-approval
+page.
+
 ## R20-S1 (✅ FIXED 2026-11-08, §34; found 2026-11-07, iOS, Arc Testnet) — a deploying account's Max charged a fee larger than shown
 
 **Platform:** found on iOS (the rule was the core's, so every shell). **Symptom:**

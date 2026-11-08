@@ -26,6 +26,8 @@ struct ReceiveListBody: View {
 
     let model: ReceiveListModel
     var onQr: (Int) -> Void = { _ in }
+    /// §37: Check again, on an account not yet confirmed on-chain.
+    var onCheckAgain: () -> Void = {}
 
     @State private var query = ""
     @State private var copiedIndex: Int?
@@ -40,6 +42,14 @@ struct ReceiveListBody: View {
     }
 
     var body: some View {
+        if let blocked = model.blocked {
+            ReceiveBlockedView(model: blocked, onCheckAgain: onCheckAgain)
+        } else {
+            list
+        }
+    }
+
+    private var list: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
             // R1 prints this directly under the title: the list below is not
             // eight addresses, and the sentence is the only thing that says so.
@@ -85,6 +95,55 @@ struct ReceiveListBody: View {
             try? await Task.sleep(for: .seconds(Tokens.Motion.fast))
             if copiedIndex == index { copiedIndex = nil }
         }
+    }
+}
+
+/// §37 (review 1-7): Receive for an account that may not be received at —
+/// the core's title and body, no address, and Check again (or "Checking
+/// on-chain…" while the chain is asked).
+struct ReceiveBlockedView: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+
+    let model: ReceiveBlockedModel
+    var onCheckAgain: () -> Void = {}
+
+    /// A stable hook for tests and the device runs.
+    static let testId = "receive.blocked"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s12) {
+            if let title = model.title {
+                Text(verbatim: title)
+                    .typeRole(Typography.title.scaled(textScale))
+                    .foregroundStyle(theme.fgBase)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let body = model.body {
+                Text(verbatim: body)
+                    .typeRole(Typography.body.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let checking = model.checking {
+                HStack(spacing: Tokens.Space.s8) {
+                    ProgressView()
+                    Text(verbatim: checking)
+                        .typeRole(Typography.body.scaled(textScale))
+                        .foregroundStyle(theme.fgSubtle)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("receive.blocked.checking")
+            }
+            if let checkAgain = model.checkAgain {
+                VelaButton(title: checkAgain, kind: .secondary, action: onCheckAgain)
+                    .padding(.top, Tokens.Space.s4)
+                    .accessibilityIdentifier("receive.blocked.checkAgain")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(Self.testId)
     }
 }
 

@@ -644,7 +644,17 @@
   "shareCardNetworkNote": "Solo pagos en {{network}}",
   "tokenContract": "Contrato del token",
   "includeNetwork": "Incluir red",
-  "includeNetworkHint": "Algunas billeteras no pueden leer este código. Si la otra persona no puede, desactívalo."
+  "includeNetworkHint": "Algunas billeteras no pueden leer este código. Si la otra persona no puede, desactívalo.",
+  "unconfirmed": {
+   "title": "Aún no confirmada en la cadena",
+   "body": "Las llaves de esta billetera vienen del índice de llaves, y el registro en la cadena aún no las confirma. Vela no muestra una dirección para recibir hasta que lo haga; vuelve a verificar cada vez que abres esto.",
+   "checkAgain": "Verificar de nuevo",
+   "checking": "Verificando en la cadena…"
+  },
+  "refuted": {
+   "title": "Esta no es tu billetera registrada",
+   "body": "El registro en la cadena guarda para tu llave de acceso un conjunto de llaves distinto del que dio el índice. No recibas nada aquí: elimina esta billetera y vuelve a iniciar sesión."
+  }
  },
  "assets": {
   "sectionTitle": "Activos",
@@ -908,7 +918,8 @@
     "noNetwork": "La passkey necesita conexión a internet. Revisa tu conexión e inténtalo de nuevo.",
     "alreadyRegistered": "Este autenticador ya guarda una de las llaves de esta wallet. Usa otro.",
     "timedOut": "Se agotó el tiempo de la ventana de la passkey. Inténtalo de nuevo.",
-    "other": "No se pudo usar la passkey. Inténtalo de nuevo."
+    "other": "No se pudo usar la passkey. Inténtalo de nuevo.",
+    "testDomainNotAssociated": "El dominio de llaves de acceso de esta compilación de prueba no está configurado en este dispositivo (TEST_RP_DOMAIN, o localhost en un simulador o emulador), así que el sistema no le deja usar una llave de acceso. Las versiones de lanzamiento no se ven afectadas."
    }
   },
   "create": {
@@ -1678,7 +1689,16 @@
    "intentChangeThreshold": "Cambiar las aprobaciones necesarias",
    "labelMember": "Miembro",
    "labelNewMember": "Nuevo miembro",
-   "labelApprovalsRequired": "Aprobaciones necesarias"
+   "labelApprovalsRequired": "Aprobaciones necesarias",
+   "farAboveBalanceWarning": "Más de 100 veces tu saldo: este contrato podría gastar todo lo que tienes, y más a medida que llegue",
+   "signIn": {
+    "refusedTitle": "Vela no firmará este inicio de sesión",
+    "wrongDomain": "Este inicio de sesión es para {{domain}}, pero lo pide {{origin}}. Un sitio que te pide iniciar sesión en otro sitio intenta apoderarse de tu cuenta allí.",
+    "wrongUri": "Este inicio de sesión nombra {{uri}}, que no es {{origin}}, el sitio que lo pide.",
+    "wrongChain": "Este inicio de sesión es para la cadena {{chain}}, pero este sitio está conectado en la cadena {{connected}}. Cambia de red y vuelve a pedirlo.",
+    "incomplete": "A este inicio de sesión le falta su {{field}}, así que Vela no puede verificar a qué te da acceso.",
+    "noOrigin": "Vela no puede saber qué sitio lo pide, así que no firmará este inicio de sesión."
+   }
   },
   "signingApprove": {
    "resultingTotal": "Nuevo límite total",

@@ -495,11 +495,21 @@ function allowanceChips(
 function guardWarnings(guard: GuardView, m: SigningMessages): Block[] {
 	const blocks: Block[] = [];
 	if (guard.unlimited_warning)
-		blocks.push({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
+		blocks.push({ kind: 'warning', tone: 'danger', text: guardWarningText(guard, m) });
 	if (guard.surface === 'permit_sign') {
 		blocks.push({ kind: 'warning', tone: 'danger', text: m.warnPermitCantCap });
 	}
 	return blocks;
+}
+
+/**
+ * §37 (review 1-12): the `unlimited_warning` sentence is the one the core
+ * names (`unlimited_warning_key`) — "Unlimited — …", or "Over 100× your
+ * balance — …" for an amount far above what the account holds. A key this
+ * build has no words for says the unlimited line, never nothing.
+ */
+export function guardWarningText(guard: GuardView, m: SigningMessages): string {
+	return m.guardWarnings?.[guard.unlimited_warning_key] || m.warnUnlimited;
 }
 
 function guardBlock(guard: GuardView, m: SigningMessages): Block | null {
@@ -674,6 +684,19 @@ export function selfCallBlockedText(
 		});
 	}
 	return fill(m.selfCallBlockedBody, { function: blocked.function });
+}
+
+/**
+ * §37 (review 1-11): a refused sign-in's sentence — the core's key, filled
+ * with the core's named params (`domain`, `origin`, `uri`, `chain`,
+ * `connected`, `field`). A key this build has no words for says the title.
+ */
+export function signInRefusedText(
+	signIn: NonNullable<NonNullable<SignView['blocked']>['sign_in']>,
+	m: SigningMessages
+): string {
+	const words = m.signIn?.[signIn.key];
+	return words ? fill(words, signIn.params as Record<string, string>) : m.signInRefusedTitle;
 }
 
 /**
@@ -866,6 +889,15 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 	 * by `confirm_gate_open`, which the core leaves false for a blocked request.
 	 */
 	if (sign.blocked) {
+		// §37 (review 1-11): a sign-in that does not bind to the site asking
+		// and its network — refused, and said as the sign-in it is, never as
+		// a self-call.
+		const signIn = sign.blocked.sign_in;
+		if (signIn) {
+			blocks.push({ kind: 'intent', text: m.signInRefusedTitle, tone: 'danger' });
+			blocks.push({ kind: 'warning', tone: 'danger', text: signInRefusedText(signIn, m) });
+			return blocks;
+		}
 		blocks.push({ kind: 'intent', text: m.selfCallBlockedTitle, tone: 'danger' });
 		blocks.push({ kind: 'warning', tone: 'danger', text: selfCallBlockedText(sign.blocked, m) });
 		return blocks;
@@ -2164,6 +2196,9 @@ export function approveOptsOf(
 		params_override_json: guard.rewritten_params_json,
 		intent: clear.record_intent ?? null,
 		unlimited_approved: guard.unlimited_consented,
+		// §37 (review 1-12): the batch legs kept unlimited on the screen, by
+		// index — the core refuses a batch whose kept-unlimited leg is unnamed.
+		unlimited_approved_legs: guard.unlimited_consented_legs,
 		token_meta: guard.meta,
 		// Spec 097: what the reading named — the contract and the coins — kept
 		// with the record so Activity names them as this sheet did.

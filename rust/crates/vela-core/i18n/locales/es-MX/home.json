@@ -107,7 +107,10 @@
         "invite": "Invitar miembros",
         "lastKnown": "Última lista conocida, de las {{time}}; buscando cambios.",
         "checking": "Buscando transacciones pendientes de aprobación…",
-        "historyUnreadable": "No se pudo leer el historial de esta multifirma en {{network}}: puede que aquí falten transacciones ejecutadas en otro lugar."
+        "historyUnreadable": "No se pudo leer el historial de esta multifirma en {{network}}: puede que aquí falten transacciones ejecutadas en otro lugar.",
+        "nonMembersShow": "Mostrar propuestas de no miembros ({{total}})",
+        "nonMembersHide": "Ocultar propuestas de no miembros",
+        "nonMembersWarning": "Ningún miembro de esta multifirma lo ha aprobado. Cualquiera puede publicar en el buzón: no apruebes algo que no reconoces."
       },
       "status": {
         "ready": "Lista para ejecutar",
@@ -440,7 +443,8 @@
         "signRiskBody": "En {{network}}, no solo sus miembros pueden actuar por esta multifirma. Quien lo controle puede mover sus fondos o bloquearla, firmes lo que firmes. Firma solo si sabes exactamente por qué lo tiene.",
         "signRiskConfirm": "Entiendo el riesgo, firmar",
         "signRiskCancel": "No firmar",
-        "signUnchecked": "Vela no pudo comprobar quién puede actuar por esta multifirma en {{network}}, así que todavía no firmará ahí. Inténtalo de nuevo en un momento."
+        "signUnchecked": "Vela no pudo comprobar quién puede actuar por esta multifirma en {{network}}, así que todavía no firmará ahí. Inténtalo de nuevo en un momento.",
+        "ownerNotBound": "En {{network}}, el miembro {{address}} es un contrato que nada vincula a su propia creación allí: quien pueda desplegar en esa dirección tendría su voto."
       },
       "external": {
         "pageTitle": "Aprobar para Vela",

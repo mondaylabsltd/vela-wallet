@@ -213,12 +213,21 @@ fn an_unreadable_mailbox_proposes_nothing() {
     assert!(world.passkeys.is_empty());
 }
 
-/// The number after every open proposal, once the list is read.
+/// A stranger's `ecdsa` approval of `tx`: it verifies, and its owner is no
+/// member of the multisig.
+fn strangers(account: &MultisigAccount, chain: u64, tx: &multisig::SafeTx) -> Value {
+    let hash = multisig::safe_tx_hash(chain, &account.address, tx).unwrap();
+    let digest = vela_core::primitives::from_hex(&hash).unwrap();
+    let (key, owner) = world::eoa(0x77);
+    json!({ "owner": owner, "signature": world::eoa_sign(&key, &digest), "createdMs": 1 })
+}
+
+/// The number after every open proposal a member vouches for, once the list
+/// is read.
 #[test]
 fn the_next_number_is_after_every_open_proposal() {
-    let (mut world, mut sut, account) = setup(&[0]);
-    let open = multisig::cancel_tx(&account.address, "0x0").unwrap();
-    world.mailbox.push(stored(&account, 100, &open, vec![]));
+    let (mut world, mut sut, _) = setup(&[0]);
+    hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
     run(
         &mut sut,
         &mut world,
@@ -228,6 +237,100 @@ fn the_next_number_is_after_every_open_proposal() {
         },
     );
     assert_eq!(sut.view().draft.unwrap().item.tx.nonce, "0x1");
+}
+
+/// §37 (review 1-13 a): a stranger's post at nonce + 1000 — no approval at
+/// all, or one by an account that is no member — holds no number: the next
+/// proposal is still right after the members' own, and the multisig is not
+/// stalled behind 1000 numbers nobody can fill.
+#[test]
+fn a_strangers_proposal_far_ahead_does_not_stall_the_multisig() {
+    let (mut world, mut sut, account) = setup(&[0]);
+    hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
+    let far = multisig::cancel_tx(&account.address, "0x3e8").unwrap();
+    world.mailbox.push(stored(&account, 100, &far, vec![]));
+    let farther = multisig::cancel_tx(&account.address, "0x3e9").unwrap();
+    let signed = strangers(&account, 100, &farther);
+    world
+        .mailbox
+        .push(stored(&account, 100, &farther, vec![signed]));
+    run(&mut sut, &mut world, Event::Refresh { fresh: true });
+    run(
+        &mut sut,
+        &mut world,
+        Event::Draft {
+            chain_id: 100,
+            proposal: transfer("2"),
+        },
+    );
+    let view = sut.view();
+    let draft = view.draft.unwrap_or_else(|| {
+        panic!(
+            "{:?} {:?}",
+            view.actions,
+            view.items
+                .iter()
+                .map(|i| (i.nonce, i.approved, i.from_non_member))
+                .collect::<Vec<_>>()
+        )
+    });
+    assert_eq!(
+        draft.item.tx.nonce, "0x1",
+        "the strangers' numbers 1000 and 1001 are nobody's to wait behind"
+    );
+}
+
+/// §37 (review 1-13 b): what no member vouches for is out of the default
+/// list and out of every count — never "needs your approval" — and is shown
+/// only behind "Show proposals from non-members", each flagged for its
+/// warning. Once a member approves one, it is the members' like any other.
+#[test]
+fn a_strangers_proposal_is_shown_only_behind_the_disclosure() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let ours = hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
+    let theirs = multisig::cancel_tx(&account.address, "0x1").unwrap();
+    let signed = strangers(&account, 100, &theirs);
+    world
+        .mailbox
+        .push(stored(&account, 100, &theirs, vec![signed]));
+    run(&mut sut, &mut world, Event::Refresh { fresh: true });
+    let view = sut.view();
+    assert_eq!(
+        view.items
+            .iter()
+            .map(|i| i.safe_tx_hash.clone())
+            .collect::<Vec<_>>(),
+        vec![ours.clone()],
+        "the default list is the members': {:?}",
+        view.items
+            .iter()
+            .map(|i| (i.nonce, i.approved, i.from_non_member, i.approvals.clone()))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(view.non_members, 1);
+    assert!(!view.showing_non_members);
+    assert_eq!(view.open_count, 1);
+    assert_eq!(
+        view.waiting_on_me, 1,
+        "ours waits on member 1; theirs on nobody"
+    );
+
+    run(&mut sut, &mut world, Event::ShowNonMembers { show: true });
+    let view = sut.view();
+    assert!(view.showing_non_members);
+    let shown: Vec<_> = view
+        .items
+        .iter()
+        .map(|i| (i.safe_tx_hash.clone(), i.from_non_member))
+        .collect();
+    let theirs_hash = multisig::safe_tx_hash(100, &account.address, &theirs).unwrap();
+    assert!(shown.contains(&(ours.clone(), false)));
+    assert!(shown.contains(&(theirs_hash, true)), "{shown:?}");
+    assert_eq!(view.open_count, 1, "opened, it still counts for nothing");
+    assert_eq!(view.waiting_on_me, 1);
+
+    run(&mut sut, &mut world, Event::ShowNonMembers { show: false });
+    assert_eq!(sut.view().items.len(), 1);
 }
 
 /// r5reg-5: the member picked on the review signs, and is offered first next time.
@@ -381,8 +484,13 @@ fn proposals_at_one_number_know_each_other() {
     )
     .unwrap();
     let c = multisig::cancel_tx(&account.address, "0x0").unwrap();
-    world.mailbox.push(stored(&account, 100, &a, vec![]));
-    world.mailbox.push(stored(&account, 100, &c, vec![]));
+    // §37: proposals a member vouches for (fixture 1's approval).
+    let vouched = |tx: &multisig::SafeTx| {
+        let hash = multisig::safe_tx_hash(100, &account.address, tx).unwrap();
+        vec![world::member_approval(1, 100, &hash)]
+    };
+    world.mailbox.push(stored(&account, 100, &a, vouched(&a)));
+    world.mailbox.push(stored(&account, 100, &c, vouched(&c)));
     run(&mut sut, &mut world, Event::Refresh { fresh: true });
     let items = sut.view().items;
     let cancel_hash = multisig::safe_tx_hash(100, &account.address, &c).unwrap();
@@ -425,7 +533,13 @@ fn without_the_list_each_network_is_asked() {
     let (mut world, mut sut, account) = setup(&[0]);
     world.cross_chain = false;
     let tx = multisig::cancel_tx(&account.address, "0x0").unwrap();
-    world.mailbox.push(stored(&account, 100, &tx, vec![]));
+    let hash = multisig::safe_tx_hash(100, &account.address, &tx).unwrap();
+    world.mailbox.push(stored(
+        &account,
+        100,
+        &tx,
+        vec![world::member_approval(1, 100, &hash)],
+    ));
     run(&mut sut, &mut world, Event::Refresh { fresh: true });
     assert_eq!(sut.view().items.len(), 1);
     assert!(world.http_log.iter().any(|l| l.contains("?chainId=100")));

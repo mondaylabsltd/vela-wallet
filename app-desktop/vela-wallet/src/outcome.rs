@@ -627,6 +627,7 @@ mod tests {
             domain: "com.apple.AuthenticationServices.AuthorizationError".to_owned(),
             code: Some(1004),
             message: "The operation couldn't be completed.".to_owned(),
+            test_build: None,
         };
         let words = vela_core::app::passkey_error::words_of(&facts);
         let worded = PromptKind::SignInFailed {

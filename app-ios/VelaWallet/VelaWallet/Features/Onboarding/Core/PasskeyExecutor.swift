@@ -48,6 +48,12 @@ struct PasskeyErrorFacts: Equatable {
     var domain: String
     var code: Int?
     var message: String
+    /// R21-3 (§37): this is a TEST build — the SAME flag this build hands
+    /// `relying_party_id` (`PasskeyRelyingParty.testBuild`: Debug, which the
+    /// simulator's and the "Vela Test" builds are). An association failure
+    /// is then said as the test build's passkey domain not being set up
+    /// (`testDomainNotAssociated`), never the release build's "update Vela".
+    var testBuild: Bool = PasskeyRelyingParty.testBuild
 
     static let platform = "ios"
 
@@ -62,13 +68,19 @@ struct PasskeyErrorFacts: Equatable {
 
     /// The wire object `passkey_failed.error` carries.
     var wire: [String: Any] {
-        ["platform": Self.platform, "domain": domain, "code": code.map { $0 as Any } ?? NSNull(), "message": message]
+        [
+            "platform": Self.platform, "domain": domain, "code": code.map { $0 as Any } ?? NSNull(),
+            "message": message, "test_build": testBuild,
+        ]
     }
 
     /// The core's words for these facts: the kind, the corpus key a sheet
     /// draws, and the failure the machines branch on.
     var words: PasskeyErrorWords {
-        passkeyErrorWords(platform: Self.platform, domain: domain, code: code.map { Int32(clamping: $0) }, message: message)
+        passkeyErrorWordsOn(
+            platform: Self.platform, domain: domain, code: code.map { Int32(clamping: $0) }, message: message,
+            testBuild: testBuild
+        )
     }
 }
 

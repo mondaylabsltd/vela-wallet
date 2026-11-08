@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-TQ8A1h5ET6A+nY09cQ9/GmQWlhpBk+5gSH2mhq4dLKo='; style-src 'sha256-IvjEd3Od02b8rk0e1KtXxPCSfUrwsnqsHIkMkYUW80A='; img-src data:; font-src data:; worker-src 'self'; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-3t018ZU8LVngM/jGkHaOB5acNtS5KIjroV00HUQsLso='; style-src 'sha256-IvjEd3Od02b8rk0e1KtXxPCSfUrwsnqsHIkMkYUW80A='; img-src data:; font-src data:; worker-src 'self'; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vela</title>
     <style>
@@ -9174,13 +9174,13 @@ window.VelaCS = window.VelaCS || {};
   var abi = ns.abi;
   var reg = ns.registry;
 
-  // Where "unlimited" starts — the wallet's own two lines
-  // (vela-core `approval_guard::UNLIMITED_CAP_256` / `_160`), so this page and
-  // the app call the same amount unlimited. 2^200 for a uint256 amount: past
-  // every real supply (about 2^128) and below every "max" sentinel (2^255,
-  // 2^256-1). 2^152 for a Permit2 uint160 amount, whose own max is 2^160-1.
-  var UNLIMITED_256 = 1n << 200n;
-  var UNLIMITED_160 = 1n << 152n;
+  // Where "unlimited" starts — the wallet's own line (vela-core
+  // `approval_guard::UNLIMITED_CAP_256` / `_160`, §37), so this page and the
+  // app call the same amount unlimited: 2^128 for every amount field, uint256
+  // and Permit2's uint160 alike — beyond any real supply (3.4e20 whole tokens
+  // at 18 decimals), so no amount at or above it is about this transaction.
+  var UNLIMITED_256 = 1n << 128n;
+  var UNLIMITED_160 = 1n << 128n;
 
 
   var UNREADABLE = new RegExp('[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f\\ufffd]');
@@ -10502,7 +10502,12 @@ window.VelaCS = window.VelaCS || {};
       return view;
     }
 
-    if (primary === 'PermitSingle' || primary === 'PermitTransferFrom') {
+    // §37 (review 1-12): Permit2's witness transfer — the transfer with the
+    // dApp's own struct (an order, an intent) bound in — reads as the
+    // transfer it is: spender, token, amount, deadline. It read blind.
+    var witnessTransfer = primary === 'PermitWitnessTransferFrom' &&
+      message.permitted && typeof message.permitted === 'object' && !Array.isArray(message.permitted);
+    if (primary === 'PermitSingle' || primary === 'PermitTransferFrom' || witnessTransfer) {
       var details = message.details || message.permitted || {};
       // PermitSingle's amount is a uint160; PermitTransferFrom's is a uint256.
       var pAmount = tokenAmount(BigInt(details.amount), details.token, ctx, primary === 'PermitSingle' ? 160 : 256);

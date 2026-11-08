@@ -1430,9 +1430,21 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `componentsUi.gas.reasonSettlementHigh{,Stopped}` (a relay billing more
 //   gas than the operation can use, `FeeFailure::SettlementGasTooHigh`).
 //   2297 + 4 = 2301 paths, 2181 leaves, 120 branches.
-if (PATHS.length !== 2301) fail(`expected 2301 paths (2181 leaf + 120 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2181) fail(`expected 2181 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
+// 2317 (Round 22, identity, standards, mailbox, §37, 2026-11-08): +
+//   `receive.unconfirmed.{title,body,checkAgain,checking}` and
+//   `receive.refuted.{title,body}` (a multi-key wallet only the key index
+//   vouched for: no address to receive at until a chain confirms it,
+//   `ReceiveStanding`), `componentsUi.signing.farAboveBalanceWarning` (an
+//   approval a hundredfold the balance, `FAR_ABOVE_BALANCE_KEY`) and
+//   `componentsUi.signing.signIn.{refusedTitle,wrongDomain,wrongUri,
+//   wrongChain,incomplete,noOrigin}` (a sign-in that does not bind,
+//   `SignInMismatch`), and `onboarding.common.passkeyError.
+//   testDomainNotAssociated` (R21-3: a test build's passkey domain not set
+//   up, `passkey_error_words_on`). 2301 + 14 leaves + 3 branches = 2318
+//   paths, 2195 leaves, 123 branches.
+if (PATHS.length !== 2318) fail(`expected 2318 paths (2195 leaf + 123 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2195) fail(`expected 2195 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 123) fail(`expected 123 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
 // 579 (round 6, the outside owner's connect page, 2026-10-30): + 17
@@ -1556,7 +1568,11 @@ if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.siz
   // 693 (Round 19, §32, 2026-11-07): + `home.multisig.proposal.feeSigning`
   //   (the mark under a fee line a press is out on: "Signing at this fee —
   //   it stays fixed until you confirm or cancel.", r18-5). 692 + 1 = 693.
-  const pins = { multisig: 693 };
+  // 697 (Round 22, §37, 2026-11-08): + `home.multisig.panel.nonMembers{Show,
+  //   Hide,Warning}` (the proposals no member vouches for, behind a
+  //   disclosure) and `home.multisig.authority.ownerNotBound` (a contract
+  //   member nothing binds to its own genesis). 693 + 4 = 697.
+  const pins = { multisig: 697 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

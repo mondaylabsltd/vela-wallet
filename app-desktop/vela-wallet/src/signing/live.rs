@@ -2027,9 +2027,19 @@ fn allowance_editor(
 pub fn guard_warnings(guard: &GuardView, s: &SigningStrings) -> Vec<Block> {
     let mut blocks = Vec::new();
     if guard.unlimited_warning {
+        // §37 (review 1-12): the sentence is the guard's — an unbounded
+        // amount, or a finite one far above what the account holds. A key
+        // this build does not know still warns, in the unbounded words.
+        let text = if guard.unlimited_warning_key
+            == vela_core::app::approval_guard::FAR_ABOVE_BALANCE_KEY
+        {
+            s.warn_far_above_balance.clone()
+        } else {
+            s.warn_unlimited.clone()
+        };
         blocks.push(Block::Warning {
             tone: Tone::Danger,
-            text: s.warn_unlimited.clone(),
+            text,
         });
     }
     if guard.surface == GuardSurface::PermitSign {
@@ -2072,6 +2082,20 @@ pub fn status_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
     // who controls the account. This is the whole story of the sheet, so it is
     // said first and in the danger tone; `confirm_gate_open` is already false.
     if let Some(blocked) = sign.blocked.as_ref() {
+        // §37 (review 1-11): a sign-in that does not bind to the site asking
+        // or its network — under its own title, in its own sentence with its
+        // params, never the self-call text.
+        if let Some(sign_in) = blocked.sign_in.as_ref() {
+            out.push(Block::Intent {
+                text: s.sign_in_refused_title.clone(),
+                tone: Tone::Danger,
+            });
+            out.push(Block::Warning {
+                tone: Tone::Danger,
+                text: SharedString::from(sign_in_refusal_text(s, sign_in)),
+            });
+            return out;
+        }
         out.push(Block::Intent {
             text: s.blocked_title.clone(),
             tone: Tone::Danger,
@@ -2420,6 +2444,33 @@ fn descriptor_host() -> String {
         .ok()
         .and_then(|url| url.host_str().map(str::to_owned))
         .unwrap_or_default()
+}
+
+/// §37 (review 1-11): a refused sign-in's sentence — its key's words with
+/// its params filled. A key this build has no words for says the
+/// `noOrigin` refusal's (still a refusal, never a key on screen).
+#[must_use]
+pub fn sign_in_refusal_text(
+    s: &SigningStrings,
+    refusal: &vela_core::app::clear_signing::SignInRefusal,
+) -> String {
+    let template = s
+        .sign_in_sentences
+        .iter()
+        .find(|(key, _)| *key == refusal.key)
+        .or_else(|| {
+            s.sign_in_sentences
+                .iter()
+                .find(|(key, _)| *key == "componentsUi.signing.signIn.noOrigin")
+        })
+        .map(|(_, text)| text.as_str())
+        .unwrap_or_default();
+    let params: Vec<(&str, &str)> = refusal
+        .params
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
+    crate::signing::fill(template, &params)
 }
 
 /// §31's refusal sentence: the call (`{{function}}`) and the Safe it would
@@ -4160,7 +4211,9 @@ mod tests {
             confirm_allowed: false,
             rewritten_params_json: None,
             unlimited_consented: false,
+            unlimited_consented_legs: Vec::new(),
             unlimited_warning: false,
+            unlimited_warning_key: vela_core::app::approval_guard::UNLIMITED_WARNING_KEY.to_owned(),
             increase_total: None,
             decimals_unverified: false,
             expired: false,
@@ -4513,6 +4566,32 @@ mod tests {
         assert_eq!(guard_warnings(&batch, &s).len(), 1);
         batch.unlimited_warning = false;
         assert!(guard_warnings(&batch, &s).is_empty());
+    }
+
+    /// §37 (review 1-12): the guard names the sentence — a finite amount far
+    /// above what the account holds is said in its own words, not as
+    /// "unlimited"; an unknown key still warns.
+    #[test]
+    fn the_guard_names_which_warning_is_said() {
+        use vela_core::app::approval_guard::{FAR_ABOVE_BALANCE_KEY, UNLIMITED_WARNING_KEY};
+        let s = strings();
+        assert_ne!(s.warn_far_above_balance, s.warn_unlimited);
+        let mut guard = guard_view(editor_view(None, true, Some("1")));
+        guard.unlimited_warning = true;
+        for (key, said) in [
+            (UNLIMITED_WARNING_KEY, &s.warn_unlimited),
+            (FAR_ABOVE_BALANCE_KEY, &s.warn_far_above_balance),
+            ("componentsUi.signing.somethingNewer", &s.warn_unlimited),
+        ] {
+            guard.unlimited_warning_key = key.to_owned();
+            let blocks = guard_warnings(&guard, &s);
+            assert!(
+                matches!(&blocks[..], [Block::Warning { tone: Tone::Danger, text }] if text == said),
+                "{key}"
+            );
+        }
+        guard.unlimited_warning = false;
+        assert!(guard_warnings(&guard, &s).is_empty());
     }
 
     /// Spec 094 S8: an unlimited off-chain permit is said in the danger tone

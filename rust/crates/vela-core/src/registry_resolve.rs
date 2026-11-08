@@ -34,6 +34,19 @@
 //! nothing may call it verified. Only a group the chain DOES hold, with a
 //! different hash, proves the index wrong.
 //!
+//! §37 (review 1-7): that `verified_by: none` is no longer a wallet like any
+//! other. One key is the person's own whoever answered (the address derives
+//! from it alone), but a MULTI-key group the chain has not confirmed is only
+//! the index's word for who else holds a key — a lying index can hand back
+//! the person's real credential beside an attacker's keys, and the wallet
+//! would show an address the attacker co-owns. So such an account is saved
+//! [`Identity::Unconfirmed`]: the person is in (refusing would make the
+//! wallet depend on RPC health), it can sign, but it shows no address to
+//! receive at and takes no deposit until [`confirm_step`] — chain only, no
+//! index — finds the group on chain and its members make this very address.
+//! A chain that holds the key's group and it makes another address proves
+//! the index wrong: [`Identity::Refuted`].
+//!
 //! Same shape as every other walk here: a pure function of a transcript. A
 //! shell performs the requests it is handed and asks again.
 
@@ -99,6 +112,45 @@ pub enum VerifiedBy {
     Ethereum,
     #[default]
     None,
+}
+
+/// §37 (review 1-7): what the chain has said about the group an account's
+/// address was derived from. Persisted on the account (`Account::identity`);
+/// absent reads [`Self::Confirmed`] — every record before §37, a wallet made
+/// on this device (its keys are its own), a one-key wallet (its address
+/// derives from the key that just signed), a group a chain proved.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum Identity {
+    /// Nothing left to confirm.
+    #[default]
+    Confirmed,
+    /// A multi-key group only the index vouched for: no receive address, no
+    /// deposit, "not yet confirmed on-chain" — checked again
+    /// ([`confirm_step`]) before first use.
+    Unconfirmed,
+    /// The chain holds this key's group, and it makes another address: the
+    /// index lied (or broke). Never received at; the person signs in again.
+    Refuted,
+}
+
+impl Identity {
+    #[must_use]
+    pub fn is_confirmed(&self) -> bool {
+        *self == Self::Confirmed
+    }
+}
+
+/// §37: the identity a sign-in gives the account it rebuilt from a group of
+/// `members` keys that `verified_by` vouched for.
+#[must_use]
+pub fn identity_of(members: usize, verified_by: VerifiedBy) -> Identity {
+    if members > 1 && verified_by == VerifiedBy::None {
+        Identity::Unconfirmed
+    } else {
+        Identity::Confirmed
+    }
 }
 
 fn verifier(chain_id: u32) -> VerifiedBy {
@@ -448,6 +500,169 @@ pub fn unit_step(unit_id: u64, source: &str, answers: &[LookupAnswer]) -> Resolv
 }
 
 // ---------------------------------------------------------------------------
+// §37 — confirming an unconfirmed account, from the chain alone
+// ---------------------------------------------------------------------------
+
+/// A step of [`confirm_step`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ConfirmStep {
+    /// Make these `eth_call`s and ask again with the answers.
+    Ask { requests: Vec<LookupRequest> },
+    /// What the chain said. `Unconfirmed` (no chain answered, or none holds
+    /// the group yet) changes nothing; the others are saved on the account.
+    Done {
+        identity: Identity,
+        verified_by: VerifiedBy,
+    },
+}
+
+/// `keys` (uncompressed P-256 hex), in some order, make `address`: each tried
+/// as the pinned first key — the only degree of freedom the multi-key
+/// derivation has (it orders the rest itself).
+fn keys_make(keys: &[String], address: &str) -> bool {
+    let derives = |ordered: &[String]| {
+        ordered
+            .iter()
+            .map(|hex| crate::safe::parse_public_key(hex))
+            .collect::<Result<Vec<_>, _>>()
+            .and_then(|keys| crate::safe::compute_safe_address_multi(&keys))
+            .is_ok_and(|info| info.address.eq_ignore_ascii_case(address.trim()))
+    };
+    (0..keys.len()).any(|pin| {
+        let mut ordered = vec![keys[pin].clone()];
+        ordered.extend(
+            keys.iter()
+                .enumerate()
+                .filter(|(i, _)| *i != pin)
+                .map(|(_, k)| k.clone()),
+        );
+        derives(&ordered)
+    })
+}
+
+/// §37 (review 1-7): re-check, before first use, the account at `address`
+/// that `public_key_hex` (one of its keys) signs for — on the chain only,
+/// never the index: which group does the registry say this key founded, and
+/// do that group's members make `address`?
+///
+/// Gnosis first, then the Ethereum backup. Yes → [`Identity::Confirmed`].
+/// The chain holds the key's group and its members make another address →
+/// [`Identity::Refuted`]. Neither chain answers, or neither holds a group for
+/// the key yet (the index takes a registration before it lands) →
+/// [`Identity::Unconfirmed`], asked again later.
+#[must_use]
+pub fn confirm_step(public_key_hex: &str, address: &str, answers: &[LookupAnswer]) -> ConfirmStep {
+    let unconfirmed = ConfirmStep::Done {
+        identity: Identity::Unconfirmed,
+        verified_by: VerifiedBy::None,
+    };
+    let key = public_key_hex.trim_start_matches("0x").to_lowercase();
+    if !query_safe(&key) {
+        return unconfirmed;
+    }
+    let Some(calls) = registry_chain::key_status_calls(&key) else {
+        return unconfirmed;
+    };
+    let answer = |id: &str| answers.iter().find(|a| a.id == id);
+    fn ok(a: &LookupAnswer) -> Option<&str> {
+        (a.outcome == LookupOutcome::Ok)
+            .then_some(a.body.as_deref())
+            .flatten()
+    }
+    for chain_id in READ_CHAINS {
+        let ids = [format!("key@{chain_id}:0"), format!("key@{chain_id}:1")];
+        let (Some(entry), Some(groups)) = (answer(&ids[0]), answer(&ids[1])) else {
+            return ConfirmStep::Ask {
+                requests: ids
+                    .iter()
+                    .zip(&calls)
+                    .map(|(id, call)| eth_call(id.clone(), chain_id, call))
+                    .collect(),
+            };
+        };
+        let listed = ok(entry)
+            .zip(ok(groups))
+            .and_then(|(entry, groups)| registry_chain::key_status_json(entry, groups))
+            .and_then(|body| serde_json::from_str::<Value>(&body).ok());
+        let unit_ids: Vec<u64> = listed
+            .and_then(|body| {
+                Some(
+                    body["groups"]["unitIds"]
+                        .as_array()?
+                        .iter()
+                        .filter_map(Value::as_u64)
+                        .collect(),
+                )
+            })
+            .unwrap_or_default();
+        if unit_ids.is_empty() {
+            // Silent, or no group for this key here (yet).
+            continue;
+        }
+        // Every group this key founded here — a key may found more than one,
+        // and each needs every member's passkey to be registered at all, so
+        // ANY of them making this address is the person's own wallet.
+        let mut asks = Vec::new();
+        let mut read: Vec<Option<Vec<String>>> = Vec::new();
+        for unit_id in &unit_ids {
+            let Some(unit_calls) = registry_chain::unit_calls(*unit_id) else {
+                read.push(None);
+                continue;
+            };
+            let ids = [
+                format!("unit:{unit_id}@{chain_id}:0"),
+                format!("unit:{unit_id}@{chain_id}:1"),
+            ];
+            let (Some(unit), Some(members)) = (answer(&ids[0]), answer(&ids[1])) else {
+                asks.extend(
+                    ids.iter()
+                        .zip(&unit_calls)
+                        .map(|(id, call)| eth_call(id.clone(), chain_id, call)),
+                );
+                continue;
+            };
+            read.push(
+                ok(unit)
+                    .zip(ok(members))
+                    .and_then(|(unit, members)| registry_chain::unit_json(*unit_id, unit, members))
+                    .and_then(|body| serde_json::from_str::<Value>(&body).ok())
+                    .and_then(|body| {
+                        body["members"]["items"]
+                            .as_array()?
+                            .iter()
+                            .map(|m| m["publicKey"].as_str().map(str::to_owned))
+                            .collect::<Option<Vec<String>>>()
+                    }),
+            );
+        }
+        if !asks.is_empty() {
+            return ConfirmStep::Ask { requests: asks };
+        }
+        if read
+            .iter()
+            .flatten()
+            .any(|keys| !keys.is_empty() && keys_make(keys, address))
+        {
+            return ConfirmStep::Done {
+                identity: Identity::Confirmed,
+                verified_by: verifier(chain_id),
+            };
+        }
+        if read.iter().all(Option::is_some) {
+            // Every group this key founded here was read, and none makes
+            // this address: the chain proves the index's group wrong.
+            return ConfirmStep::Done {
+                identity: Identity::Refuted,
+                verified_by: verifier(chain_id),
+            };
+        }
+        // A group could not be read: no verdict from this chain.
+    }
+    unconfirmed
+}
+
+// ---------------------------------------------------------------------------
 // JSON doors, for the bindings
 // ---------------------------------------------------------------------------
 
@@ -470,6 +685,20 @@ pub fn key_step_json(public_key_hex: &str, answers_json: &str) -> String {
 #[must_use]
 pub fn unit_step_json(unit_id: u64, source: &str, answers_json: &str) -> String {
     to_json(&unit_step(unit_id, source, &answers_of(answers_json)))
+}
+
+/// [`confirm_step`] over JSON: `{type: 'ask', requests}` |
+/// `{type: 'done', identity, verified_by}`.
+#[must_use]
+pub fn confirm_step_json(public_key_hex: &str, address: &str, answers_json: &str) -> String {
+    serde_json::to_string(&confirm_step(
+        public_key_hex,
+        address,
+        &answers_of(answers_json),
+    ))
+    .unwrap_or_else(|_| {
+        r#"{"type":"done","identity":"unconfirmed","verified_by":"none"}"#.to_owned()
+    })
 }
 
 #[cfg(test)]
@@ -747,6 +976,217 @@ mod tests {
         assert_eq!(
             body.map(|b| b["groups"]["total"].clone()),
             Some(Value::from(0))
+        );
+    }
+
+    /// An attacker's genuine P-256 point (the test suite's second fixture key).
+    const ATTACKER: &str = "041111111111111111111111111111111111111111111111111111111111111114d8dd738ca691a327dd14c119194a3d96dbb93d2cb9edab12387669ec973cb024";
+
+    fn unit_keys(body: &Value) -> Vec<String> {
+        body["members"]["items"]
+            .as_array()
+            .unwrap_or(&Vec::new())
+            .iter()
+            .filter_map(|m| m["publicKey"].as_str().map(str::to_owned))
+            .collect()
+    }
+
+    fn address_of(keys: &[String]) -> String {
+        let parsed: Vec<_> = keys
+            .iter()
+            .filter_map(|k| crate::safe::parse_public_key(k).ok())
+            .collect();
+        crate::safe::compute_safe_address_multi(&parsed)
+            .map(|i| i.address)
+            .unwrap_or_default()
+    }
+
+    fn confirmed(step: ConfirmStep) -> (Identity, VerifiedBy) {
+        let ConfirmStep::Done {
+            identity,
+            verified_by,
+        } = step
+        else {
+            unreachable!()
+        };
+        (identity, verified_by)
+    }
+
+    /// Drive a confirm walk against the recorded chains minus `down`.
+    fn confirm_run(address: &str, down: &[u32]) -> ConfirmStep {
+        let fixture = recorded();
+        let mut answers: Vec<LookupAnswer> = Vec::new();
+        for _ in 0..16 {
+            match confirm_step(&key(), address, &answers) {
+                ConfirmStep::Ask { requests } => {
+                    for request in requests {
+                        let LookupRequest::EthCall {
+                            id, chain_id, data, ..
+                        } = request
+                        else {
+                            unreachable!("the confirm walk never asks the index");
+                        };
+                        let body = (!down.contains(&chain_id))
+                            .then(|| fixture["answers"][chain_id.to_string()][&data].as_str())
+                            .flatten()
+                            .map(str::to_owned);
+                        answers.push(LookupAnswer {
+                            id,
+                            outcome: if body.is_some() {
+                                LookupOutcome::Ok
+                            } else {
+                                LookupOutcome::Failed
+                            },
+                            body,
+                        });
+                    }
+                }
+                done => return done,
+            }
+        }
+        unreachable!("the confirm walk never finished")
+    }
+
+    /// §37: an index that told the truth is confirmed by the chain alone —
+    /// a group this key founded makes the very address.
+    #[test]
+    fn an_honest_group_is_confirmed_on_chain() {
+        let address = address_of(&unit_keys(&honest_unit()));
+        assert_eq!(
+            confirmed(confirm_run(&address, &[])),
+            (Identity::Confirmed, VerifiedBy::Gnosis)
+        );
+        assert_eq!(
+            confirmed(confirm_run(&address, &[100])),
+            (Identity::Confirmed, VerifiedBy::Ethereum),
+            "Gnosis silent: the Ethereum backup confirms it"
+        );
+    }
+
+    /// §37 (review 1-7), the lying-index fixture: the person's real key and
+    /// credential, beside an attacker's key — the address it makes is one
+    /// the attacker co-owns. The chain holds this key's groups, none makes
+    /// it: refuted. With no chain to ask, it stays unconfirmed — never
+    /// confirmed.
+    #[test]
+    fn a_lying_index_group_is_refuted_by_the_chain() {
+        let lie = address_of(&[key(), ATTACKER.to_owned()]);
+        let (identity, _) = confirmed(confirm_run(&lie, &[]));
+        assert_eq!(identity, Identity::Refuted);
+        assert_eq!(
+            confirmed(confirm_run(&lie, &[100, 1])),
+            (Identity::Unconfirmed, VerifiedBy::None)
+        );
+        // …and at sign-in it was never verified: a multi-key group nobody
+        // but the index vouched for is saved unconfirmed.
+        let mut forged = honest_unit();
+        forged["members"]["items"][1]["publicKey"] = Value::from(ATTACKER);
+        let (_, _, verified_by, _) = parts(
+            run(
+                |a| unit_step(10, "index", a),
+                Some(&forged.to_string()),
+                &[100, 1],
+            )
+            .0,
+        );
+        assert_eq!(identity_of(3, verified_by), Identity::Unconfirmed);
+        assert_eq!(identity_of(1, verified_by), Identity::Confirmed);
+        assert_eq!(identity_of(3, VerifiedBy::Gnosis), Identity::Confirmed);
+    }
+
+    /// §37: the lying-index vector (`tests/vectors/rules/lying-index.json`)
+    /// every shell replays through its own resolver loop against the recorded
+    /// chains (`registry-chain.json`): what the unit step vouches for, the
+    /// identity a sign-in saves, and what the confirm step finds. Rebuilt
+    /// with `VELA_WRITE_VECTORS=1`; otherwise it must equal what the core
+    /// says.
+    #[test]
+    fn the_lying_index_vector_is_the_cores_answer() {
+        let honest = honest_unit();
+        let keys = unit_keys(&honest);
+        let mut forged = honest.clone();
+        forged["members"]["items"][1]["publicKey"] = Value::from(ATTACKER);
+        let lie = address_of(&[key(), ATTACKER.to_owned()]);
+        let unit_case = |name: &str, body: &Value, down: &[u32]| {
+            let (body_out, source, verified_by, discarded) =
+                parts(run(|a| unit_step(10, "index", a), Some(&body.to_string()), down).0);
+            let members = body_out.as_ref().map_or(0, |b| unit_keys(b).len());
+            serde_json::json!({
+                "name": name, "kind": "unit", "unitId": 10, "source": "index",
+                "index": body, "down": down,
+                "expect": {
+                    "verified_by": verified_by, "source": source, "index_discarded": discarded,
+                    "members": members,
+                    "identity": identity_of(members, verified_by),
+                },
+            })
+        };
+        let confirm_case = |name: &str, address: &str, down: &[u32]| {
+            let (identity, verified_by) = confirmed(confirm_run(address, down));
+            serde_json::json!({
+                "name": name, "kind": "confirm", "address": address, "down": down,
+                "expect": { "identity": identity, "verified_by": verified_by },
+            })
+        };
+        let cases = vec![
+            unit_case("an honest index, Gnosis proves it", &honest, &[]),
+            unit_case(
+                "a forged member is caught; the chain's members are used",
+                &forged,
+                &[],
+            ),
+            unit_case(
+                "a forged member, no chain answers: unconfirmed, never confirmed",
+                &forged,
+                &[100, 1],
+            ),
+            unit_case(
+                "an honest index, no chain answers: still unconfirmed",
+                &honest,
+                &[100, 1],
+            ),
+            confirm_case(
+                "the honest group is confirmed on Gnosis",
+                &address_of(&keys),
+                &[],
+            ),
+            confirm_case(
+                "the honest group, Gnosis silent: Ethereum's backup confirms",
+                &address_of(&keys),
+                &[100],
+            ),
+            confirm_case(
+                "the lying index's address (the person's key + an attacker's) is refuted",
+                &lie,
+                &[],
+            ),
+            confirm_case(
+                "the lying index's address, no chain answers: unconfirmed",
+                &lie,
+                &[100, 1],
+            ),
+        ];
+        let vector = serde_json::json!({
+            "about": "§37 (review 1-7): a key index that lies. `publicKey` is the recorded golden key; every eth_call is answered from app-web/vela-wallet/src/lib/onboarding/core/__fixtures__/registry-chain.json (`answers[chainId][calldata]`), minus the chains in `down` (answered as failed); an IndexGet is answered with `index`. kind `unit`: drive `registry_resolve_unit_step(unitId, source, …)` to done — `expect.verified_by` is what the shell passes on in RegistryUnit, `expect.identity` what a sign-in saves for a group of `expect.members` keys (`unconfirmed`: no receive address). kind `confirm`: drive `registry_resolve_confirm_step(publicKey, address, …)` to done.",
+            "attacker": ATTACKER,
+            "publicKey": key(),
+            "cases": cases,
+        });
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/vectors/rules/lying-index.json"
+        );
+        if std::env::var("VELA_WRITE_VECTORS").is_ok() {
+            let text = serde_json::to_string_pretty(&vector).unwrap_or_default() + "\n";
+            assert!(std::fs::write(path, text).is_ok());
+        }
+        let on_disk: Value = std::fs::read_to_string(path)
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or_default();
+        assert_eq!(
+            on_disk, vector,
+            "the vector is the core's answer (VELA_WRITE_VECTORS=1 rebuilds it)"
         );
     }
 

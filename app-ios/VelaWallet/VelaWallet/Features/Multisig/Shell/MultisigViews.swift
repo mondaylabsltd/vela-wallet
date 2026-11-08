@@ -464,6 +464,10 @@ struct MsProposalItem: Decodable, Equatable, Identifiable {
     /// r11: every number (decimal) a queued transaction waits behind, the
     /// core's (`waits_for`, at most 20).
     var waitsFor: [String]
+    /// §37 (review 1-13): open, and no member of the multisig vouches for it
+    /// — anyone can post to the mailbox. Listed only once the person asks
+    /// (`show_non_members`), and then with its warning.
+    var fromNonMember: Bool
 
     var id: String { "\(chainId):\(safeTxHash.lowercased())" }
     var key: String { "\(chainId):\(safeTxHash)" }
@@ -493,6 +497,7 @@ struct MsProposalItem: Decodable, Equatable, Identifiable {
         renameUndeployed = c.soft(MsKey("renameUndeployed"), false)
         membersHere = c.soft(MsKey("membersHere"))
         waitsFor = c.soft(MsKey("waitsFor"), [])
+        fromNonMember = c.soft(MsKey("fromNonMember"), false)
     }
 }
 
@@ -665,6 +670,12 @@ struct MsProposalsView: Decodable, Equatable {
     /// multisig service".
     var busy = false
     var paceMs = 12_000
+    /// §37 (review 1-13): the open proposals no member vouches for, left out
+    /// of `items` and every count until shown — the list then ends with
+    /// "Show proposals from non-members (n)" / "Hide …".
+    var nonMembers = 0
+    /// They are in `items` now (`show_non_members {show: true}`).
+    var showingNonMembers = false
     var outbox: [String: MsJSON] = [:]
     var draft: MsDraft?
     var actions: [String: MsTagged] = [:]
@@ -720,6 +731,8 @@ struct MsProposalsView: Decodable, Equatable {
         unreachable = c.soft(MsKey("unreachable"), false)
         busy = c.soft(MsKey("busy"), false)
         paceMs = c.soft(MsKey("pace_ms"), 12_000)
+        nonMembers = c.soft(MsKey("non_members"), 0)
+        showingNonMembers = c.soft(MsKey("showing_non_members"), false)
         outbox = c.soft(MsKey("outbox"), [:])
         draft = c.soft(MsKey("draft"))
         actions = c.soft(MsKey("actions"), [:])

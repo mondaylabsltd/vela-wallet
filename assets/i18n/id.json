@@ -641,7 +641,17 @@
   "shareCardNetworkNote": "Hanya pembayaran {{network}}",
   "tokenContract": "Kontrak token",
   "includeNetwork": "Sertakan jaringan",
-  "includeNetworkHint": "Beberapa dompet tidak bisa membaca kode ini. Jika pengirim tidak bisa memindai, matikan."
+  "includeNetworkHint": "Beberapa dompet tidak bisa membaca kode ini. Jika pengirim tidak bisa memindai, matikan.",
+  "unconfirmed": {
+   "title": "Belum dikonfirmasi on-chain",
+   "body": "Kunci dompet ini berasal dari indeks kunci, dan registri on-chain belum mengonfirmasinya. Vela tidak menampilkan alamat penerimaan sampai terkonfirmasi — Vela memeriksa lagi setiap kali Anda membuka ini.",
+   "checkAgain": "Periksa lagi",
+   "checking": "Memeriksa on-chain…"
+  },
+  "refuted": {
+   "title": "Ini bukan dompet terdaftar Anda",
+   "body": "Registri on-chain menyimpan kumpulan kunci yang berbeda untuk passkey Anda dibanding yang diberikan indeks kunci. Jangan menerima apa pun di sini — hapus dompet ini dan masuk lagi."
+  }
  },
  "assets": {
   "sectionTitle": "Aset",
@@ -905,7 +915,8 @@
     "noNetwork": "Passkey memerlukan koneksi jaringan. Periksa koneksi Anda lalu coba lagi.",
     "alreadyRegistered": "Autentikator ini sudah menyimpan salah satu kunci dompet ini. Gunakan yang lain.",
     "timedOut": "Waktu jendela passkey habis. Coba lagi.",
-    "other": "Passkey tidak dapat digunakan. Coba lagi."
+    "other": "Passkey tidak dapat digunakan. Coba lagi.",
+    "testDomainNotAssociated": "Domain passkey build uji ini belum disiapkan di perangkat ini (TEST_RP_DOMAIN, atau localhost di simulator atau emulator), jadi sistem tidak mengizinkannya memakai passkey. Build rilis tidak terpengaruh."
    }
   },
   "create": {
@@ -1673,7 +1684,16 @@
    "intentChangeThreshold": "Ubah persetujuan yang dibutuhkan",
    "labelMember": "Anggota",
    "labelNewMember": "Anggota baru",
-   "labelApprovalsRequired": "Persetujuan yang dibutuhkan"
+   "labelApprovalsRequired": "Persetujuan yang dibutuhkan",
+   "farAboveBalanceWarning": "Lebih dari 100× saldo Anda — kontrak ini bisa membelanjakan semua yang Anda miliki, dan lebih lagi saat masuk",
+   "signIn": {
+    "refusedTitle": "Vela tidak akan menandatangani login ini",
+    "wrongDomain": "Login ini untuk {{domain}}, tetapi {{origin}} yang meminta. Situs yang meminta Anda masuk ke situs lain sedang mencoba mengambil alih akun Anda di sana.",
+    "wrongUri": "Login ini menyebut {{uri}}, yang bukan {{origin}}, situs yang meminta.",
+    "wrongChain": "Login ini untuk chain {{chain}}, tetapi situs ini terhubung di chain {{connected}}. Ganti jaringan dan minta lagi.",
+    "incomplete": "Login ini tidak menyertakan {{field}}, jadi Vela tidak bisa memeriksa Anda masuk ke mana.",
+    "noOrigin": "Vela tidak bisa mengetahui situs mana yang meminta, jadi tidak akan menandatangani login ini."
+   }
   },
   "signingApprove": {
    "resultingTotal": "Total izin belanja baru",

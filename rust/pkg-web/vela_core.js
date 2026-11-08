@@ -3598,6 +3598,27 @@ export function abiEncodeUint256(value_hex) {
 }
 
 /**
+ * §37: the stored account with `identity` (`confirmed` | `unconfirmed` |
+ * `refuted`) — what a confirm step found — and nothing else changed.
+ * @param {string} account_json
+ * @param {string} identity
+ * @returns {string | undefined}
+ */
+export function accountWithIdentity(account_json, identity) {
+    const ptr0 = passStringToWasm0(account_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(identity, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.accountWithIdentity(ptr0, len0, ptr1, len1);
+    let v3;
+    if (ret[0] !== 0) {
+        v3 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v3;
+}
+
+/**
  * What an entered address reads as — `"valid"`, `"malformed"` or
  * `"checksum"` (mixed case that is not its EIP-55 checksum). The one rule
  * every field that takes an address refuses by (send-2, set-4).
@@ -6006,6 +6027,45 @@ export function matchSelector(sig, calldata) {
 }
 
 /**
+ * §37 (review 1-11): the signature a site gets for a message —
+ * `signature_hex` (the account's EIP-1271 signature) as it is when the
+ * account holds code on the request's chain (`code_hex`, its
+ * `eth_getCode`), else in its ERC-6492 envelope. `keys_json`: the founding
+ * keys, `[{credential_id, public_key_hex}]`, in order.
+ * @param {string} signature_hex
+ * @param {string} keys_json
+ * @param {string} account
+ * @param {string | null} [code_hex]
+ * @returns {string}
+ */
+export function messageSignature(signature_hex, keys_json, account, code_hex) {
+    let deferred6_0;
+    let deferred6_1;
+    try {
+        const ptr0 = passStringToWasm0(signature_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(keys_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(account, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        var ptr3 = isLikeNone(code_hex) ? 0 : passStringToWasm0(code_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len3 = WASM_VECTOR_LEN;
+        const ret = wasm.messageSignature(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+        var ptr5 = ret[0];
+        var len5 = ret[1];
+        if (ret[3]) {
+            ptr5 = 0; len5 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred6_0 = ptr5;
+        deferred6_1 = len5;
+        return getStringFromWasm0(ptr5, len5);
+    } finally {
+        wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
+    }
+}
+
+/**
  * The lowest gas price a chain accepts, as a decimal string (money crosses
  * this boundary as decimal strings, never as JS numbers).
  *
@@ -6375,6 +6435,35 @@ export function passkeyErrorWords(platform, domain, code, message) {
 }
 
 /**
+ * [`passkey_error_words`] for the build it runs in (R21-3, §37): a test
+ * build's association failure names its passkey domain.
+ * @param {string} platform
+ * @param {string} domain
+ * @param {number | null | undefined} code
+ * @param {string} message
+ * @param {boolean} test_build
+ * @returns {string}
+ */
+export function passkeyErrorWordsOn(platform, domain, code, message, test_build) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(platform, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(domain, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(message, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.passkeyErrorWordsOn(ptr0, len0, ptr1, len1, !isLikeNone(code), isLikeNone(code) ? 0 : code, ptr2, len2, test_build);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
  * **The security-key fallback mark**, as an `image/svg+xml` data URI, for a
  * key whose AAGUID the catalog cannot name. `undefined` when the row deserves
  * no mark of this kind — a platform authenticator, which the client already
@@ -6562,6 +6651,24 @@ export function publicRpcUrls(chain_id) {
 }
 
 /**
+ * §37: may the stored account be received at, and what Receive says when it
+ * may not (`ReceiveStanding`). `undefined` for a record this build cannot read.
+ * @param {string} account_json
+ * @returns {string | undefined}
+ */
+export function receiveStanding(account_json) {
+    const ptr0 = passStringToWasm0(account_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.receiveStanding(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
  * Returns `null` when the two assertions do not pin down exactly one key
  * (different credentials, or the same signature twice) — that is a legitimate
  * outcome, not an error.
@@ -6734,6 +6841,34 @@ export function registryNameStep(address, answers_json) {
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * §37 (review 1-7): re-check an unconfirmed account on the chain alone —
+ * `ask` with `eth_call`s to perform, or `done` with its `identity`. See
+ * `vela_core::registry_resolve::confirm_step`.
+ * @param {string} public_key_hex
+ * @param {string} address
+ * @param {string} answers_json
+ * @returns {string}
+ */
+export function registryResolveConfirmStep(public_key_hex, address, answers_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(public_key_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(answers_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.registryResolveConfirmStep(ptr0, len0, ptr1, len1, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
 }
 

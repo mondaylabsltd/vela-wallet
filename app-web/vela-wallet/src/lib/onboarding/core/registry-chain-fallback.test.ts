@@ -18,8 +18,14 @@ vi.mock('$lib/core/client', async (original) => ({
 }));
 
 import { registryChainUnit, registryChainUnitPlan } from '$lib/core/client';
-import { functionSelector, toHex } from '$lib/core/kernels';
-import { _resetUnitSource, queryByPublicKey, queryUnit, RegistryError } from './registry';
+import { computeSafeAddressMulti, functionSelector, toHex } from '$lib/core/kernels';
+import {
+	_resetUnitSource,
+	confirmIdentity,
+	queryByPublicKey,
+	queryUnit,
+	RegistryError
+} from './registry';
 
 const answers = fixture.answers as Record<string, Record<string, string>>;
 
@@ -216,5 +222,61 @@ describe('who vouched for a key’s answer', () => {
 	it('Ethereum’s backup lists the key: ethereum', async () => {
 		silentChains = [100];
 		expect((await queryByPublicKey(fixture.publicKey)).verifiedBy).toBe('ethereum');
+	});
+});
+
+/**
+ * §37 (review 1-7): who vouched for a UNIT's founding set reaches the
+ * sign-in machine untouched (`registry_unit.verified_by`) — a multi-key
+ * group only the index vouched for signs in unconfirmed.
+ */
+describe('who vouched for a unit’s founding set (§37)', () => {
+	it('the chain proved it: gnosis', async () => {
+		expect((await queryByPublicKey(fixture.publicKey)).verifiedBy).toBe('gnosis');
+		expect((await queryUnit(10)).verifiedBy).toBe('gnosis');
+	});
+
+	it('only the index answered — no chain reachable: none', async () => {
+		indexListing = { entry: {}, groups: { total: 1, unitIds: [10] } };
+		indexUnit = honestUnit();
+		silentChains = [100, 1];
+		await queryByPublicKey(fixture.publicKey);
+		expect((await queryUnit(10)).verifiedBy).toBe('none');
+	});
+});
+
+/**
+ * §37 (review 1-7): an unconfirmed account checked again — on the CHAIN
+ * alone (`registry_resolve::confirm_step`), through the same public RPCs.
+ * The index is never asked.
+ */
+describe('the chain-only confirm walk (§37)', () => {
+	async function unitAddress(unitId: number): Promise<string> {
+		const unit = await queryUnit(unitId);
+		return computeSafeAddressMulti(unit.members.map((m) => m.public_key_hex)).address;
+	}
+
+	it('the chain holds the group that makes this address: confirmed, and the index is not asked', async () => {
+		const address = await unitAddress(10);
+		asked.length = 0;
+		expect(await confirmIdentity(fixture.publicKey, address)).toEqual({
+			identity: 'confirmed',
+			verifiedBy: 'gnosis'
+		});
+		expect(asked).not.toContain('index');
+	});
+
+	it('the chain holds this key’s groups, and none makes this address: refuted', async () => {
+		const found = await confirmIdentity(
+			fixture.publicKey,
+			'0x000000000000000000000000000000000000dEaD'
+		);
+		expect(found.identity).toBe('refuted');
+	});
+
+	it('no chain answers: still unconfirmed — nothing changes', async () => {
+		const address = await unitAddress(10);
+		silentChains = [100, 1];
+		expect((await confirmIdentity(fixture.publicKey, address)).identity).toBe('unconfirmed');
 	});
 });

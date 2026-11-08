@@ -13,6 +13,7 @@
 	 * Shape follows `PromptSheet`: bottom sheet below the desktop breakpoint,
 	 * centred card above it.
 	 */
+	import { receiveIdentity } from '$lib/onboarding/core/receive-identity.svelte';
 	import { MediaQuery } from 'svelte/reactivity';
 	import BottomSheet from './BottomSheet.svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -85,7 +86,11 @@
 		}
 	}
 
+	/** §37: the address of an account that may not be received at is not offered for copying. */
+	const copyable = $derived(receiveIdentity.held(address) === null);
+
 	async function copyAddress() {
+		if (!copyable) return;
 		try {
 			await navigator.clipboard.writeText(address);
 		} catch {
@@ -106,9 +111,11 @@
 		<p class="caption">{copy.caption}</p>
 		<p class="address">{address}</p>
 		<div class="actions">
-			<Button variant="primary" shape="rounded" onclick={copyAddress}>
-				{copied ? copy.copied : copy.copyAddress}
-			</Button>
+			{#if copyable}
+				<Button variant="primary" shape="rounded" onclick={copyAddress}>
+					{copied ? copy.copied : copy.copyAddress}
+				</Button>
+			{/if}
 			<Button variant="secondary" shape="rounded" onclick={close}>{copy.close}</Button>
 		</div>
 	</div>

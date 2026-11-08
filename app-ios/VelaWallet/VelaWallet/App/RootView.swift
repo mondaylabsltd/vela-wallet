@@ -123,6 +123,8 @@ struct RootView: View {
     private var activity: ActivityStore { graph.activity }
     private var tokens: ManageTokensStore { graph.tokens }
     private var deposits: ReceiveWatchStore { graph.deposits }
+    /// §37: may the account shown be received at — every deposit entry asks.
+    private var receiveStanding: ReceiveStandingStore { graph.receiveStanding }
     /// The space in front (spec 105).
     private var space: NetworkSpace { graph.space }
     /// Which network row opened the receive code.
@@ -1049,6 +1051,9 @@ struct RootView: View {
             .onChange(of: session.view.address) { _, address in
                 followAccountInFront(address)
             }
+            // §37: Receive's gate for the account shown, read before anything
+            // can open it (an address not read yet shows none).
+            .task(id: shownAddress) { await receiveStanding.refresh(shownAddress) }
             // A multisig shown (or the account again): the home wears it.
             .onChange(of: multisig.accountsView.active) { _, _ in
                 followShown()
@@ -1340,7 +1345,7 @@ struct RootView: View {
                     if state == .t3 { tokens.open() }
                     // The watcher runs while a code is on screen — five
                     // minutes, at the core's own cadence, and it stops itself.
-                    if state == .r2 || state == .r3 {
+                    if state == .r2 || state == .r3, receiveStanding.receivable(shownAddress) {
                         deposits.open(address: shownAddress)
                     }
                 }
@@ -1438,7 +1443,10 @@ struct RootView: View {
                             // (the proposals machine's `retry`, as the card's note).
                             onActivityRetry: shownMultisig == nil ? nil : {
                                 multisig.sendProposal(["type": "retry"])
-                            }
+                            },
+                            // §37: no "Copy address" for an account that may
+                            // not be received at.
+                            addressCopyable: receiveStanding.receivable(shownAddress)
                         )
                     }
                     // r16-11: a multisig was in front when the app last ran —
@@ -2684,6 +2692,12 @@ struct RootView: View {
         // The catalog's name, or the chain id in words nobody has to invent —
         // the balance wire carries the TOKEN's name, which is not the network's.
         let network = walletNetworks.meta(token.chainId)?.displayName ?? String(token.chainId)
+        // §37: no code for an account that may not be received at — Receive
+        // opens on its sentence instead.
+        guard receiveStanding.receivable(shownAddress) else {
+            enterReceive()
+            return
+        }
         startPaymentRequest()
         paymentRequest.pickAsset(
             chainId: token.chainId,
@@ -2885,9 +2899,21 @@ struct RootView: View {
         // The receive screens first, because they are the ones where a fixture
         // is not embarrassing but dangerous: money sent to the drawn address is
         // money gone.
+        // §37 (review 1-7): an account the core says may not be received at
+        // shows no address anywhere on Receive — the list says why instead,
+        // and no code opens over it.
+        let receivable = receiveStanding.receivable(address)
         if case .receive(let list) = model.base {
-            model.base = .receive(FlowsLive.receiveList(address, on: list, loc: loc,
-                                                        networks: walletNetworks))
+            model.base = .receive(receivable
+                ? FlowsLive.receiveList(address, on: list, loc: loc, networks: walletNetworks)
+                : FlowsLive.receiveBlocked(
+                    receiveStanding.standing(of: address),
+                    checking: receiveStanding.isChecking(address),
+                    on: list, loc: loc
+                ))
+        }
+        if case .receiveQr? = model.sheet, !receivable {
+            model.sheet = nil
         }
         if case .receiveQr(let qr)? = model.sheet {
             // R2 is a NETWORK's code and R3 is one ASSET's. The state is the
@@ -3365,11 +3391,23 @@ struct RootView: View {
     /// start on every return to the list (where this used to live) would have
     /// switched it off behind somebody choosing another network.
     private func enterReceive() {
+        // §37: the standing read again on every entry, and an unconfirmed
+        // account checked on the chain first ("Checking on-chain…").
+        let address = shownAddress
+        Task { await receiveStanding.open(address) }
         startPaymentRequest()
         flows.enter(.receive)
     }
 
+    /// §37: Check again, on an account not yet confirmed on-chain.
+    private func checkReceiveAgain() {
+        let address = shownAddress
+        Task { await receiveStanding.check(address) }
+    }
+
     private func startPaymentRequest() {
+        // §37: no payment request for an account that may not be received at.
+        guard receiveStanding.receivable(shownAddress) else { return }
         paymentRequest.start(
             account: shownAddress,
             recipient: shownAddress,
@@ -3601,6 +3639,7 @@ struct RootView: View {
                             networkName: chain.displayName
                         )
                     },
+                    onReceiveCheckAgain: { checkReceiveAgain() },
                     onSelectActivityItem: { activityItemId = $0 },
                     opensElsewhere: { openMultisigRow($0) },
                     // r10 follow-up: no scan in the history's way while it
@@ -3619,7 +3658,7 @@ struct RootView: View {
                     onExplorer: explorerLink(for: state).map { url in
                         { UIApplication.shared.open(url) }
                     },
-                    onSaveCard: session.view.address.isEmpty ? nil : { saveShareCard() },
+                    onSaveCard: !receiveStanding.receivable(session.view.address) ? nil : { saveShareCard() },
                     // Spec 090: the switch asks the core, which decides what
                     // the code then says.
                     onIncludeNetwork: { paymentRequest.includeNetwork($0) },
@@ -3892,6 +3931,8 @@ struct RootView: View {
     /// the code on screen is built from, so the image and the screen can never
     /// disagree.
     private func saveShareCard() {
+        // §37: never a card for an account that may not be received at.
+        guard receiveStanding.receivable(session.view.address) else { return }
         // The card is about the asset the CODE is about — the machine's (spec
         // 090), which a token's 收款 sets without touching `receiveNetwork`;
         // the row index is the fallback before the machine has one.
@@ -4771,7 +4812,10 @@ struct RootView: View {
         case "receive":
             section = .wallet
             enterReceive()
-            if let chainId = (screen["chain_id"] as? NSNumber)?.intValue {
+            // §37: the list says why; no code opens for an account that may
+            // not be received at.
+            if let chainId = (screen["chain_id"] as? NSNumber)?.intValue,
+               receiveStanding.receivable(shownAddress) {
                 guard let index = walletNetworks.chains.firstIndex(where: { $0.chainId == chainId }),
                       let chain = walletNetworks.chains[safe: index]
                 else { return "the wallet has no network with that chain id" }

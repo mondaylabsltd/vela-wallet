@@ -1002,8 +1002,8 @@ fn approve_result(amount_word: &str) -> ClearSignResult {
     sut.view().result.expect("approve result")
 }
 
-/// The sheet's "Unlimited" starts where the approval guard's does (2^200 for
-/// a uint256 amount), not at the registry's 2^255: between the two, the guard
+/// The sheet's "Unlimited" starts where the approval guard's does (2^128 for
+/// every amount since §37), not at the registry's 2^255: between the two, the guard
 /// warned and offered a cap while the decode drew a seventy-digit figure, and
 /// a cap chosen there never replaced it.
 #[test]
@@ -1011,12 +1011,14 @@ fn unlimited_starts_at_the_guards_line_not_the_registrys() {
     let two_254 = format!("4{}", "0".repeat(63));
     let max_half = format!("7{}", "f".repeat(63)); // type(uint256).max >> 1
     let two_200 = format!("{}1{}", "0".repeat(13), "0".repeat(50));
-    let below = format!("{}{}", "0".repeat(14), "f".repeat(50)); // 2^200 - 1
+    let two_128 = format!("{}1{}", "0".repeat(31), "0".repeat(32));
+    let below = format!("{}{}", "0".repeat(32), "f".repeat(32)); // 2^128 - 1
 
     for (word, name) in [
         (&two_254, "2^254"),
         (&max_half, "2^255 - 1"),
         (&two_200, "2^200"),
+        (&two_128, "2^128"),
     ] {
         let result = approve_result(word);
         let amount = &result.fields[0];
@@ -1034,7 +1036,7 @@ fn unlimited_starts_at_the_guards_line_not_the_registrys() {
 
     let result = approve_result(&below);
     let amount = &result.fields[0];
-    assert_ne!(amount.value, "Unlimited", "2^200 - 1 is a figure");
+    assert_ne!(amount.value, "Unlimited", "2^128 - 1 is a figure");
     assert!(!amount.warning);
     assert!(!approval_guard::is_unbounded_amount(
         U256::from_str_radix(&below, 16).unwrap(),
@@ -1043,7 +1045,7 @@ fn unlimited_starts_at_the_guards_line_not_the_registrys() {
 }
 
 /// A registry descriptor's threshold may name a constant, and a uint160-scale
-/// one (Permit2's 2^160-1) is lowered to the guard's uint160 line, 2^152.
+/// one (Permit2's 2^160-1) is lowered to the guard's line, 2^128 (§37).
 #[test]
 fn a_named_uint160_threshold_is_read_and_lowered_to_the_guards_line() {
     let sig = "setAllowance(uint160 amount)";
@@ -1067,10 +1069,10 @@ fn a_named_uint160_threshold_is_read_and_lowered_to_the_guards_line() {
         sut.view().result.expect("result").fields[0].clone()
     };
 
-    let at_line = read(format!("{}1{}", "0".repeat(25), "0".repeat(38))); // 2^152
+    let at_line = read(format!("{}1{}", "0".repeat(31), "0".repeat(32))); // 2^128
     assert_eq!(at_line.value, "Unlimited");
     assert!(at_line.warning);
-    let below = read(format!("{}{}", "0".repeat(26), "f".repeat(38))); // 2^152 - 1
+    let below = read(format!("{}{}", "0".repeat(32), "f".repeat(32))); // 2^128 - 1
     assert_ne!(below.value, "Unlimited");
     assert!(!below.warning);
 }

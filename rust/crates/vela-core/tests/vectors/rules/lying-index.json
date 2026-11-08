@@ -1,0 +1,266 @@
+{
+  "about": "§37 (review 1-7): a key index that lies. `publicKey` is the recorded golden key; every eth_call is answered from app-web/vela-wallet/src/lib/onboarding/core/__fixtures__/registry-chain.json (`answers[chainId][calldata]`), minus the chains in `down` (answered as failed); an IndexGet is answered with `index`. kind `unit`: drive `registry_resolve_unit_step(unitId, source, …)` to done — `expect.verified_by` is what the shell passes on in RegistryUnit, `expect.identity` what a sign-in saves for a group of `expect.members` keys (`unconfirmed`: no receive address). kind `confirm`: drive `registry_resolve_confirm_step(publicKey, address, …)` to done.",
+  "attacker": "041111111111111111111111111111111111111111111111111111111111111114d8dd738ca691a327dd14c119194a3d96dbb93d2cb9edab12387669ec973cb024",
+  "cases": [
+    {
+      "down": [],
+      "expect": {
+        "identity": "confirmed",
+        "index_discarded": false,
+        "members": 3,
+        "source": "index",
+        "verified_by": "gnosis"
+      },
+      "index": {
+        "members": {
+          "items": [
+            {
+              "attestation": "0100000000000000000000000000000000450000",
+              "authenticatorAttachment": "platform",
+              "credentialId": "76656c612d666978747572652d3031",
+              "entryId": 11,
+              "publicKey": "04197db9030a1e166bec2cee05e0ddb94b26ee0b6d6f429f1748cda4eedac36f04fe546861a9c9dfaf75719b53c75e0b933d4aad6d325f18c75776a260d507647b",
+              "transports": "internal"
+            },
+            {
+              "attestation": "0100000000000000000000000000000000450000",
+              "authenticatorAttachment": "platform",
+              "credentialId": "76656c612d666978747572652d3032",
+              "entryId": 12,
+              "publicKey": "047802f2cc39cc6ed85c41268a580c5f0df36df3f065facfb40f84265927b7ed678438b2084cb84f0d00708e40d44ed8c9901d979bbcb390117089847672c12eec",
+              "transports": "internal"
+            },
+            {
+              "attestation": "0100000000000000000000000000000000450000",
+              "authenticatorAttachment": "platform",
+              "credentialId": "76656c612d666978747572652d3033",
+              "entryId": 13,
+              "publicKey": "043eb2ae2f4e8090837820048baca2db04a7e7ca7dc6742f342a30c6855e7d96947f36ac5a4538dc3a8a7cbf0deea1c0ecb80bfb96a3f8ca57c98f8f400548cd56",
+              "transports": "internal"
+            }
+          ],
+          "total": 3
+        },
+        "unit": {
+          "groupPublicKey": "0427ef005c5d12175e3716f004c41fb2df8f85ff9fe7f5be3fd90523b9460b95bb2b394315cc54eda61ebf36ba9bc26ece5ecb3d4f4b1a70da54e2fee17dc93840",
+          "memberCount": 3,
+          "metadata": "7b2276657273696f6e223a312c2261646472657373223a22307838386343413045654462463243343432363131306262466339393846303438363839323636383934222c2277616c6c65745f76657273696f6e223a22736166652d312e342e31222c226b65795f6e616d6573223a5b22496e7465726c65617665222c224b65792032222c224b65792033225d2c22637265617465645f61745f69736f223a22323032362d30382d32325430323a31343a32382e3636375a227d",
+          "rpId": "localhost",
+          "unitId": 10
+        }
+      },
+      "kind": "unit",
+      "name": "an honest index, Gnosis proves it",
+      "source": "index",
+      "unitId": 10
+    },
+    {
+      "down": [],
+      "expect": {
+        "identity": "confirmed",
+        "index_discarded": true,
+        "members": 3,
+        "source": "chain:100",
+        "verified_by": "gnosis"
+      },
+      "index": {
+        "members": {
+          "items": [
+            {
+              "attestation": "0100000000000000000000000000000000450000",
+              "authenticatorAttachment": "platform",
+              "credentialId": "76656c612d666978747572652d3031",
+              "entryId": 11,
+              "publicKey": "04197db9030a1e166bec2cee05e0ddb94b26ee0b6d6f429f1748cda4eedac36f04fe546861a9c9dfaf75719b53c75e0b933d4aad6d325f18c75776a260d507647b",
+              "transports": "internal"
+            },
+            {
+              "attestation": "0100000000000000000000000000000000450000",
+              "authenticatorAttachment": "platform",
+              "credentialId": "76656c612d666978747572652d3032",
+              "entryId": 12,
+              "publicKey": "041111111111111111111111111111111111111111111111111111111111111114d8dd738ca691a327dd14c119194a3d96dbb93d2cb9edab12387669ec973cb024",
+              "transports": "internal"
+            },
+            {
+              "attestation": "0100000000000000000000000000000000450000",
+              "authenticatorAttachment": "platform",
+              "credentialId": "76656c612d666978747572652d3033",
+              "entryId": 13,
+              "publicKey": "043eb2ae2f4e8090837820048baca2db04a7e7ca7dc6742f342a30c6855e7d96947f36ac5a4538dc3a8a7cbf0deea1c0ecb80bfb96a3f8ca57c98f8f400548cd56",
+              "transports": "internal"
+            }
+          ],
+          "total": 3
+        },
+        "unit": {
+          "groupPublicKey": "0427ef005c5d12175e3716f004c41fb2df8f85ff9fe7f5be3fd90523b9460b95bb2b394315cc54eda61ebf36ba9bc26ece5ecb3d4f4b1a70da54e2fee17dc93840",
+          "memberCount": 3,
+          "metadata": "7b2276657273696f6e223a312c2261646472657373223a22307838386343413045654462463243343432363131306262466339393846303438363839323636383934222c2277616c6c65745f76657273696f6e223a22736166652d312e342e31222c226b65795f6e616d6573223a5b22496e7465726c65617665222c224b65792032222c224b65792033225d2c22637265617465645f61745f69736f223a22323032362d30382d32325430323a31343a32382e3636375a227d",
+          "rpId": "localhost",
+          "unitId": 10
+        }
+      },
+      "kind": "unit",
+      "name": "a forged member is caught; the chain's members are used",
+      "source": "index",
+      "unitId": 10
+    },
+    {
+      "down": [
+        100,
+        1
+      ],
+      "expect": {
+        "identity": "unconfirmed",
+        "index_discarded": false,
+        "members": 3,
+        "source": "index",
+        "verified_by": "none"
+      },
+      "index": {
+        "members": {
+          "items": [
+            {
+              "attestation": "0100000000000000000000000000000000450000",
+              "authenticatorAttachment": "platform",
+              "credentialId": "76656c612d666978747572652d3031",
+              "entryId": 11,
+              "publicKey": "04197db9030a1e166bec2cee05e0ddb94b26ee0b6d6f429f1748cda4eedac36f04fe546861a9c9dfaf75719b53c75e0b933d4aad6d325f18c75776a260d507647b",
+              "transports": "internal"
+            },
+            {
+              "attestation": "0100000000000000000000000000000000450000",
+              "authenticatorAttachment": "platform",
+              "credentialId": "76656c612d666978747572652d3032",
+              "entryId": 12,
+              "publicKey": "041111111111111111111111111111111111111111111111111111111111111114d8dd738ca691a327dd14c119194a3d96dbb93d2cb9edab12387669ec973cb024",
+              "transports": "internal"
+            },
+            {
+              "attestation": "0100000000000000000000000000000000450000",
+              "authenticatorAttachment": "platform",
+              "credentialId": "76656c612d666978747572652d3033",
+              "entryId": 13,
+              "publicKey": "043eb2ae2f4e8090837820048baca2db04a7e7ca7dc6742f342a30c6855e7d96947f36ac5a4538dc3a8a7cbf0deea1c0ecb80bfb96a3f8ca57c98f8f400548cd56",
+              "transports": "internal"
+            }
+          ],
+          "total": 3
+        },
+        "unit": {
+          "groupPublicKey": "0427ef005c5d12175e3716f004c41fb2df8f85ff9fe7f5be3fd90523b9460b95bb2b394315cc54eda61ebf36ba9bc26ece5ecb3d4f4b1a70da54e2fee17dc93840",
+          "memberCount": 3,
+          "metadata": "7b2276657273696f6e223a312c2261646472657373223a22307838386343413045654462463243343432363131306262466339393846303438363839323636383934222c2277616c6c65745f76657273696f6e223a22736166652d312e342e31222c226b65795f6e616d6573223a5b22496e7465726c65617665222c224b65792032222c224b65792033225d2c22637265617465645f61745f69736f223a22323032362d30382d32325430323a31343a32382e3636375a227d",
+          "rpId": "localhost",
+          "unitId": 10
+        }
+      },
+      "kind": "unit",
+      "name": "a forged member, no chain answers: unconfirmed, never confirmed",
+      "source": "index",
+      "unitId": 10
+    },
+    {
+      "down": [
+        100,
+        1
+      ],
+      "expect": {
+        "identity": "unconfirmed",
+        "index_discarded": false,
+        "members": 3,
+        "source": "index",
+        "verified_by": "none"
+      },
+      "index": {
+        "members": {
+          "items": [
+            {
+              "attestation": "0100000000000000000000000000000000450000",
+              "authenticatorAttachment": "platform",
+              "credentialId": "76656c612d666978747572652d3031",
+              "entryId": 11,
+              "publicKey": "04197db9030a1e166bec2cee05e0ddb94b26ee0b6d6f429f1748cda4eedac36f04fe546861a9c9dfaf75719b53c75e0b933d4aad6d325f18c75776a260d507647b",
+              "transports": "internal"
+            },
+            {
+              "attestation": "0100000000000000000000000000000000450000",
+              "authenticatorAttachment": "platform",
+              "credentialId": "76656c612d666978747572652d3032",
+              "entryId": 12,
+              "publicKey": "047802f2cc39cc6ed85c41268a580c5f0df36df3f065facfb40f84265927b7ed678438b2084cb84f0d00708e40d44ed8c9901d979bbcb390117089847672c12eec",
+              "transports": "internal"
+            },
+            {
+              "attestation": "0100000000000000000000000000000000450000",
+              "authenticatorAttachment": "platform",
+              "credentialId": "76656c612d666978747572652d3033",
+              "entryId": 13,
+              "publicKey": "043eb2ae2f4e8090837820048baca2db04a7e7ca7dc6742f342a30c6855e7d96947f36ac5a4538dc3a8a7cbf0deea1c0ecb80bfb96a3f8ca57c98f8f400548cd56",
+              "transports": "internal"
+            }
+          ],
+          "total": 3
+        },
+        "unit": {
+          "groupPublicKey": "0427ef005c5d12175e3716f004c41fb2df8f85ff9fe7f5be3fd90523b9460b95bb2b394315cc54eda61ebf36ba9bc26ece5ecb3d4f4b1a70da54e2fee17dc93840",
+          "memberCount": 3,
+          "metadata": "7b2276657273696f6e223a312c2261646472657373223a22307838386343413045654462463243343432363131306262466339393846303438363839323636383934222c2277616c6c65745f76657273696f6e223a22736166652d312e342e31222c226b65795f6e616d6573223a5b22496e7465726c65617665222c224b65792032222c224b65792033225d2c22637265617465645f61745f69736f223a22323032362d30382d32325430323a31343a32382e3636375a227d",
+          "rpId": "localhost",
+          "unitId": 10
+        }
+      },
+      "kind": "unit",
+      "name": "an honest index, no chain answers: still unconfirmed",
+      "source": "index",
+      "unitId": 10
+    },
+    {
+      "address": "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+      "down": [],
+      "expect": {
+        "identity": "confirmed",
+        "verified_by": "gnosis"
+      },
+      "kind": "confirm",
+      "name": "the honest group is confirmed on Gnosis"
+    },
+    {
+      "address": "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+      "down": [
+        100
+      ],
+      "expect": {
+        "identity": "confirmed",
+        "verified_by": "ethereum"
+      },
+      "kind": "confirm",
+      "name": "the honest group, Gnosis silent: Ethereum's backup confirms"
+    },
+    {
+      "address": "0xdF101E6e9982daAB0d98fc2F79E220C4cb19D693",
+      "down": [],
+      "expect": {
+        "identity": "refuted",
+        "verified_by": "ethereum"
+      },
+      "kind": "confirm",
+      "name": "the lying index's address (the person's key + an attacker's) is refuted"
+    },
+    {
+      "address": "0xdF101E6e9982daAB0d98fc2F79E220C4cb19D693",
+      "down": [
+        100,
+        1
+      ],
+      "expect": {
+        "identity": "unconfirmed",
+        "verified_by": "none"
+      },
+      "kind": "confirm",
+      "name": "the lying index's address, no chain answers: unconfirmed"
+    }
+  ],
+  "publicKey": "04197db9030a1e166bec2cee05e0ddb94b26ee0b6d6f429f1748cda4eedac36f04fe546861a9c9dfaf75719b53c75e0b933d4aad6d325f18c75776a260d507647b"
+}

@@ -147,6 +147,8 @@
 		ondeletetx?: () => void;
 		/** Spec 090: the receive code's "include network" switch. Absent in the gallery. */
 		onincludenetwork?: (include: boolean) => void;
+		/** §37: Receive's Check again, while the address is held back. Absent in the gallery. */
+		oncheckagain?: () => void;
 		/**
 		 * r10 follow-up: the history list's scroll or drag started (`true`) or
 		 * settled (`false`) — the incoming check waits meanwhile. Absent in
@@ -165,6 +167,7 @@
 		batch,
 		ondeletetx,
 		onincludenetwork,
+		oncheckagain,
 		ongesture
 	}: Props = $props();
 
@@ -181,9 +184,14 @@
 	{onclose}
 >
 	{#if body.kind === 'receive-list'}
-		<ReceiveList model={body.model} chrome={false} onqr={(i) => go('receive-qr', i)} />
+		<ReceiveList
+			model={body.model}
+			chrome={false}
+			onqr={(i) => go('receive-qr', i)}
+			{oncheckagain}
+		/>
 	{:else if body.kind === 'receive-qr'}
-		<ReceiveQr model={body.model} {onincludenetwork} />
+		<ReceiveQr model={body.model} {onincludenetwork} {oncheckagain} />
 	{:else if body.kind === 'history'}
 		<History model={body.model} onselect={(g, r) => go('tx-detail', g * 100 + r)} {ongesture} />
 	{:else if body.kind === 'tx-detail'}

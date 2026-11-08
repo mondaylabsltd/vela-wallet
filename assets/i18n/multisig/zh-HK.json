@@ -30,7 +30,10 @@
     "invite": "邀請成員",
     "lastKnown": "這是 {{time}} 時的列表，正在檢查有沒有變化。",
     "checking": "正在查找等待批准的交易…",
-    "historyUnreadable": "無法讀取這個多簽在 {{network}} 上的記錄：在其他裝置上執行的交易可能沒有顯示在這裡。"
+    "historyUnreadable": "無法讀取這個多簽在 {{network}} 上的記錄：在其他裝置上執行的交易可能沒有顯示在這裡。",
+    "nonMembersShow": "顯示非成員的提案（{{total}}）",
+    "nonMembersHide": "隱藏非成員的提案",
+    "nonMembersWarning": "此多簽的成員都沒有批准過它。任何人都能向郵箱投遞——不要批准你不認得的內容。"
    },
    "status": {
     "ready": "可以執行",
@@ -357,7 +360,8 @@
     "signRiskBody": "在 {{network}} 上，除成員外，尚有其他東西可操作這個多簽帳戶。無論你簽署甚麼，控制它的人都可以轉走資金或阻止它。只有在你清楚知道它為何設有這個時才簽署。",
     "signRiskConfirm": "我明白風險，簽署",
     "signRiskCancel": "不簽署",
-    "signUnchecked": "Vela 未能核對 {{network}} 上誰可操作這個多簽帳戶，所以暫時不會在該處簽署。請稍後再試。"
+    "signUnchecked": "Vela 未能核對 {{network}} 上誰可操作這個多簽帳戶，所以暫時不會在該處簽署。請稍後再試。",
+    "ownerNotBound": "在 {{network}} 上，成員 {{address}} 是一個合約，沒有任何東西把它綁定到它在那裏的創建——誰能在該地址部署，誰就掌握它的那一票。"
    },
    "external": {
     "pageTitle": "用錢包為 Vela 批准",

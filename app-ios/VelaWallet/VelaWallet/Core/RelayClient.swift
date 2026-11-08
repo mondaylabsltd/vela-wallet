@@ -973,6 +973,17 @@ final class RelayClient {
         }
     }
 
+    /// §37 (review 1-11): the account's code on `chainId`, as the chain said
+    /// it (`0x` for none) — what a message signature's ERC-6492 envelope is
+    /// decided by (`messageSignature`). `nil` when the chain could not be
+    /// asked; never remembered — the envelope must follow the chain as it is.
+    func code(chainId: Int, address: String) async -> String? {
+        guard let code = await chainCall(
+            chainId: chainId, method: "eth_getCode", params: [address, "latest"]
+        ) as? String, code.hasPrefix("0x") else { return nil }
+        return code
+    }
+
     /// The recipient-risk answer's `is_contract` — NOT `isDeployed`, which asks
     /// whether the SENDER's Safe exists. The web's `isContractAddress` (and
     /// Android's `RelayClient.isContract`): an EIP-7702-delegated EOA carries

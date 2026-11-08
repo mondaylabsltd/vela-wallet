@@ -564,7 +564,12 @@
 				// A request the CORE refuses outright is answered the moment it
 				// arrives — so the page never hangs — but the sheet is still
 				// explaining WHY; the person's dismissal is what leaves (081).
-				if (error?.kind === 'self_call_blocked' || error?.kind === 'parent_safe_blocked') return;
+				if (
+					error?.kind === 'self_call_blocked' ||
+					error?.kind === 'parent_safe_blocked' ||
+					error?.kind === 'sign_in_refused'
+				)
+					return;
 				// A transaction the wallet can watch stays on screen and lands; the
 				// person's Done is what leaves. Anything else leaves as it always has.
 				setTimeout(() => {

@@ -66,6 +66,10 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // §37 + §38 merged: 674b7333's opening from the hashed bytes and its
+    // Service Worker pin, with e7ee3925's Permit2 witness reading and 2^128
+    // unlimited line — one page carrying both. Not LAUNCH.
+    "e95fb59d2eefffeea361786616ee719eb4db6f7df8e0737dd7278200b8dd79fb",
     // §38 (review 0-5): the page can be opened FROM THE BYTES THE WALLET
     // HASHED. Opened as a blob URL by the web wallet ([`FROM_BYTES`]), it reads
     // its host from its origin (the passkey's relying party, the loopback
@@ -77,6 +81,14 @@ pub const BUILD_ALLOWED: &[&str] = &[
     // gains `worker-src 'self'` for that worker and nothing else. Otherwise
     // 7ec6e9a3's page. Not LAUNCH.
     "674b73334dda36410fd5cecdaddd462a8193398328743ba2263d419d6be53b56",
+    // §37 (review 1-12): the unlimited line is the wallet's one line, 2^128
+    // for every amount (uint256 and Permit2's uint160 alike — it was 2^200 /
+    // 2^152), and Permit2's `PermitWitnessTransferFrom` (UniswapX, intent
+    // protocols) reads as the transfer it is — spender, token, amount,
+    // deadline — where it read as blind typed data. Not LAUNCH: until
+    // LAUNCH moves here (after dist/ is deployed), the older page draws the
+    // old line; the core's own guard is the line either way.
+    "e7ee3925440c7f68d818cfb2bb77a04e8d7999b18a40341250ab3d50d0b2e2ab",
     // §35 (review 1-6): every SafeOp expires. The page hashes the operation's
     // own validAfter / validUntil (the core's `calculate_safe_op_hash`, read
     // from the request's decimal strings) instead of a zero window, refuses an
@@ -370,8 +382,10 @@ pub const BUILD_ALLOWED: &[&str] = &[
 /// fragment, which pages before 674b7333 did not (they would ask the passkey
 /// for an empty relying party). Every other version opens at its address, as
 /// before.
-pub const FROM_BYTES: &[&str] =
-    &["674b73334dda36410fd5cecdaddd462a8193398328743ba2263d419d6be53b56"];
+pub const FROM_BYTES: &[&str] = &[
+    "e95fb59d2eefffeea361786616ee719eb4db6f7df8e0737dd7278200b8dd79fb",
+    "674b73334dda36410fd5cecdaddd462a8193398328743ba2263d419d6be53b56",
+];
 
 /// Whether a shell may REFUSE on this module's verdict, as opposed to merely
 /// recording it.

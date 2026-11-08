@@ -281,6 +281,9 @@ final class OnboardingExecutor {
                         "transports": member.transports,
                     ]
                 },
+                // §37 (review 1-7): who vouched for these members, passed
+                // through untouched — absent reads `none` in the core.
+                "verified_by": unit.verifiedBy,
             ]
 
         case "probe_index_health":

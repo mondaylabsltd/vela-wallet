@@ -500,7 +500,7 @@ struct SigningPlanTests {
                 resultJson: String(decoding: data, as: UTF8.self), digest: digest, keys: fixture.keys
             ))
         }
-        let relay = RelayClient(port: ScriptedRelayPort(), now: { 0 }, retryDelayMs: 0)
+        let relay = RelayClient(port: ScriptedRelayPort.deployedAccount(), now: { 0 }, retryDelayMs: 0)
         let spine = UserOpSpine(relay: relay, accounts: accounts, signer: { signer })
         spine.trustedSigner = page
 

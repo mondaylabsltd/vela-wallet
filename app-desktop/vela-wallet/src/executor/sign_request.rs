@@ -731,6 +731,9 @@ fn sign_message(
         signer,
         &user_op::quiet,
         &asked,
+        // §37: whether it is deployed on the request's chain, read through
+        // the wallet's own RPC — the core wraps it in ERC-6492 if not.
+        &user_op::account_code,
     ) {
         Ok(signature) => SignSubmitOutcome::Succeeded { result: signature },
         Err(user_op::SubmitFailure::AskerGone) => asker_gone(id),
@@ -1387,6 +1390,7 @@ mod tests {
             sign_in_key,
             signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
             signing_venue,
+            identity: Default::default(),
         };
         let mut ctx = SignContext::new(
             &account,

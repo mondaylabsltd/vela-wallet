@@ -325,7 +325,16 @@
       "intentChangeThreshold": "필요한 승인 수 변경",
       "labelMember": "멤버",
       "labelNewMember": "새 멤버",
-      "labelApprovalsRequired": "필요한 승인 수"
+      "labelApprovalsRequired": "필요한 승인 수",
+      "farAboveBalanceWarning": "잔액의 100배 이상 — 이 컨트랙트는 보유한 전부와 앞으로 들어올 금액까지 쓸 수 있습니다",
+      "signIn": {
+        "refusedTitle": "Vela는 이 로그인에 서명하지 않습니다",
+        "wrongDomain": "이 로그인은 {{domain}}용인데 {{origin}}에서 요청하고 있습니다. 다른 사이트에 로그인하라고 요청하는 사이트는 그곳의 계정을 탈취하려는 것입니다.",
+        "wrongUri": "이 로그인은 {{uri}}를 지정하지만, 요청하는 사이트 {{origin}}가 아닙니다.",
+        "wrongChain": "이 로그인은 체인 {{chain}}용이지만, 이 사이트는 체인 {{connected}}에 연결되어 있습니다. 네트워크를 바꾼 뒤 다시 요청하세요.",
+        "incomplete": "이 로그인에는 {{field}}가 빠져 있어, Vela가 무엇에 로그인하는지 확인할 수 없습니다.",
+        "noOrigin": "어느 사이트가 요청하는지 Vela가 알 수 없어 이 로그인에 서명하지 않습니다."
+      }
     },
     "signingApprove": {
       "resultingTotal": "새 총 승인 한도",

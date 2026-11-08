@@ -641,7 +641,17 @@
   "shareCardNetworkNote": "只接收 {{network}} 網絡的付款",
   "tokenContract": "代幣合約",
   "includeNetwork": "附上網絡資料",
-  "includeNetworkHint": "部分錢包無法讀取。如對方無法掃描，請關閉此選項。"
+  "includeNetworkHint": "部分錢包無法讀取。如對方無法掃描，請關閉此選項。",
+  "unconfirmed": {
+   "title": "尚未在鏈上確認",
+   "body": "此錢包的密鑰來自密鑰索引，鏈上登記冊尚未確認。確認之前 Vela 不會顯示收款地址——每次打開時都會重新檢查。",
+   "checkAgain": "重新檢查",
+   "checking": "正在鏈上檢查…"
+  },
+  "refuted": {
+   "title": "這不是你登記的錢包",
+   "body": "鏈上登記冊為你的通行密鑰記錄的密鑰與密鑰索引給出的不同。請勿在此收款——請移除此錢包並重新登入。"
+  }
  },
  "assets": {
   "sectionTitle": "資產",
@@ -905,7 +915,8 @@
     "noNetwork": "使用通行密鑰需要連網。請檢查網絡後再試一次。",
     "alreadyRegistered": "這個驗證器裡已經有這個錢包的一把密鑰。請改用另一個。",
     "timedOut": "通行密鑰視窗已逾時。請再試一次。",
-    "other": "無法使用通行密鑰。請再試一次。"
+    "other": "無法使用通行密鑰。請再試一次。",
+    "testDomainNotAssociated": "此測試版的通行密鑰網域未在本裝置上設定（TEST_RP_DOMAIN，模擬器上為 localhost），系統因此不允許它使用通行密鑰。正式版不受影響。"
    }
   },
   "create": {
@@ -1673,7 +1684,16 @@
    "intentChangeThreshold": "修改需要的批准數",
    "labelMember": "成員",
    "labelNewMember": "新成員",
-   "labelApprovalsRequired": "需要的批准數"
+   "labelApprovalsRequired": "需要的批准數",
+   "farAboveBalanceWarning": "超過你餘額的 100 倍——此合約可花掉你持有的全部，以及之後到賬的更多",
+   "signIn": {
+    "refusedTitle": "Vela 不會簽署此登入",
+    "wrongDomain": "此登入是給 {{domain}} 的，但發起請求的是 {{origin}}。要求你登入其他網站的網站，是想接管你在那裏的帳戶。",
+    "wrongUri": "此登入指定的是 {{uri}}，而不是發起請求的網站 {{origin}}。",
+    "wrongChain": "此登入針對鏈 {{chain}}，但此網站連接在鏈 {{connected}} 上。請切換網絡後重新請求。",
+    "incomplete": "此登入缺少 {{field}}，Vela 無法核對它讓你登入到哪裏。",
+    "noOrigin": "Vela 無法判斷是哪個網站在請求，因此不會簽署此登入。"
+   }
   },
   "currency": {
    "title": "顯示貨幣",

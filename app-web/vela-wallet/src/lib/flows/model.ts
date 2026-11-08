@@ -191,6 +191,22 @@ export interface NetworkRowModel {
 	qrLabel: string;
 }
 
+/**
+ * §37 (review 1-7): Receive in place of the address — the core's
+ * `receive_standing` held it back. Drawn instead of every row, code, copy,
+ * share and request; `checking` while the chain is being asked, `checkAgain`
+ * where the core offers it (an unconfirmed account, never a refuted one).
+ */
+export interface ReceiveHeldModel {
+	/** "Not yet confirmed on-chain" / "This isn't your registered wallet". */
+	title: string;
+	body: string;
+	/** "Checking on-chain…" — the walk is out now. */
+	checking?: string;
+	/** "Check again" — the walk, asked once more. */
+	checkAgain?: string;
+}
+
 export interface ReceiveListModel {
 	header: FlowHeaderModel;
 	/** "One address across all 8 networks". */
@@ -199,6 +215,8 @@ export interface ReceiveListModel {
 	/** Shown in place of the rows when the search matches nothing. */
 	emptyText: string;
 	rows: NetworkRowModel[];
+	/** §37: no address may be shown — `rows` is empty and this is drawn instead. */
+	held?: ReceiveHeldModel;
 }
 
 /** The account card that sits above every QR: who this address belongs to. */
@@ -247,6 +265,11 @@ export interface ReceiveQrModel {
 	 * never reached the chain has nothing there to look at.
 	 */
 	explorerUrl?: string;
+	/**
+	 * §37: no address may be shown — no code, no account lines, no share,
+	 * no request, no watch; this is drawn instead.
+	 */
+	held?: ReceiveHeldModel;
 }
 
 /** R4 — the image "Save image" produces, not a screen someone navigates to. */

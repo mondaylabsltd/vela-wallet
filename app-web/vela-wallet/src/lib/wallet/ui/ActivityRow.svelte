@@ -21,24 +21,28 @@
 	let { row, onclick }: Props = $props();
 
 	const icon = $derived(
-		row.kind === 'sent'
-			? UTILITY_ICONS['arrow-up-right']
-			: row.kind === 'received'
-				? UTILITY_ICONS['arrow-down-left']
-				: UTILITY_ICONS['link-2']
+		row.disclosure
+			? UTILITY_ICONS['chevron-down']
+			: row.kind === 'sent'
+				? UTILITY_ICONS['arrow-up-right']
+				: row.kind === 'received'
+					? UTILITY_ICONS['arrow-down-left']
+					: UTILITY_ICONS['link-2']
 	);
 </script>
 
 {#snippet body()}
 	<span class="lead" aria-hidden="true">
 		<Icon {icon} size="md" />
-		<span
-			class="badge"
-			class:with-logo={row.badgeLogoUrl !== undefined}
-			style:background={row.badgeColor}
-		>
-			<RemoteLogo urls={row.badgeLogoUrl === undefined ? undefined : [row.badgeLogoUrl]} />
-		</span>
+		{#if !row.disclosure}
+			<span
+				class="badge"
+				class:with-logo={row.badgeLogoUrl !== undefined}
+				style:background={row.badgeColor}
+			>
+				<RemoteLogo urls={row.badgeLogoUrl === undefined ? undefined : [row.badgeLogoUrl]} />
+			</span>
+		{/if}
 	</span>
 	<span class="text">
 		{#if row.titleParts !== undefined}
@@ -78,7 +82,11 @@
 		<span class="subtitle"><AddressText text={row.subtitle} /></span>
 		{#if row.caution}
 			<!-- r4a-1 / r4a-2: what must be read before anything else. -->
-			<span class="caution" data-testid="activity-caution"><AddressText text={row.caution} /></span>
+			<span
+				class="caution"
+				class:warning={row.cautionTone === 'warning'}
+				data-testid="activity-caution"><AddressText text={row.caution} /></span
+			>
 		{/if}
 	</span>
 	<!-- 087 F11: a dApp call that moved no coin of ours has no figure, and
@@ -265,6 +273,11 @@
 		font-weight: var(--weight-semibold);
 		color: var(--color-error-base);
 		overflow-wrap: anywhere;
+	}
+
+	/* §37: a proposal no member approved — read first, but not a refusal. */
+	.caution.warning {
+		color: var(--color-warning-base);
 	}
 
 	.figures {

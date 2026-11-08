@@ -232,6 +232,25 @@ data class ReceiveListModel(
     val address: String = "",
 )
 
+/**
+ * §37 (review 1-7): Receive for an account the chain has not confirmed (or
+ * proved another wallet's) — said INSTEAD of the address, its QR code, the
+ * payment request, copy and share. The words are the core's
+ * (`ReceiveStanding`).
+ */
+@Immutable
+data class ReceiveStandingModel(
+    val header: FlowHeaderModel,
+    val title: String,
+    val body: String,
+    /** A chain proved it another wallet's: said in the danger tone, nothing to ask again. */
+    val refuted: Boolean,
+    /** "Check again" — on an unconfirmed one only. */
+    val checkAgain: String?,
+    /** "Checking on-chain…" while the chain is being asked; `null` otherwise. */
+    val checking: String?,
+)
+
 /** The account card that sits above every QR: whose address this is. */
 @Immutable
 data class AddressCardModel(

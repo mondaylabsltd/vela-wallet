@@ -658,6 +658,55 @@ pub fn registry_resolve_unit_step(unit_id: u32, source: &str, answers_json: &str
     vela_core::registry_resolve::unit_step_json(u64::from(unit_id), source, answers_json)
 }
 
+/// §37 (review 1-7): re-check an unconfirmed account on the chain alone —
+/// `ask` with `eth_call`s to perform, or `done` with its `identity`. See
+/// `vela_core::registry_resolve::confirm_step`.
+#[wasm_bindgen(js_name = registryResolveConfirmStep)]
+#[must_use]
+pub fn registry_resolve_confirm_step(
+    public_key_hex: &str,
+    address: &str,
+    answers_json: &str,
+) -> String {
+    vela_core::registry_resolve::confirm_step_json(public_key_hex, address, answers_json)
+}
+
+/// §37: may the stored account be received at, and what Receive says when it
+/// may not (`ReceiveStanding`). `undefined` for a record this build cannot read.
+#[wasm_bindgen(js_name = receiveStanding)]
+#[must_use]
+pub fn receive_standing(account_json: &str) -> Option<String> {
+    vela_core::app::receive_standing_json(account_json)
+}
+
+/// §37: the stored account with `identity` (`confirmed` | `unconfirmed` |
+/// `refuted`) — what a confirm step found — and nothing else changed.
+#[wasm_bindgen(js_name = accountWithIdentity)]
+#[must_use]
+pub fn account_with_identity(account_json: &str, identity: &str) -> Option<String> {
+    vela_core::app::account_with_identity_json(account_json, identity)
+}
+
+/// §37 (review 1-11): the signature a site gets for a message —
+/// `signature_hex` (the account's EIP-1271 signature) as it is when the
+/// account holds code on the request's chain (`code_hex`, its
+/// `eth_getCode`), else in its ERC-6492 envelope. `keys_json`: the founding
+/// keys, `[{credential_id, public_key_hex}]`, in order.
+#[wasm_bindgen(js_name = messageSignature)]
+pub fn message_signature(
+    signature_hex: &str,
+    keys_json: &str,
+    account: &str,
+    code_hex: Option<String>,
+) -> JsResult<String> {
+    let keys: Vec<vela_core::user_op::WalletKey> = serde_json::from_str(keys_json)
+        .map_err(|e| err(vela_core::error::CoreError::InvalidPublicKey(e.to_string())))?;
+    let signature = vela_core::primitives::from_hex(signature_hex).map_err(err)?;
+    vela_core::user_op::message_signature(&signature, &keys, account, code_hex.as_deref())
+        .map(|bytes| vela_core::primitives::to_hex(&bytes, true))
+        .map_err(err)
+}
+
 /// Which passkeys control the wallet at `address` — the Settings keys view
 /// (spec 062). `device_keys_json` is the account record's `keys` array (or a
 /// one-element array built from the legacy scalars); the answer is `ask` with
@@ -2799,6 +2848,25 @@ pub fn passkey_error_words(
     let code = code.filter(|c| c.is_finite()).map(|c| c as i32);
     serde_json::to_string(&vela_core::app::passkey_error::passkey_error_words(
         platform, domain, code, message,
+    ))
+    .unwrap_or_default()
+}
+
+/// [`passkey_error_words`] for the build it runs in (R21-3, §37): a test
+/// build's association failure names its passkey domain.
+#[wasm_bindgen(js_name = passkeyErrorWordsOn)]
+#[must_use]
+pub fn passkey_error_words_on(
+    platform: &str,
+    domain: &str,
+    code: Option<f64>,
+    message: &str,
+    test_build: bool,
+) -> String {
+    #[allow(clippy::cast_possible_truncation)]
+    let code = code.filter(|c| c.is_finite()).map(|c| c as i32);
+    serde_json::to_string(&vela_core::app::passkey_error::passkey_error_words_on(
+        platform, domain, code, message, test_build,
     ))
     .unwrap_or_default()
 }

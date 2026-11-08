@@ -36,6 +36,7 @@ import app.getvela.wallet.feature.signing.core.GuardView
 import app.getvela.wallet.feature.signing.core.IncomingRequest
 import app.getvela.wallet.feature.signing.core.SignErrorKind
 import app.getvela.wallet.feature.signing.core.ParentReason
+import app.getvela.wallet.feature.signing.core.SIGN_IN_REFUSED_TITLE_KEY
 import app.getvela.wallet.feature.signing.core.ConfirmState
 import app.getvela.wallet.feature.send.core.FeeTier
 import kotlinx.serialization.json.jsonPrimitive
@@ -492,7 +493,7 @@ object SigningLive {
         GuardSurface.PermitSign -> buildList {
             guard.detected?.let { add(SigningBlock.Party(s.a("spenderLabel"), ExploreLive.shortAddress(it.spender), it.spender)) }
             // An unlimited permit is said like any unlimited approval (spec 094 S8).
-            if (guard.unlimited_warning) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
+            if (guard.unlimited_warning) add(SigningBlock.Warning(SigningTone.Danger, s.t(guard.unlimited_warning_key)))
             add(SigningBlock.Warning(SigningTone.Danger, s.a("permitCantCap")))
         }
         GuardSurface.ApprovalEditor -> buildList {
@@ -506,7 +507,7 @@ object SigningLive {
             }
             guard.detected?.let { add(SigningBlock.Party(s.a("spenderLabel"), ExploreLive.shortAddress(it.spender), it.spender)) }
             // Kept as the site asked (2026-09-26) — allowed, never unsaid; the core decides when (094 S8).
-            if (guard.unlimited_warning) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
+            if (guard.unlimited_warning) add(SigningBlock.Warning(SigningTone.Danger, s.t(guard.unlimited_warning_key)))
         }
         GuardSurface.Batch -> buildList {
             guard.batch?.legs?.forEachIndexed { index, leg ->
@@ -522,7 +523,7 @@ object SigningLive {
                 }
                 leg.approval?.let { add(SigningBlock.Party(s.a("spenderLabel"), ExploreLive.shortAddress(it.spender), it.spender)) }
             }
-            if (guard.unlimited_warning) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
+            if (guard.unlimited_warning) add(SigningBlock.Warning(SigningTone.Danger, s.t(guard.unlimited_warning_key)))
         }
     }
 
@@ -1043,6 +1044,13 @@ object SigningLive {
         // Spec 081: the core refused this request outright — it would have
         // changed who controls the account. Nothing else on the sheet matters,
         // and `confirm_gate_open` is already false, so say it and stop.
+        // §37 (review 1-11): a refused sign-in says why in its own words —
+        // never the self-call text, which is about who controls the account.
+        sign.blocked?.sign_in?.let { signIn ->
+            add(SigningBlock.Intent(s.t(SIGN_IN_REFUSED_TITLE_KEY), SigningTone.Danger))
+            add(SigningBlock.Warning(SigningTone.Danger, s.t(signIn.key, signIn.params)))
+            return@buildList
+        }
         sign.blocked?.let { blocked ->
             add(SigningBlock.Intent(s.s("selfCallBlockedTitle"), SigningTone.Danger))
             val text = when {

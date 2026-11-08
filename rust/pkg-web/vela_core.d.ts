@@ -933,6 +933,12 @@ export function abiEncodeBytes32(data: Uint8Array): Uint8Array;
 export function abiEncodeUint256(value_hex: string): Uint8Array;
 
 /**
+ * §37: the stored account with `identity` (`confirmed` | `unconfirmed` |
+ * `refuted`) — what a confirm step found — and nothing else changed.
+ */
+export function accountWithIdentity(account_json: string, identity: string): string | undefined;
+
+/**
  * What an entered address reads as — `"valid"`, `"malformed"` or
  * `"checksum"` (mixed case that is not its EIP-55 checksum). The one rule
  * every field that takes an address refuses by (send-2, set-4).
@@ -1578,6 +1584,15 @@ export function maskedAmount(unit: string): string;
 export function matchSelector(sig: string, calldata: Uint8Array): boolean;
 
 /**
+ * §37 (review 1-11): the signature a site gets for a message —
+ * `signature_hex` (the account's EIP-1271 signature) as it is when the
+ * account holds code on the request's chain (`code_hex`, its
+ * `eth_getCode`), else in its ERC-6492 envelope. `keys_json`: the founding
+ * keys, `[{credential_id, public_key_hex}]`, in order.
+ */
+export function messageSignature(signature_hex: string, keys_json: string, account: string, code_hex?: string | null): string;
+
+/**
  * The lowest gas price a chain accepts, as a decimal string (money crosses
  * this boundary as decimal strings, never as JS numbers).
  *
@@ -1699,6 +1714,12 @@ export function passkeyDirectoryUrl(aaguid: string, origin?: string | null): str
 export function passkeyErrorWords(platform: string, domain: string, code: number | null | undefined, message: string): string;
 
 /**
+ * [`passkey_error_words`] for the build it runs in (R21-3, §37): a test
+ * build's association failure names its passkey domain.
+ */
+export function passkeyErrorWordsOn(platform: string, domain: string, code: number | null | undefined, message: string, test_build: boolean): string;
+
+/**
  * **The security-key fallback mark**, as an `image/svg+xml` data URI, for a
  * key whose AAGUID the catalog cannot name. `undefined` when the row deserves
  * no mark of this kind — a platform authenticator, which the client already
@@ -1770,6 +1791,12 @@ export function productionWriteVerdict(ask_json: string): string;
 export function publicRpcUrls(chain_id: number): string[];
 
 /**
+ * §37: may the stored account be received at, and what Receive says when it
+ * may not (`ReceiveStanding`). `undefined` for a record this build cannot read.
+ */
+export function receiveStanding(account_json: string): string | undefined;
+
+/**
  * Returns `null` when the two assertions do not pin down exactly one key
  * (different credentials, or the same signature twice) — that is a legitimate
  * outcome, not an error.
@@ -1826,6 +1853,13 @@ export function registryChainUnitPlan(unit_id: number): string | undefined;
  * the transport; every rule is the core's.
  */
 export function registryNameStep(address: string, answers_json: string): string;
+
+/**
+ * §37 (review 1-7): re-check an unconfirmed account on the chain alone —
+ * `ask` with `eth_call`s to perform, or `done` with its `identity`. See
+ * `vela_core::registry_resolve::confirm_step`.
+ */
+export function registryResolveConfirmStep(public_key_hex: string, address: string, answers_json: string): string;
 
 /**
  * Sign-in's first question — which groups does this key belong to? — through
@@ -2550,6 +2584,7 @@ export interface InitOutput {
     readonly abiEncodeAddress: (a: number, b: number) => [number, number, number, number];
     readonly abiEncodeBytes32: (a: number, b: number) => [number, number, number, number];
     readonly abiEncodeUint256: (a: number, b: number) => [number, number, number, number];
+    readonly accountWithIdentity: (a: number, b: number, c: number, d: number) => [number, number];
     readonly activityfeedcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly activityfeedcore_new: () => number;
     readonly activityfeedcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -2761,6 +2796,7 @@ export interface InitOutput {
     readonly markMissTtlMs: (a: number, b: number, c: number) => number;
     readonly maskedAmount: (a: number, b: number) => [number, number];
     readonly matchSelector: (a: number, b: number, c: number, d: number) => [number, number, number];
+    readonly messageSignature: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
     readonly minGasPriceWei: (a: number) => [number, number];
     readonly multisigApprovalRoute: (a: number, b: number, c: number, d: number) => [number, number];
     readonly multisigCall: (a: number, b: number, c: number, d: number) => [number, number, number, number];
@@ -2807,6 +2843,7 @@ export interface InitOutput {
     readonly passkeyDirectoryEntry: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
     readonly passkeyDirectoryUrl: (a: number, b: number, c: number, d: number) => [number, number];
     readonly passkeyErrorWords: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+    readonly passkeyErrorWordsOn: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly passkeyFallbackIconDataUri: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
     readonly passkeyProviderIconDataUri: (a: number, b: number, c: number) => [number, number];
     readonly passkeyProviderName: (a: number, b: number) => [number, number];
@@ -2821,6 +2858,7 @@ export interface InitOutput {
     readonly prefsRead: (a: number, b: number) => [number, number];
     readonly productionWriteVerdict: (a: number, b: number) => [number, number];
     readonly publicRpcUrls: (a: number) => [number, number];
+    readonly receiveStanding: (a: number, b: number) => [number, number];
     readonly receivewatchcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly receivewatchcore_new: () => number;
     readonly receivewatchcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -2833,6 +2871,7 @@ export interface InitOutput {
     readonly registryChainUnit: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly registryChainUnitPlan: (a: number) => [number, number];
     readonly registryNameStep: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly registryResolveConfirmStep: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly registryResolveKeyStep: (a: number, b: number, c: number, d: number) => [number, number];
     readonly registryResolveUnitStep: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly relyingPartyJson: (a: number, b: number) => [number, number];

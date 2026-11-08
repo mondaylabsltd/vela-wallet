@@ -185,6 +185,8 @@
 		onchains?: () => void;
 		/** Spec 090: the receive code's "include network" switch. Absent in the gallery. */
 		onincludenetwork?: (include: boolean) => void;
+		/** §37: Receive's Check again, while the address is held back. Absent in the gallery. */
+		oncheckagain?: () => void;
 		/**
 		 * Draw the state's SHEET alone, over whatever the route already has on
 		 * screen (note 16): a sheet a home row opened stands over the home it
@@ -212,6 +214,7 @@
 		ondeletetx,
 		onchains,
 		onincludenetwork,
+		oncheckagain,
 		sheetOnly = false,
 		ongesture
 	}: Props = $props();
@@ -262,7 +265,7 @@
 		<div class="card-stage"><ShareCard model={base.model} /></div>
 	{:else if base.kind === 'receive-list'}
 		<FlowScreen header={base.model.header} {onback}>
-			<ReceiveList model={base.model} onqr={(i) => go('receive-qr', i)} />
+			<ReceiveList model={base.model} onqr={(i) => go('receive-qr', i)} {oncheckagain} />
 		</FlowScreen>
 	{:else if base.kind === 'history'}
 		<FlowScreen header={base.model.header} {onback} onpill={onchains}>
@@ -370,7 +373,7 @@
 				hideTitle
 				onclose={closeSheet}
 			>
-				<ReceiveQr model={sheet.model} {onincludenetwork} />
+				<ReceiveQr model={sheet.model} {onincludenetwork} {oncheckagain} />
 			</BottomSheet>
 		{:else if sheet.kind === 'tx-detail'}
 			<!-- vis-19: titled, with its ×, as every other sheet is. -->

@@ -940,6 +940,7 @@ fn an_expo_era_record_restores_the_session() {
         sign_in_key: None,
         signing_domain: "getvela.app".to_owned(),
         signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+        identity: Default::default(),
     };
     let json = serde_json::to_string(&Res::AccountsLoaded {
         accounts: vec![stored.clone()],

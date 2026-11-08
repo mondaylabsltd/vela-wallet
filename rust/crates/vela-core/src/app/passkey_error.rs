@@ -129,6 +129,13 @@ pub struct PasskeyErrorFacts {
     /// in the module doc; kept by the shell for the report.
     #[serde(default)]
     pub message: String,
+    /// R21-3 (§37): the shell is a TEST build — the flag it hands
+    /// `service_defaults::relying_party_id`. An association failure is then
+    /// said as the test build's passkey domain not being set up
+    /// ([`TEST_DOMAIN_NOT_ASSOCIATED_KEY`]). Absent: a release build's words.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub test_build: Option<bool>,
 }
 
 /// What a shell draws for a failed passkey prompt.
@@ -142,7 +149,17 @@ pub struct PasskeyErrorWords {
     pub failure: FailureKind,
 }
 
-/// The rule: a platform's passkey error facts → the words a sheet draws.
+/// R21-3 (§37): what a TEST build says when the platform will not associate
+/// it with its passkey domain. A test build asks for its own relying party
+/// (`service_defaults::relying_party_id`: `localhost` on a simulator or
+/// emulator, `TEST_RP_DOMAIN` on a device), which no store app's association
+/// covers — so the release words ("check your connection… update Vela")
+/// sent a tester after the network. These name what is actually missing.
+pub const TEST_DOMAIN_NOT_ASSOCIATED_KEY: &str =
+    "onboarding.common.passkeyError.testDomainNotAssociated";
+
+/// The rule: a platform's passkey error facts → the words a sheet draws, as
+/// a release build says them.
 #[must_use]
 pub fn passkey_error_words(
     platform: &str,
@@ -150,10 +167,31 @@ pub fn passkey_error_words(
     code: Option<i32>,
     message: &str,
 ) -> PasskeyErrorWords {
+    passkey_error_words_on(platform, domain, code, message, false)
+}
+
+/// [`passkey_error_words`] for the build it runs in: `test_build` — the
+/// flag the shell hands `service_defaults::relying_party_id` — says an
+/// association failure in the test build's own words
+/// ([`TEST_DOMAIN_NOT_ASSOCIATED_KEY`]). The kind and the failure are the
+/// same either way; a release build's words do not change.
+#[must_use]
+pub fn passkey_error_words_on(
+    platform: &str,
+    domain: &str,
+    code: Option<i32>,
+    message: &str,
+    test_build: bool,
+) -> PasskeyErrorWords {
     let kind = classify(platform, domain, code, message);
+    let key = if test_build && kind == PasskeyErrorKind::AppNotAssociated {
+        TEST_DOMAIN_NOT_ASSOCIATED_KEY
+    } else {
+        kind.key()
+    };
     PasskeyErrorWords {
         kind,
-        key: kind.key().to_owned(),
+        key: key.to_owned(),
         failure: kind.failure(),
     }
 }
@@ -161,7 +199,13 @@ pub fn passkey_error_words(
 /// [`passkey_error_words`] over [`PasskeyErrorFacts`].
 #[must_use]
 pub fn words_of(facts: &PasskeyErrorFacts) -> PasskeyErrorWords {
-    passkey_error_words(&facts.platform, &facts.domain, facts.code, &facts.message)
+    passkey_error_words_on(
+        &facts.platform,
+        &facts.domain,
+        facts.code,
+        &facts.message,
+        facts.test_build.unwrap_or(false),
+    )
 }
 
 /// [`passkey_error_words`] over JSON text ([`PasskeyErrorFacts`] in,
@@ -336,6 +380,47 @@ mod tests {
         ] {
             assert!(kind.key().starts_with("onboarding.common."), "{kind:?}");
         }
+    }
+
+    /// R21-3: an association failure in a test build names the test build's
+    /// passkey domain; a release build keeps its words; nothing else moves.
+    #[test]
+    fn a_test_builds_association_failure_names_its_passkey_domain() {
+        let ios = ("ios", "ASAuthorizationErrorDomain", Some(1004),
+            "Application with identifier T.app.getvela.wallet is not associated with domain localhost");
+        let android = ("android", "", None, "[50152] RP ID cannot be validated.");
+        for (platform, domain, code, message) in [ios, android] {
+            let release = passkey_error_words_on(platform, domain, code, message, false);
+            assert_eq!(
+                release.key,
+                "onboarding.common.passkeyError.appNotAssociated"
+            );
+            assert_eq!(
+                release,
+                passkey_error_words(platform, domain, code, message)
+            );
+            let test = passkey_error_words_on(platform, domain, code, message, true);
+            assert_eq!(test.kind, PasskeyErrorKind::AppNotAssociated);
+            assert_eq!(test.failure, release.failure);
+            assert_eq!(test.key, TEST_DOMAIN_NOT_ASSOCIATED_KEY);
+        }
+        // …and the facts a shell hands a machine carry it.
+        let facts: PasskeyErrorFacts = serde_json::from_str(
+            r#"{"platform":"android","domain":"","message":"[50152] RP ID cannot be validated.","test_build":true}"#,
+        )
+        .expect("facts");
+        assert_eq!(words_of(&facts).key, TEST_DOMAIN_NOT_ASSOCIATED_KEY);
+        let release: PasskeyErrorFacts = serde_json::from_str(
+            r#"{"platform":"android","domain":"","message":"[50152] RP ID cannot be validated."}"#,
+        )
+        .expect("facts");
+        assert_eq!(
+            words_of(&release).key,
+            "onboarding.common.passkeyError.appNotAssociated"
+        );
+        let cancelled =
+            passkey_error_words_on("ios", "ASAuthorizationErrorDomain", Some(1001), "", true);
+        assert_eq!(cancelled.key, "onboarding.common.passkeyError.cancelled");
     }
 
     #[test]

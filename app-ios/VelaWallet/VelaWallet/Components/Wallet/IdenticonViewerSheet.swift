@@ -21,6 +21,9 @@ struct IdenticonViewerSheet: View {
     /// The seed, verbatim: what the artwork was drawn from.
     let address: String
     let onClose: () -> Void
+    /// §37: "Copy address" is offered — not for an account the core says may
+    /// not be received at (no deposit entry, the home's included).
+    var copyable = true
 
     @State private var copied = false
 
@@ -68,13 +71,15 @@ struct IdenticonViewerSheet: View {
                 )
 
             VStack(spacing: Tokens.Space.s12) {
-                VelaButton(
-                    title: loc.t(copied
-                        ? "componentsUi.identiconViewer.copied"
-                        : "componentsUi.identiconViewer.copyAddress"),
-                    kind: .primary,
-                    action: copy
-                )
+                if copyable {
+                    VelaButton(
+                        title: loc.t(copied
+                            ? "componentsUi.identiconViewer.copied"
+                            : "componentsUi.identiconViewer.copyAddress"),
+                        kind: .primary,
+                        action: copy
+                    )
+                }
                 VelaButton(
                     title: loc.t("componentsUi.identiconViewer.close"),
                     kind: .secondary,

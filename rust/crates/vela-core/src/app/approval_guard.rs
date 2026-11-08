@@ -32,7 +32,8 @@
 //! ```
 //!
 //! Faithful port of the TypeScript sources — behavior aligned line by line,
-//! the cap constants (2^200 for uint256 fields, 2^152 for uint160 fields) and
+//! the cap constants (2^128 for every amount field since §37 — they were 2^200
+//! for uint256 and 2^152 for uint160) and
 //! every classification kept verbatim:
 //!
 //! - `src/services/approval-guard.ts` (whole file) — detectApproval's 8
@@ -116,13 +117,36 @@ use ts_rs::TS;
 // Caps — the whole invariant in two numbers
 // ---------------------------------------------------------------------------
 
-/// uint256 amount fields (ERC-20 approve / increaseAllowance / ERC-2612
-/// value): 2^200. Far above any legitimate amount (total_supply × 10^decimals
-/// ≈ 2^128) and far below the "unlimited" sentinels (2^256-1, 2^255), so it
-/// cleanly separates "a big finite number the user chose" from "unlimited".
-pub const UNLIMITED_CAP_256: U256 = U256::from_limbs([0, 0, 0, 1 << 8]);
-/// Permit2 uint160 amount fields (sentinel is 2^160-1): 2^152.
-pub const UNLIMITED_CAP_160: U256 = U256::from_limbs([0, 0, 1 << 24, 0]);
+/// §37 (review 1-12): "unlimited" from 2^128 up, for every amount field —
+/// uint256 (ERC-20 approve / increaseAllowance / ERC-2612 value / Permit2
+/// transfers) and Permit2's uint160 alike. 2^128 ≈ 3.4 × 10^38 base units:
+/// 3.4 × 10^20 whole tokens at 18 decimals, beyond any real supply
+/// (SHIB's is below 2^110 base units), so no amount at or above it is about
+/// what this transaction moves. The line was 2^200 (2^152 for uint160),
+/// which let 2^199 — every coin anybody will ever hold — read as "a big
+/// finite number"; a drainer needs no sentinel, only a number nobody holds.
+pub const UNLIMITED_CAP_256: U256 = U256::from_limbs([0, 0, 1, 0]);
+/// The same line for Permit2's uint160 fields (sentinel 2^160-1): 2^128.
+pub const UNLIMITED_CAP_160: U256 = UNLIMITED_CAP_256;
+
+/// §37 (review 1-12): an approval for at least this many times what the
+/// account holds of the token is flagged as unlimited-like (said with
+/// [`FAR_ABOVE_BALANCE_KEY`]), where the balance was read and is not zero.
+/// A hundredfold is no longer about this transaction: an allowance that
+/// size is a standing claim on whatever arrives later. Lower multiples are
+/// common and honest — a round number above the balance, an approval before
+/// a top-up — and a warning on them would teach people to skip it. A zero
+/// balance flags nothing by this rule: there is nothing at stake yet, and
+/// every first approval would read as a drain; [`UNLIMITED_CAP_256`] still
+/// holds.
+pub const FAR_ABOVE_BALANCE_TIMES: u64 = 100;
+
+/// The danger sentence for an unbounded amount (spec 094 S8).
+pub const UNLIMITED_WARNING_KEY: &str = "componentsUi.signing.unlimitedWarning";
+/// §37: the danger sentence for an amount at least
+/// [`FAR_ABOVE_BALANCE_TIMES`] times the balance — "far beyond your balance",
+/// never "unlimited", because it is a number and the sheet shows it.
+pub const FAR_ABOVE_BALANCE_KEY: &str = "componentsUi.signing.farAboveBalanceWarning";
 
 /// Field width of an approval amount (drives the cap + the re-encode).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -164,6 +188,41 @@ const SEL_DECREASE_ALLOWANCE: &str = "a457c2d7";
 const SEL_SET_APPROVAL_FOR_ALL: &str = "a22cb465";
 /// Permit2 on-chain `approve(address,address,uint160,uint48)`.
 const SEL_PERMIT2_APPROVE: &str = "87517c45";
+
+// §37 (review 1-12): the calls that CARRY calls. An approval inside one is
+// read as the account's own: whether the carrier keeps `msg.sender` (an
+// OpenZeppelin / Uniswap `multicall` delegatecalls itself and does; a
+// Multicall3 `aggregate` does not; a Safe's `multiSend` does when the Safe
+// delegatecalls it) is the carrier's code to decide, not something the
+// calldata says — so the guard errs toward seeing a grant, never toward
+// missing one.
+/// `multicall(bytes[])` — OpenZeppelin `Multicall`, Uniswap's routers: each
+/// call made to the contract itself, as the sender.
+pub const SEL_MULTICALL: &str = "ac9650d8";
+/// `multicall(uint256,bytes[])` — the same, with a deadline.
+pub const SEL_MULTICALL_DEADLINE: &str = "5ae401dc";
+/// `multicall(bytes32,bytes[])` — the same, with a previous block hash.
+pub const SEL_MULTICALL_BLOCKHASH: &str = "1f0464d1";
+/// Multicall3 `aggregate((address,bytes)[])`.
+pub const SEL_AGGREGATE: &str = "252dba42";
+/// Multicall3 `tryAggregate(bool,(address,bytes)[])`.
+pub const SEL_TRY_AGGREGATE: &str = "bce38bd7";
+/// Multicall3 `blockAndAggregate((address,bytes)[])`.
+pub const SEL_BLOCK_AND_AGGREGATE: &str = "c3077fa9";
+/// Multicall3 `tryBlockAndAggregate(bool,(address,bytes)[])`.
+pub const SEL_TRY_BLOCK_AND_AGGREGATE: &str = "399542e9";
+/// Multicall3 `aggregate3((address,bool,bytes)[])`.
+pub const SEL_AGGREGATE3: &str = "82ad56cb";
+/// Multicall3 `aggregate3Value((address,bool,uint256,bytes)[])`.
+pub const SEL_AGGREGATE3_VALUE: &str = "174dea71";
+/// Safe `multiSend(bytes)` (MultiSend / MultiSendCallOnly): packed legs.
+pub const SEL_MULTI_SEND: &str = "8d80ff0a";
+/// How deep carried calls are read — a carrier inside a carrier inside a
+/// carrier inside a carrier. Deeper than this no honest dApp goes; the
+/// approvals found to that depth are every one the guard judges.
+const MAX_NESTING: u8 = 4;
+/// The most calls one carrier is read for.
+const MAX_CARRIED: usize = 64;
 
 // ---------------------------------------------------------------------------
 // Wire value types
@@ -236,6 +295,15 @@ pub struct GuardDetectedApproval {
     /// one.
     pub deadline: Option<String>,
     pub locus: GuardLocus,
+    /// §37 (review 1-12): the approval is a call CARRIED by the one sent — a
+    /// `multicall(bytes[])`, a Multicall3 `aggregate*`, a Safe `multiSend` —
+    /// whose own calldata starts this many bytes into the request's data.
+    /// [`GuardLocus::CalldataWord`]'s word counts from there, so a cap
+    /// re-encodes exactly that word in place (the length never changes).
+    /// `None`: the call itself. Absent on the wire reads `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub nested_at: Option<u32>,
 }
 
 /// The user's decision for one approval.
@@ -521,7 +589,7 @@ pub struct GuardTokenMetaView {
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum GuardAmountError {
     InvalidAmount,
-    /// A typed cap so large it is no cap at all (≥ 2^200 / 2^152). The cap
+    /// A typed cap so large it is no cap at all (≥ 2^128, §37). The cap
     /// field limits; keeping the site's unlimited ask is the Requested chip.
     UnlimitedDisabled,
 }
@@ -626,6 +694,14 @@ pub struct GuardView {
     /// only thing that lets an unbounded amount past the submit guard, so a
     /// request this machine never saw still cannot carry one.
     pub unlimited_consented: bool,
+    /// §37 (review 1-12): the batch legs (0-based) whose unbounded approval
+    /// this surface showed and the person kept on Requested — each waives
+    /// the submit guard for THAT leg's one approval and no other. The shell
+    /// copies it to `SignApproveOpts::unlimited_approved_legs`; a batch is
+    /// never waived by [`Self::unlimited_consented`] alone. Empty for a
+    /// single request.
+    #[serde(default)]
+    pub unlimited_consented_legs: Vec<u32>,
     /// The request grants an unbounded allowance as it stands, and the
     /// person is told so in the danger tone — the ONE place every shell reads
     /// that sentence from (spec 094 S8): the single approval kept on its
@@ -636,12 +712,34 @@ pub struct GuardView {
     /// ([`GuardBlockReason::OffChainPermit`]) — which is why, before this, an
     /// unlimited Permit2 drew a red hero and no warning at all (089 F22).
     pub unlimited_warning: bool,
+    /// §37: the sentence [`Self::unlimited_warning`] says —
+    /// [`UNLIMITED_WARNING_KEY`], or [`FAR_ABOVE_BALANCE_KEY`] for a finite
+    /// amount at least [`FAR_ABOVE_BALANCE_TIMES`] times the balance read
+    /// (unlimited-like: it is a number, and the sheet shows it). Every shell
+    /// draws this key, never one of its own.
+    #[serde(default = "unlimited_warning_key")]
+    pub unlimited_warning_key: String,
     pub increase_total: Option<GuardIncreaseTotalView>,
     /// Unverified decimals must be explicitly flagged
     /// (`EditableApproveCard.tsx:200-202`; `PermitSignView.tsx:103-105`).
     pub decimals_unverified: bool,
     pub expired: bool,
     pub batch: Option<GuardBatchView>,
+}
+
+fn unlimited_warning_key() -> String {
+    UNLIMITED_WARNING_KEY.to_owned()
+}
+
+/// §37: `amount` is at least [`FAR_ABOVE_BALANCE_TIMES`] times `balance` —
+/// read, and not zero.
+pub fn far_above_balance(amount: U256, balance: Option<U256>) -> bool {
+    match balance {
+        Some(balance) if !balance.is_zero() => {
+            amount >= balance.saturating_mul(U256::from(FAR_ABOVE_BALANCE_TIMES))
+        }
+        _ => false,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -733,11 +831,20 @@ impl App for ApprovalGuard {
             let confirm_allowed = batch_view.all_settled;
             let (rewritten_params_json, all_capped) =
                 rewritten_batch_params(model, batch, &batch_view);
-            let unlimited_consented = all_capped
-                && batch_view
+            // §37: consent is per leg — the legs whose own unbounded approval
+            // was shown and kept, and only while every cap re-encoded.
+            let unlimited_consented_legs: Vec<u32> = if all_capped {
+                batch_view
                     .legs
                     .iter()
-                    .any(|leg| matches!(leg.choice, Some(GuardChoice::Unlimited)));
+                    .enumerate()
+                    .filter(|(_, leg)| matches!(leg.choice, Some(GuardChoice::Unlimited)))
+                    .filter_map(|(i, _)| u32::try_from(i).ok())
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            let unlimited_consented = !unlimited_consented_legs.is_empty();
             let unlimited_warning = batch_view.any_uncapped;
             return GuardView {
                 surface: GuardSurface::Batch,
@@ -752,7 +859,9 @@ impl App for ApprovalGuard {
                 confirm_allowed,
                 rewritten_params_json,
                 unlimited_consented,
+                unlimited_consented_legs,
                 unlimited_warning,
+                unlimited_warning_key: unlimited_warning_key(),
                 increase_total: None,
                 decimals_unverified: false,
                 expired: false,
@@ -770,7 +879,9 @@ impl App for ApprovalGuard {
                 confirm_allowed: true,
                 rewritten_params_json: None,
                 unlimited_consented: false,
+                unlimited_consented_legs: Vec::new(),
                 unlimited_warning: false,
+                unlimited_warning_key: unlimited_warning_key(),
                 increase_total: None,
                 decimals_unverified: false,
                 expired: false,
@@ -791,10 +902,26 @@ impl App for ApprovalGuard {
 
         let unlimited_consented = matches!(choice, Some(GuardChoice::Unlimited));
         // Kept unbounded on the editor, or a permit nobody can cap.
-        let unlimited_warning = unlimited_consented
+        let unbounded_kept = unlimited_consented
             || (surface == GuardSurface::PermitSign
                 && detected.is_unbounded
                 && !detected.is_reducing);
+        // §37: a finite amount kept at a hundredfold the balance or more is
+        // unlimited-like — said in the same tone, in its own words.
+        let kept_amount = match &choice {
+            Some(GuardChoice::Amount { amount_raw }) => parse_dec_u256(amount_raw),
+            _ => None,
+        };
+        let far_above = !unbounded_kept
+            && !detected.is_reducing
+            && !detected.is_boolean_grant
+            && kept_amount.is_some_and(|amount| far_above_balance(amount, model.balance));
+        let unlimited_warning = unbounded_kept || far_above;
+        let unlimited_warning_key = if far_above {
+            FAR_ABOVE_BALANCE_KEY.to_owned()
+        } else {
+            unlimited_warning_key()
+        };
         let rewritten_params_json = match (&choice, &model.params) {
             // Kept as asked: the site's own bytes go out, nothing to re-encode.
             (Some(GuardChoice::Unlimited), _) => None,
@@ -827,7 +954,9 @@ impl App for ApprovalGuard {
             confirm_allowed,
             rewritten_params_json,
             unlimited_consented,
+            unlimited_consented_legs: Vec::new(),
             unlimited_warning,
+            unlimited_warning_key,
             decimals_unverified,
             meta,
             batch: None,
@@ -895,10 +1024,10 @@ fn start_batch(model: &mut Model, ops: &mut Vec<GuardOperation>) {
     let legs: Vec<Leg> = calls
         .iter()
         .map(|call| {
-            let detected = detect_calldata_approval(
+            let detected = surfaced(calldata_approvals(
                 call.get("to").and_then(Value::as_str),
                 call.get("data").and_then(Value::as_str),
-            );
+            ));
             Leg {
                 to: call
                     .get("to")
@@ -1641,10 +1770,10 @@ pub fn detect_approval(method: &str, params: Option<&Value>) -> Option<GuardDete
         if !tx.is_object() {
             return None;
         }
-        return detect_calldata_approval(
+        return surfaced(calldata_approvals(
             tx.get("to").and_then(Value::as_str),
             tx.get("data").and_then(Value::as_str),
-        );
+        ));
     }
 
     if crate::typed_data_request::looks_like_typed_data(method) {
@@ -1709,6 +1838,7 @@ pub fn detect_calldata_approval(
                 block_reason: None,
                 deadline: None,
                 locus: GuardLocus::CalldataWord { word_index: 1 },
+                nested_at: None,
             })
         }
         SEL_INCREASE_ALLOWANCE => {
@@ -1727,6 +1857,7 @@ pub fn detect_calldata_approval(
                 block_reason: None,
                 deadline: None,
                 locus: GuardLocus::CalldataWord { word_index: 1 },
+                nested_at: None,
             })
         }
         SEL_DECREASE_ALLOWANCE => {
@@ -1745,6 +1876,7 @@ pub fn detect_calldata_approval(
                 block_reason: None,
                 deadline: None,
                 locus: GuardLocus::CalldataWord { word_index: 1 },
+                nested_at: None,
             })
         }
         SEL_PERMIT2_APPROVE => {
@@ -1769,6 +1901,7 @@ pub fn detect_calldata_approval(
                 block_reason: None,
                 deadline: Some(deadline.to_string()),
                 locus: GuardLocus::CalldataWord { word_index: 2 },
+                nested_at: None,
             })
         }
         SEL_SET_APPROVAL_FOR_ALL => {
@@ -1790,10 +1923,208 @@ pub fn detect_calldata_approval(
                 block_reason: None,
                 deadline: None,
                 locus: GuardLocus::CalldataWord { word_index: 1 },
+                nested_at: None,
             })
         }
         _ => None,
     }
+}
+
+// ---------------------------------------------------------------------------
+// Carried calls (§37, review 1-12): approvals inside multicall / MultiSend
+// ---------------------------------------------------------------------------
+
+/// Every approval `data` sent to `to` grants: the call itself when it is one,
+/// else — depth-first, to [`MAX_NESTING`] carriers — each call it carries
+/// that is ([`SEL_MULTICALL`] and kin, Multicall3, `multiSend`). A carried
+/// approval is marked [`GuardDetectedApproval::nested_at`], so its cap
+/// re-encodes its own word where it sits. Empty when nothing grants.
+pub fn calldata_approvals(to: Option<&str>, data: Option<&str>) -> Vec<GuardDetectedApproval> {
+    let Some(data) = data else {
+        return Vec::new();
+    };
+    let body = data.strip_prefix("0x").unwrap_or(data);
+    if !body.is_ascii() || body.len() % 2 != 0 || !body.bytes().all(|b| b.is_ascii_hexdigit()) {
+        // A top-level shape still reads as it always did (it tolerates what
+        // it can); carried calls are read only from bytes that parse.
+        return detect_calldata_approval(to, Some(data))
+            .into_iter()
+            .collect();
+    }
+    let Ok(bytes) = crate::primitives::from_hex(body) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    walk_calls(to, &bytes, 0, bytes.len(), 0, &mut out);
+    out
+}
+
+/// The approval the sheet surfaces from `approvals` (one per call): the
+/// first that grants broadly (an unbounded amount, a grant-all), else the
+/// first that grants at all, else the first.
+pub fn surfaced(approvals: Vec<GuardDetectedApproval>) -> Option<GuardDetectedApproval> {
+    let broad = approvals
+        .iter()
+        .position(|a| a.is_unbounded && !a.is_reducing);
+    let granting = approvals.iter().position(|a| !a.is_reducing);
+    let at = broad.or(granting).unwrap_or(0);
+    approvals.into_iter().nth(at)
+}
+
+fn walk_calls(
+    to: Option<&str>,
+    all: &[u8],
+    start: usize,
+    len: usize,
+    depth: u8,
+    out: &mut Vec<GuardDetectedApproval>,
+) {
+    let Some(call) = all.get(start..start.saturating_add(len)) else {
+        return;
+    };
+    let hex = crate::primitives::to_hex(call, true);
+    if let Some(mut found) = detect_calldata_approval(to, Some(&hex)) {
+        if start > 0 {
+            let Ok(at) = u32::try_from(start) else {
+                return;
+            };
+            found.nested_at = Some(at);
+        }
+        out.push(found);
+        // An approval carries nothing.
+        return;
+    }
+    if depth >= MAX_NESTING {
+        return;
+    }
+    for inner in carried_calls(call) {
+        let target = inner.to.as_deref().or(to);
+        walk_calls(target, all, start + inner.start, inner.len, depth + 1, out);
+    }
+}
+
+/// One call a carrier carries: where its calldata sits in the carrier's
+/// (bytes, from the carrier's selector), and whom it is made to — `None`:
+/// the carrier itself (a `multicall` calls its own contract).
+struct Carried {
+    to: Option<String>,
+    start: usize,
+    len: usize,
+}
+
+fn usize_at(bytes: &[u8], at: usize) -> Option<usize> {
+    let word = bytes.get(at..at.checked_add(32)?)?;
+    let n = U256::from_be_slice(word);
+    usize::try_from(n).ok().filter(|n| *n <= bytes.len())
+}
+
+fn address_at(bytes: &[u8], at: usize) -> Option<String> {
+    let word = bytes.get(at..at.checked_add(32)?)?;
+    word[..12]
+        .iter()
+        .all(|b| *b == 0)
+        .then(|| crate::primitives::to_hex(&word[12..], true).to_lowercase())
+}
+
+/// `bytes` whose length word is at `at`: where its content starts, and how long.
+fn bytes_at(bytes: &[u8], at: usize) -> Option<(usize, usize)> {
+    let len = usize_at(bytes, at)?;
+    let start = at.checked_add(32)?;
+    (start.checked_add(len)? <= bytes.len()).then_some((start, len))
+}
+
+/// The element heads of a dynamic array whose length word is at `at`: each
+/// element's absolute position (element offsets count from the first head).
+fn array_elements(bytes: &[u8], at: usize) -> Option<Vec<usize>> {
+    let n = usize_at(bytes, at)?;
+    if n > MAX_CARRIED {
+        return None;
+    }
+    let heads = at.checked_add(32)?;
+    (0..n)
+        .map(|i| {
+            let off = usize_at(bytes, heads.checked_add(i.checked_mul(32)?)?)?;
+            heads.checked_add(off)
+        })
+        .collect()
+}
+
+/// The calls `call` (a selector and its arguments) carries, if it is a
+/// carrier this guard reads; empty otherwise, or when its encoding does not
+/// hold together.
+fn carried_calls(call: &[u8]) -> Vec<Carried> {
+    const ARGS: usize = 4;
+    let Some(selector) = call.get(..ARGS) else {
+        return Vec::new();
+    };
+    let selector = crate::primitives::to_hex(selector, false).to_lowercase();
+    // `bytes[]` at argument `arg`: each to the carrier itself.
+    let self_calls = |arg: usize| -> Option<Vec<Carried>> {
+        let array = ARGS.checked_add(usize_at(call, ARGS + arg * 32)?)?;
+        array_elements(call, array)?
+            .into_iter()
+            .map(|el| {
+                let (start, len) = bytes_at(call, el)?;
+                Some(Carried {
+                    to: None,
+                    start,
+                    len,
+                })
+            })
+            .collect()
+    };
+    // `(address target, …, bytes callData)[]` at argument `arg`, the bytes'
+    // offset in word `data_word` of each tuple.
+    let tuples = |arg: usize, data_word: usize| -> Option<Vec<Carried>> {
+        let array = ARGS.checked_add(usize_at(call, ARGS + arg * 32)?)?;
+        array_elements(call, array)?
+            .into_iter()
+            .map(|tuple| {
+                let to = address_at(call, tuple)?;
+                let data = tuple.checked_add(usize_at(call, tuple + data_word * 32)?)?;
+                let (start, len) = bytes_at(call, data)?;
+                Some(Carried {
+                    to: Some(to),
+                    start,
+                    len,
+                })
+            })
+            .collect()
+    };
+    let multi_send = || -> Option<Vec<Carried>> {
+        let at = ARGS.checked_add(usize_at(call, ARGS)?)?;
+        let (payload, len) = bytes_at(call, at)?;
+        let mut out = Vec::new();
+        let mut i = 0usize;
+        while i + 85 <= len {
+            let leg = payload + i;
+            let to = crate::primitives::to_hex(call.get(leg + 1..leg + 21)?, true).to_lowercase();
+            let data_len = usize_at(call, leg + 53)?;
+            let start = leg + 85;
+            let end = start.checked_add(data_len)?;
+            if end > payload + len || out.len() >= MAX_CARRIED {
+                return None;
+            }
+            out.push(Carried {
+                to: Some(to),
+                start,
+                len: data_len,
+            });
+            i = end - payload;
+        }
+        Some(out)
+    };
+    match selector.as_str() {
+        SEL_MULTICALL => self_calls(0),
+        SEL_MULTICALL_DEADLINE | SEL_MULTICALL_BLOCKHASH => self_calls(1),
+        SEL_AGGREGATE | SEL_BLOCK_AND_AGGREGATE => tuples(0, 1),
+        SEL_TRY_AGGREGATE | SEL_TRY_BLOCK_AND_AGGREGATE => tuples(1, 1),
+        SEL_AGGREGATE3 => tuples(0, 2),
+        SEL_AGGREGATE3_VALUE => tuples(0, 3),
+        SEL_MULTI_SEND => multi_send(),
+        _ => None,
+    }
+    .unwrap_or_default()
 }
 
 fn detect_typed_data_approval(td: &Value) -> Option<GuardDetectedApproval> {
@@ -1838,6 +2169,7 @@ fn detect_typed_data_approval(td: &Value) -> Option<GuardDetectedApproval> {
             locus: GuardLocus::TypedPath {
                 path: "allowed".to_owned(),
             },
+            nested_at: None,
         });
     }
 
@@ -1859,6 +2191,7 @@ fn detect_typed_data_approval(td: &Value) -> Option<GuardDetectedApproval> {
             locus: GuardLocus::TypedPath {
                 path: "value".to_owned(),
             },
+            nested_at: None,
         });
     }
 
@@ -1882,6 +2215,7 @@ fn detect_typed_data_approval(td: &Value) -> Option<GuardDetectedApproval> {
             locus: GuardLocus::TypedPath {
                 path: "details.amount".to_owned(),
             },
+            nested_at: None,
         });
     }
 
@@ -1907,6 +2241,7 @@ fn detect_typed_data_approval(td: &Value) -> Option<GuardDetectedApproval> {
                 locus: GuardLocus::TypedPath {
                     path: "details".to_owned(),
                 },
+                nested_at: None,
             });
         }
     }
@@ -1918,7 +2253,15 @@ fn detect_typed_data_approval(td: &Value) -> Option<GuardDetectedApproval> {
     // no rule for it. Surfaced under the Permit2 kinds (no new kind: every
     // shell decodes the kind, and an unknown one refuses the whole view), never
     // editable, signed verbatim only under the off-chain-permit consent.
-    if pt == "PermitTransferFrom" && js_truthy(msg.get("permitted")) {
+    // §37 (review 1-12): the WITNESS forms (`PermitWitnessTransferFrom`,
+    // `PermitBatchWitnessTransferFrom`) are the same authorization with the
+    // dApp's own struct (an order, an intent) bound into the signature — what
+    // UniswapX and most intent protocols ask for, and what a drainer asks for
+    // when the plain form would be recognised. They fell through to blind
+    // typed data; they are read exactly as the plain forms.
+    if (pt == "PermitTransferFrom" || pt == "PermitWitnessTransferFrom")
+        && js_truthy(msg.get("permitted"))
+    {
         let permitted = msg.get("permitted").unwrap_or(&empty);
         let amount = to_big(permitted.get("amount"));
         return Some(GuardDetectedApproval {
@@ -1936,9 +2279,10 @@ fn detect_typed_data_approval(td: &Value) -> Option<GuardDetectedApproval> {
             locus: GuardLocus::TypedPath {
                 path: "permitted.amount".to_owned(),
             },
+            nested_at: None,
         });
     }
-    if pt == "PermitBatchTransferFrom" {
+    if pt == "PermitBatchTransferFrom" || pt == "PermitBatchWitnessTransferFrom" {
         if let Some(list) = msg.get("permitted").and_then(Value::as_array) {
             let any_unbounded = list.iter().any(|p| {
                 let amount = to_big(p.get("amount"));
@@ -1959,6 +2303,7 @@ fn detect_typed_data_approval(td: &Value) -> Option<GuardDetectedApproval> {
                 locus: GuardLocus::TypedPath {
                     path: "permitted".to_owned(),
                 },
+                nested_at: None,
             });
         }
     }
@@ -2112,10 +2457,21 @@ pub fn rewrite_calldata(
     if !hex.is_ascii() {
         return Err(GuardRewriteError::MalformedParams);
     }
-    let word_start = 8 + (*word_index as usize) * 64;
+    // §37: a carried approval's word counts from its own selector.
+    let call_start = detected.nested_at.map_or(0, |at| at as usize * 2);
+    let word_start = call_start + 8 + (*word_index as usize) * 64;
     let word_end = word_start + 64;
     if hex.len() < word_end {
         return Err(GuardRewriteError::CalldataTooShort);
+    }
+    // The call the approval IS must still read as that approval, where it
+    // is: a carried offset is never trusted to point at a word blind.
+    let at_call = hex
+        .get(call_start..)
+        .ok_or(GuardRewriteError::CalldataTooShort)?;
+    let still = detect_calldata_approval(detected.token_address.as_deref(), Some(at_call));
+    if still.as_ref().map(|d| (d.kind, &d.locus)) != Some((detected.kind, &detected.locus)) {
+        return Err(GuardRewriteError::WrongLocus);
     }
     let selector = hex.get(..8).ok_or(GuardRewriteError::CalldataTooShort)?;
 
@@ -2224,45 +2580,68 @@ pub struct GuardUnlimitedApproval {
     pub amount_raw: String,
 }
 
-/// Errors if the FINAL request would grant an unbounded allowance. The submit
-/// chokepoint (`sign_request::proceed_submit`) waives it only when the
-/// approval surface reported [`GuardView::unlimited_consented`]; everything
-/// else — a shell that never mounted the surface, a shape no descriptor
-/// decodes — is still refused here.
+/// Errors if the FINAL request would grant an unbounded allowance — in the
+/// call itself or in any call it carries (§37). The submit chokepoint
+/// (`sign_request::proceed_submit`) waives ONE such approval per call, and
+/// only when the approval surface reported the person kept it
+/// ([`enforce_within_consent`]); everything else — a shell that never
+/// mounted the surface, a shape no descriptor decodes — is refused here.
 pub fn enforce_no_unlimited(
     method: &str,
     params: Option<&Value>,
 ) -> Result<(), GuardUnlimitedApproval> {
-    let Some(detected) = detect_approval(method, params) else {
-        return Ok(());
+    enforce_within_consent(method, params, false)
+}
+
+/// The grants the FINAL request makes that the submit guard judges: every
+/// unbounded amount on a transaction the wallet submits, carried calls
+/// included. Off-chain permit SIGNATURES (typed data) are redeemed by the
+/// dApp with its OWN struct — the wallet can't cap what it doesn't submit,
+/// so a forced cap only desyncs the signature and reverts the dApp's tx;
+/// those are gated by the sheet's explicit risk consent, not this guard.
+/// Boolean grants and reductions carry no amount to judge.
+fn unbounded_grants(method: &str, params: Option<&Value>) -> Vec<GuardUnlimitedApproval> {
+    if method != "eth_sendTransaction" {
+        return Vec::new();
+    }
+    let Some(tx) = params.and_then(Value::as_array).and_then(|a| a.first()) else {
+        return Vec::new();
     };
-    // Off-chain permit SIGNATURES (typed data) are redeemed by the dApp with
-    // its OWN struct — the wallet can't cap what it doesn't submit, so a
-    // forced cap only desyncs the signature and reverts the dApp's tx. These
-    // are gated by an explicit, deliberate UI risk-consent (the sheet's confirm),
-    // not by this amount guard, which only governs txs the WALLET submits.
-    if matches!(detected.locus, GuardLocus::TypedPath { .. }) {
-        return Ok(());
+    calldata_approvals(
+        tx.get("to").and_then(Value::as_str),
+        tx.get("data").and_then(Value::as_str),
+    )
+    .into_iter()
+    .filter(|d| !d.is_boolean_grant && !d.is_reducing)
+    .filter_map(|d| {
+        let amount_raw = d.amount_raw.clone()?;
+        let bits = d.amount_bits?;
+        let amount = parse_signed_dec(&amount_raw);
+        (!amount.neg && is_unbounded_amount(amount.mag, bits_from_wire(Some(bits)))).then_some(
+            GuardUnlimitedApproval {
+                kind: d.kind,
+                amount_raw,
+            },
+        )
+    })
+    .collect()
+}
+
+/// §37 (review 1-12): [`enforce_no_unlimited`] with the person's consent for
+/// this one call. `consented` waives exactly ONE unbounded approval — the
+/// one the sheet surfaces for a call ([`surfaced`]) — and never a second:
+/// a call that grants two cannot have shown both.
+pub fn enforce_within_consent(
+    method: &str,
+    params: Option<&Value>,
+    consented: bool,
+) -> Result<(), GuardUnlimitedApproval> {
+    let grants = unbounded_grants(method, params);
+    let waived = usize::from(consented);
+    match grants.into_iter().nth(waived) {
+        Some(refused) => Err(refused),
+        None => Ok(()),
     }
-    // Boolean grants (setApprovalForAll true) are handled by explicit UI
-    // consent — there is no finite amount to enforce.
-    if detected.is_boolean_grant {
-        return Ok(());
-    }
-    // Reducing the allowance (decreaseAllowance / approve-to-0) never grants.
-    if detected.is_reducing {
-        return Ok(());
-    }
-    if let (Some(amount_raw), Some(bits)) = (&detected.amount_raw, detected.amount_bits) {
-        let amount = parse_signed_dec(amount_raw);
-        if !amount.neg && is_unbounded_amount(amount.mag, bits_from_wire(Some(bits))) {
-            return Err(GuardUnlimitedApproval {
-                kind: detected.kind,
-                amount_raw: amount_raw.clone(),
-            });
-        }
-    }
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------

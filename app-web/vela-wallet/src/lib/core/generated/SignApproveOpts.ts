@@ -46,6 +46,14 @@ intent: string | null,
  */
 unlimited_approved: boolean, 
 /**
+ * §37 (review 1-12): `GuardView::unlimited_consented_legs`, copied
+ * verbatim — for a `wallet_sendCalls`, the legs (0-based) whose one
+ * unbounded approval the sheet showed and the person kept. Each waives
+ * the submit guard for that leg alone; [`Self::unlimited_approved`]
+ * waives no batch leg. Absent: none.
+ */
+unlimited_approved_legs: Array<number>, 
+/**
  * What the wallet's OWN simulation said this operation moves, exactly as
  * the sheet drew it under "Balance changes" when the confirm fired
  * (083 F1): `token_trust`'s judgments, in the sheet's order — an

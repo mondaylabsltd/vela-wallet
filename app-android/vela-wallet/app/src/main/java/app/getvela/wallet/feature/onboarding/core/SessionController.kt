@@ -195,6 +195,22 @@ class SessionController(
     }
 
     /**
+     * §37 (review 1-7): a re-check found something new about an account —
+     * [updated] is the core's `accountWithIdentity` of its stored record,
+     * written whole (the store's invariant), then handed to the session as
+     * the list the store now holds, the account in front left in front (by
+     * address, a row's identity).
+     */
+    suspend fun saveIdentity(updated: JSONObject) {
+        store.saveAccount(updated)
+        val accounts = store.loadAccounts()
+        val inFront = view.value.address.ifBlank { updated.optString("address") }
+        accountEstablished(
+            JSONObject().put("type", "set_wallet").put("accounts", accounts).put("active_index", indexOfAddress(accounts, inFront)),
+        )
+    }
+
+    /**
      * Spec 102: where [address]'s transactions and messages are reviewed and
      * signed on this device — [venueJson] exactly as the core offered it
      * (`signingVenueChoices`). By address (invariant ⑨). The core refuses a

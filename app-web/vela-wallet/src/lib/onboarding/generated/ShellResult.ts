@@ -47,7 +47,14 @@ unit_ids: Array<number>,
  * that predates the field fails closed (no rebuild is offered on an
  * answer nobody checked).
  */
-verified_by: VerifiedBy, } | { "type": "registry_unit", metadata_hex: string, members: Array<RegistryUnitMember>, } | { "type": "index_failed", message: string, 
+verified_by: VerifiedBy, } | { "type": "registry_unit", metadata_hex: string, members: Array<RegistryUnitMember>, 
+/**
+ * §37 (review 1-7): who vouched for these members — the resolver's
+ * `Done.verified_by` (`registry_resolve::unit_step`), passed through
+ * untouched. Absent reads `none`: a multi-key group nobody checked
+ * is saved unconfirmed (no receive address until a chain says so).
+ */
+verified_by: VerifiedBy, } | { "type": "index_failed", message: string, 
 /**
  * True when the request never reached the server (transport failure or
  * abort). Only the shell can tell that from a 4xx, so this one bit of

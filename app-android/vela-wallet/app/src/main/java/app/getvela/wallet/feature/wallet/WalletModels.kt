@@ -66,6 +66,12 @@ data class WalletHeaderModel(
      * (`SessionView.unsynced`) — "Syncing…", then "Not synced yet" with a retry.
      */
     val sync: WalletSyncLineModel? = null,
+    /**
+     * §37 (review 1-7): the core's `ReceiveStanding.receivable` for the
+     * account in front — `false` and the identicon viewer offers no copy of
+     * the address (Receive itself says why).
+     */
+    val receivable: Boolean = true,
 )
 
 /**

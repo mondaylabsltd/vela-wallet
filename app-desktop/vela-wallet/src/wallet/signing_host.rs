@@ -1929,6 +1929,9 @@ fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> S
         // asked — the submit guard's only waiver, copied from the view that
         // drew it, never decided here.
         unlimited_approved: guard.unlimited_consented,
+        // §37 (review 1-12): and WHICH batch legs it was kept on — each
+        // waives the submit guard for that leg alone. Copied, never decided.
+        unlimited_approved_legs: guard.unlimited_consented_legs.clone(),
         // The simulation is the column's, not these views': `approve` adds
         // it (`approved_changes`).
         balance_changes: None,
@@ -2683,6 +2686,18 @@ mod tests {
         guard.unlimited_consented = true;
         let opts = approve_opts(&fee, &clear, &guard);
         assert!(opts.unlimited_approved);
+        assert!(opts.unlimited_approved_legs.is_empty(), "no batch, no leg");
+
+        // §37 (review 1-12): a batch's consent names its legs, and they
+        // reach the submit guard as they were — the core waives no leg the
+        // view did not name.
+        guard.unlimited_consented_legs = vec![0, 2];
+        assert_eq!(
+            approve_opts(&fee, &clear, &guard).unlimited_approved_legs,
+            vec![0, 2]
+        );
+        guard.unlimited_consented_legs.clear();
+        let opts = approve_opts(&fee, &clear, &guard);
         assert_eq!(
             opts.params_override_json, None,
             "kept as asked: the site's own bytes, nothing rewritten"
@@ -3158,6 +3173,7 @@ mod approve_tests {
             params_override_json: None,
             intent: None,
             unlimited_approved: false,
+            unlimited_approved_legs: Vec::new(),
             balance_changes: None,
             token_meta: None,
             reading: None,
@@ -3485,6 +3501,7 @@ mod approve_tests {
             sign_in_key: None,
             signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
             signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+            identity: Default::default(),
         };
         SignContext::new(&account, CeremonyChannel::new().ceremony(0))
     }
@@ -3702,6 +3719,7 @@ mod sim_wait_tests {
             sign_in_key: None,
             signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
             signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+            identity: Default::default(),
         };
         SignContext::new(&account, CeremonyChannel::new().ceremony(0))
     }
@@ -4432,6 +4450,7 @@ pub(crate) mod parent_safe_tests {
             sign_in_key: None,
             signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
             signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+            identity: Default::default(),
         }
     }
 
@@ -4661,6 +4680,81 @@ pub(crate) mod parent_safe_tests {
             chain_id,
             granted_address: input["signer"].as_str().unwrap_or_default().to_owned(),
         })
+    }
+
+    /// §37 (review 1-11): a sign-in (EIP-4361) for another site than the one
+    /// asking is refused on arrival — under the sign-in's own title, in its
+    /// own sentence with the domain and the origin, never the self-call text
+    /// — nothing is signed, and its close answers -32603 `sign_in_refused`.
+    #[test]
+    fn a_sign_in_for_another_site_is_refused_in_its_own_words() {
+        const SIGNER: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        let message = format!(
+            "dapp.example wants you to sign in with your Ethereum account:\n{SIGNER}\n\nSign in.\n\nURI: https://dapp.example\nVersion: 1\nChain ID: 100\nNonce: 32891756\nIssued At: 2021-09-30T16:25:24Z"
+        );
+        let request = IncomingRequest::from_forwarded(crate::executor::dapp_browser::Forwarded {
+            tab: "t1".to_owned(),
+            id: "si-37".to_owned(),
+            method: "personal_sign".to_owned(),
+            params_json: serde_json::json!([message, SIGNER]).to_string(),
+            origin: "https://evil.example".to_owned(),
+            chain_id: 100,
+            granted_address: SIGNER.to_owned(),
+        });
+        let mut column = Column::open(&request, SIGNER, Vec::new(), vec![100]);
+        let view = column.sign.view();
+        let refusal = view
+            .blocked
+            .as_ref()
+            .and_then(|blocked| blocked.sign_in.clone())
+            .unwrap_or_else(|| panic!("not refused as a sign-in: {:?}", view.blocked));
+        assert_eq!(
+            crate::signing::live::ColumnKind::of(&view),
+            crate::signing::live::ColumnKind::Refused
+        );
+        assert_eq!(
+            view.error.as_ref().map(|error| error.kind),
+            Some(SignErrorKind::SignInRefused)
+        );
+        let en = crate::loc::Loc::for_language("en");
+        let vars: Vec<(&str, &str)> = refusal
+            .params
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        let sentence = en.t_texts(&refusal.key, &vars).to_string();
+        assert_eq!(
+            column.said(),
+            vec![
+                en.t("componentsUi.signing.signIn.refusedTitle").to_string(),
+                sentence.clone()
+            ]
+        );
+        assert!(
+            sentence.contains("dapp.example") && sentence.contains("evil.example"),
+            "{sentence}"
+        );
+        assert!(!sentence.contains("{{"), "{sentence}");
+
+        column.dispatch(SignEvent::ApproveTapped {
+            opts: SignApproveOpts::default(),
+        });
+        assert!(column.nothing_signed(), "{:?}", column.asked);
+        column.close();
+        let [answer] = column.answers.as_slice() else {
+            panic!("one answer: {:?}", column.answers);
+        };
+        assert!(
+            matches!(
+                answer,
+                SignResponsePayload::Err {
+                    code: -32603,
+                    kind: SignErrorKind::SignInRefused,
+                    ..
+                }
+            ),
+            "{answer:?}"
+        );
     }
 
     /// The takeover, on a multisig this device has: refused at once — no

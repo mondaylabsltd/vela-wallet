@@ -644,7 +644,17 @@
   "shareCardNetworkNote": "Paiements {{network}} uniquement",
   "tokenContract": "Contrat du jeton",
   "includeNetwork": "Inclure le réseau",
-  "includeNetworkHint": "Certains portefeuilles ne lisent pas ce code. Si votre interlocuteur n'y arrive pas, désactivez-le."
+  "includeNetworkHint": "Certains portefeuilles ne lisent pas ce code. Si votre interlocuteur n'y arrive pas, désactivez-le.",
+  "unconfirmed": {
+   "title": "Pas encore confirmé sur la chaîne",
+   "body": "Les clés de ce portefeuille viennent de l'index des clés, et le registre sur la chaîne ne les confirme pas encore. Vela n'affiche aucune adresse de réception tant que ce n'est pas le cas — il vérifie à nouveau chaque fois que vous ouvrez ceci.",
+   "checkAgain": "Vérifier à nouveau",
+   "checking": "Vérification sur la chaîne…"
+  },
+  "refuted": {
+   "title": "Ce n'est pas votre portefeuille enregistré",
+   "body": "Le registre sur la chaîne détient pour votre clé d'accès d'autres clés que celles données par l'index. Ne recevez rien ici — supprimez ce portefeuille et reconnectez-vous."
+  }
  },
  "assets": {
   "sectionTitle": "Actifs",
@@ -908,7 +918,8 @@
     "noNetwork": "La passkey a besoin d'une connexion réseau. Vérifiez votre connexion et réessayez.",
     "alreadyRegistered": "Cet authentificateur contient déjà l'une des clés de ce portefeuille. Utilisez-en un autre.",
     "timedOut": "La fenêtre de la passkey a expiré. Réessayez.",
-    "other": "La passkey n'a pas pu être utilisée. Réessayez."
+    "other": "La passkey n'a pas pu être utilisée. Réessayez.",
+    "testDomainNotAssociated": "Le domaine de clés d'accès de cette version de test n'est pas configuré sur cet appareil (TEST_RP_DOMAIN, ou localhost sur un simulateur ou un émulateur) : le système ne la laisse pas utiliser de clé d'accès. Les versions publiées ne sont pas concernées."
    }
   },
   "create": {
@@ -1678,7 +1689,16 @@
    "intentChangeThreshold": "Modifier les approbations requises",
    "labelMember": "Membre",
    "labelNewMember": "Nouveau membre",
-   "labelApprovalsRequired": "Approbations requises"
+   "labelApprovalsRequired": "Approbations requises",
+   "farAboveBalanceWarning": "Plus de 100 fois votre solde — ce contrat pourrait dépenser tout ce que vous détenez, et davantage à mesure que cela arrive",
+   "signIn": {
+    "refusedTitle": "Vela ne signera pas cette connexion",
+    "wrongDomain": "Cette connexion est pour {{domain}}, mais c'est {{origin}} qui la demande. Un site qui vous demande de vous connecter à un autre site cherche à prendre le contrôle de votre compte là-bas.",
+    "wrongUri": "Cette connexion indique {{uri}}, qui n'est pas {{origin}}, le site qui la demande.",
+    "wrongChain": "Cette connexion est pour la chaîne {{chain}}, mais ce site est connecté sur la chaîne {{connected}}. Changez de réseau et redemandez.",
+    "incomplete": "Il manque le champ {{field}} à cette connexion : Vela ne peut pas vérifier à quoi elle vous connecte.",
+    "noOrigin": "Vela ne peut pas savoir quel site demande, il ne signera donc pas cette connexion."
+   }
   },
   "signingApprove": {
    "resultingTotal": "Nouvelle autorisation totale",

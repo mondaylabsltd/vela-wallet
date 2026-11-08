@@ -79,6 +79,16 @@
     "shareCardNetworkNote": "Somente pagamentos na {{network}}",
     "tokenContract": "Contrato do token",
     "includeNetwork": "Incluir rede",
-    "includeNetworkHint": "Algumas carteiras não leem este código. Se a outra pessoa não conseguir, desative."
+    "includeNetworkHint": "Algumas carteiras não leem este código. Se a outra pessoa não conseguir, desative.",
+    "unconfirmed": {
+      "title": "Ainda não confirmada na blockchain",
+      "body": "As chaves desta carteira vieram do índice de chaves, e o registro na blockchain ainda não as confirma. O Vela não mostra endereço para receber até que confirme — ele verifica de novo toda vez que você abre isto.",
+      "checkAgain": "Verificar de novo",
+      "checking": "Verificando na blockchain…"
+    },
+    "refuted": {
+      "title": "Esta não é sua carteira registrada",
+      "body": "O registro na blockchain guarda para sua passkey um conjunto de chaves diferente do que o índice deu. Não receba nada aqui — remova esta carteira e entre de novo."
+    }
   }
 }

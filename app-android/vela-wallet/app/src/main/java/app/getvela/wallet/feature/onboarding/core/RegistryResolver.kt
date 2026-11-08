@@ -21,4 +21,10 @@ class RegistryResolver(
         { key, answers -> uniffi.vela_core_uniffi.registryResolveKeyStep(key, answers) },
     val unitStep: (unitId: Long, source: String, answersJson: String) -> String =
         { id, source, answers -> uniffi.vela_core_uniffi.registryResolveUnitStep(id.toUInt(), source, answers) },
+    /**
+     * §37 (review 1-7): the chain-only re-check of an unconfirmed account —
+     * `vela_core::registry_resolve::confirm_step`, answered with [ethCall].
+     */
+    val confirmStep: (publicKeyHex: String, address: String, answersJson: String) -> String =
+        { key, address, answers -> uniffi.vela_core_uniffi.registryResolveConfirmStep(key, address, answers) },
 )

@@ -576,7 +576,7 @@ struct WireParityI1Tests {
     /// run beside this one. The core's `test_launch_input.rs` drives the rest.)
     @Test func thePageLaunchInputNamesAVersionTheCoreAccepts() throws {
         let defaults = freshDefaults()
-        let newest = "674b73334dda36410fd5cecdaddd462a8193398328743ba2263d419d6be53b56"
+        let newest = "e95fb59d2eefffeea361786616ee719eb4db6f7df8e0737dd7278200b8dd79fb"
         #expect(throws: DevLaunchInputs.InputError.self) {
             try DevLaunchInputs.apply(environment: ["VELA_PAGE_LAUNCH": String(repeating: "ab", count: 32)], defaults: defaults)
         }

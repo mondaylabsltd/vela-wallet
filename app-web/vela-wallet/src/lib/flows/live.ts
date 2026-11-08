@@ -91,9 +91,11 @@ import type {
 	DesktopFlowModel,
 	FlowScreenModel,
 	HistoryModel,
+	ReceiveHeldModel,
 	ReceiveListModel,
 	ReceiveQrModel
 } from './model';
+import type { ReceiveStanding } from '$lib/core/kernels';
 
 export interface FlowsLiveInputs {
 	balance: BalanceView;
@@ -159,6 +161,35 @@ export interface FlowsLiveInputs {
 	 * the deposits it has seen land, newest first.
 	 */
 	receiveWatch?: ReceiveWatchView;
+	/**
+	 * §37 (review 1-7): the core's `receive_standing` for the account shown,
+	 * when it holds the address back, and whether the chain is being asked
+	 * now. Absent: Receive as ever (a receivable account, a multisig).
+	 */
+	receiveHeld?: { standing: ReceiveStanding; checking: boolean };
+}
+
+/**
+ * §37: Receive's words in place of the address — the core's `title_key` and
+ * `body_key`, "Checking on-chain…" while the walk is out, and "Check again"
+ * where the core offers it (`check_first`). `undefined` when nothing is held.
+ */
+export function receiveHeldOf(
+	held: FlowsLiveInputs['receiveHeld'],
+	fm: WalletFlowMessages | undefined
+): ReceiveHeldModel | undefined {
+	if (held === undefined || held.standing.receivable) return undefined;
+	const word = (key: string | null | undefined) =>
+		key ? ((fm as Record<string, string> | undefined)?.[key] ?? '') : '';
+	const { standing, checking } = held;
+	return {
+		title: word(standing.title_key),
+		body: word(standing.body_key),
+		...(checking ? { checking: fm?.['receive.unconfirmed.checking'] ?? '' } : {}),
+		...(standing.check_first && !checking
+			? { checkAgain: fm?.['receive.unconfirmed.checkAgain'] ?? '' }
+			: {})
+	};
 }
 
 /** The networks the receive list walks, in the order the page indexes them. */
@@ -261,6 +292,9 @@ function liveHistory(model: HistoryModel, inputs: FlowsLiveInputs): HistoryModel
 function liveReceiveList(model: ReceiveListModel, inputs: FlowsLiveInputs): ReceiveListModel {
 	const identity = inputs.identity;
 	if (identity === undefined) return model;
+	// §37: held — no row, so no address, no copy and no code to open.
+	const held = receiveHeldOf(inputs.receiveHeld, inputs.fm);
+	if (held !== undefined) return { ...model, rows: [], held };
 	const template = model.rows[0];
 	const networks = receiveNetworks();
 	return {
@@ -356,6 +390,31 @@ export function receiveWatchLine(
 function liveReceiveQr(model: ReceiveQrModel, inputs: FlowsLiveInputs): ReceiveQrModel {
 	const identity = inputs.identity;
 	if (identity === undefined) return model;
+	// §37: held — nothing of the address: no code, no lines, no share card,
+	// no request switch, no explorer link, no "listening for deposits".
+	const held = receiveHeldOf(inputs.receiveHeld, inputs.fm);
+	if (held !== undefined) {
+		const {
+			code: _code,
+			share: _share,
+			network: _network,
+			watch: _watch,
+			explorerUrl: _explorer,
+			...rest
+		} = model;
+		void [_code, _share, _network, _watch, _explorer];
+		return {
+			...rest,
+			contract: model.contract && { ...model.contract, copyValue: undefined },
+			account: {
+				...model.account,
+				name: identity.name,
+				identiconSvg: identity.identiconSvg,
+				lines: ['', '']
+			},
+			held
+		};
+	}
 	const { chainId, token } = receiveSubject(inputs, model.contract !== undefined);
 	const network = chainName(chainId);
 	const fm = inputs.fm;
@@ -526,6 +585,12 @@ function liveTokenDetail(model: TokenDetailModel, inputs: FlowsLiveInputs): Toke
 function liveShareCard(model: ShareCardModel, inputs: FlowsLiveInputs): ShareCardModel {
 	const identity = inputs.identity;
 	if (identity === undefined) return model;
+	// §37: no picture of an address the core holds back.
+	if (receiveHeldOf(inputs.receiveHeld, inputs.fm) !== undefined) {
+		const { code: _code, ...rest } = model;
+		void _code;
+		return { ...rest, name: identity.name, lines: ['', ''], identiconSvg: identity.identiconSvg };
+	}
 	return {
 		...model,
 		code: encodeShareQr(identity.address),

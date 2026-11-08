@@ -1408,7 +1408,10 @@ impl WalletPage {
             .cloned()
             .collect();
         let note = card_note(view.waiting_note.as_ref(), history_said);
-        if open.is_empty() && view.missing.is_empty() && note.is_none() {
+        // §37 (review 1-13): proposals no member vouches for are behind
+        // their own disclosure, at the end of the list.
+        let disclosure = non_members_disclosure(&view, &loc);
+        if open.is_empty() && view.missing.is_empty() && note.is_none() && disclosure.is_none() {
             return None;
         }
         let mut group = div().flex().flex_col().pb(px(16.)).child(
@@ -1462,6 +1465,8 @@ impl WalletPage {
             );
             // r4b-6: proposals at one number — only one of them can run.
             let conflict = (!item.same_nonce.is_empty()).then(|| words::t(&loc, "status.conflict"));
+            // §37: one nobody on the multisig approved, shown on request.
+            let stranger = non_member_warning(item, &loc);
             let sub = [
                 Some(network(item.chain_id)),
                 Some(words::tv(
@@ -1507,7 +1512,15 @@ impl WalletPage {
                                     .text_size(theme::text_label())
                                     .text_color(theme.fg_subtle)
                                     .child(sub),
-                            ),
+                            )
+                            .when_some(stranger, |el, warning| {
+                                el.child(
+                                    div()
+                                        .text_size(theme::text_label())
+                                        .text_color(theme.warning_base)
+                                        .child(crate::ui::prose(warning)),
+                                )
+                            }),
                     )
                     .child(
                         div()
@@ -1529,6 +1542,18 @@ impl WalletPage {
                         this.open_multisig_sheet(chain_id, hash.clone(), cx);
                     })),
             );
+        }
+        if let Some((label, show)) = disclosure {
+            group = group.child(div().py(px(4.)).child(
+                text_action("ms-non-members", theme, &mut self.icons, None, label.into()).on_click(
+                    cx.listener(move |this, _, _, cx| {
+                        let host = this.ms_host(cx);
+                        host.update(cx, |host, cx| {
+                            host.proposals(ms_proposals::Event::ShowNonMembers { show }, cx)
+                        });
+                    }),
+                ),
+            ));
         }
         for missing in &view.missing {
             group = group.child(
@@ -1565,6 +1590,39 @@ impl WalletPage {
     fn ms_note_words(&self, note: &WaitingNote) -> (String, bool) {
         waiting_note_words(&self.loc, note)
     }
+}
+
+/// §37 (review 1-13 b): the disclosure that ends the proposal list when
+/// open proposals no member vouches for were left out of it — "Show
+/// proposals from non-members (n)", or "Hide…" once opened — and what a
+/// tap on it asks the core (`Event::ShowNonMembers { show }`). `None` when
+/// there are none. Pure.
+pub(crate) fn non_members_disclosure(
+    view: &ms_proposals::ProposalsView,
+    loc: &crate::loc::Loc,
+) -> Option<(String, bool)> {
+    if view.non_members == 0 {
+        return None;
+    }
+    Some(if view.showing_non_members {
+        (words::t(loc, "panel.nonMembersHide"), false)
+    } else {
+        (
+            words::tv(
+                loc,
+                "panel.nonMembersShow",
+                &[("total", &view.non_members.to_string())],
+            ),
+            true,
+        )
+    })
+}
+
+/// §37: the warning a proposal no member vouches for carries
+/// (`ProposalItem::from_non_member`). Pure.
+pub(crate) fn non_member_warning(item: &ProposalItem, loc: &crate::loc::Loc) -> Option<String> {
+    item.from_non_member
+        .then(|| words::t(loc, "panel.nonMembersWarning"))
 }
 
 /// The waiting group's note in words, and whether it offers Retry (the
@@ -5361,6 +5419,41 @@ mod tests {
     /// launch, the list it holds is not this multisig's — says Opening…,
     /// never "no longer in the list" nor "isn't shown here", and offers no
     /// Try again; once followed, the core's `missing_said` speaks.
+    #[test]
+    fn proposals_no_member_vouches_for_are_behind_a_disclosure() {
+        use vela_core::app::multisig_proposals::ProposalsView;
+        for (tag, loc) in crate::loc::Loc::every_language() {
+            assert_eq!(
+                super::non_members_disclosure(&ProposalsView::default(), &loc),
+                None,
+                "{tag}: none left out, no disclosure"
+            );
+            let hidden = ProposalsView {
+                non_members: 3,
+                ..ProposalsView::default()
+            };
+            let (show, opens) = super::non_members_disclosure(&hidden, &loc)
+                .unwrap_or_else(|| unreachable!("{tag}: three left out, no disclosure"));
+            assert!(opens, "{tag}: the closed disclosure opens");
+            assert_eq!(
+                show,
+                loc.t_texts("home.multisig.panel.nonMembersShow", &[("total", "3")])
+                    .to_string()
+            );
+            assert!(show.contains('3') && !show.contains("{{"), "{tag}: {show}");
+            let open = ProposalsView {
+                non_members: 3,
+                showing_non_members: true,
+                ..ProposalsView::default()
+            };
+            let (hide, opens) = super::non_members_disclosure(&open, &loc)
+                .unwrap_or_else(|| unreachable!("{tag}: opened, no disclosure"));
+            assert!(!opens, "{tag}: the open disclosure closes");
+            assert_eq!(hide, super::words::t(&loc, "panel.nonMembersHide"));
+            assert!(!hide.contains("home.multisig"), "{tag}: {hide}");
+        }
+    }
+
     #[test]
     fn a_sheet_whose_multisig_is_not_followed_yet_says_opening() {
         use vela_core::app::multisig_proposals::ProposalsView;

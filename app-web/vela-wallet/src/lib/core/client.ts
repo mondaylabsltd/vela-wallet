@@ -104,6 +104,7 @@ import init, {
 	registryChainUnit,
 	registryChainUnitPlan,
 	registryNameStep,
+	registryResolveConfirmStep,
 	registryResolveKeyStep,
 	registryResolveUnitStep,
 	RpcPoolCore,
@@ -230,6 +231,9 @@ export { dpermSettleOnClose };
 export { dappOriginLock };
 export { registryChainKeyPlan, registryChainKeyStatus, registryChainUnit, registryChainUnitPlan };
 export { registryResolveKeyStep, registryResolveUnitStep };
+// §37 (review 1-7): an unconfirmed account checked again on the chain alone —
+// `ask` with `eth_call`s, or `done` with its `identity`.
+export { registryResolveConfirmStep };
 // Settings' shared rules (spec 072): how every shell's preference spellings
 // read, and what each stored key IS — its storage row, whether "clear all
 // caches" takes it, whether an erase does. JSON in and out, like the machines.

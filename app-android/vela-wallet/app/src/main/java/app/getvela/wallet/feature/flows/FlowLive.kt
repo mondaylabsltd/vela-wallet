@@ -149,6 +149,24 @@ object FlowLive {
         networkNote = strings.t(I18nKeys.Flows.SHARE_CARD_NETWORK_NOTE, mapOf("network" to networkName)),
     )
 
+    /**
+     * §37 (review 1-7): what Receive says in place of the address, or `null`
+     * when it may show one ([standing] receivable, or no record to judge).
+     * The title and body are the core's keys; Check again is offered only
+     * where the core asks the chain first (`check_first`).
+     */
+    fun receiveStanding(standing: app.getvela.wallet.feature.wallet.core.ReceiveStanding?, checking: Boolean, strings: VelaStrings): ReceiveStandingModel? {
+        if (standing == null || standing.receivable) return null
+        return ReceiveStandingModel(
+            header = FlowHeaderModel(title = strings.t(I18nKeys.Flows.RECEIVE_TITLE), backLabel = strings.t(I18nKeys.Flows.BACK)),
+            title = strings.t(standing.title_key ?: I18nKeys.Flows.RECEIVE_UNCONFIRMED_TITLE),
+            body = strings.t(standing.body_key ?: I18nKeys.Flows.RECEIVE_UNCONFIRMED_BODY),
+            refuted = standing.identity == app.getvela.wallet.feature.onboarding.core.IDENTITY_REFUTED,
+            checkAgain = if (standing.check_first) strings.t(I18nKeys.Flows.RECEIVE_UNCONFIRMED_CHECK_AGAIN) else null,
+            checking = if (checking) strings.t(I18nKeys.Flows.RECEIVE_UNCONFIRMED_CHECKING) else null,
+        )
+    }
+
     fun receiveGateOpen(request: PaymentRequestView): Boolean =
         !request.gate_loading && request.acknowledged
 

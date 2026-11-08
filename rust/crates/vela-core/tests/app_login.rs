@@ -611,6 +611,7 @@ fn a_failed_sign_in_with_the_platform_facts_names_its_sentence() {
         domain: "androidx.credentials.exceptions.GetCredentialUnknownException".to_owned(),
         code: None,
         message: "[50152] RP ID cannot be validated.".to_owned(),
+        test_build: None,
     }));
     assert_eq!(
         said,
@@ -766,6 +767,7 @@ fn sign_in_while_busy_is_a_no_op() {
 
 use vela_core::app::RegistryUnitMember;
 use vela_core::registry_metadata::{RegistryMetadata, REGISTRY_METADATA_VERSION};
+use vela_core::registry_resolve::Identity;
 
 const CRED2: &str = "credential-2";
 
@@ -833,6 +835,7 @@ fn fetching_unit() -> Sut {
 fn a_grouped_candidate_reconstructs_the_full_key_set() {
     let mut sut = fetching_unit();
     let next = sut.resolve(ShellResult::RegistryUnit {
+        verified_by: VerifiedBy::Gnosis,
         metadata_hex: unit_metadata_hex(),
         members: unit_members(),
     });
@@ -849,6 +852,106 @@ fn a_grouped_candidate_reconstructs_the_full_key_set() {
     }
 }
 
+/// §37 (review 1-7): a multi-key group only the index vouched for (no chain
+/// could confirm it) still signs the person in — refusing would make the
+/// wallet depend on RPC health — but the account is saved UNCONFIRMED: no
+/// receive address, no deposit, until a chain says so.
+#[test]
+fn an_unverified_multi_key_group_is_saved_unconfirmed() {
+    let mut sut = fetching_unit();
+    let next = sut.resolve(ShellResult::RegistryUnit {
+        metadata_hex: unit_metadata_hex(),
+        members: unit_members(),
+        verified_by: VerifiedBy::None,
+    });
+    match next.as_slice() {
+        [ShellOperation::SaveAccount { account }] => {
+            assert_eq!(account.address, multi_address());
+            assert_eq!(account.identity, Identity::Unconfirmed);
+            let standing = vela_core::app::receive_standing(account);
+            assert!(!standing.receivable, "no address to receive at");
+            assert!(standing.check_first);
+            assert_eq!(
+                standing.title_key.as_deref(),
+                Some("receive.unconfirmed.title")
+            );
+            // Written, and read back the same.
+            let json = serde_json::to_string(account).unwrap();
+            assert!(json.contains(r#""identity":"unconfirmed""#), "{json}");
+            let back: vela_core::app::Account = serde_json::from_str(&json).unwrap();
+            assert_eq!(back.identity, Identity::Unconfirmed);
+        }
+        other => panic!("expected the save, got {other:?}"),
+    }
+}
+
+/// A group a chain proved is confirmed, and `confirmed` is not written.
+#[test]
+fn a_verified_group_is_confirmed() {
+    let mut sut = fetching_unit();
+    let next = sut.resolve(ShellResult::RegistryUnit {
+        metadata_hex: unit_metadata_hex(),
+        members: unit_members(),
+        verified_by: VerifiedBy::Ethereum,
+    });
+    match next.as_slice() {
+        [ShellOperation::SaveAccount { account }] => {
+            assert_eq!(account.identity, Identity::Confirmed);
+            assert!(vela_core::app::receive_standing(account).receivable);
+            let json = serde_json::to_string(account).unwrap();
+            assert!(!json.contains("identity"), "{json}");
+        }
+        other => panic!("expected the save, got {other:?}"),
+    }
+}
+
+/// §37 (review 1-7), the lying-index fixture: the index hands back the
+/// person's real CREDENTIAL ID under an attacker's PUBLIC KEY (the address
+/// computed accordingly). Matched by credential id alone it would be
+/// entered; matched by the key the signature recovers, it is refused —
+/// whoever vouched for it.
+#[test]
+fn a_member_whose_key_is_not_the_signers_is_refused() {
+    let attacker = support::second_public_key_hex();
+    let forged = vec![RegistryUnitMember {
+        credential_id: CRED.to_owned(),
+        public_key_hex: attacker.clone(),
+        authenticator_attachment: "platform".to_owned(),
+        transports: String::new(),
+    }];
+    let keys = [vela_core::safe::parse_public_key(&attacker).unwrap()];
+    let address = vela_core::safe::compute_safe_address_multi(&keys)
+        .unwrap()
+        .address;
+    let metadata_hex = RegistryMetadata {
+        version: REGISTRY_METADATA_VERSION,
+        address,
+        wallet_version: "safe-1.4.1".to_owned(),
+        key_names: vec!["Ann".to_owned()],
+        created_at_iso: NOW.to_owned(),
+    }
+    .encode_hex()
+    .unwrap();
+    for verified_by in [VerifiedBy::None, VerifiedBy::Gnosis] {
+        let mut sut = fetching_unit();
+        let next = sut.resolve(ShellResult::RegistryUnit {
+            metadata_hex: metadata_hex.clone(),
+            members: forged.clone(),
+            verified_by,
+        });
+        assert!(
+            matches!(
+                next.as_slice(),
+                [ShellOperation::Prompt {
+                    kind: PromptKind::SignInFailed { .. },
+                    ..
+                }]
+            ),
+            "a credential id under another key is never this wallet; got {next:?}"
+        );
+    }
+}
+
 /// A server that reorders members cannot move the wallet: the pin is re-found
 /// by derivation against the recorded address.
 #[test]
@@ -857,6 +960,7 @@ fn reconstruction_survives_shuffled_member_order() {
     let mut shuffled = unit_members();
     shuffled.reverse();
     let next = sut.resolve(ShellResult::RegistryUnit {
+        verified_by: VerifiedBy::Gnosis,
         metadata_hex: unit_metadata_hex(),
         members: shuffled,
     });
@@ -887,6 +991,7 @@ fn a_group_that_does_not_derive_its_address_is_refused() {
     .encode_hex()
     .unwrap();
     let next = sut.resolve(ShellResult::RegistryUnit {
+        verified_by: VerifiedBy::Gnosis,
         metadata_hex,
         members: unit_members(),
     });
@@ -1296,6 +1401,7 @@ fn a_wallet_already_held_is_entered_not_saved_again() {
     });
 
     let next = sut.resolve(ShellResult::RegistryUnit {
+        verified_by: VerifiedBy::Gnosis,
         metadata_hex: unit_metadata_hex(),
         members: unit_members(),
     });
@@ -1333,6 +1439,7 @@ fn a_wallet_held_in_another_casing_is_still_the_same_wallet() {
         verified_by: VerifiedBy::None,
     });
     let next = sut.resolve(ShellResult::RegistryUnit {
+        verified_by: VerifiedBy::Gnosis,
         metadata_hex: unit_metadata_hex(),
         members: unit_members(),
     });
@@ -1365,6 +1472,7 @@ fn an_unheld_wallet_is_still_saved_and_added() {
         verified_by: VerifiedBy::None,
     });
     let next = sut.resolve(ShellResult::RegistryUnit {
+        verified_by: VerifiedBy::Gnosis,
         metadata_hex: unit_metadata_hex(),
         members: unit_members(),
     });
@@ -1937,6 +2045,7 @@ fn an_index_failure_still_tries_the_other_candidate() {
     let next = answer_both(&mut sut, Answer::Failed { local: true }, Answer::Grouped);
     assert_eq!(next, vec![ShellOperation::RegistryQueryUnit { unit_id: 3 }]);
     let next = sut.resolve(ShellResult::RegistryUnit {
+        verified_by: VerifiedBy::Gnosis,
         metadata_hex: unit_metadata_hex(),
         members: unit_members(),
     });
@@ -2067,6 +2176,7 @@ fn a_multikey_member_offline_never_saves_another_address() {
             let next = sut.resolve(result_of(Answer::Grouped));
             assert_eq!(next, vec![ShellOperation::RegistryQueryUnit { unit_id: 3 }]);
             let next = sut.resolve(ShellResult::RegistryUnit {
+                verified_by: VerifiedBy::Gnosis,
                 metadata_hex: unit_metadata_hex(),
                 members: unit_members(),
             });

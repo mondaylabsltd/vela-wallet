@@ -641,7 +641,17 @@
   "shareCardNetworkNote": "{{network}} payments only",
   "tokenContract": "Token contract",
   "includeNetwork": "Include network",
-  "includeNetworkHint": "Some wallets can't read this code. If theirs can't, switch it off."
+  "includeNetworkHint": "Some wallets can't read this code. If theirs can't, switch it off.",
+  "unconfirmed": {
+   "title": "Not yet confirmed on-chain",
+   "body": "This wallet's keys came from the key index, and the registry on-chain doesn't confirm them yet. Vela shows no address to receive at until it does — it checks again each time you open this.",
+   "checkAgain": "Check again",
+   "checking": "Checking on-chain…"
+  },
+  "refuted": {
+   "title": "This isn't your registered wallet",
+   "body": "The registry on-chain holds a different set of keys for your passkey than the key index gave. Don't receive anything here — remove this wallet and sign in again."
+  }
  },
  "assets": {
   "sectionTitle": "Assets",
@@ -905,7 +915,8 @@
     "noNetwork": "The passkey needs a network connection. Check your connection and try again.",
     "alreadyRegistered": "This authenticator already holds one of this wallet's keys. Use a different one.",
     "timedOut": "The passkey prompt timed out. Try again.",
-    "other": "The passkey couldn't be used. Try again."
+    "other": "The passkey couldn't be used. Try again.",
+    "testDomainNotAssociated": "This test build's passkey domain isn't set up on this device (TEST_RP_DOMAIN, or localhost on a simulator or emulator), so the system won't let it use a passkey. Release builds aren't affected."
    }
   },
   "create": {
@@ -1725,7 +1736,16 @@
    "intentChangeThreshold": "Change approvals required",
    "labelMember": "Member",
    "labelNewMember": "New member",
-   "labelApprovalsRequired": "Approvals required"
+   "labelApprovalsRequired": "Approvals required",
+   "farAboveBalanceWarning": "Over 100× your balance — this contract could spend all you hold, and more as it arrives",
+   "signIn": {
+    "refusedTitle": "Vela won't sign this in",
+    "wrongDomain": "This sign-in is for {{domain}}, but {{origin}} is asking. A site that asks you to sign in to another site is trying to take over your account there.",
+    "wrongUri": "This sign-in names {{uri}}, which isn't {{origin}}, the site asking.",
+    "wrongChain": "This sign-in is for chain {{chain}}, but this site is connected on chain {{connected}}. Switch networks and ask again.",
+    "incomplete": "This sign-in leaves out its {{field}}, so Vela can't check what it signs you in to.",
+    "noOrigin": "Vela can't tell which site is asking, so it won't sign this sign-in."
+   }
   },
   "currency": {
    "title": "Display currency",

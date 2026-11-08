@@ -101,12 +101,14 @@
 		type WalletIdentity
 	} from '$lib/wallet/identity';
 	import { shownIdentity } from '$lib/multisig/core/shown';
+	import { receiveIdentity } from '$lib/onboarding/core/receive-identity.svelte';
 	import { multisig } from '$lib/multisig/core/store.svelte';
 	import { multisigUi } from '$lib/multisig/core/ui.svelte';
 	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
 	import MultisigHomeCard from '$lib/multisig/ui/MultisigHomeCard.svelte';
 	import { keepLink } from '$lib/multisig/core/kept-link';
 	import {
+		MULTISIG_NON_MEMBERS,
 		MULTISIG_RETRY,
 		missingOfRow,
 		proposalOfRow,
@@ -1852,6 +1854,26 @@
 	const receiveCodeShown = $derived(
 		flowState === 'r2' || flowState === 'r3' || desktopFlow === 'dr2' || desktopFlow === 'dr3'
 	);
+	/**
+	 * §37 (review 1-7): the core's `receive_standing` for the account shown,
+	 * when it holds the address back — Receive then draws its words in place
+	 * of every row, code, copy, share and request, and no deposit watch or
+	 * request session runs behind it. `null`: Receive as ever (receivable,
+	 * or not a stored Vela account — a multisig).
+	 */
+	const receiveHeld = $derived(receiveIdentity.held(identity?.address));
+	const receiveChecking = $derived(receiveIdentity.checking(identity?.address));
+	// §37: opening Receive on an account the chain has not confirmed asks the
+	// chain first ("it checks again each time you open this").
+	$effect(() => {
+		if (receiving) untrack(() => void receiveIdentity.check(identity?.address));
+	});
+	// §37: and once at start, in the background, for the active account —
+	// re-checked before its first use, whichever account the page shows.
+	$effect(() => {
+		const active = view.address;
+		if (signedIn && active) untrack(() => void receiveIdentity.check(active));
+	});
 	// Usage statistics: each opening of Receive, and each time a code comes up.
 	$effect(() => {
 		if (receiving) untrack(() => track('receive_opened'));
@@ -1861,7 +1883,8 @@
 	});
 	$effect(() => {
 		const address = identity?.address;
-		if (!receiving || address === undefined) return;
+		// §37: an account that may not be received at listens for no deposit.
+		if (!receiving || address === undefined || receiveHeld !== null) return;
 		let disposed = false;
 		void loadCore().then(() => {
 			if (disposed) return;
@@ -1894,7 +1917,8 @@
 	let paySession: PaymentRequestSession | null = null;
 	$effect(() => {
 		const address = identity?.address;
-		if (!receiving || address === undefined) return;
+		// §37: nor makes a payment request for it.
+		if (!receiving || address === undefined || receiveHeld !== null) return;
 		let disposed = false;
 		void loadCore().then(() => {
 			if (disposed) return;
@@ -2080,7 +2104,11 @@
 	function openActivity(row: { id?: string }) {
 		const proposal = multisigOfRow(row.id);
 		const missing = missingOfRow(row.id);
-		if (proposal) {
+		if (row.id === MULTISIG_NON_MEMBERS) {
+			// §37: the list's disclosure — proposals no member approved, shown or hidden.
+			proposalTapped = true;
+			multisigProposals.showNonMembers(!multisigProposals.showingNonMembers);
+		} else if (proposal) {
 			// The row's own tap goes on to the transaction detail: not for this one.
 			proposalTapped = true;
 			multisigUi.open({ kind: 'proposal', ...proposal });
@@ -2157,6 +2185,7 @@
 		receiveChainId: selectedReceiveChainId,
 		pay: payView ?? undefined,
 		receiveWatch: receiveWatchView ?? undefined,
+		receiveHeld: receiveHeld ? { standing: receiveHeld, checking: receiveChecking } : undefined,
 		emptyCopy: data.flows.t4.base.kind === 'assets' ? data.flows.t4.base.model.empty : undefined,
 		send: sendInputs,
 		batch: batchInputs,
@@ -2946,6 +2975,7 @@
 		batch={batchActions}
 		ondeletetx={deleteSelectedTx}
 		onincludenetwork={includeNetwork}
+		oncheckagain={() => void receiveIdentity.check(identity?.address)}
 		ongesture={listGestured}
 	/>
 {/snippet}
@@ -3172,6 +3202,7 @@
 		ondeletetx={deleteSelectedTx}
 		onchains={() => (chainSheetOpen = true)}
 		onincludenetwork={includeNetwork}
+		oncheckagain={() => void receiveIdentity.check(identity?.address)}
 		{sheetOnly}
 		ongesture={listGestured}
 	/>

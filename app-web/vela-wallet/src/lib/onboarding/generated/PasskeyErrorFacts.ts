@@ -30,4 +30,11 @@ code: number | null,
  * The platform's raw message — read only for the stable tokens named
  * in the module doc; kept by the shell for the report.
  */
-message: string, };
+message: string, 
+/**
+ * R21-3 (§37): the shell is a TEST build — the flag it hands
+ * `service_defaults::relying_party_id`. An association failure is then
+ * said as the test build's passkey domain not being set up
+ * ([`TEST_DOMAIN_NOT_ASSOCIATED_KEY`]). Absent: a release build's words.
+ */
+test_build?: boolean, };
