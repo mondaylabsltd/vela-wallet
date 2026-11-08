@@ -33,6 +33,22 @@ with no "anyway" for this device's multisigs and for any Safe whose
 again at submit; independently on the signing page (2c649b76). Proved on the
 fork harness (`multisig_fork.rs` `parent::…`).
 
+## R20b-1 (open, S4, 2026-11-08, web, Chrome extension, Safari extension, desktop) — found in the R20b re-verification of §34
+
+**Platform:** web, Chrome extension, Safari extension, desktop. **Symptom:** A red "Insufficient USDC to cover amount + gas fees" can show under a frozen press whose own figures fit (computed against the newer, unshown quote, or the balance re-read after the operation landed). The press either stops or sends correctly; no money effect. **Severity:** S4. **Workaround:** Trust the frozen "Signing at this fee and amount…" line.
+
+## R20b-2 (open, S4, 2026-11-08, iOS) — found in the R20b re-verification of §34
+
+**Platform:** iOS. **Symptom:** A sweep's Max confirm says "Max is now 0.05 USDC (it was 0.014)" when the form already showed 0.05 at Continue. Charged = shown. **Severity:** S4. **Workaround:** Cosmetic.
+
+## R20b-3 (open, S4, 2026-11-08, web (stop logic shared)) — found in the R20b re-verification of §34
+
+**Platform:** web (stop logic shared). **Symptom:** A multi-token sweep's stop says only that the fee changed, though the USDC line moved too (0.28 → 0.244). **Severity:** S4. **Workaround:** Read the lines before confirming again.
+
+## R20b-4 (open, S4, 2026-11-08, web) — found in the R20b re-verification of §34
+
+**Platform:** web. **Symptom:** The stop sentence can be replaced about 2 s later by the next re-quote's "Max is now…" line. Nothing was signed; the next press charges what is drawn. **Severity:** S4. **Workaround:** Read the figures before pressing again.
+
 ## R20-2 (open, S3, 2026-11-08, Android) — found in the R20 release-candidate acceptance
 
 **Platform:** Android. **Symptom:** Testnet, fresh install, first switch from Mainnet: "No activity yet" beside "Can't reach 2 networks right now" from about 21 s to 39 s (r18-1 fixed on Mainnet, web and iOS, not here). **Severity:** S3. **Workaround:** Wait for the networks to answer, or pull to refresh.
