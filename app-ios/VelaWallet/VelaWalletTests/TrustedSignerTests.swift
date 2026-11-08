@@ -505,7 +505,7 @@ struct TrustedSignerSpineTests {
     @Test func aMessageIsSignedByThePageOverThePasskeysDigest() async throws {
         let signer = CountingSigner()
         let page = honestPage()
-        let spine = spine(ScriptedRelayPort(), signer, clear: page)
+        let spine = spine(.deployedAccount(), signer, clear: page)
         let original = Data(repeating: 0x42, count: 32)
         let params = #"["0x68656c6c6f","\#(fixture.account)"]"#
 

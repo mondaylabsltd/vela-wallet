@@ -1271,6 +1271,9 @@ final class SigningController {
             // The guard showed an unbounded amount and it was kept as the site
             // asked — the submit guard's only waiver, copied, never decided.
             "unlimited_approved": guardView.unlimitedConsented,
+            // §37 (review 1-12): which batch legs' one unbounded approval was
+            // shown and kept — the waiver for those legs alone, copied.
+            "unlimited_approved_legs": (guardView.unlimitedConsentedLegs ?? []).map { NSNumber(value: $0) },
             "token_meta": guardView.meta.wire,
             "balance_changes": balanceChanges.map { $0.map(\.wire) as Any } ?? NSNull(),
             // Spec 097: what the reading named, copied verbatim.

@@ -461,6 +461,15 @@ enum SigningLive {
         // Spec 081: the core refused this request outright — it would have
         // changed who controls the account. Nothing else on the sheet matters,
         // and `confirmGateOpen` is already false, so say it and stop.
+        if let blocked = sign.blocked, let signIn = blocked.signIn {
+            // §37 (review 1-11): a sign-in that does not bind to the site
+            // asking or its network — its own title and the core's sentence,
+            // never the self-call text.
+            blocks.append(.intent(text: s(loc, "signIn.refusedTitle"), tone: .danger))
+            blocks.append(.warning(tone: .danger, text: signIn.params.isEmpty
+                ? loc.t(signIn.key) : loc.t(signIn.key, vars: signIn.params)))
+            return blocks
+        }
         if let blocked = sign.blocked {
             blocks.append(.intent(text: s(loc, "selfCallBlockedTitle"), tone: .danger))
             let text: String
@@ -503,7 +512,7 @@ enum SigningLive {
             // 2026-09-26 it means the approval screen did not show the
             // unlimited approval — a wallet fault, not "unlimited is disabled".
             // The blocked sheet above already says it, in full.
-            case .selfCallBlocked, .parentSafeBlocked: ""
+            case .selfCallBlocked, .parentSafeBlocked, .signInRefused: ""
             case .unsupportedChain: loc.t("send.lock.netNotFound")
             // Neither of these is an error a person needs to read: one is
             // their own decision and the other is the wallet's.
@@ -1516,7 +1525,7 @@ enum SigningLive {
             // An unlimited permit is said like any unlimited approval (spec
             // 094 S8) — the core's flag, the same sentence.
             if guardView.unlimitedWarning {
-                blocks.append(.warning(tone: .danger, text: s(loc, "unlimitedWarning")))
+                blocks.append(.warning(tone: .danger, text: unlimitedWarningText(guardView, loc: loc)))
             }
             // The dApp submits its own amount on chain, so rewriting would
             // desync the signature and revert their transaction. Saying so is
@@ -1541,7 +1550,7 @@ enum SigningLive {
             // Kept as the site asked (2026-09-26) — allowed, never unsaid. The
             // core decides when (spec 094 S8).
             if guardView.unlimitedWarning {
-                blocks.append(.warning(tone: .danger, text: s(loc, "unlimitedWarning")))
+                blocks.append(.warning(tone: .danger, text: unlimitedWarningText(guardView, loc: loc)))
             }
             return blocks
 
@@ -1565,10 +1574,20 @@ enum SigningLive {
                 }
             }
             if guardView.unlimitedWarning {
-                blocks.append(.warning(tone: .danger, text: s(loc, "unlimitedWarning")))
+                blocks.append(.warning(tone: .danger, text: unlimitedWarningText(guardView, loc: loc)))
             }
             return blocks
         }
+    }
+
+    /// §37 (review 1-12): the `unlimitedWarning` sentence, from the key the
+    /// core names (`unlimited_warning_key` — the unlimited sentence, or "over
+    /// 100× your balance" for a finite cap far above it). An older core names
+    /// none: the unlimited sentence.
+    static func unlimitedWarningText(_ guardView: GuardViewWire, loc: Loc) -> String {
+        let key = guardView.unlimitedWarningKey.flatMap { $0.isEmpty ? nil : $0 }
+            ?? "componentsUi.signing.unlimitedWarning"
+        return loc.t(key)
     }
 
     static func allowanceBlock(

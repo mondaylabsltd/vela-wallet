@@ -377,13 +377,26 @@ final class UserOpSpine {
             }
         )
         signingDone()
+        let signature: Data
         do {
-            let signature = try eip1271Signature(
+            signature = try eip1271Signature(
                 assertion: signed.assertion,
                 credentialId: signed.credentialIdHex,
                 keys: keys
             )
-            return "0x" + signature.map { String(format: "%02x", $0) }.joined()
+        } catch {
+            throw other("Failed to create signature")
+        }
+        // §37 (review 1-11, ERC-6492): a message signature verifies on chain
+        // only once the account holds code there. The account's code on the
+        // REQUEST's chain, through the wallet's own RPC, decides — the core
+        // wraps the signature for an account not deployed yet (and for a
+        // code it could not read: `nil`), and leaves it as it is otherwise.
+        // The passkey and the trusted page reach here alike.
+        let code = await relay.code(chainId: chainId, address: account)
+        do {
+            let message = try messageSignature(signature: signature, keys: keys, account: account, code: code)
+            return "0x" + message.map { String(format: "%02x", $0) }.joined()
         } catch {
             throw other("Failed to create signature")
         }

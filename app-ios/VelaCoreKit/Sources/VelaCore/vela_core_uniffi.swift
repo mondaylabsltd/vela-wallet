@@ -18949,6 +18949,18 @@ public func abiEncodeUint256(valueHex: String)throws  -> Data  {
 })
 }
 /**
+ * §37: the stored account with `identity` replaced, nothing else touched.
+ */
+public func accountWithIdentity(accountJson: String, identity: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_account_with_identity(
+        FfiConverterString.lower(accountJson),
+        FfiConverterString.lower(identity),uniffiCallStatus
+    )
+})
+}
+/**
  * Where the caret belongs in `clean`, having been at `caret` in `raw`
  * (UTF-16 units).
  */
@@ -20168,6 +20180,23 @@ public func matchSelector(sig: String, calldata: Data)throws  -> Bool  {
 })
 }
 /**
+ * §37 (review 1-11): the signature a site gets for a message — `signature`
+ * (from [`eip1271_signature`]) as it is when the account holds code on the
+ * request's chain (`code`, its `eth_getCode`; `None` when unread), else in
+ * its ERC-6492 envelope. `keys`: the founding keys, in order.
+ */
+public func messageSignature(signature: Data, keys: [WalletKeyRecord], account: String, code: String?)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_message_signature(
+        FfiConverterData.lower(signature),
+        FfiConverterSequenceTypeWalletKeyRecord.lower(keys),
+        FfiConverterString.lower(account),
+        FfiConverterOptionString.lower(code),uniffiCallStatus
+    )
+})
+}
+/**
  * A fresh app's network count: online, no misses.
  */
 public func netHealthFresh() -> NetHealthState  {
@@ -20440,6 +20469,18 @@ public func rasterizeSvgPng(svg: String, sizePx: UInt32)throws  -> Data  {
     )
 })
 }
+/**
+ * §37: may the stored account be received at (`ReceiveStanding` JSON);
+ * `None` for a record this build cannot read.
+ */
+public func receiveStanding(accountJson: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_receive_standing(
+        FfiConverterString.lower(accountJson),uniffiCallStatus
+    )
+})
+}
 public func recoverPublicKeyFromAssertions(a: WebAuthnAssertion, b: WebAuthnAssertion)throws  -> P256PublicKey?  {
     return try  FfiConverterOptionTypeP256PublicKey.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -20575,6 +20616,20 @@ public func registryNameStep(address: String, answersJson: String) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_registry_name_step(
+        FfiConverterString.lower(address),
+        FfiConverterString.lower(answersJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * §37 (review 1-7): re-check an unconfirmed account on the chain alone.
+ * See `vela_core::registry_resolve::confirm_step`.
+ */
+public func registryResolveConfirmStep(publicKeyHex: String, address: String, answersJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_registry_resolve_confirm_step(
+        FfiConverterString.lower(publicKeyHex),
         FfiConverterString.lower(address),
         FfiConverterString.lower(answersJson),uniffiCallStatus
     )
@@ -23392,6 +23447,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_abi_encode_uint256() != 17049) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_account_with_identity() != 36453) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_amount_text_caret() != 46568) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23671,6 +23729,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_match_selector() != 41973) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_message_signature() != 31222) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_net_health_fresh() != 36533) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23728,6 +23789,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_rasterize_svg_png() != 18592) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_receive_standing() != 20575) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_recover_public_key_from_assertions() != 37092) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23756,6 +23820,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_registry_name_step() != 50136) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_registry_resolve_confirm_step() != 61339) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_registry_resolve_key_step() != 38068) {
