@@ -406,6 +406,18 @@ jobs:
           VELA_KEEP: '1'
           VELA_REPRO_OUT: ${{ runner.temp }}/repro
         run: rust/scripts/reproduce-web.sh "$GITHUB_SHA"
+      # When they differ, the bytes CI built are what to read (and, if the
+      # host build was the one that moved, what to commit).
+      - name: Keep what the container built
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-core-container-build
+          path: |
+            ${{ runner.temp }}/repro/tree/assets/wasm
+            ${{ runner.temp }}/repro/tree/rust/pkg-web
+            ${{ runner.temp }}/repro/build.log
+          retention-days: 14
       - name: Attest the CI-built web core
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/attest-build-provenance@v2

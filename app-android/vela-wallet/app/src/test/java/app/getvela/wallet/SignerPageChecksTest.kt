@@ -387,10 +387,38 @@ class SignerPageChecksTest {
     }
 
     @Test
+    fun `a debug build's page launch input names a version the core accepts, and only a debug build`() {
+        // §38 (`--es vela.pageLaunch`, ServiceLaunchInputs): the core's rule.
+        // Process-wide, so set and cleared within this one test (the JVM runs
+        // this module's tests one at a time).
+        val newest = "674b73334dda36410fd5cecdaddd462a8193398328743ba2263d419d6be53b56"
+        try {
+            assertNotNull("a release build is refused", uniffi.vela_core_uniffi.signerPageSetTestLaunch(newest, false))
+            assertNotNull("not a published version", uniffi.vela_core_uniffi.signerPageSetTestLaunch("ab".repeat(32), true))
+            assertNull(uniffi.vela_core_uniffi.signerPageSetTestLaunch(newest, true))
+            // Whatever the deployed index lists, the debug build opens that version — still checked.
+            val chosen = uniffi.vela_core_uniffi.SignerPageTarget.choose(
+                "https://sign.getvela.app/",
+                listOf("6d7172b4ba59735e09eaa8ea6c3d3c020ba7cd26399e6ab85be3619a23424d0a"),
+                emptyList(),
+                emptyList(),
+            )
+            assertEquals(newest, chosen.version())
+        } finally {
+            uniffi.vela_core_uniffi.signerPageSetTestLaunch(null, true)
+        }
+    }
+
+    @Test
     fun `the check asks for the page as a browser navigates to it`() {
         val headers = uniffi.vela_core_uniffi.signerPageCheckHeaders()
-        assertEquals(listOf("Accept"), headers.map { it.name })
-        assertTrue(headers.single().value.startsWith("text/html"))
+        // §38: a top-level navigation's headers, not `Accept` alone.
+        assertEquals(
+            listOf("Accept", "Upgrade-Insecure-Requests", "Sec-Fetch-Dest", "Sec-Fetch-Mode", "Sec-Fetch-Site", "Sec-Fetch-User"),
+            headers.map { it.name },
+        )
+        assertTrue(headers.first().value.startsWith("text/html"))
+        assertEquals("navigate", headers.single { it.name == "Sec-Fetch-Mode" }.value)
     }
 
     @Test

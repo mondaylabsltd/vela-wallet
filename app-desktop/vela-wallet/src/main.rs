@@ -428,9 +428,7 @@ fn main() {
     // of the core's BUILD_ALLOWED, whatever the page's index lists. A release
     // build does not carry the name (dev_env, check-store-binary.sh).
     if let Some(version) = dev_env::var!("VELA_PAGE_LAUNCH") {
-        if let Err(why) =
-            vela_core::trusted_signer::launch::set_test_launch(Some(&version), true)
-        {
+        if let Err(why) = vela_core::trusted_signer::launch::set_test_launch(Some(&version), true) {
             eprintln!("[vela-wallet] VELA_PAGE_LAUNCH={version}: {why}");
             std::process::exit(2);
         }
