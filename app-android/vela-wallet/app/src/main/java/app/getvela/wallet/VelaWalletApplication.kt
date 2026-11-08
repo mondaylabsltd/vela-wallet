@@ -818,6 +818,10 @@ class AppContainer(private val app: Application) {
                     override fun trackerView() = wallet.tracker
                     // One in flight per account and network (the core's read of the tracker's own JSON).
                     override fun inFlightOps() = wallet.inFlightOps
+                    // VELA-2026-002: the core's `isOwner` read, through the pool, its
+                    // answer as it came (the executor bounds it and hands it back).
+                    override suspend fun safeOwnerCall(chainId: Int, safe: String, data: String): RpcResult =
+                        pool.call(chainId, "eth_call", listOf(JSONObject().put("to", safe).put("data", data), "latest"))
                     override fun dataBase(): String = settings.endpointUrl(NetEndpointField.EthereumData)
                     // The pool's answer as it came; the core reads it (`simOutcome`, RG6).
                     override suspend fun simulate(chainId: Int, params: List<Any?>): RpcResult =

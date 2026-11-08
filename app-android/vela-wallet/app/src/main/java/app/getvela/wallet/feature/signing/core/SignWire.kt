@@ -64,6 +64,13 @@ enum class SignErrorKind {
     /** The request would have changed who controls the account (spec 081). */
     @SerialName("self_call_blocked") SelfCallBlocked,
 
+    /**
+     * VELA-2026-002: the request would have made this account act for a Safe it owns —
+     * one whose `isOwner` read true (or could not be read). Refused, never
+     * signed; `-32603`, never "anyway".
+     */
+    @SerialName("parent_safe_blocked") ParentSafeBlocked,
+
     @SerialName("funding_cancelled") FundingCancelled,
 
     @SerialName("submit_failed") SubmitFailed,
@@ -228,7 +235,46 @@ data class SignBlockedView(
     val selector: String = "",
     val leg_index: Int? = null,
     val nested: Boolean = false,
+    /**
+     * VELA-2026-002: the Safe this account owns that the request would have acted for.
+     * `null`: the account itself (spec 081).
+     */
+    val parent: String? = null,
+    /** VELA-2026-002: why — `owner` or `unchecked`; `null` without [parent]. */
+    val reason: ParentReason? = null,
 )
+
+/** VELA-2026-002: why a request that would act for a Safe this account owns was refused. */
+@Serializable
+enum class ParentReason {
+    /** The chain says this account is one of its owners. */
+    @SerialName("owner") Owner,
+
+    /** Whether this account owns it could not be read — refused all the same. */
+    @SerialName("unchecked") Unchecked,
+}
+
+/**
+ * VELA-2026-002: what the shell's `eth_call` of `isOwner(account)` came back as — the
+ * node's answer, verbatim. The shell decides nothing from it; the core reads it.
+ */
+@Serializable
+sealed class SafeOwnerAnswer {
+    /** The node answered `result` (hex), as it came. */
+    @Serializable
+    @SerialName("returned")
+    data class Returned(val data: String) : SafeOwnerAnswer()
+
+    /** The node answered a JSON-RPC error object. `code` is `i64`. */
+    @Serializable
+    @SerialName("rpc_error")
+    data class RpcError(val code: Long? = null, val message: String = "") : SafeOwnerAnswer()
+
+    /** No node answered (offline, timed out, every endpoint failed). */
+    @Serializable
+    @SerialName("unreachable")
+    data class Unreachable(val detail: String = "") : SafeOwnerAnswer()
+}
 
 @Serializable
 data class SignFundingNeeded(
@@ -676,6 +722,23 @@ sealed class SignOperation {
     @Serializable
     @SerialName("sim_verdict_timer")
     data class SimVerdictTimer(val id: String, val round: Int, val ms: Int) : SignOperation()
+
+    /**
+     * VELA-2026-002: read whether [account] owns [safe] — an `eth_call` of [data]
+     * (`isOwner(account)`, built by the core) to [safe] at `latest` on
+     * [chain_id], through the pool, bounded. Answered
+     * [SignShellResult.SafeOwnerRead] with the same [id], [chain_id] and
+     * [safe]; until it is, the confirm stays shut (`reading`).
+     */
+    @Serializable
+    @SerialName("read_safe_owner")
+    data class ReadSafeOwner(
+        val id: String,
+        val chain_id: Int,
+        val safe: String,
+        val account: String,
+        val data: String,
+    ) : SignOperation()
 }
 
 @Serializable
@@ -712,6 +775,16 @@ sealed class SignShellResult {
     @Serializable
     @SerialName("sim_verdict_timer_fired")
     data class SimVerdictTimerFired(val id: String, val round: Int) : SignShellResult()
+
+    /** VELA-2026-002: the answer to [SignOperation.ReadSafeOwner] — its id, chain and Safe echoed as given. */
+    @Serializable
+    @SerialName("safe_owner_read")
+    data class SafeOwnerRead(
+        val id: String,
+        val chain_id: Int,
+        val safe: String,
+        val answer: SafeOwnerAnswer,
+    ) : SignShellResult()
 }
 
 @Serializable

@@ -33,6 +33,7 @@ import app.getvela.wallet.feature.signing.core.GuardTokenMetaView
 import app.getvela.wallet.feature.signing.core.GuardView
 import app.getvela.wallet.feature.signing.core.IncomingRequest
 import app.getvela.wallet.feature.signing.core.SignErrorKind
+import app.getvela.wallet.feature.signing.core.ParentReason
 import app.getvela.wallet.feature.signing.core.ConfirmState
 import app.getvela.wallet.feature.send.core.FeeTier
 import kotlinx.serialization.json.jsonPrimitive
@@ -961,6 +962,13 @@ object SigningLive {
         sign.blocked?.let { blocked ->
             add(SigningBlock.Intent(s.s("selfCallBlockedTitle"), SigningTone.Danger))
             val text = when {
+                // VELA-2026-002: it would have made this account act for a Safe it owns
+                // — said by that Safe, and "couldn't check" when its ownership
+                // could not be read.
+                blocked.parent != null -> s.s(
+                    if (blocked.reason == ParentReason.Unchecked) "parentSafeUnchecked" else "parentSafeBlocked",
+                    mapOf("function" to blocked.function, "safe" to ExploreLive.shortAddress(blocked.parent)),
+                )
                 blocked.function == "SafeTx" -> s.s("selfCallBlockedSafeTx")
                 blocked.leg_index != null -> s.s(
                     "selfCallBlockedLegBody",

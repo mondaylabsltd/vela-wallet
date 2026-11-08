@@ -146,6 +146,16 @@ class SignExecutor(
 
         /** The chain's native symbol for the record row. */
         fun nativeSymbol(chainId: Int): String
+
+        /**
+         * VELA-2026-002: `eth_call` `[{to: safe, data}, "latest"]` on [chainId] through
+         * the app's pool — the pool's answer as it came. The executor hands it
+         * to the core verbatim ([safeOwnerAnswer]); nothing here reads what it
+         * means. The default is "no node answered", which the core refuses as
+         * "couldn't check" — never a request signed for want of a port.
+         */
+        suspend fun safeOwnerCall(chainId: Int, safe: String, data: String): app.getvela.wallet.feature.wallet.core.RpcResult =
+            app.getvela.wallet.feature.wallet.core.RpcResult.Failed(rateLimited = false)
     }
 
     suspend fun perform(operation: SignOperation): SignShellResult = when (operation) {
@@ -219,6 +229,22 @@ class SignExecutor(
             timer(operation.ms.toLong())
             SignShellResult.SimVerdictTimerFired(id = operation.id, round = operation.round)
         }
+        // VELA-2026-002: whether this account owns a Safe the request would act for.
+        // One bounded read through the pool, its answer handed back as it
+        // came — the core decides; a read nobody could make is its refusal.
+        is SignOperation.ReadSafeOwner -> {
+            val answer = try {
+                safeOwnerAnswer(
+                    operation.chain_id,
+                    withTimeoutOrNull(SAFE_OWNER_READ_MS) { ports.safeOwnerCall(operation.chain_id, operation.safe, operation.data) },
+                )
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                SafeOwnerAnswer.Unreachable(error.message ?: error.javaClass.simpleName)
+            }
+            SignShellResult.SafeOwnerRead(id = operation.id, chain_id = operation.chain_id, safe = operation.safe, answer = answer)
+        }
     }
 
     fun neutralAnswer(operation: SignOperation): SignShellResult = when (operation) {
@@ -236,6 +262,14 @@ class SignExecutor(
         // says it could not check and the confirm opens. Left unanswered, a
         // simulation that never lands would hold the confirm for ever.
         is SignOperation.SimVerdictTimer -> SignShellResult.SimVerdictTimerFired(id = operation.id, round = operation.round)
+        // VELA-2026-002: a read that could not run is a read nobody answered — the core
+        // refuses the request "couldn't check". Never an answer it could sign on.
+        is SignOperation.ReadSafeOwner -> SignShellResult.SafeOwnerRead(
+            id = operation.id,
+            chain_id = operation.chain_id,
+            safe = operation.safe,
+            answer = SafeOwnerAnswer.Unreachable("the read could not run"),
+        )
     }
 
     /** A switch that would sign as the wrong account: logged, and deliberately never answered. */
@@ -386,6 +420,44 @@ class SignExecutor(
     }
 
     companion object {
+        /**
+         * VELA-2026-002: the backstop on one `isOwner` read. The pool bounds each of its
+         * own posts; this only makes sure a read that waited on routing for
+         * longer still ends — "no node answered", which the core refuses.
+         */
+        const val SAFE_OWNER_READ_MS = 15_000L
+
+        /**
+         * VELA-2026-002: the pool's answer to the `isOwner` read, as the core's
+         * [SafeOwnerAnswer] — the node's `result` verbatim, its JSON-RPC
+         * error, or unreachable (`null` = the backstop ran out). Says what
+         * came back, never what it means.
+         */
+        fun safeOwnerAnswer(chainId: Int, answer: app.getvela.wallet.feature.wallet.core.RpcResult?): SafeOwnerAnswer {
+            fun rpcError(error: JSONObject) = SafeOwnerAnswer.RpcError(
+                code = (error.opt("code") as? Number)?.toLong(),
+                message = error.optString("message", ""),
+            )
+            return when (answer) {
+                null -> SafeOwnerAnswer.Unreachable("no answer from chain $chainId in $SAFE_OWNER_READ_MS ms")
+                is app.getvela.wallet.feature.wallet.core.RpcResult.Body -> {
+                    val error = answer.json.optJSONObject("error")
+                    when {
+                        error != null -> rpcError(error)
+                        answer.json.has("result") && !answer.json.isNull("result") ->
+                            SafeOwnerAnswer.Returned(answer.json.get("result").let { it as? String ?: it.toString() })
+                        else -> SafeOwnerAnswer.Unreachable("no result from chain $chainId")
+                    }
+                }
+                is app.getvela.wallet.feature.wallet.core.RpcResult.RangeCapped ->
+                    answer.json?.optJSONObject("error")?.let(::rpcError)
+                        ?: SafeOwnerAnswer.Unreachable("the node of chain $chainId capped the call")
+                is app.getvela.wallet.feature.wallet.core.RpcResult.Failed -> SafeOwnerAnswer.Unreachable(
+                    if (answer.rateLimited) "every node of chain $chainId is rate limiting" else "no node of chain $chainId answered",
+                )
+            }
+        }
+
         /** The write-ahead gate's key on the dApp path: the request and its op. */
         private fun clearanceKey(id: String, userOpHash: String) = "$id|${userOpHash.lowercase()}"
 

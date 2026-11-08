@@ -1546,6 +1546,12 @@ class CoreWireDriftTest {
         assertStringUnion<SignSwipeAction>("SignSwipeAction")
         assertStringUnion<SignMethodKind>("SignMethodKind")
         assertStringUnion<SignErrorKind>("SignErrorKind")
+        // VELA-2026-002: the parent-Safe guard — the refusal's view, why, and
+        // the `isOwner` read's answer, each as the core's mirror names them.
+        assertFieldsExist<SignBlockedView>("SignBlockedView")
+        assertStringUnion<ParentReason>("ParentReason")
+        assertVariantFieldsExhaustive(SafeOwnerAnswer.serializer(), "SafeOwnerAnswer")
+        assertVariantsExhaustive<SafeOwnerAnswer>("SafeOwnerAnswer")
         assertStringUnion<SignFundingPresentation>("SignFundingPresentation")
         assertStringUnion<SignRecordKind>("SignRecordKind")
         assertStringUnion<SignRecordStatus>("SignRecordStatus")
