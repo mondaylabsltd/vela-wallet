@@ -561,6 +561,17 @@ object I18nKeys {
         /** Spec 090: the receive code's opt-in "include network" switch and its hint. */
         const val RECEIVE_INCLUDE_NETWORK = "receive.includeNetwork"
         const val RECEIVE_INCLUDE_NETWORK_HINT = "receive.includeNetworkHint"
+        /**
+         * §37 (review 1-7): an account the chain has not confirmed yet — no
+         * address, Check again, and the line while the chain is asked. The
+         * title and body are the core's (`ReceiveStanding.title_key/body_key`).
+         */
+        const val RECEIVE_UNCONFIRMED_TITLE = "receive.unconfirmed.title"
+        const val RECEIVE_UNCONFIRMED_BODY = "receive.unconfirmed.body"
+        const val RECEIVE_UNCONFIRMED_CHECK_AGAIN = "receive.unconfirmed.checkAgain"
+        const val RECEIVE_UNCONFIRMED_CHECKING = "receive.unconfirmed.checking"
+        const val RECEIVE_REFUTED_TITLE = "receive.refuted.title"
+        const val RECEIVE_REFUTED_BODY = "receive.refuted.body"
 
         // Scan.
         const val SCAN_TITLE = "componentsUi.scanner.title"

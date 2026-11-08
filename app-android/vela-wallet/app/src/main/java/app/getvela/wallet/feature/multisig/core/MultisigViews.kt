@@ -411,6 +411,12 @@ data class MsProposalItem(
     val membersHere: List<String>? = null,
     /** r11 S4: every number a queued one waits behind (`waits_for`, decimal), the same on every surface. */
     val waitsFor: List<String> = emptyList(),
+    /**
+     * §37 (review 1-13): open, and not one approval by a member vouches for
+     * it — the mailbox takes a post from anyone. Listed only behind the
+     * disclosure, each with `home.multisig.panel.nonMembersWarning`.
+     */
+    val fromNonMember: Boolean = false,
 ) {
     val id: String get() = "$chainId:${safeTxHash.lowercase()}"
 
@@ -442,6 +448,7 @@ data class MsProposalItem(
             raw = e,
             membersHere = (e["membersHere"] ?: e["members_here"])?.takeIf { it is kotlinx.serialization.json.JsonArray }?.strings(),
             waitsFor = (e["waitsFor"] ?: e["waits_for"]).strings(),
+            fromNonMember = (e["fromNonMember"] ?: e["from_non_member"]).bool ?: false,
         )
     }
 }
@@ -643,6 +650,14 @@ data class MsProposalsView(
      * keeps is stale once a later press on the same transaction went through.
      */
     val pressOrder: Map<String, Long> = emptyMap(),
+    /**
+     * §37 (review 1-13): how many open proposals no member vouches for are
+     * left out of [items] (and every count). Non-zero: the list ends with
+     * "Show proposals from non-members ({{total}})".
+     */
+    val nonMembers: Int = 0,
+    /** The disclosure is open: those proposals are in [items], each flagged [MsProposalItem.fromNonMember]. */
+    val showingNonMembers: Boolean = false,
 ) {
     /** The members here whose one press approves and executes [item] (the machine's `approve_execute`). */
     fun approveExecuteBy(item: MsProposalItem): List<String> = lookup(approveExecute, item.chainId, item.safeTxHash) ?: emptyList()
@@ -720,6 +735,8 @@ data class MsProposalsView(
             waitingParts = e["waiting_parts"].obj.mapValues { it.value.arr },
             banner = e["banner"],
             setUp = e["set_up"].bool ?: false,
+            nonMembers = e["non_members"].int ?: 0,
+            showingNonMembers = e["showing_non_members"].bool ?: false,
         )
     }
 }

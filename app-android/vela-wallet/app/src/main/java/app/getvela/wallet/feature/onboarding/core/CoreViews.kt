@@ -253,6 +253,13 @@ data class SessionAccountRow(
     val address: String,
     val signingDomain: String = "getvela.app",
     val signingVenueJson: String = """{"type":"in_vela"}""",
+    /**
+     * §37 (review 1-7): the record itself, as the session holds it — what the
+     * core judges whether it may be received at (`receiveStanding`) and what
+     * a re-check hands back (`accountWithIdentity`). Never read field by
+     * field here; `""` when there is none (a drawn row).
+     */
+    val accountJson: String = "",
 )
 
 /** `SessionSignOutView` — present iff the confirmation dialog is open. */
@@ -313,6 +320,7 @@ data class SessionView(
                     signingDomain = account.optString("signing_domain").ifEmpty { "getvela.app" },
                     signingVenueJson = account.optJSONObject("signing_venue")?.toString()
                         ?: """{"type":"in_vela"}""",
+                    accountJson = row.optJSONObject("account")?.toString().orEmpty(),
                 )
             },
             allowedRoute = SessionRoute.of(json.getString("allowed_route")),

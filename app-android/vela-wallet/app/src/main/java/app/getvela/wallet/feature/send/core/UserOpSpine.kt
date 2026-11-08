@@ -25,6 +25,7 @@ import app.getvela.wallet.feature.signing.trustedsigner.SigningRoute
 import app.getvela.wallet.feature.signing.trustedsigner.VenueBlock
 import app.getvela.wallet.feature.signing.trustedsigner.VenueWords
 import uniffi.vela_core_uniffi.eip1271Signature
+import uniffi.vela_core_uniffi.messageSignature
 import uniffi.vela_core_uniffi.safeMessageHash
 import uniffi.vela_core_uniffi.isChainWithoutNativeCoin
 import uniffi.vela_core_uniffi.quotedFeeUsable
@@ -534,7 +535,15 @@ class UserOpSpine(
                 keys,
             )
         }.getOrElse { other(it.message ?: "Failed to create signature") }
-        return "0x" + signature.joinToString("") { b -> "%02x".format(b.toInt() and 0xff) }
+        // §37 (review 1-11): ERC-6492 — a site verifies this before the account
+        // is deployed on the request's chain only through the envelope. Whether
+        // it needs one is the core's (`message_signature`) from the account's
+        // code there, read now through the wallet's own RPC; an unread code is
+        // `null`, which the core wraps.
+        val code = relay.code(chainId, account)
+        val answered = runCatching { messageSignature(signature, keys, account, code) }
+            .getOrElse { other(it.message ?: "Failed to create signature") }
+        return "0x" + answered.joinToString("") { b -> "%02x".format(b.toInt() and 0xff) }
     }
 
     /**

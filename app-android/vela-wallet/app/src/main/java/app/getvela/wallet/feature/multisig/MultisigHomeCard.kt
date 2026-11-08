@@ -116,7 +116,11 @@ fun MultisigHomeCard(
             }
         }
         val open = view.items.filter { it.status != "done" }
-        if (following && open.isNotEmpty()) {
+        // §37 (review 1-13): the proposals no member vouches for are left out
+        // by the core; the list ends with the way to them, and each carries
+        // its warning once shown.
+        val disclosure = following && view.nonMembers > 0
+        if (following && (open.isNotEmpty() || disclosure)) {
             MsSection(words.t("panel.pending")) {
                 Column {
                     for (item in open) {
@@ -133,11 +137,21 @@ fun MultisigHomeCard(
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
                                 MsText(title, MsType.Field, maxLines = 2)
                                 MsText(status, MsType.Sub, color = if (standing.kind == "yourTurn") colors.fgBase else colors.fgSubtle, maxLines = 2)
+                                words.nonMemberWarning(item)?.let { warning ->
+                                    MsNote(warning, tone = MsTone.Warning, tag = "multisig.home.proposal.nonMember")
+                                }
                             }
                             MsText("${item.approved}/${item.threshold}", MsType.Label, color = colors.fgMuted)
                             Icon(VelaIcons.ChevronRight, null, tint = colors.fgSubtle, modifier = Modifier.size(VelaIconSize.sm))
                         }
                         MsDivider()
+                    }
+                    if (disclosure) {
+                        words.nonMembersDisclosure(view)?.let { label ->
+                            MsTextButton(label, tag = "multisig.home.nonMembers") {
+                                hub.sendProposal(ev("show_non_members", "show" to !view.showingNonMembers))
+                            }
+                        }
                     }
                 }
             }

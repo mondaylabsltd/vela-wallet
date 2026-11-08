@@ -195,6 +195,7 @@ private fun WalletHomeContent(
         IdenticonViewerSheet(
             address = model.header.identiconSeed,
             onDismiss = { viewingIdenticon = false },
+            copyable = model.header.receivable,
         )
     }
 

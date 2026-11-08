@@ -2,6 +2,7 @@ package app.getvela.wallet.feature.onboarding.core
 
 import android.os.SystemClock
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.core.net.ProductionWriteGuard
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -296,6 +297,9 @@ class OnboardingExecutor(
                 val unit = registry.queryUnit(operation.optLong("unit_id"))
                 result("registry_unit") {
                     put("metadata_hex", unit.metadataHex)
+                    // §37: untouched from the resolver — a multi-key group
+                    // nobody but the index vouched for is saved unconfirmed.
+                    put("verified_by", unit.verifiedBy)
                     put(
                         "members",
                         JSONArray().apply {
@@ -757,16 +761,24 @@ class OnboardingExecutor(
                 // core names the failure sheet's sentence from them
                 // (`words_key`), never the system's English in a Chinese UI;
                 // the raw message stays the bug report's detail.
-                put(
-                    "error",
-                    JSONObject()
-                        .put("platform", "android")
-                        .put("domain", failure.domain ?: error::class.simpleName.orEmpty())
-                        .put("code", failure.code ?: JSONObject.NULL)
-                        .put("message", error.message.orEmpty()),
-                )
+                put("error", errorFacts(failure, error))
             }
         }
+
+        /**
+         * The platform error's facts (`PasskeyErrorFacts`). R21-3 (§37):
+         * [testBuild] is the flag this build hands `relying_party_id`
+         * ([RelyingParty]), so a test build's association failure is said as
+         * its own passkey domain not being set up — never the release words
+         * ("check your connection").
+         */
+        internal fun errorFacts(failure: PasskeyFailure, error: Throwable, testBuild: Boolean = ProductionWriteGuard.testBuild): JSONObject =
+            JSONObject()
+                .put("platform", "android")
+                .put("domain", failure.domain ?: error::class.simpleName.orEmpty())
+                .put("code", failure.code ?: JSONObject.NULL)
+                .put("message", error.message.orEmpty())
+                .put("test_build", testBuild)
 
         private fun indexFailure(error: Throwable): JSONObject = result("index_failed") {
             put("message", describe(error))

@@ -793,6 +793,19 @@ class RelayClient(
     }
 
     /**
+     * §37 (review 1-11): the raw `eth_getCode` at [address] on [chainId],
+     * through the wallet's own RPC — `0x` when nothing is there, `null` when
+     * the chain could not be asked (or said an error). Never held: a message
+     * signature reads it right before it is answered.
+     */
+    suspend fun code(chainId: Int, address: String): String? =
+        chainCall(chainId, "eth_getCode", listOf(address, "latest"))
+            ?.takeUnless { it.has("error") }
+            ?.opt("result")
+            ?.let { it as? String }
+            ?.takeIf { it.startsWith("0x") }
+
+    /**
      * The recipient-risk answer's `is_contract` — NOT [isDeployed], which asks
      * whether the SENDER's Safe exists. The web's `isContractAddress`,
      * verbatim: an EIP-7702 delegated EOA carries code `0xef0100 ++ implAddr`
