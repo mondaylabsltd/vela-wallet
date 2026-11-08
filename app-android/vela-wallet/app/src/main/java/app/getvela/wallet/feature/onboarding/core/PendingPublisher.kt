@@ -23,8 +23,21 @@ import uniffi.vela_core_uniffi.trustedSignerRegistryRpId
  */
 class PendingPublisher(
     private val registry: suspend () -> RegistryClient,
-    /** The wallet's own relying party, for a unit filed under no page. */
-    private val relyingPartyId: String = WALLET_RP_ID,
+    /**
+     * The wallet's own relying party, for a unit filed under no page — the
+     * one the key index records, so the one the unit's keys were made under:
+     * this build's platform relying party, the core's rule (§35,
+     * [RelyingParty.current]) — `getvela.app` for a release build,
+     * `localhost` for a test build on an emulator, the build's
+     * `TEST_RP_DOMAIN` on a device. Read only when a unit needs it; a build
+     * with none refuses the replay in the core's words (the record stays).
+     */
+    private val relyingPartyId: () -> String = {
+        when (val answer = RelyingParty.current) {
+            is RelyingParty.Answer.Id -> answer.rpId
+            is RelyingParty.Answer.Unavailable -> throw RegistryFailure(answer.message, network = false)
+        }
+    },
     /** The group proof over the challenge — the core's (`registry_build_group_proof`); a seam for tests. */
     private val groupProof: (seedHex: String, rpId: String, challenge: String) -> String = ::registryBuildGroupProof,
     /** Spec 102's rule from a page to the unit's rpId — the core's; a seam for tests. */
@@ -42,7 +55,7 @@ class PendingPublisher(
         if (publish.group_seed_hex.isBlank() || publish.group_public_key_hex.isBlank()) {
             throw RegistryFailure("the pending publish carries no group key", network = false)
         }
-        val rpId = rpIdOf(publish.page) ?: relyingPartyId
+        val rpId = rpIdOf(publish.page) ?: relyingPartyId()
         val client = registry()
         val challenge = client.groupChallenge(
             metadataHex = publish.metadata_hex,
@@ -65,10 +78,5 @@ class PendingPublisher(
             is OnboardingExecutor.AfterRegister.Accepted -> client.awaitTask(next.taskId)
         }
         VelaLog.event("registry.landing", "replayed publish landed", "members" to members.size)
-    }
-
-    private companion object {
-        /** The wallet's own relying party — `PasskeyExecutor`'s, the one a unit on no page is filed under. */
-        const val WALLET_RP_ID = "getvela.app"
     }
 }

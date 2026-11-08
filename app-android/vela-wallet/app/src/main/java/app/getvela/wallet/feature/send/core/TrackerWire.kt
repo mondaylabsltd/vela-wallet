@@ -192,6 +192,13 @@ enum class RefusalReason {
 
     @SerialName("nonce_used") NonceUsed,
 
+    /**
+     * §35: the operation's validity window closed before it was included —
+     * the EntryPoint refuses it (`AA22`), so it can never land. The core keys
+     * it `componentsUi.signing.expired`.
+     */
+    @SerialName("expired") Expired,
+
     @SerialName("simulation_failed") SimulationFailed,
 
     @SerialName("invalid_operation") InvalidOperation,

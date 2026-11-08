@@ -19,6 +19,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -128,6 +129,20 @@ class PasskeyDeadlineTest {
         assertEquals(userOpNonceUsedDetail(), spent.message)
         assertTrue("a refusal of this operation: no Retry", spent.refused)
         assertTrue(spent.message.contains("went first"))
+    }
+
+    /**
+     * §35: an operation that expired before the EntryPoint saw it is answered
+     * to the core in its own fixed detail (`userOpExpiredDetail()`), as a
+     * refusal of THIS operation — the core then says it calmly on the sheet
+     * (`componentsUi.signing.expired`, not sent) and offers Try again.
+     */
+    @Test
+    fun `the sheet hears an expired operation in the core's own detail`() {
+        val expired = SignExecutor.outcomeOf(UserOpSpine.Failure.Expired) as SignSubmitOutcome.Failed
+        assertEquals(uniffi.vela_core_uniffi.userOpExpiredDetail(), expired.message)
+        assertTrue(expired.refused)
+        assertNull("not the passkey's failure", expired.signer)
     }
 
     // -- the rig ------------------------------------------------------------------

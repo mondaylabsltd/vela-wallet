@@ -242,6 +242,15 @@ sealed class FeeFailure {
     data object GasQuoteTooHigh : FeeFailure() { override val name = "gas_quote_too_high" }
 
     /**
+     * §35 (review 1-6): the relay's `settlementGas` — the gas it bills the
+     * in-band fee on — is past the core's cap (`settlement_gas_cap`): more
+     * than the operation can use. A quote Vela won't accept, asked again on
+     * the relay schedule like [GasQuoteTooHigh]; said as
+     * `componentsUi.gas.reasonSettlementHigh` (`…Stopped` once it stops).
+     */
+    data object SettlementGasTooHigh : FeeFailure() { override val name = "settlement_gas_too_high" }
+
+    /**
      * Spec 083 fee: the relay answered that the operation fails — its answer,
      * where [FeeGasOutcome.SimulationFailed] is no answer at all. The core
      * says it only to a shell that reports [FeeGasOutcome.Refused] (r11-8:
@@ -321,7 +330,7 @@ sealed class FeeFailure {
         val PLAIN: List<FeeFailure> by lazy {
             listOf(
                 MissingPublicKey, FeeTokenUnavailable, QuoteUnavailable, CalculationFailed, EstimateFailed, GasQuoteTooHigh,
-                WouldFail, Internal,
+                SettlementGasTooHigh, WouldFail, Internal,
             )
         }
     }

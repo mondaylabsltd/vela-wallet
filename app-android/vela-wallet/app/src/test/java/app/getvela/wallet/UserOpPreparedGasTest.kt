@@ -26,8 +26,13 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
+import uniffi.vela_core_uniffi.CoreException
 import uniffi.vela_core_uniffi.UserOpCall
 import uniffi.vela_core_uniffi.UserOpFeeMode
+import uniffi.vela_core_uniffi.WalletKeyRecord
+import uniffi.vela_core_uniffi.WebAuthnAssertion
+import uniffi.vela_core_uniffi.userOpSign
+import uniffi.vela_core_uniffi.userOpStampValidity
 import uniffi.vela_core_uniffi.userOpApplyEstimate
 import uniffi.vela_core_uniffi.userOpDraft
 import uniffi.vela_core_uniffi.userOpFloors
@@ -48,6 +53,7 @@ class UserOpPreparedGasTest {
     private val port = FakeRelayPort()
     private val measured = AtomicInteger()
     private var challenge: ByteArray? = null
+    private var clockMs: Long = NOW
 
     private val call = UserOpCall(to = TOKEN, value = "0", data = TRANSFER)
     private val prepared = PreparedGas(
@@ -125,7 +131,52 @@ class UserOpPreparedGasTest {
         var draft = userOpDraft(SAFE, "0x7", true, listOf(KEY), listOf(call), UserOpFeeMode.InBand(null, "1", SAFE), floors)
         draft = userOpApplyEstimate(draft, gas.verification_gas_limit, gas.call_gas_limit, gas.pre_verification_gas, gas.settlement_gas, floors)
         draft = userOpWithCalls(draft, listOf(call), UserOpFeeMode.InBand(null, FEE, RECIPIENT))
-        return userOpSafeOpHash(draft, 100u)
+        // §35: the spine stamps the final operation at its clock (NOW).
+        return userOpSafeOpHash(userOpStampValidity(draft, NOW.toDouble()), 100u)
+    }
+
+    /** The same final operation, unstamped (§35): what nothing may sign. */
+    private fun unstampedFinal(gas: PreparedGas) = userOpFloors(100u, true, 2u).let { floors ->
+        var draft = userOpDraft(SAFE, "0x7", true, listOf(KEY), listOf(call), UserOpFeeMode.InBand(null, "1", SAFE), floors)
+        draft = userOpApplyEstimate(draft, gas.verification_gas_limit, gas.call_gas_limit, gas.pre_verification_gas, gas.settlement_gas, floors)
+        userOpWithCalls(draft, listOf(call), UserOpFeeMode.InBand(null, FEE, RECIPIENT))
+    }
+
+    // -- §35: every SafeOp expires ---------------------------------------------------
+
+    @Test
+    fun `the passkey signs the operation stamped with the core's window at this device's clock`() = runBlocking {
+        submit(prepared)
+        val stamped = userOpStampValidity(unstampedFinal(prepared), NOW.toDouble())
+        assertEquals("validAfter 0", 0uL, stamped.validAfter)
+        assertEquals("validUntil now + 30 min", NOW / 1000 + 1800, stamped.validUntil.toLong())
+        assertArrayEquals(userOpSafeOpHash(stamped, 100u), challenge)
+        // The window is in the hash: another clock is another challenge.
+        val later = userOpStampValidity(unstampedFinal(prepared), (NOW + 60_000).toDouble())
+        assertFalse(userOpSafeOpHash(later, 100u).contentEquals(challenge))
+    }
+
+    @Test
+    fun `an unstamped operation is refused by everything that signs`() {
+        val bare = unstampedFinal(prepared)
+        assertEquals(0uL, bare.validUntil)
+        val hash = runCatching { userOpSafeOpHash(bare, 100u) }
+        assertTrue("the hash is refused for an operation that never expires", hash.exceptionOrNull() is CoreException)
+        assertTrue(hash.exceptionOrNull()!!.message.orEmpty(), hash.exceptionOrNull()!!.message.orEmpty().contains("no expiry"))
+        val signed = runCatching {
+            userOpSign(bare, WebAuthnAssertion(ByteArray(37), ByteArray(10), ByteArray(70)), CREDENTIAL, listOf(WalletKeyRecord(CREDENTIAL, KEY)))
+        }
+        assertTrue("the envelope is refused too", signed.exceptionOrNull() is CoreException)
+    }
+
+    @Test
+    fun `each attempt stamps anew`() = runBlocking {
+        submit(prepared)
+        val first = challenge
+        clockMs = NOW + 5 * 60_000
+        submit(prepared)
+        assertFalse("the second attempt is a new window, a new challenge", first.contentEquals(challenge))
+        assertArrayEquals(userOpSafeOpHash(userOpStampValidity(unstampedFinal(prepared), clockMs.toDouble()), 100u), challenge)
     }
 
     private suspend fun submit(gas: PreparedGas?) {
@@ -148,6 +199,7 @@ class UserOpPreparedGasTest {
                 }
             },
             measureCall = { _, _, _, _, _ -> measured.incrementAndGet(); "0x30d40" },
+            wallClockMs = { clockMs },
         )
         try {
             spine.submit(100, SAFE, listOf(call), null, UserOpSpine.Quoted(FEE, RECIPIENT), prepared = gas)
@@ -158,6 +210,8 @@ class UserOpPreparedGasTest {
     }
 
     private companion object {
+        /** The device's clock the spine stamps from (§35). */
+        const val NOW = 1_800_000_000_123L
         const val SAFE = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
         const val TOKEN = "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d"
         const val RECIPIENT = "0x2222222222222222222222222222222222222222"

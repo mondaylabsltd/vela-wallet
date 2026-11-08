@@ -98,11 +98,32 @@ class PasskeyExecutor(
      */
     private val selectorUnresponsiveMessage: () -> String = { SELECTOR_UNRESPONSIVE_FALLBACK },
     /**
-     * The relying party. A passkey is bound to it: change it and every existing
-     * wallet becomes unreachable from this app.
+     * The relying party of the PLATFORM ceremony (Credential Manager) — the
+     * core's rule for this build ([RelyingParty.current], §35): `getvela.app`
+     * for a release build, `localhost` for a test build on an emulator, the
+     * build's `TEST_RP_DOMAIN` for one on a device, else the core's error. A
+     * passkey is bound to it: change it and every existing wallet becomes
+     * unreachable from this app. A seam for the tests.
      */
-    val relyingPartyId: String = RELYING_PARTY,
+    private val relyingParty: () -> RelyingParty.Answer = { RelyingParty.current },
 ) {
+    /**
+     * The platform ceremony's rpId — or, when this build has none (a device
+     * test build without `TEST_RP_DOMAIN`), the ceremony's failure in the
+     * core's words ([PasskeyFailure], [FailureKind.Other]); never a fall-back
+     * to `getvela.app`.
+     */
+    val relyingPartyId: String get() = relyingParty().orFail()
+
+    /**
+     * The rpId a key made by [method] lives under — what the key index files
+     * a unit under: the platform ceremony's ([relyingPartyId]); the app-owned
+     * CTAP routes (USB, caBLE) and the GMS security-key route keep
+     * [RELYING_PARTY] (§35: out of the test-domain rule's scope).
+     */
+    fun relyingPartyFor(method: KeyMethod): String =
+        if (method == KeyMethod.Platform) relyingPartyId else RELYING_PARTY
+
     private val manager: CredentialManager? =
         runCatching { CredentialManager.create(context) }.getOrNull()
 
@@ -352,7 +373,8 @@ class PasskeyExecutor(
         )
         val credential = try {
             ceremony.register(
-                rpId = relyingPartyId,
+                // §35: the security-key route keeps getvela.app (out of the test-domain rule).
+                rpId = RELYING_PARTY,
                 rpName = RELYING_PARTY_NAME,
                 challenge = random(CHALLENGE_BYTES),
                 userId = encodeUserHandle(name).toByteArray(Charsets.UTF_8),
@@ -602,7 +624,8 @@ class PasskeyExecutor(
         )
         val credential = try {
             ceremony.assert(
-                rpId = relyingPartyId,
+                // §35: the security-key route keeps getvela.app (out of the test-domain rule).
+                rpId = RELYING_PARTY,
                 challenge = challenge,
                 credentialId = credentialIdHex?.let { uniffi.vela_core_uniffi.fromHex(it) },
             )

@@ -369,15 +369,29 @@ class MultisigWords(
      * have made the multisig act for a Safe it owns (`refusal.data.reason ==
      * "parent_safe"`) — said in the core's sentence for it (`data.key`:
      * `componentsUi.signing.parentSafeBlocked` / `parentSafeUnchecked`) with
-     * the function and that Safe. `null` for any other refusal.
+     * the function and that Safe. §35 (SEC-PARENT-2): one that would make the
+     * multisig call ITSELF to change who controls it (`reason ==
+     * "self_call"`) — the core's `componentsUi.signing.multisigSelfCallBlocked`
+     * with the function. `null` for any other refusal.
      */
     fun dappRefusal(refusal: JsonElement?): String? {
         val data = refusal["data"]
+        if (data["reason"].str == SELF_CALL_REASON) {
+            return raw(SELF_CALL_KEY, "function" to data["function"].str.orEmpty())
+        }
         if (data["reason"].str != "parent_safe") return null
         val key = data["key"].str?.takeIf { it == PARENT_BLOCKED_KEY || it == PARENT_UNCHECKED_KEY }
             ?: if (data["why"].str == "unchecked") PARENT_UNCHECKED_KEY else PARENT_BLOCKED_KEY
         return raw(key, "function" to data["function"].str.orEmpty(), "safe" to data["safe"].str?.let(::short).orEmpty())
     }
+
+    /**
+     * §35: the refused sheet's title — "Vela can't sign this"
+     * (`componentsUi.signing.selfCallBlockedTitle`) over a self-call
+     * refusal; `null` (the sheet's own) for any other.
+     */
+    fun dappRefusalTitle(refusal: JsonElement?): String? =
+        if (refusal["data"]["reason"].str == SELF_CALL_REASON) raw(SELF_CALL_TITLE_KEY) else null
 
     /**
      * Round 16 leftover 4: a draft the core refused to build (`refused`'s
@@ -608,6 +622,11 @@ class MultisigWords(
         /** §31: the core's two sentences for a parent-Safe refusal (`multisig_dapp::PARENT_*_KEY`). */
         private const val PARENT_BLOCKED_KEY = "componentsUi.signing.parentSafeBlocked"
         private const val PARENT_UNCHECKED_KEY = "componentsUi.signing.parentSafeUnchecked"
+
+        /** §35: a self-call refusal (`multisig_dapp::self_call_refusal`) — its reason, sentence and title. */
+        private const val SELF_CALL_REASON = "self_call"
+        private const val SELF_CALL_KEY = app.getvela.wallet.core.i18n.I18nKeys.Flows.MULTISIG_SELF_CALL_BLOCKED
+        private const val SELF_CALL_TITLE_KEY = app.getvela.wallet.core.i18n.I18nKeys.Flows.MULTISIG_SELF_CALL_TITLE
 
         /** The core's member-change refusals (`MemberRefusal`'s kinds) worded by [memberRefusal]. */
         private val MEMBER_REFUSALS = setOf(

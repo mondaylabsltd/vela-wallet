@@ -69,6 +69,12 @@ val velaMinifyDebug: Boolean = providers.gradleProperty("velaMinifyDebug").isPre
 // release with it (an unsigned one, `-PvelaUnsignedRelease`, is for a device
 // pass signed by hand with the debug key).
 val velaDeviceTest: Boolean = providers.gradleProperty("velaDeviceTest").isPresent
+// §35 (review 0-1): a test build's own passkey domain on a device —
+// `-PvelaTestRpDomain=test.example.org`, else env `TEST_RP_DOMAIN`, else
+// empty (unset). Validated by the core (`relying_party_id`), not here.
+val velaTestRpDomain: String = (providers.gradleProperty("velaTestRpDomain").orNull ?: providers.environmentVariable("TEST_RP_DOMAIN").orNull)
+    ?.trim().orEmpty()
+    .also { require('"' !in it && '\\' !in it) { "velaTestRpDomain must be a bare host name: $it" } }
 
 // Spec 088 FR-012: every upload needs a higher versionCode than any before it.
 // `-PvelaVersionCode=N`, else `VELA_VERSION_CODE`, else the number of commits
@@ -181,6 +187,13 @@ android {
             "ALLOW_PRODUCTION_WRITES",
             "${providers.gradleProperty("velaAllowProductionWrites").isPresent}",
         )
+        // §35 (review 0-1): the passkey domain a TEST build on a device uses
+        // (`-PvelaTestRpDomain=…`, else env `TEST_RP_DOMAIN`; empty = unset).
+        // The rule is the core's (`relying_party_id`, `RelyingParty`): a
+        // release build uses getvela.app and never reads it, an emulator uses
+        // localhost, and a device test build without one refuses its ceremony
+        // in the core's words. A store release carries it empty (below).
+        buildConfigField("String", "TEST_RP_DOMAIN", "\"$velaTestRpDomain\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -216,6 +229,11 @@ android {
             }
             // The upload key, or nothing at all — never the debug key.
             signingConfig = signingConfigs.findByName("release")
+            // §35: a store release never carries a test passkey domain (the
+            // core never reads it for a release build either); a device-test
+            // release is a test build and keeps the one it was given.
+            // `scripts/check-release-apk.sh` holds this.
+            if (!velaDeviceTest) buildConfigField("String", "TEST_RP_DOMAIN", "\"\"")
         }
         // A DEBUG build with release's R8 (`-PvelaMinifyDebug`): the doors only
         // debug has — the parallel space's fixed keys, the harness's launch

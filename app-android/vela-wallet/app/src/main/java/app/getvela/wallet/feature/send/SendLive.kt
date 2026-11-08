@@ -1504,11 +1504,13 @@ object SendLive {
                 // send-15: another transaction of this account went first —
                 // "Not sent", calmly, over the core's sentence (the web's
                 // `nonce_used`).
-                wentFirst(view) -> s.t(I18nKeys.Flows.RECEIPT_NOT_SENT)
+                // §35: it expired before it was submitted — said the same
+                // way, over its own sentence.
+                wentFirst(view) || expired(view) -> s.t(I18nKeys.Flows.RECEIPT_NOT_SENT)
                 else -> null
             },
             // send-11: a passkey that signed nothing is said calmly too.
-            noticeCalm = notSent(view) || wentFirst(view) || passkeyNote(view, s) != null || feeMovedNote(view, ctx) != null,
+            noticeCalm = notSent(view) || wentFirst(view) || expired(view) || passkeyNote(view, s) != null || feeMovedNote(view, ctx) != null,
             noticeFund = fundAddress(view, ctx),
             noticeReport = reportLabel(view, ctx),
             // The treasury pause has two exits (spec 045 US4): the core's retry,
@@ -1527,8 +1529,9 @@ object SendLive {
                 view.tx_error == SendTxErrorKey.VenueBlocked -> null
                 // A proposal this shell cannot make would meet the same answer.
                 view.tx_error == SendTxErrorKey.ProposalNotSupported -> null
-                // send-15: a fresh quote, nonce and signature — "Review again".
-                wentFirst(view) -> s.t(I18nKeys.Flows.TX_REVIEW_AGAIN)
+                // send-15: a fresh quote, nonce and signature — "Review again";
+                // §35: an expired one the same — a new signature, its own window.
+                wentFirst(view) || expired(view) -> s.t(I18nKeys.Flows.TX_REVIEW_AGAIN)
                 view.tx_error != null -> s.t(I18nKeys.Flows.TX_RETRY)
                 // The stage stays Confirm while the passkey prompt is up; the
                 // one honest button under it is Cancel — the core's checkpoint.
@@ -1579,6 +1582,15 @@ object SendLive {
      */
     internal fun wentFirst(view: SendView): Boolean =
         view.tx_error == SendTxErrorKey.NonceUsed && view.relay_unreachable == null && view.treasury_bootstrap == null
+
+    /**
+     * §35: the submit was turned back because the operation's validity window
+     * closed before the EntryPoint saw it — nothing was sent (the core's
+     * `SendTxErrorKey::Expired`), and no relay stop is up over it. Drawn
+     * exactly as [wentFirst], over `componentsUi.signing.expired`.
+     */
+    internal fun expired(view: SendView): Boolean =
+        view.tx_error == SendTxErrorKey.Expired && view.relay_unreachable == null && view.treasury_bootstrap == null
 
     /**
      * r7-6: the confirmed operation is out to be signed — its passkey, its
@@ -1681,6 +1693,8 @@ object SendLive {
             // send-15: another of this account's transactions went first —
             // nothing was sent, calmly (the web's `nonce_used`).
             SendTxErrorKey.NonceUsed -> s.t(I18nKeys.Flows.WENT_FIRST)
+            // §35: it expired before it was submitted — nothing was sent, calmly.
+            SendTxErrorKey.Expired -> s.t(I18nKeys.Flows.EXPIRED)
             // A proposal's own words (web-only multisig); here the plain line.
             SendTxErrorKey.ProposalMailboxDown, SendTxErrorKey.ProposalOffline -> s.t(I18nKeys.Flows.TX_ERROR_GENERIC)
             // A multisig's proposal this shell cannot make
@@ -1831,7 +1845,8 @@ object SendLive {
         // core alone (`can_send_again`) — "Send again"; "Review again" when
         // another send used the nonce (send-15). Never over one that may have left.
         val again = if (receipt?.can_send_again == true) {
-            s.t(if (receipt.refusal_key == I18nKeys.Flows.SIGN_WENT_FIRST) I18nKeys.Flows.TX_REVIEW_AGAIN else I18nKeys.Flows.TX_SEND_AGAIN)
+            // §35: and when it expired before it was included — signed anew, its own window.
+            s.t(if (receipt.refusal_key == I18nKeys.Flows.SIGN_WENT_FIRST || receipt.refusal_key == I18nKeys.Flows.EXPIRED) I18nKeys.Flows.TX_REVIEW_AGAIN else I18nKeys.Flows.TX_SEND_AGAIN)
         } else {
             null
         }

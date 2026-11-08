@@ -939,6 +939,18 @@ object I18nKeys {
         const val TX_ERROR_PROPOSAL_NOT_SUPPORTED = "send.txErrorProposalNotSupported"
         /** send-15:another transaction of this account spent the nonce first; nothing was sent. */
         const val WENT_FIRST = "componentsUi.signing.wentFirst"
+        /**
+         * §35: it expired before it was submitted — nothing was sent
+         * (`SendTxErrorKey::Expired`, the tracker's `RefusalReason::Expired`,
+         * the sheet's refusal key for `userOpExpiredDetail()`).
+         */
+        const val EXPIRED = "componentsUi.signing.expired"
+        /** §35 (review 1-6): the relay billed more gas than the operation can use — retried, then stopped. */
+        const val FEE_REASON_SETTLEMENT_HIGH = "componentsUi.gas.reasonSettlementHigh"
+        const val FEE_REASON_SETTLEMENT_HIGH_STOPPED = "componentsUi.gas.reasonSettlementHighStopped"
+        /** §35 (SEC-PARENT-2): a site asked a multisig to change who controls it — the title and the sentence. */
+        const val MULTISIG_SELF_CALL_TITLE = "componentsUi.signing.selfCallBlockedTitle"
+        const val MULTISIG_SELF_CALL_BLOCKED = "componentsUi.signing.multisigSelfCallBlocked"
         /** send-18 / round 3: the confirm opened without the recipient's check — said neutrally, with Check again. */
         const val RISK_UNFINISHED = "send.riskUnfinished"
         const val RISK_HISTORY_UNREAD = "send.riskHistoryUnread"

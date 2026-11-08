@@ -475,10 +475,98 @@ class ParentSafeEntryPointsTest {
         leaveAndAnswer(hub, h, "m3", heldId, answers)
     }
 
+    // -- §35 (SEC-PARENT-2): a site never makes the multisig call itself ------------
+
+    private val selfCallVector by lazy { JSONObject(File(repoRoot, "rust/crates/vela-core/tests/vectors/rules/multisig-self-call.json").readText()) }
+
+    /** The vector's calls with `SELF` as [multisig] (`SELF_UPPER` in upper case; `SELFADDR` its 20 bytes, lower-case hex). */
+    private fun selfCalls(case: JSONObject, multisig: String): JsonElement {
+        val bare = multisig.removePrefix("0x").lowercase()
+        val calls = JSONArray()
+        val asked = case.getJSONArray("calls")
+        for (i in 0 until asked.length()) {
+            val call = asked.getJSONObject(i)
+            val to = when (val raw = call.getString("to")) {
+                "SELF" -> multisig
+                "SELF_UPPER" -> "0x" + bare.uppercase()
+                else -> raw
+            }
+            calls.put(JSONObject().put("to", to).put("value", call.getString("value")).put("data", call.getString("data").replace("SELFADDR", bare)))
+        }
+        return Wire.json.parseToJsonElement(
+            JSONArray().put(JSONObject().put("version", "2.0.0").put("chainId", "0x64").put("from", multisig).put("calls", calls)).toString(),
+        )
+    }
+
+    @Test
+    fun `the self-call vector, replayed through the real multisig machine at its dApp entry`() = runBlocking<Unit> {
+        val cases = selfCallVector.getJSONArray("cases")
+        assertEquals("the vector's 13 cases", 13, cases.length())
+        val words = MultisigWords(strings)
+        for (i in 0 until cases.length()) {
+            val case = cases.getJSONObject(i)
+            val name = case.getString("name")
+            val ports = MultisigShellTest.FakePorts()
+            val hub = hub(ports, listOf(row(child, "0x1")))
+            val id = "sc$i"
+            val answers = CopyOnWriteArrayList<JsonElement>()
+            hub.dappRequest(id, child, "wallet_sendCalls", selfCalls(case, child), origin, 100) { answers += it }
+            val refused = case.opt("refused").takeIf { it is String } as String?
+            if (refused != null) {
+                val refusal = refusalOf(hub, id)
+                assertEquals(name, -32603L, refusal["code"].long)
+                assertEquals(name, "self_call", refusal["data"]["reason"].str)
+                assertEquals(name, refused, refusal["data"]["function"].str)
+                assertEquals(name, selfCallVector.getString("key"), refusal["data"]["key"].str)
+                assertTrue(name, refusal["data"]["safe"].str.equals(child, ignoreCase = true))
+                assertEquals(name, case.getLong("leg"), refusal["data"]["leg"].long)
+                assertNull("$name: nothing drafted", hub.proposalsView.value.draft)
+                assertTrue("$name: nothing signed", ports.passkeys.isEmpty())
+                // Said in the core's sentence, with the function it named.
+                assertEquals(
+                    name,
+                    strings.t("componentsUi.signing.multisigSelfCallBlocked", mapOf("function" to refused)),
+                    words.dappRefusal(refusal),
+                )
+                assertEquals(name, strings.t("componentsUi.signing.selfCallBlockedTitle"), words.dappRefusalTitle(refusal))
+                // Read, then answered with the refusal — never 4001.
+                hub.dappLeave(id)
+                withTimeout(10_000) { while (answers.isEmpty()) delay(20) }
+                assertEquals(name, -32603L, answers.single()["error"]["code"].long)
+            } else {
+                // Clear: held for its review as any other request (its draft's
+                // reads are this fake chain's — never a self-call refusal).
+                withTimeout(20_000) { while (hub.proposalsView.value.dapp[id] == null) delay(20) }
+                delay(500)
+                assertEquals(name, "reviewing", hub.proposalsView.value.dapp[id]["stage"].str)
+                assertTrue(name, hub.proposalsView.value.dapp[id]["refusal"].let { it == null || it is kotlinx.serialization.json.JsonNull })
+                assertTrue("$name: nothing answered", answers.isEmpty())
+            }
+        }
+    }
+
+    @Test
+    fun `a site's self-call reaches the multisig machine through the in-app browser, refused in the catalog's words`() = runBlocking<Unit> {
+        val ports = MultisigShellTest.FakePorts()
+        val hub = hub(ports, listOf(row(child, "0x1")))
+        val h = browser(child, 100, alsoAccounts = listOf(signer))
+        val changeThreshold = "0x694e80c3" + "0".repeat(63) + "1"
+        val (heldId, answers) = multisigAsks(hub, h, "m4", child, changeThreshold)
+        val refusal = refusalOf(hub, heldId)
+        assertEquals("self_call", refusal["data"]["reason"].str)
+        assertEquals("changeThreshold", refusal["data"]["function"].str)
+        assertTrue(ports.passkeys.isEmpty())
+        val said = MultisigWords(strings).dappRefusal(refusal)!!
+        assertTrue(said, said.contains("changeThreshold") && said.contains("Nothing was proposed"))
+        leaveAndAnswer(hub, h, "m4", heldId, answers)
+    }
+
     @Test
     fun `any other multisig refusal keeps its own words`() {
         val words = MultisigWords(strings)
         assertNull(words.dappRefusal(Wire.json.parseToJsonElement("""{"code":4200,"message":"a multisig signs no messages"}""")))
         assertNull(words.dappRefusal(null))
+        assertNull(words.dappRefusalTitle(null))
+        assertNull("a parent-Safe refusal keeps the sheet's own title", words.dappRefusalTitle(Wire.json.parseToJsonElement("""{"code":-32603,"data":{"reason":"parent_safe"}}""")))
     }
 }

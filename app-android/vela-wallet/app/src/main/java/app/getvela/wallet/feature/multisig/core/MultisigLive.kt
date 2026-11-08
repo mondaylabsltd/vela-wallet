@@ -118,6 +118,8 @@ sealed class MultisigShellFailure {
             is UserOpSpine.Failure.Rejected -> Unknown(failure.message ?: "The network refused this transaction.")
             UserOpSpine.Failure.PreviousPending -> Unknown("Waiting for the last transaction of this account on this network.")
             UserOpSpine.Failure.NonceUsed -> Unknown("Another transaction of this account went first.")
+            // §35: the window closed before the EntryPoint saw it.
+            UserOpSpine.Failure.Expired -> Unknown("The transaction expired before it was submitted; nothing was sent.")
             UserOpSpine.Failure.NotCleared -> Unknown("cancelled")
         }
     }

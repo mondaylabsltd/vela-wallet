@@ -89,6 +89,31 @@ else
   echo "check-release-apk: arm64 libvela_core_uniffi.so = $core_bytes bytes (budget $CORE_BUDGET)"
 fi
 
+# 4. §35 (review 0-1): a store release's passkeys live under getvela.app alone.
+#    The core never reads a test domain for a release build; the build must
+#    not carry one either. The release BuildConfig the APK was compiled from
+#    says TEST_RP_DOMAIN = "" (a device-test release, DEVICE_TEST = true, is a
+#    test build and may carry its own), and a domain set in this environment
+#    (TEST_RP_DOMAIN / VELA_TEST_RP_DOMAIN) is nowhere in the dex.
+BUILD_CONFIG="${VELA_RELEASE_BUILDCONFIG:-$HERE/app/build/generated/source/buildConfig/release/app/getvela/wallet/BuildConfig.java}"
+if [ -f "$BUILD_CONFIG" ]; then
+  if LC_ALL=C grep -qE 'DEVICE_TEST = false' "$BUILD_CONFIG"; then
+    if ! LC_ALL=C grep -qE 'String TEST_RP_DOMAIN = "";' "$BUILD_CONFIG"; then
+      problems+=("the release BuildConfig carries a test passkey domain: $(LC_ALL=C grep -E 'TEST_RP_DOMAIN' "$BUILD_CONFIG" | tr -s ' ')")
+    fi
+    echo "check-release-apk: release BuildConfig read (TEST_RP_DOMAIN empty, DEVICE_TEST false)"
+  else
+    echo "check-release-apk: a device-test release (DEVICE_TEST true) — its test passkey domain is its own"
+  fi
+else
+  problems+=("no release BuildConfig at $BUILD_CONFIG to read TEST_RP_DOMAIN from")
+fi
+for domain in "${TEST_RP_DOMAIN:-}" "${VELA_TEST_RP_DOMAIN:-}"; do
+  if [ -n "$domain" ] && LC_ALL=C grep -aqF "$domain" "$WORK"/classes*.dex; then
+    problems+=("the dex carries the test passkey domain $domain")
+  fi
+done
+
 if [ ${#problems[@]} -gt 0 ]; then
   echo "check-release-apk: $(basename "$APK") carries what a release must not:" >&2
   printf '  - %s\n' "${problems[@]}" >&2
