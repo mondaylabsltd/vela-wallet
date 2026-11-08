@@ -1,6 +1,6 @@
-// Where "unlimited" starts on this page — the wallet's own two lines
-// (vela-core `approval_guard`): 2^200 for a uint256 amount, 2^152 for
-// Permit2's uint160 one. The app's sheet draws the same line.
+// Where "unlimited" starts on this page — the wallet's own line (vela-core
+// `approval_guard`, §37): 2^128 for every amount, a uint256 one and Permit2's
+// uint160 one alike. The app's sheet draws the same line.
 //
 //   node samples/unlimited-line-test.mjs
 import { loadPageLibs, makeChecks } from './test-kit.mjs';
@@ -47,24 +47,37 @@ const MAX160 = (1n << 160n) - 1n;
 check('approve(MaxUint256) — what Uniswap sends to Permit2 — is unlimited', heroUnlimited(approve(MAX256)));
 check('approve(2^255 - 1) is unlimited', heroUnlimited(approve((1n << 255n) - 1n)));
 check('approve(2^200) is unlimited', heroUnlimited(approve(1n << 200n)));
-check('approve(2^200 - 1) is a figure', !heroUnlimited(approve((1n << 200n) - 1n)));
-check('approve(2^128) — past every supply, below the line — is a figure', !heroUnlimited(approve(1n << 128n)));
+check('approve(2^128) is unlimited (§37: past every supply)', heroUnlimited(approve(1n << 128n)));
+check('approve(2^128 - 1) is a figure', !heroUnlimited(approve((1n << 128n) - 1n)));
 
 const permit = (value) => typed('Permit', { owner: ACCOUNT, spender: SPENDER, value: String(value), nonce: '0', deadline: '1900000000' }, USDC);
-check('ERC-2612 permit of 2^200 is unlimited', heroUnlimited(permit(1n << 200n)));
-check('ERC-2612 permit of 2^200 - 1 is a figure', !heroUnlimited(permit((1n << 200n) - 1n)));
+check('ERC-2612 permit of 2^128 is unlimited', heroUnlimited(permit(1n << 128n)));
+check('ERC-2612 permit of 2^128 - 1 is a figure', !heroUnlimited(permit((1n << 128n) - 1n)));
 
 const single = (amount) => typed('PermitSingle', {
   details: { token: USDC, amount: String(amount), expiration: '1900000000', nonce: '0' },
   spender: SPENDER, sigDeadline: '1900000000',
 }, PERMIT2);
 check('PermitSingle for uint160 max — what Uniswap signs — is unlimited', heroUnlimited(single(MAX160)));
-check('PermitSingle for 2^152 is unlimited', heroUnlimited(single(1n << 152n)));
-check('PermitSingle for 2^152 - 1 is a figure', !heroUnlimited(single((1n << 152n) - 1n)));
+check('PermitSingle for 2^128 is unlimited', heroUnlimited(single(1n << 128n)));
+check('PermitSingle for 2^128 - 1 is a figure', !heroUnlimited(single((1n << 128n) - 1n)));
 
 const transfer = (amount) => typed('PermitTransferFrom', {
   permitted: { token: USDC, amount: String(amount) }, spender: SPENDER, nonce: '0', deadline: '1900000000',
 }, PERMIT2);
-check('PermitTransferFrom is read as uint256: 2^152 is a figure', !heroUnlimited(transfer(1n << 152n)));
+check('PermitTransferFrom of 2^128 - 1 is a figure', !heroUnlimited(transfer((1n << 128n) - 1n)));
+
+// §37 (review 1-12): the witness transfer — UniswapX's, an intent protocol's —
+// reads as the transfer it is (it read blind): the spender, the token, the
+// amount, the deadline.
+const witness = (amount) => typed('PermitWitnessTransferFrom', {
+  permitted: { token: USDC, amount: String(amount) }, spender: SPENDER, nonce: '0', deadline: '1900000000',
+  witness: { info: { reactor: SPENDER }, swapper: ACCOUNT },
+}, PERMIT2);
+const w = witness(MAX256);
+check('PermitWitnessTransferFrom is read as Permit2 (not blind typed data)', w.intentKey === 'intent.permit2');
+check('…its unlimited amount is unlimited', heroUnlimited(w));
+check('…a figure is a figure', !heroUnlimited(witness(1_000_000n)));
+check('…it names the spender', w.fields.some((f) => f.role === 'spender'));
 
 process.exit(check.summary() ? 0 : 1);
