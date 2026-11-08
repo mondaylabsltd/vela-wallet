@@ -213,6 +213,20 @@ fn erc6492_signatures_for_the_fork() {
             }]),
         );
         assert!(tx.is_string(), "{tx}");
+        // Mined before its code is read (a fork may answer the read first).
+        let mut receipt = Value::Null;
+        for _ in 0..60 {
+            receipt = rpc(port, "eth_getTransactionReceipt", json!([tx]));
+            if !receipt.is_null() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(500));
+        }
+        assert_eq!(
+            receipt["status"],
+            json!("0x1"),
+            "the deployment landed: {receipt}"
+        );
     }
     let code = rpc(port, "eth_getCode", json!([deployed.address, "latest"]));
     assert_ne!(code, json!("0x"), "deployed by its own factory call");

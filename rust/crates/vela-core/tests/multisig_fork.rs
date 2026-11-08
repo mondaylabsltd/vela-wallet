@@ -607,7 +607,7 @@ fn a_strangers_far_proposal_does_not_stall_the_multisig() {
         let tx = vela_core::multisig::cancel_tx(&safe, nonce).unwrap();
         let hash = vela_core::multisig::safe_tx_hash(100, &safe, &tx).unwrap();
         let digest = vela_core::primitives::from_hex(&hash).unwrap();
-        let (sig, id) = stranger.sign_prehash_recoverable(&digest).unwrap();
+        let (sig, id) = stranger.sign_prehash_recoverable(&digest);
         let mut bytes = sig.to_bytes().to_vec();
         bytes.push(27 + id.to_byte());
         let body = json!({
