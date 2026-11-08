@@ -2401,3 +2401,101 @@ Left open:
 - iOS: the many-networks words read "1 networks" for one network nobody names (§29's known gap).
 - A multisig press failing with `production_write_refused` is worded from the core's key; the Try again beside it was not audited on either shell.
 - r18-1 on a device in the Testnet space was not re-run (the seeded space did not take on the emulator); a mainnet cold start showed the unread line ("Activity can't be read on World Chain right now.") in the empty state's place while World Chain was unread, then "No activity yet" once it answered.
+
+## 34. Send: charged = shown, frozen at confirm (R20 S1)
+
+**Found** in the R20 release-candidate acceptance (iOS, Arc Testnet, zh). "R20
+iOS ZH" held 0.3 USDC and had never deployed, so its first send also deployed
+it. Send → USDC → Max → payee → Continue: the confirm read **0.0675 USDC** with
+**预估手续费 0.2325 USDC**; after Confirm & Send the chain took **0.0058875** to the
+payee and a **0.29411249999** fee leg (tx `0x5c832ead…89052357`) — 0.0616 more fee
+than shown, the same less sent. The receipt honestly said "已发送 0.005888 USDC".
+Seen 1 in 3 (a re-run on the deployed account, and a fresh deploying account
+whose quote did not move under the press, charged as shown).
+
+**Root cause (the exact path, `app/send.rs`).** Plain sends had the review
+freeze (`confirmed_review`, the review digest) but not the press freeze §32 gave
+multisig (r18-5):
+
+1. `slide_confirm` froze `confirmed_review` and went to the press's own reads
+   (`SubmitCredential` / `SubmitTreasury`: the credential, the relay's float).
+2. The fee card's next quote (`Event::FeeUpdated`) landed during those reads.
+   `shown_fee` froze only from `Pipeline::Submitting`, so the confirm drew the
+   new fee (0.2941125) beside the amount pressed (0.0675) — a figure nobody was
+   signing.
+3. `submit_user_op` rebuilt the plan from the new quote, found it was not the
+   confirmed review, and **returned the button without a word** (`tx = Idle`, no
+   error, no note).
+4. The same update's `hold_max_to_quote` (r14-8, "Max follows each new quote
+   until the slide") re-derived the Max from the new quote: 0.3 − 0.2941125 =
+   0.0058875, said only as `max_moved` under the amount — with `from` still the
+   form's first figure, not the one pressed.
+5. The next press (the button simply came back) signed 0.0058875 + 0.2941125.
+
+The machine test replays it on the old core: under the press the fee row read
+0.2941125 beside 0.0675; the stop carried no words; the next press signed
+`5887500000000000` + `294112500000000000`.
+
+**The rule (one core, every send path of the Send machine — a single send,
+Max, a split, a multi-token sweep; first sends that deploy included).**
+
+- **From the press to its signature, cancel or stop, the figures pressed are
+  frozen** (`Press`, `press_frozen`): `shown_fee` serves the fee the press was
+  made on — through the preparing reads, not only from the submit — the Max is
+  never re-derived under it (`max_follow_up`, `hold_max_to_quote` hold), a
+  sweep's lines are figured against the fee drawn (`multi_token_specs` takes the
+  fee: the drawn one for the page, the newest for the plan), and
+  `SendView.fee_signing_key` (`send.feeSigning`, "Signing at this fee and amount
+  — they stay fixed until you confirm or cancel.") marks them as the figures
+  being signed, under the fee row.
+- **The quote at the signature not the one pressed: nothing is signed.** The
+  press ends, the newest quote is drawn, a Max is re-derived from it, and the
+  stop is said beside the confirm (`press_moved` → `SendView.fee_moved`):
+  `send.feeMoved`, or `send.feeMovedMax` with the Max's two figures (the one
+  pressed and the one now). `max_moved` is not said beside it — one sentence
+  for one move. The next press signs exactly what is drawn.
+- **A tap drawn on a review that has since moved** (a quote landing between the
+  paint and the tap) confirms nothing — and says so (`send.feeMoved`), never a
+  silent no-op the person takes for a tap that did not register.
+- Before the press, r14-8 stands: a Max follows each new quote on the confirm,
+  said by `max_moved`.
+
+**dApp sends and `wallet_sendCalls`** (the signing sheet, `sign_request`): the
+approve carries the fee the sheet drew (`SignApproveOpts.quoted_fee`), the
+machine hands exactly that to `SignAndSubmit`, and the spine signs that fee leg
+or refuses ("The fee quote has expired…"); once approved the sheet is a status
+(spec 079 F11), with no fee row to move. Nothing on that path re-derives an
+amount or re-prices after the approve, so it already charges what it showed —
+left as it is.
+
+**Every shell draws the core** (no shell decides any of it): web, the Chrome
+and Safari extensions (one confirm, `live-send.ts`: the fee row frozen from
+preparing on, `feeSigningNote` under it, `feeMovedNote` beside the confirm in
+the calm note's place); iOS (`SendLive.confirm`: the row frozen while
+`feeSigningKey` is set, its note; `feeMovedNote` → `send.confirm.feeMoved`
+banner over the confirm); Android (`SendLive.outToSign`, the row's note,
+`feeMovedNote` as the calm notice); desktop (`confirm_fee_fact`,
+`fee_moved_notice`).
+
+**Tests.**
+
+- Core: vector `tests/vectors/rules/send-fee-cover.json` `press_freeze` (4
+  cases: the R20 figures, a quote unchanged under the press, a typed amount, a
+  stale tap); `app_send_fee_cover.rs`
+  `the_figures_signed_are_the_figures_pressed_or_nothing_is_signed`;
+  `app_send.rs` `a_sweep_whose_reserve_moved_under_the_press_signs_nothing_and_says_so`.
+- Web (real wasm core): `live-send-ceiling.test.ts` §34. iOS (real uniffi core):
+  `SendPressFreezeTests`. Android (real core): `SendPressFreezeTest`
+  (`SendRoundsTest`'s r7-6 pin now expects the frozen line). Desktop (real
+  machine): `press_freeze_tests`.
+- On chain (fork harness): `e2e/onchain/send-press.onchain.ts` — Parallel Three,
+  undeployed, 0.5 xDAI, Max; the press's float read held while the network's base
+  fee rises and the fee card re-quotes. The row kept 0.0213 with the frozen line;
+  at the signature nothing was submitted, the account stayed untouched and
+  undeployed, and the stop said "Max is now 0.0527 xDAI (it was 0.4787)" with the
+  new 0.4473 fee; the next press deployed the account and charged exactly 0.0527
+  + 0.4473, the account at 0.
+
+**Left open.** The signing sheet's approve reads the fee view at the handler,
+not the painted frame's (the same one-frame window the stale-tap stop closes
+for Send); no incident points at it.
