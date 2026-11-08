@@ -200,7 +200,9 @@ fn erc6492_signatures_for_the_fork() {
     // to simulate.
     let deployed = account(DEPLOYED_KEY, "R22 deployed", b"vela-r22-6492-b");
     if rpc(port, "eth_getCode", json!([deployed.address, "latest"])) == json!("0x") {
-        let init = user_op::build_init_code_for_keys(&[deployed.public_key_hex.clone()]).unwrap();
+        let init =
+            user_op::build_init_code_for_keys(std::slice::from_ref(&deployed.public_key_hex))
+                .unwrap();
         let from = rpc(port, "eth_accounts", json!([]))[0].clone();
         let tx = rpc(
             port,
