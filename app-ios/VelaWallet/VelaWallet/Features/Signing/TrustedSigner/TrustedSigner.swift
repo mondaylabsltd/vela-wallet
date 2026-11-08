@@ -370,7 +370,7 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
     /// The hand-off card, until the page may open — and, when `waitForOpen`,
     /// until the person taps Open. `nil` when they left instead.
     ///
-    /// The ruling is fetched fresh when none stands (24 hours, the core's),
+    /// The ruling is fetched fresh when none opens now (ten minutes, the core's §38),
     /// and checked again at the tap if it went stale while the card was up:
     /// the URL that opens is always one a live check admitted.
     private func admitted(

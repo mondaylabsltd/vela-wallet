@@ -33,7 +33,25 @@ perf = []
 update-test = []
 
 [dependencies]
-gpui = { git = "https://github.com/zed-industries/zed" }
+# Zed's UI framework, from git: gpui is not published to crates.io at a version
+# this app can use. PINNED to one full commit (Round 22, supply chain): a git
+# dependency without `rev` means "whatever the default branch is the next time
+# someone runs `cargo update`", so the lockfile was the only thing holding the
+# commit and a routine update could silently pull hundreds of upstream commits
+# into a wallet. The rev is the one Cargo.lock already recorded, so pinning it
+# changed nothing that is built.
+#
+# EVERY zed git dependency must carry the SAME `rev` string — here (gpui,
+# gpui_platform) and in app-desktop/vendor/gpui_macos/Cargo.toml (gpui,
+# collections, gpui_util, media). Cargo treats `zed` and `zed?rev=…` as two
+# different sources, so one entry left without the rev pulls a second,
+# incompatible gpui. The `[patch."https://github.com/zed-industries/zed"]` at
+# the bottom of this file still applies: cargo matches a patch on the URL, not
+# on the rev. TO MOVE THE PIN: change all six revs together, refresh the
+# vendored gpui_macos from the new commit (its manifest says how), run
+# `cargo update -p gpui`, and review the upstream diff — deny.toml's
+# [sources] lists this repository as an allowed git source for that reason.
+gpui = { git = "https://github.com/zed-industries/zed", rev = "c97b7c0ea41acf56e9726964eca10c2078e921b0" }
 # `wayland` and `x11` are NOT optional extras. gpui_linux defaults to both, but
 # Zed's workspace pins it `default-features = false`, so a git dependency
 # inherits neither and every run dies in gpui_linux/src/linux.rs at
@@ -42,7 +60,7 @@ gpui = { git = "https://github.com/zed-industries/zed" }
 # made at runtime from WAYLAND_DISPLAY, so dropping x11 would leave an X session
 # with no backend. The features are inert on macOS and Windows, where
 # gpui_linux is not a dependency at all.
-gpui_platform = { git = "https://github.com/zed-industries/zed", features = [
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "c97b7c0ea41acf56e9726964eca10c2078e921b0", features = [
     "font-kit",
     "wayland",
     "x11",
@@ -77,8 +95,12 @@ resvg = { version = "0.45", default-features = false, features = [
 # Lottie playback for the launch animation (spec 012). Three things about this
 # line are load-bearing — see specs/012-launch-animation-lottie/research.md D2:
 #
-#   * `tag`, not a version: crates.io only carries `0.1.0-alpha.1` from
+#   * git, not a version: crates.io only carries `0.1.0-alpha.1` from
 #     2024-09-18, while the real code is 58 releases ahead and git-only.
+#     The `rev` is the commit the `v0.1.58` tag pointed at when it was
+#     adopted (Round 22: a tag can be moved upstream, a commit cannot;
+#     deny.toml requires `rev` on every git source). To move it, resolve the
+#     new release tag to its commit and put that sha here.
 #   * `default-features = false`: the default set pulls `state-machines` and
 #     `theming`, neither of which this feature uses.
 #   * NO `tvg-wg` / `tvg-gl`: `build.rs`'s `wgpu_native` module DOWNLOADS
@@ -89,7 +111,7 @@ resvg = { version = "0.45", default-features = false, features = [
 #
 # Airbnb has no Rust runtime at all, which is why desktop is the one platform
 # not on the Airbnb player (research D2).
-dotlottie-rs = { git = "https://github.com/LottieFiles/dotlottie-rs", tag = "v0.1.58", default-features = false, features = [
+dotlottie-rs = { git = "https://github.com/LottieFiles/dotlottie-rs", rev = "2ce5e48f5786c3e60301d66db4cfdff56c896895", default-features = false, features = [
     "dotlottie",
     "tvg",
     "tvg-cpu",
@@ -166,7 +188,7 @@ unicode-segmentation = "1"
 # this is the one thing it cannot do — read an .xlsx — and it is pure Rust
 # with no system dependency, so the three desktops pay the same for it. Read
 # only: the template the importer saves is CSV text the core composes.
-calamine = "0.36"
+calamine = "0.38"
 
 # The 32-byte software group-key seed, and CTAP2's PIN/UV key agreement. ALL
 # randomness in the flow lives in the shell — vela-core's ctap module takes the

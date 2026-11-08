@@ -1006,6 +1006,40 @@ pub(crate) fn post_launch(page: &str, lang: &str) -> String {
     format!("{page}?ch=post{}", lang_param(lang))
 }
 
+/// `#ch=post&lang=<lang>&b=<version>` — what a page opened from the bytes its
+/// check read reads in place of its query (§38): a `blob:` URL carries no
+/// query, and no path to read a version from. The shell appends it to the
+/// object URL it made from those bytes. Only [`launch::CheckedPage`] calls
+/// this.
+pub(crate) fn bytes_launch(version: &str, lang: &str) -> String {
+    format!("#ch=post{}&b={version}", lang_param(lang))
+}
+
+/// May a document at `origin` use passkeys of the relying party `rp_id`?
+/// WebAuthn's rule: the origin is `https` (or `http` on this machine's
+/// loopback) and its host is `rp_id` or a subdomain of it. An IP address is
+/// never a relying party.
+pub(crate) fn origin_can_use_rp(origin: &str, rp_id: &str) -> bool {
+    let rp = rp_id.trim().to_ascii_lowercase();
+    if rp.is_empty() || rp.starts_with('[') || rp.parse::<std::net::Ipv4Addr>().is_ok() {
+        return false;
+    }
+    let Some((scheme, rest)) = origin.trim().split_once("://") else {
+        return false;
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    if authority.contains('@') {
+        return false;
+    }
+    let host = host_of(authority);
+    let secure = match scheme.to_ascii_lowercase().as_str() {
+        "https" => true,
+        "http" => is_loopback(&host),
+        _ => false,
+    };
+    secure && (host == rp || host.ends_with(&format!(".{rp}")))
+}
+
 /// `<page>?ch=ws#p=<port>&t=<token>` — the page, told to connect to the
 /// wallet's loopback WebSocket (spec 071). Only [`launch::CheckedPage`] calls
 /// this.

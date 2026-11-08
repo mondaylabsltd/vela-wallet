@@ -2546,3 +2546,54 @@ getvela.app in every build, and the key index's recorded RP for a test
 build's keys follows each shell's own reading (a core rule for it is open);
 the onchain `send-press` suite needs a harness of its own (it needs Parallel
 Three undeployed, which `multisig.onchain.ts` deploys).
+
+## 38. Round 22: supply chain and the signing page's integrity
+
+Review items 1-10 (dependency hygiene), 1-9 (reproducibility) and 0-5 (the
+signing page's check-then-open), with 0-4's honest account of what the page
+guarantees, decided by best practice under the core principle. **Every
+decision, its evidence, every gate finding and the owner's list are in
+`docs/security/hardening.md` "Round 22"**; how a reader checks it all is
+`docs/security/verify.md`. This is the summary.
+
+| Item | Decision | Proof |
+| --- | --- | --- |
+| **cargo-deny** (1-10) | one reasoned `deny.toml` over `rust/` and the desktop: advisories (vuln, unmaintained, unsound, yanked all fail), an explicit licence list, crates.io + four commit-pinned git repos, openssl/native-tls banned; every exception says why it is safe and what removes it | both graphs `advisories ok, bans ok, licenses ok, sources ok`; CI `supply-chain` |
+| **Advisories found** | core: crypto-bigint 0.7.5 (0387) and ctutils 0.4.2 (0385) — timing, reachable in CTAP/caBLE on the phones — **fixed** with ruint, tokio, wnaf in `rust/Cargo.lock` (shipped with this round's wasm); desktop: rustls, webpki, zip, calamine, pulldown-cmark, tokio and more fixed in its lock; the rest allowlisted with exits | `hardening.md` R22-1 table |
+| **GPL-3.0 in gpui** | `zlog`/`ztracing`/`ztracing_macro` are GPL-3.0 at the pinned zed rev and linked into the desktop: a version-pinned exception, **a desktop release blocker** until the pin moves to zed `ac5af8b9`+ (relicensed Apache-2.0) | owner item |
+| **JS audits** | `pnpm audit --prod` high + whole tree critical (kit bundles devDependencies), `bun audit --prod` for getvela.app, npm audit for `scripts/`; kit 2.70.4 / devalue 5.9.4 bumped | all exit 0 |
+| **Dependabot** | cargo, npm, bun, gradle, swift, actions; weekly, grouped, 7-day cooldown; uniffi and pinned git deps by hand; a `rust/Cargo.lock` bump rebuilds the wasm in the same PR | `.github/dependabot.yml` |
+| **gpui pinned** | `rev = c97b7c0e…` — the commit the lock already had, so nothing built changed | `cargo check --locked` both ways |
+| **PeerConnect** | provenance in `VENDOR.json` (commit `977ec1e` — the README's `f3148cb` was wrong, and the module matched no commit), rebuilt from it with paths mapped out; `check-peerconnect-vendor.mjs` checks the hashes (CI `app`) and rebuilds byte for byte (CI `supply-chain`) | two clean rebuilds identical |
+| **build-single --check blocking** (1-9) | CI `signing-page` on every PR, Bun and Node | — |
+| **Web wasm reproducible** (1-9) | the builder's paths mapped out (the 0.9.8 module shipped a developer's home directory in 27 strings), the `producers` section dropped; a pinned container (`web-build.Dockerfile`) and `reproduce-web.sh` compare the committed module byte for byte; CI `web-core-reproducible`, which attests the CI-built module on `main` | two clean macOS builds byte-identical; 0 builder paths (was 27). Linux not measured locally (the Docker VM ran out of memory under emulation), so CI's first run is the cross-host proof; if it differs, commit the container's build |
+| **Open the bytes that were hashed** (0-5) | the web wallet opens the official page from the checked bytes (a `blob:` URL), never the address — the core decides (`integrity::FROM_BYTES`, `CheckedPage::opens_from_bytes`: the opener's origin must be able to use the page's RP ID); the page `674b7333` reads its host from its origin and its query from the fragment; the wallet's CSP admits exactly that page's script hash, read from the core and the committed bytes | `e2e/page-from-bytes.e2e.ts` (a message signed end to end from a blob; a host that swaps the page after the check changes nothing); `sign-challenge.test.ts`; core `signing_venue_102` |
+| **Where it cannot** | extensions (no getvela.app passkeys, no inline script), a self-hosted page's own domain, the natives' system browser: the **Service Worker pin** (FR-008) — `b/<h>/` is served only as bytes hashing to `h`; opening needs a check **≤10 min** old (was 24 h; the line still stands a day); check requests carry a navigation's `Sec-Fetch-*` and `Upgrade-Insecure-Requests` | `samples/sw-pin-test.mjs` 10/10; core + iOS + Android tests |
+| **Natives: no in-app WebView** | considered and not built: a WebView cannot use a custom domain's passkeys (no association), adds nothing for getvela.app keys the app can call natively, and puts the page under the app's control — the opposite of what the page-scoped RP needs | `hardening.md` R22-3 |
+| **A test build names its page** (R21 finding) | `integrity::LAUNCH` was a constant and the deployed index lists only what is deployed, so a phone could not open a page built here (and R21 refuses what `6d7172b4` signs). `launch::set_test_launch(version, test_build)`: refused in a release build and for any version not in `BUILD_ALLOWED`; `target()` then picks it whatever the index lists, still checked. iOS `VELA_PAGE_LAUNCH` (Dev/), Android `--es vela.pageLaunch` (debug source set), desktop `dev_env::var!` | core `test_launch_input.rs`; Android `SignerPageChecksTest`; iOS Release passes `check-ios-store-binary.sh` (0 × `VELA_PAGE_LAUNCH`), Android release passes `check-release-apk.sh`. **Not done:** a page-signed send and multisig approval on an emulator or simulator, which needs a phone harness that does not exist yet (`hardening.md`) |
+| **Honest guarantees** | per account type: getvela.app — display assurance, not authority (the wallet, extension and apps can call the passkey directly); own domain — display assurance and authority | `hardening.md` table |
+| **Page-scoped RP ID** | recorded as the real fix, with its trade-offs, for the owner — not built | `hardening.md` |
+
+**Every surface.** Core: `integrity::FROM_BYTES`, `launch::{opens_from_bytes,
+bytes_launch, MAX_CHECK_AGE_MS = 10 min, LINE_MAX_AGE_MS, CHECK_HEADERS}`.
+Page: `674b7333` (`lib/place.js`, `sw.js`, `worker-src 'self'`). Web: `page-handoff`
+(bytes kept, object URL at the tap), `vite.config.ts` CSP. Chrome/Safari
+extensions: unchanged path (address + pin). iOS, Android, desktop: the core's
+shorter window and headers through their existing re-check at the tap; tests
+updated.
+
+**Go-live (the owner)** — `hardening.md` "Round 22 go-live": deploy
+`trusted-signer/dist/` with `sw.js`; add the three new checks to branch
+protection; switch on Dependabot alerts and security updates; move the gpui pin
+past the GPL relicence before a desktop release; bump getvela.app's Worker
+kit/svelte/devalue; decide on the page-scoped RP ID.
+
+**Left open:** the pin's first visit is trust on first use and its own updates
+come from the host; WebAuthn from a blob verified on Chromium only (WebKit and
+Firefox expose the API and the origin, but have no virtual authenticator to
+drive); the rest of the web wallet's JavaScript (Vite on Cloudflare) is not
+compared byte for byte; native release builds are attested, not reproducible;
+`publish = false` / `license` in our manifests and `wildcards = "deny"` are R23;
+the phones' page path end to end (a page-signed send and a multisig approval
+on an emulator or simulator) still needs its harness — the launch input that
+makes it possible is in.

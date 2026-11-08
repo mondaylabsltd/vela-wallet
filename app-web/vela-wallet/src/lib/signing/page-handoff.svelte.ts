@@ -14,7 +14,15 @@
  *    opened, and the person reads why (the core's integrity line);
  * 2. the hand-off card: Open opens the checked version in a window of its own
  *    (a tap — a browser opens a window only for one), and once the page says
- *    it is ready, hands it the core's request over `postMessage`;
+ *    it is ready, hands it the core's request over `postMessage`. §38
+ *    (review 0-5): where the core says this wallet's origin may
+ *    (`fromBytes`, `CheckedPage::opens_from_bytes` — the official page, from
+ *    `wallet.getvela.app`), the window opens THE BYTES THE CHECK HASHED, as a
+ *    `blob:` URL, never the address: a host that answered the check with one
+ *    page cannot answer the window with another, because the window never
+ *    asks it. Elsewhere (an extension, a self-hosted page's own domain) it
+ *    opens the checked address, and only the page's Service Worker pin stands
+ *    between the check and the open;
  * 3. the answer is accepted only as the core accepts it (the caller's
  *    `accept`: `trustedSignerSignatureAccept` / `trustedSignerApprovalAccept`)
  *    — over exactly the bytes the core computed, by the account's key, checked
@@ -151,6 +159,19 @@ export interface PageHandoffDeps {
 	lang: () => string;
 	listen: (handler: (event: MessageEvent) => void) => () => void;
 	sha256: (bytes: ArrayBuffer) => Promise<string>;
+	/**
+	 * This wallet's own origin, as the browser reports it — the opener the
+	 * core asks about (`fromBytes`). Absent: the page always opens at its
+	 * address.
+	 */
+	origin?: () => string;
+	/** An object URL for the checked bytes, as an HTML document (§38). */
+	objectUrl?: (bytes: ArrayBuffer) => string;
+	/**
+	 * Let an object URL go when the hand-off ends. Kept until then, so a
+	 * reload of the window runs the same checked bytes — never the address.
+	 */
+	revokeUrl?: (url: string) => void;
 	/** Timers, so a test can run the keep-alive and the ready wait on its own clock. */
 	setInterval?: (fn: () => void, ms: number) => unknown;
 	clearInterval?: (id: unknown) => void;
@@ -174,7 +195,10 @@ const windowDeps: PageHandoffDeps = {
 		window.addEventListener('message', handler);
 		return () => window.removeEventListener('message', handler);
 	},
-	sha256: sha256Hex
+	sha256: sha256Hex,
+	origin: () => window.location.origin,
+	objectUrl: (bytes) => URL.createObjectURL(new Blob([bytes], { type: 'text/html' })),
+	revokeUrl: (url) => URL.revokeObjectURL(url)
 };
 
 /**
@@ -203,23 +227,40 @@ function hostOf(url: string): string {
 	}
 }
 
+/** A checked page, as the hand-off opens it. */
+export interface CheckedPage {
+	line: IntegrityLine;
+	/** The checked address, handed the request by `postMessage` — `null`: not admitted. */
+	launch: string | null;
+	/**
+	 * §38: the bytes the check hashed and the fragment to open them with, when
+	 * the core says this wallet opens them rather than the address.
+	 */
+	bytes: { body: ArrayBuffer; fragment: string } | null;
+}
+
 /**
  * R6, the web's way: the deployment's index, the version the core picks, the
  * bytes that version serves — fetched as a browser navigates — and the core's
  * ruling on them. The page must answer the wallet's origin's request
  * (`Access-Control-Allow-Origin`); one that does not is a check that could
  * not complete, and nothing opens.
+ *
+ * The bytes are kept (§38): when the core rules that this wallet's origin
+ * opens this version from its bytes (`fromBytes`), they are what the window
+ * opens.
  */
 export async function checkPage(
 	base: string,
 	deps: PageHandoffDeps = browserDeps
-): Promise<{ line: IntegrityLine; launch: string | null }> {
+): Promise<CheckedPage> {
 	const root = base.endsWith('/') ? base : `${base}/`;
 	const index = await deps
 		.fetch(`${root}index.json`, { cache: 'no-store', credentials: 'omit' })
 		.then((r) => (r.ok ? r.text() : null))
 		.catch(() => null);
 	let observed: string | null = null;
+	let body: ArrayBuffer | null = null;
 	try {
 		const target = trustedSignerPageTarget(root, index);
 		const response = await deps.fetch(target.url, {
@@ -227,11 +268,24 @@ export async function checkPage(
 			cache: 'no-store',
 			credentials: 'omit'
 		});
-		if (response.ok) observed = await deps.sha256(await response.arrayBuffer());
+		if (response.ok) {
+			body = await response.arrayBuffer();
+			observed = await deps.sha256(body);
+		}
 	} catch {
 		observed = null;
+		body = null;
 	}
-	return trustedSignerPageAdmit(root, index, observed, deps.now(), deps.lang());
+	const opener = deps.origin && deps.objectUrl ? deps.origin() : null;
+	const ruling = trustedSignerPageAdmit(root, index, observed, deps.now(), deps.lang(), [], opener);
+	return {
+		line: ruling.line,
+		launch: ruling.launch,
+		bytes:
+			ruling.launch !== null && ruling.fromBytes !== null && body !== null
+				? { body, fragment: ruling.fromBytes }
+				: null
+	};
 }
 
 export interface HandoffInput<T> {
@@ -291,6 +345,8 @@ export async function handOff<T>(
 	let alive: unknown = null;
 	let readyAt: number | null = null;
 	let finished = false;
+	// The object URL of a page opened from its bytes, let go when the hand-off ends.
+	let revokeOnFinish = () => {};
 
 	const closeWindow = () => {
 		try {
@@ -302,6 +358,7 @@ export async function handOff<T>(
 	const finish = (error: unknown, value?: { ok: T }) => {
 		if (finished) return;
 		finished = true;
+		revokeOnFinish();
 		stopListening?.();
 		if (watch !== null) stop(watch);
 		if (alive !== null) stop(alive);
@@ -364,7 +421,23 @@ export async function handOff<T>(
 		return done;
 	}
 	const launch = checked.launch;
-	const pageOrigin = originOf(launch);
+	// §38: opened from the bytes the check hashed, the page is a blob document
+	// of THIS origin, and its messages come from here; opened at its address,
+	// from the page's.
+	const fromBytes = checked.bytes;
+	const pageOrigin = fromBytes && deps.origin ? deps.origin() : originOf(launch);
+	let objectUrl: string | null = null;
+	const revoke = () => {
+		if (objectUrl === null) return;
+		const url = objectUrl;
+		objectUrl = null;
+		try {
+			deps.revokeUrl?.(url);
+		} catch {
+			/* gone already */
+		}
+	};
+	revokeOnFinish = revoke;
 	const id = `vs-${deps.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 	let handed = false;
 
@@ -423,9 +496,20 @@ export async function handOff<T>(
 			win.focus();
 			return;
 		}
-		// Inside the tap: a browser opens a window only for one.
-		win = deps.open(launch);
-		if (!win) return;
+		// Inside the tap: a browser opens a window only for one. The bytes the
+		// check hashed, when the core says so — a fresh object URL each time,
+		// from the same bytes; else the checked address.
+		revoke();
+		if (fromBytes && deps.objectUrl) {
+			objectUrl = deps.objectUrl(fromBytes.body);
+			win = deps.open(objectUrl + fromBytes.fragment);
+		} else {
+			win = deps.open(launch);
+		}
+		if (!win) {
+			revoke();
+			return;
+		}
 		handed = false;
 		stopListening?.();
 		stopListening = deps.listen(onMessage);

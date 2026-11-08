@@ -1,0 +1,22 @@
+{
+  "note": "What the vendored PeerConnect client is built from (§38). Checked by scripts/check-peerconnect-vendor.mjs: the hashes always (CI app job), a rebuild from this commit byte for byte (CI supply-chain job).",
+  "repository": "https://github.com/atshelchin/peerconnect.git",
+  "commit": "977ec1e2175e32d5827c8646d1a9961cab3f0607",
+  "commitDate": "2026-10-28",
+  "toolchain": "1.97.1",
+  "wasmBindgen": "0.2.129",
+  "wasmOpt": "none (PeerConnect js/scripts/build.sh runs it only when it finds one)",
+  "build": "cargo build --locked -p peerconnect-wasm --target wasm32-unknown-unknown --profile wasm; wasm-bindgen --target web --weak-refs; js/scripts/inline.mjs",
+  "localPatch": {
+    "file": "vela-local.patch",
+    "what": "Connection.reconnectNow() (r4C-15), on js/index.js and js/index.d.ts",
+    "sha256": "2d004a7dac00d451afa08101b3e588a523ad0fe932d90c3d944ec4cdb7ecc640"
+  },
+  "files": {
+    "index.js": "1814d6bc73959d3bb9e8158b1db363f27609810995222a0339ef8302eed16f62",
+    "index.d.ts": "16448fa1664e5b43041d18fa5c7fae18115695030b9e143d5736f3c49e979e6d",
+    "dist/peerconnect.js": "e6b40b0bf25bb37ff26df58cb42bd302b7e7fb36b4665f35640456e878727bf1",
+    "dist/peerconnect.d.ts": "5ddc6f70906a8be4a22833b354ebeb79069111321e0da274cae7c9d96d220e89",
+    "dist/module.js": "f62ea7723e868bd0810377c700d80fd5bf61ce7cc49499d66250aa3af944bb93"
+  }
+}

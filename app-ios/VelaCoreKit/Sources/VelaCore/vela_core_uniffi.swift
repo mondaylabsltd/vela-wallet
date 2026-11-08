@@ -13493,7 +13493,8 @@ public func FfiConverterTypeSignerPageCheck_lower(_ value: SignerPageCheck) -> R
  */
 public struct SignerRefreshSchedule: Equatable, Hashable {
     /**
-     * How long a check vouches for a page (24 h).
+     * How long a check vouches for OPENING a page (10 min, §38; its line
+     * stands for a day).
      */
     public var maxAgeMs: UInt64
     /**
@@ -13513,7 +13514,8 @@ public struct SignerRefreshSchedule: Equatable, Hashable {
     // declare one manually.
     public init(
         /**
-         * How long a check vouches for a page (24 h).
+         * How long a check vouches for OPENING a page (10 min, §38; its line
+         * stands for a day).
          */maxAgeMs: UInt64, 
         /**
          * A check older than this is refreshed in the background (12 h).
@@ -23182,6 +23184,24 @@ public func signerPageRefreshSchedule() -> SignerRefreshSchedule  {
 })
 }
 /**
+ * §38: a TEST build's launch input `VELA_PAGE_LAUNCH` — the page version
+ * `SignerPageTarget.choose` picks, whatever the index lists
+ * (`launch::set_test_launch`). Called only from the shells' debug-only
+ * launch-input code (iOS `Dev/DevLaunchInputs.swift`, Android's debug
+ * `ServiceLaunchInputs`), which release builds do not contain. `None`: set;
+ * otherwise why it was refused (not a test build, or not a version this
+ * build accepts) — and nothing was set. An empty `version` clears it.
+ */
+public func signerPageSetTestLaunch(version: String?, testBuild: Bool) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_signer_page_set_test_launch(
+        FfiConverterOptionString.lower(version),
+        FfiConverterBool.lower(testBuild),uniffiCallStatus
+    )
+})
+}
+/**
  * Where a known version lives, for any deployment of `dist/`.
  */
 public func signerPageUrl(base: String, hash: String) -> String?  {
@@ -24311,6 +24331,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_signer_page_refresh_schedule() != 27891) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_signer_page_set_test_launch() != 59245) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_signer_page_url() != 47674) {

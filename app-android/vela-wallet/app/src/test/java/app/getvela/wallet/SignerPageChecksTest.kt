@@ -64,7 +64,7 @@ class SignerPageChecksTest {
     }
 
     @Test
-    fun `a fresh check is reused, and one past a day is run again before anything opens`() {
+    fun `a fresh check is reused, and one past ten minutes is run again before anything opens`() {
         var now = 1_760_000_000_000L
         val checks = OfficialDist.checks(clock = { now })
         runBlocking { checks.ensure(official) }
@@ -72,11 +72,19 @@ class SignerPageChecksTest {
         runBlocking { checks.ensure(official) }
         assertEquals("a fresh check is not fetched again", first, OfficialDist.fetches.get())
 
+        // §38: ten minutes vouch for opening; the line stands for a day.
+        now += 11 * 60 * 1000L
+        assertEquals("the line stands", SignerIntegrityState.MATCHES, checks.line(official).state)
+        assertNull("…but opens nothing until it is run again", checks.admitted(official))
+        assertNotNull(runBlocking { checks.ensure(official) })
+        val second = OfficialDist.fetches.get()
+        assertTrue("the stale page was fetched again", second > first)
+
         now += 24 * 60 * 60 * 1000L + 1
-        assertEquals("a stale check vouches for nothing", SignerIntegrityState.CHECKING, checks.line(official).state)
+        assertEquals("a day-old check vouches for nothing", SignerIntegrityState.CHECKING, checks.line(official).state)
         assertNull("…and admits nothing until it is run again", checks.admitted(official))
         assertNotNull(runBlocking { checks.ensure(official) })
-        assertTrue("the stale page was fetched again", OfficialDist.fetches.get() > first)
+        assertTrue("the stale page was fetched again", OfficialDist.fetches.get() > second)
         assertTrue(checks.line(official).opens)
     }
 
@@ -253,7 +261,8 @@ class SignerPageChecksTest {
         runBlocking { checks.refresh(listOf(official)) }
         assertEquals("kept", SignerIntegrityState.MATCHES, checks.line(official).state)
         assertEquals(first, checks.line(official).checkedAtMs)
-        assertNotNull("still opens", checks.admitted(official))
+        // §38: its line stands; opening on it needs a check minutes old.
+        assertNull("a thirteen-hour-old check opens nothing", checks.admitted(official))
         assertFalse("an attempt that could not complete rests", checks.refreshDue(official))
 
         now += uniffi.vela_core_uniffi.signerPageRefreshSchedule().retryAfterMs.toLong() + 1
@@ -289,8 +298,10 @@ class SignerPageChecksTest {
         now += 13 * 60 * 60 * 1000L
         val refresh = scope.launch { checks.check(official) }
         runBlocking { withTimeout(5_000L) { while (checks.checks.value[SignerPageChecks.key(official)]?.running != true) kotlinx.coroutines.delay(5) } }
-        assertEquals("a fresh verdict holds", SignerIntegrityState.MATCHES, checks.line(official).state)
-        assertNotNull("and still opens", checks.admitted(official))
+        assertEquals("a standing verdict holds", SignerIntegrityState.MATCHES, checks.line(official).state)
+        // §38: Open waits for the check that is running.
+        assertFalse(checks.line(official).opens)
+        assertNull("and opens nothing on the old one", checks.admitted(official))
 
         now += 12 * 60 * 60 * 1000L
         assertEquals("a stale one reads checking", SignerIntegrityState.CHECKING, checks.line(official).state)
@@ -376,10 +387,38 @@ class SignerPageChecksTest {
     }
 
     @Test
+    fun `a debug build's page launch input names a version the core accepts, and only a debug build`() {
+        // §38 (`--es vela.pageLaunch`, ServiceLaunchInputs): the core's rule.
+        // Process-wide, so set and cleared within this one test (the JVM runs
+        // this module's tests one at a time).
+        val newest = "674b73334dda36410fd5cecdaddd462a8193398328743ba2263d419d6be53b56"
+        try {
+            assertNotNull("a release build is refused", uniffi.vela_core_uniffi.signerPageSetTestLaunch(newest, false))
+            assertNotNull("not a published version", uniffi.vela_core_uniffi.signerPageSetTestLaunch("ab".repeat(32), true))
+            assertNull(uniffi.vela_core_uniffi.signerPageSetTestLaunch(newest, true))
+            // Whatever the deployed index lists, the debug build opens that version — still checked.
+            val chosen = uniffi.vela_core_uniffi.SignerPageTarget.choose(
+                "https://sign.getvela.app/",
+                listOf("6d7172b4ba59735e09eaa8ea6c3d3c020ba7cd26399e6ab85be3619a23424d0a"),
+                emptyList(),
+                emptyList(),
+            )
+            assertEquals(newest, chosen.version())
+        } finally {
+            uniffi.vela_core_uniffi.signerPageSetTestLaunch(null, true)
+        }
+    }
+
+    @Test
     fun `the check asks for the page as a browser navigates to it`() {
         val headers = uniffi.vela_core_uniffi.signerPageCheckHeaders()
-        assertEquals(listOf("Accept"), headers.map { it.name })
-        assertTrue(headers.single().value.startsWith("text/html"))
+        // §38: a top-level navigation's headers, not `Accept` alone.
+        assertEquals(
+            listOf("Accept", "Upgrade-Insecure-Requests", "Sec-Fetch-Dest", "Sec-Fetch-Mode", "Sec-Fetch-Site", "Sec-Fetch-User"),
+            headers.map { it.name },
+        )
+        assertTrue(headers.first().value.startsWith("text/html"))
+        assertEquals("navigate", headers.single { it.name == "Sec-Fetch-Mode" }.value)
     }
 
     @Test
