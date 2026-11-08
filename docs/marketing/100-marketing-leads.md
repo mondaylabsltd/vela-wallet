@@ -117,7 +117,7 @@
 
 **4. 拒绝盲签：每笔交易解析成人类可读意图（ERC-7730）。** 未知调用被**标记**而非隐藏（whitepaper、`docs/clear-signing-design.md`）。→ "盲签是钱包被盗的最大来源之一"——把行业痛点变成你的卖点，对安全敏感用户极具说服力。
 
-**5. 没有任何东西可被钓鱼。** passkey 不是"能输入的秘密"，钓鱼网站无法让你"输入 passkey"（`docs/passkeys.md`）。→ "Nothing to phish." 一句话讲清为什么比助记词钱包更安全，适合做对比图/短视频。
+**5. 钓鱼网站骗不走。** passkey 不是"能输入的秘密"，钓鱼网站无法让你"输入 passkey"（`docs/passkeys.md`）。注意边界：它防的是网站钓鱼，不防你自己运行的软件（有 getvela.app 权限的扩展、直接调用安全密钥的程序）。→ 用"A fake website can't phish it"，不要说 "Nothing to phish"。
 
 **6. 端到端开源 + 可自托管。** App 与全部三个后端服务（chain data、passkey index、bundler）MIT 开源，设置内可换自建端点（Settings → Advanced → Service Endpoints）。→ "Verify, don't trust." 面向硬核用户与技术 KOL 的信誉背书。
 
