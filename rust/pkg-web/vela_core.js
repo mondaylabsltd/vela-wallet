@@ -6789,6 +6789,27 @@ export function registryResolveUnitStep(unit_id, source, answers_json) {
 }
 
 /**
+ * `service_defaults::relying_party_id` over JSON (the native rule, for the
+ * shared vector's replay through the shipped wasm).
+ * @param {string} ask_json
+ * @returns {string}
+ */
+export function relyingPartyJson(ask_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(ask_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.relyingPartyJson(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * **The address a typed name points to** (`alice.eth`, a member to add):
  * `vela_core::app::name_verify::resolve_step` over JSON — the same forward
  * walk as [`verified_name_step`], handing back the address (EIP-55) for the
@@ -8317,6 +8338,24 @@ export function userOpEventTopic() {
 }
 
 /**
+ * What a dApp is told when its operation expired before it was submitted
+ * (`RelayRejection::Expired`, §35).
+ * @returns {string}
+ */
+export function userOpExpiredDetail() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.userOpExpiredDetail();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
  * The gas limits a submit signs, from the relay's estimate — the core's one
  * rule (`vela_core::user_op::in_band_gas_limits`, or Tempo's padding on a
  * Tempo chain; `fee_policy::user_op_gas_floors` chooses), raised to the inner
@@ -8527,6 +8566,21 @@ export function userOpSubmitStep(reply_json, attempt, maybe_delivered, local_has
 }
 
 /**
+ * The window an operation stamped now is signed with (§35), `[validAfter,
+ * validUntil]` in Unix seconds — `user_op::validity_window`, the one rule:
+ * `validAfter` 0, `validUntil` `now_ms` (the shell's clock) + 30 minutes.
+ * The web stamps its final operation with it just before the hash.
+ * @param {number} now_ms
+ * @returns {Float64Array}
+ */
+export function userOpValidityWindow(now_ms) {
+    const ret = wasm.userOpValidityWindow(now_ms);
+    var v1 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+    return v1;
+}
+
+/**
  * How long the page waits for `ClearToPost` after `OpSigned` before it gives
  * up without POSTing (spec 082 RJ1), in ms.
  * @returns {number}
@@ -8669,6 +8723,29 @@ export function walletKeysStep(address, device_keys_json, answers_json, sign_in_
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
         wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
+}
+
+/**
+ * §35: the relying party the web wallet uses on `host`
+ * (`service_defaults::web_relying_party_id`) — the rule `passkey.ts`
+ * follows, replayed against the shared vector.
+ * @param {string} host
+ * @param {boolean} packaged_extension
+ * @returns {string}
+ */
+export function webRelyingPartyId(host, packaged_extension) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(host, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webRelyingPartyId(ptr0, len0, packaged_extension);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
 
@@ -9091,6 +9168,11 @@ function debugString(val) {
     return className;
 }
 
+function getArrayF64FromWasm0(ptr, len) {
+    ptr = ptr >>> 0;
+    return getFloat64ArrayMemory0().subarray(ptr / 8, ptr / 8 + len);
+}
+
 function getArrayJsValueFromWasm0(ptr, len) {
     ptr = ptr >>> 0;
     const mem = getDataViewMemory0();
@@ -9118,6 +9200,14 @@ function getDataViewMemory0() {
         cachedDataViewMemory0 = new DataView(wasm.memory.buffer);
     }
     return cachedDataViewMemory0;
+}
+
+let cachedFloat64ArrayMemory0 = null;
+function getFloat64ArrayMemory0() {
+    if (cachedFloat64ArrayMemory0 === null || cachedFloat64ArrayMemory0.byteLength === 0) {
+        cachedFloat64ArrayMemory0 = new Float64Array(wasm.memory.buffer);
+    }
+    return cachedFloat64ArrayMemory0;
 }
 
 function getStringFromWasm0(ptr, len) {
@@ -9255,6 +9345,7 @@ function __wbg_finalize_init(instance, module) {
     wasm = instance.exports;
     wasmModule = module;
     cachedDataViewMemory0 = null;
+    cachedFloat64ArrayMemory0 = null;
     cachedUint32ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
     wasm.__wbindgen_start();
