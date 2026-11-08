@@ -327,3 +327,262 @@ the domain. The release-binary checks assert it:
    add `webcredentials:<domain>` to the test builds' entitlements.
 5. **vela-relay** (G5): name `expired` as the `rejection_reason` when the EntryPoint answers
    AA22, so the tracker says "expired" rather than "refused".
+
+---
+
+# Round 22: signing truth
+
+Round 22 makes the defences true. The 2026-11-07 review found that a "plain" signing verdict
+(no "… anyway") could rest on one source an adversary controls, that several checks failed
+open, that an unauthenticated descriptor could grade a call green, and that a site's
+transaction was hashed without being checked against what the sheet showed. Items 1-2
+(with `KNOWN-BUGS` SEC-PARENT-3), 1-3, 1-4 and 1-5 are closed here. `docs/multisig-machines.md`
+§36 is the summary. The parallel lanes are `r22-identity` (key index, ERC-6492/SIWE,
+approvals, mailbox) and `r22-supply` (dependency gates, signing-page integrity).
+
+The rule, in one sentence: **a plain verdict needs two independent sources to agree — two
+distinct providers, or the person's own node and one default; one source answering, or two
+that differ, is a check Vela could not read.**
+
+## 7. One RPC never decides what the signer believes (review 1-2, SEC-PARENT-3)
+
+**Before.** Simulation (`eth_simulateV1`), the state-diff guard (`debug_traceCall`, the
+SafeStateProbe), `eth_getCode` and a multisig's authority reads (owners, threshold, modules,
+guard, nonce, an unlisted Safe's `isOwner`) were each asked of the RPC pool, and the first
+good answer won. A lying or compromised node could answer "No asset changes" for a drain, a
+clean diff for a takeover, or "not an owner" to clear a parent-Safe request.
+
+**Decision.**
+- **Two independent sources** (`app::corroborate`). A read a verdict stands on is a
+  *corroborated read* (`rpc_pool::Event::CallRequested::corroborate`). Once one endpoint
+  answers, the pool asks a second one **from another provider** the same question, and
+  concludes `Respond { url, witness_url }`. The shell hands both bodies to the core in one
+  envelope (`{result|error|unreachable, witness, ownNode}`, built only by
+  `corroborated_envelope`). The core compares what the answers MEAN, never their bytes,
+  because two honest clients differ in gas, block hashes and which accounts a prestate diff
+  lists:
+  - simulation: the same set of balances moving, the same direction, figures within 2 %
+    (`SIM_AGREE_BPS`). Two nodes a block apart price a busy pool differently. Within the
+    bound the sheet shows the **worse** of the two figures (the larger outflow, the smaller
+    inflow), so a node that shades a figure gains nothing;
+  - state diff and probe: the same `StateVerdict`. An undeclared change or a revert that
+    **either** node reads stands alone, so a lying first node cannot hide the honest
+    node's refusal;
+  - code, storage, `eth_call` (authority reads, `isOwner`): the same answer exactly
+    (`same_answer`; hex case-insensitive, an error by code and `data`).
+- **Who counts as independent** (`provider_of`). A host's registrable domain: the two
+  Alchemy hosts are one provider, `rpc.ankr.com` is `ankr.com`. Shared hosting suffixes
+  (`workers.dev`, `vercel.app`, …) count one more label, and so do two-letter country
+  suffixes (`co.uk`). A loopback or IP address counts with its port, because a developer's
+  nodes are all `127.0.0.1`. This is a URL heuristic. It cannot see that two brands resell
+  the same backend, and it is no stronger than the pool's own list. Vectors are in
+  `signing-truth.json` `provider`.
+- **Disagreement or one source is unread.** Simulation → `SimOutcome::Unconfirmed
+  { disagreed }`: a caution, "Only one node answered…" / "Two independent nodes gave
+  different answers…", Check again, and the confirm is "… anyway". State diff →
+  `StateVerdict::Unavailable { reason: "uncorroborated" | "disagreed" }`. Authority reads
+  used by a guard → "couldn't check": the multisig gate is `SigningUnchecked`, and the
+  parent-Safe guard refuses `Unchecked`.
+- **Where it applies.** The signing sheet's own simulation, every read of the multisig
+  review (`gather_review` runs on a corroborating `Io`), the gate before every multisig
+  signature (`authorize_signing` and the outside page's `gate_now`: `judge`, members,
+  nonce), and the §31 `isOwner` read on the sign sheet and in a multisig's dApp flow.
+- **chainId on every source.** Before a corroborated read is answered by an endpoint, that
+  endpoint must have reported this chain's id (`ProbeChainId`, once per endpoint until the
+  pool reloads). One that cannot say is no source. One that names another chain is
+  excluded from **every** read of this chain from then on, ordinary reads included.
+  Ordinary display reads (balances, history) are not held behind a probe. They never
+  decide a verdict, and holding them would double every cold read.
+- **"Only use my node".** With it on, the pool holds the person's node alone. A
+  corroborated read is then trusted alone (`own_node`), and the UI says so: "Checked by
+  your own node only" under the balance changes (`simOwnNode`). The network setting says
+  what it means (`onlyMineTrust`). When a check is unconfirmed, the sheet offers it
+  (`ownNodeHint`, which opens the network's RPC settings).
+- **Bounded load.** At most two extra POSTs (`WITNESS_MAX_ASKS`) and one chain-id probe per
+  new endpoint. A corroborated read is never hedged: it is left out of `pending_urls`,
+  because an early answer would skip the witness. Answers already fetched are reused: the
+  witness is asked only after the first node answered, and a review read again re-asks
+  only its silent checks (r16-3).
+
+**Proof.**
+- Vectors `tests/vectors/rules/signing-truth.json`: 13 simulation envelopes (the lie in both
+  orders, block drift, a witness that cannot simulate or says it fails, own node, revert,
+  unreachable), 8 `isOwner` readings, 12 provider URLs. They are replayed by the core and
+  by every shell.
+- Core `tests/r22_signing_truth.rs`:
+  - the pool's corroborated flow, chain checks, a wrong-chain node never asked again, a
+    single provider, own-only and own+default;
+  - on the captured fork vectors: one node's word is unread, two honest nodes are plain, a
+    lying first or second node is never plain, and a liar cannot hide the honest node's
+    Bybit refusal.
+- **The lying RPC, on the fork** (`tests/fork_proxy`, a local proxy that rewrites
+  `eth_simulateV1` logs to none and a prestate diff to "only the nonce moves", and refuses
+  the probe):
+  - `tests/signing_truth_fork.rs`: a real WXDAI drain, through the real pool machine and
+    real HTTP. Two honest nodes see the outflow, believe it and the confirm is plain. The
+    liar alone gives `unconfirmed`, never "No asset changes". The liar beside an honest
+    node, first or second, gives `simDisagreed` and "… anyway", held.
+  - `tests/multisig_fork.rs` `a_lying_node_never_gives_a_member_change_a_plain_review`: a
+    real 2-of-3's member change. Honest + honest is `declared` and plain. With the liar
+    first or second the review is refused: the rewritten diff reads as an owners change
+    the transaction does not declare, and that refusal stands alone. A lie can only make
+    Vela refuse. Run on a fresh harness (ports 9701–9706), 3/3 with the other two fork
+    tests (create → propose → approve ×2 → execute; the parent-Safe takeover refused).
+    `signing_truth_fork.rs` 1/1 on the same harness.
+
+## 8. Every check Vela could not read is "… anyway" (review 1-3)
+
+**Before.**
+- A simulated revert was drawn as a danger, but the confirm stayed a plain press.
+- In a multisig review, one of the two safety checks unread still signed plainly.
+- A batch leg nobody could read was a caution with a plain Confirm.
+- "… anyway" was only a red label: the `holdToConfirm` string existed but was unused.
+- Nothing let a person refuse blind signing altogether.
+
+**Decision (one rule, `sign_confirm::posture`, and the multisig door).**
+- **"… anyway"** whenever anything Vela checks could not be read:
+  - a call or message nobody reads (the blind surfaces);
+  - a `wallet_sendCalls` batch with one leg nobody reads (`ClearSigningView::sign_anyway`);
+  - for a transaction, a simulation that did not come back (or waited out), that a node did
+    not offer, that nobody independent confirmed, or that **says it fails**. A revert is
+    "… anyway" and a danger.
+  - In the multisig review, `sign.anyway` whenever the state diff OR what moves is unread
+    (`Concern::StateUnread | Unsimulated`). Either one alone is still a caution in tone
+    (the D1 danger line stays for both unread).
+- **Hold to confirm** for every "… anyway" and every danger: `ConfirmState.hold_ms` /
+  `SignDoor.hold_ms` = `HOLD_TO_CONFIRM_MS` = **1.5 s**, with a progress fill and "Hold to
+  confirm".
+  - *Why 1.5 s.* A tap, a double tap or a press made while the sheet is still arriving
+    cannot sign. The platforms' long-press threshold (≈0.5 s) is deliberately not enough.
+    Past 2 s a hold reads as broken. Hold-to-confirm controls in wallets and in the
+    platforms' own destructive confirmations sit at 1–2 s.
+  - *Accessible equivalent* (WCAG 2.1 SC 2.5.1, 2.5.7: a held gesture is never the only
+    way). With assistive technology in use (VoiceOver, Switch Control, TalkBack, a screen
+    reader, the keyboard), the first activation arms the confirm and announces "Press
+    again to confirm" (`confirmAgain`). A second within `CONFIRM_AGAIN_WINDOW_MS` (5 s)
+    confirms, and past it the confirm disarms. One component per platform serves the sheet,
+    the hand-off card's Open and every multisig sign button.
+- **"Refuse blind signing"** (`prefs::keys::REFUSE_BLIND_SIGNING`, Settings → Security).
+  With it on, every "… anyway" is refused: `ConfirmBlock::BlindRefused`, and
+  `home.multisig.review.blindRefused` on the door, each naming where the switch is.
+  - **Default: off.** Ledger refuses blind signing by default, but on a device that
+    cannot show why. Here every "… anyway" is already held, danger-styled and says its
+    reason.
+  - Since this round, "… anyway" also covers "only one node answered". A refusing default
+    would refuse ordinary transactions on every network whose pool holds a single
+    provider, and on every network without `eth_simulateV1`. That trains people to turn
+    the protection off (warning fatigue: Akhawe & Felt, USENIX Security 2013).
+  - For the audience that wants Ledger's posture — core devs, security researchers — it is
+    one switch, named on every refusal and kept per device.
+
+**Proof.** In `r22_signing_truth.rs`:
+- red on the old code first (`red-1`): the batch leg, one unread check of two;
+- the posture for every simulation kind, blind and eth_sign held, refuse-blind refusing;
+- the door's hold and refusal through the link rule shells call.
+
+`review-state.json` gains `hold_ms` on every door case and three `refuseBlind` cases. Its
+two "one check unread: plain" cases now say "… anyway".
+
+## 9. Only the app's own words grade a call green (review 1-4)
+
+**Before.** Risk came from a reading's intent words, so a Fetched (unauthenticated)
+ERC-7730 descriptor saying "claim" or "deposit" graded **Safe**. A compromised descriptor
+service could paint a drain green.
+
+**Decision.** `project_result` floors every reading whose provenance is not verified
+(`ClearProvenance::is_verified`: BuiltIn, PinnedMatch) at **Normal**. This covers Fetched,
+SelectorDb, Standard and None. Only a description that changing would mean changing the app
+may be green. The floor applies on the finished result, so no builder can grant green by
+hand.
+
+**Proof.** `a_fetched_descriptor_saying_claim_is_never_graded_safe` (red on the old code:
+`Safe`). The built-in Lido and Vela-registry readings stay Safe.
+
+## 10. A site's request is signed as reviewed (review 1-5)
+
+**Before.** A wallet send was bound review → hash (`reviewed_safe_op_hash`, spec 104). A
+site's transaction, a `wallet_sendCalls` batch and a typed-data signature were hashed by
+every shell with the unchecked hash (desktop `executor/user_op.rs`, iOS `UserOpSpine.swift`,
+Android `UserOpSpine.kt`, the web's dApp path). That is the v0.9.5 bug class.
+
+**Decision.** At the confirm the core freezes what the sheet showed:
+`signed_review::DappReview`, from the FINAL params, carried on `SignAndSubmit.review`.
+- A transaction or batch is `Calls { chain, account, calls[], fee: { recipient } }`. The
+  shell may hash only an operation whose decoded calls are exactly these calls in order
+  (target, coin, calldata), then at most one in-band fee leg paid to the quoted recipient
+  (`dapp_safe_op_hash`). The fee amount stays the fee machine's (bounded by `fee_policy` and
+  the settlement-gas cap).
+- A signature is `Message { chain, account, digest }`. The shell wraps only the digest the
+  sheet read, for that account (`dapp_message_hash`).
+- Anything else is refused and nothing is signed. A missing review signs nothing.
+
+**Proof.**
+- `r22_signing_truth.rs` `attest`: a drifted calldata, value, chain, a fee leg to another
+  recipient, a dropped or swapped batch leg, another typed message and another account are
+  each refused. The reviewed ones hash.
+- Each shell has a test that a drifted operation prompts no passkey.
+
+## 11. An expired operation says it expired, on every path (Round 21 test, r21-1)
+
+**Before.** A plain Send refused with AA22 said "Not sent — It expired before it was
+submitted — nothing was sent." and offered Review again (§1). A multisig Execute refused
+the same way said something generic instead. The web said "That didn't go through: The
+network didn't take it, so nothing was sent. Try again."; iOS and Android said "Something
+went wrong, so nothing was sent. Try again." The relay's `SUBMIT REFUSED by simulation:
+AA22` reached the multisig machine as a `not_sent` / `unknown` detail. Someone whose clock
+is behind would see this every time, with nothing pointing at the cause.
+
+**Decision.**
+- **One kind**, `multisig_failure::FailureKind::Expired`, said in the Send's own words
+  (`componentsUi.signing.expired`). Try again signs anew with a fresh window. It covers a
+  multisig execute and the one-press approve-and-execute.
+- **The rule is the core's.** A shell's `{"kind":"expired"}` maps to it. So does the
+  relay's AA22 carried in a `not_sent` or `unknown` detail's words
+  (`user_op::is_expired_rejection` over `message` / `detail` / `reason`).
+- **The dApp paths too.** A site's transaction, `wallet_sendCalls` and the deploy that
+  rides an operation are read the same way: `SignSubmitOutcome::Failed` is expired when its
+  message is the core's sentence or the relay's own AA22.
+
+**Proof.** `multisig_failure` `an_expired_operation_is_said_as_expired`. Four new
+`review-state.json` `failure` cases, replayed by every shell's `review.failure` replay.
+
+## 12. A fee is never shown below its charge; Max sends what it shows (Round 21 test, r21-2)
+
+**Before.** The web cut fees and amounts to six places through floats, so the chain
+charged a few millionths more than the screen showed:
+
+| Shown | Charged |
+|---|---|
+| 0.192556 | 0.1925565 |
+| 0.102365 | 0.10236552 |
+| 0.018078 | 0.018078621 |
+| Max 0.116999 | 0.116999359 |
+
+**Decision (best practice: a charge is never under-stated, and what is signed is what is
+shown).**
+- **Fees round UP** at the shown places (`fee_policy::fee_figure`; wasm `feeFigure`,
+  UniFFI `fee_figure`). The row's budget is 6 places for a native fee and 4 for a token
+  fee. Under the last place a fee keeps two significant digits, also rounded up. The
+  figure is cut as text, never through a float. This is the rule `coin_amount_text`
+  already applied to a shortfall's `need`.
+- **Amounts are shown exactly.** A typed amount is the amount signed.
+- **Max is a figure the field can show exactly, and that exact value is sent**
+  (`send::max_shown_exact`). It is the sendable amount cut DOWN to the field's ladder: 6
+  places below 1, 4 from 1, 2 from 1000. The charge is never more than shown. The cost is
+  a remainder under the last shown place (< 0.000001 of the coin), which stays in the
+  account. A Max no longer empties an 18-decimal balance to the wei, and that is accepted
+  so the screen and the signature are one number.
+
+**Proof.** `a_fee_reads_up_never_below_the_charge` (the four Round 21 pairs) and
+`max_sends_exactly_what_it_shows`. `send-fee-cover.json`'s R20 Max now reads and sends
+0.005887. Invariant ⑨ now reads "never more than the balance less the fee, less than one
+shown place left".
+
+## Left open (Round 22)
+- Provider independence is a URL heuristic (above).
+- Ordinary display reads are not chain-id probed before use. A proven wrong-chain node is
+  excluded from them once any corroborated read or race has met it.
+- Recipient facts (is it a contract, first time) and the clear-signing `no_code` probe are
+  still one node's word. They only ADD a caution, and never make a verdict plain.
+- The signing page (trusted signer) runs offline. It draws "… anyway" as the app's word and
+  is unchanged this round. Its own hold is the `r22-supply` lane's call.

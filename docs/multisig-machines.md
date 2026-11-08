@@ -2546,3 +2546,39 @@ getvela.app in every build, and the key index's recorded RP for a test
 build's keys follows each shell's own reading (a core rule for it is open);
 the onchain `send-press` suite needs a harness of its own (it needs Parallel
 Three undeployed, which `multisig.onchain.ts` deploys).
+
+## 36. Round 22: signing truth
+
+The P1 code items of the 2026-11-07 core-dev security review that make the defences true:
+1-2 (with KNOWN-BUGS SEC-PARENT-3), 1-3, 1-4 and 1-5. They are decided by best practice
+under the core principle. **Every decision, with its reasons and proofs, is in
+`docs/security/hardening.md` §7–§10**; this is the summary. The parallel lanes are
+`r22-identity` and `r22-supply`.
+
+**The rule.** A plain verdict (no "… anyway") needs two independent sources to agree: two
+distinct pool providers, or the person's own node and one default. One source answering,
+or two that disagree, is a check Vela could not read.
+
+| Item | Decision (one core rule) | Proof |
+| --- | --- | --- |
+| **One RPC decides** (1-2, SEC-PARENT-3) | corroborated reads (`rpc_pool` `corroborate`, a witness from another provider, `WITNESS_MAX_ASKS` 2, never hedged); each source checks its chain id first, and a wrong-chain node is never asked again; the core compares meaning (`app::corroborate`, `sim_outcome::classify_envelope`, `multisig_review` `StateRead`), and a refusal from either node stands; simulation, the review's every read, the multisig gate's authority reads, §31 `isOwner`; "Only use my node" = trusted alone, and said (`simOwnNode`, `onlyMineTrust`, `ownNodeHint`) | vector `signing-truth.json` (13 sim + 8 owner + 12 provider cases, every shell); `r22_signing_truth.rs`; fork: `signing_truth_fork.rs` (a WXDAI drain behind a lying proxy) and `multisig_fork.rs` `a_lying_node_never_gives_a_member_change_a_plain_review` |
+| **Fail-open paths** (1-3) | `sign_confirm::posture`: any unread check — blind, a batch leg nobody reads, a simulation not back / not offered / unconfirmed / **reverting** — is "… anyway"; the multisig review is anyway on either check unread; danger and every anyway are held 1.5 s (`HOLD_TO_CONFIRM_MS`), or two presses within 5 s with assistive tech; "Refuse blind signing" (`vela.refuseBlindSigning`, **off** by default, hardening §8) refuses every anyway (`BlindRefused`, `home.multisig.review.blindRefused`) | red on old code (batch leg, one unread of two); posture and door tests; `review-state.json` + `hold_ms`, `refuseBlind` cases |
+| **Descriptor trust** (1-4) | `project_result`: an unverified provenance (Fetched, SelectorDb, Standard, None) is never Safe — floored at Normal | `a_fetched_descriptor_saying_claim_is_never_graded_safe` (red on old code) |
+| **WYSIWYS for dApps** (1-5) | `SignAndSubmit.review` = `DappReview` frozen at the confirm; shells hash only `dapp_safe_op_hash` (the calls in order + one fee leg to the quoted recipient) and wrap only `dapp_message_hash` | `r22_signing_truth.rs` `attest`; a shell test per platform that a drifted op prompts no passkey |
+
+**Two Round 21 test findings, folded in** (hardening §11–§12):
+
+| Finding | Decision | Proof |
+| --- | --- | --- |
+| **r21-1** (S3): an expired multisig execution said something generic | `FailureKind::Expired` — a shell's `expired`, or the relay's AA22 in any detail's words — is said in the Send's words (`componentsUi.signing.expired`) with Try again; the dApp sheet reads the relay's AA22 too | `an_expired_operation_is_said_as_expired`; `review-state.json` `failure` +4 |
+| **r21-2** (S4): fees and Max cut to 6 decimals, charged a little more | fees round UP at the shown places (`fee_figure`); a typed amount is exact; Max is the sendable amount cut DOWN to the field's places and that exact figure is sent (`max_shown_exact`) | `a_fee_reads_up_never_below_the_charge`, `max_sends_exactly_what_it_shows`; `send-fee-cover.json` R20 Max 0.005887 |
+
+**Every surface.** (filled in at the end of the round)
+
+**Left open** (each in `hardening.md`):
+- Provider independence is a URL heuristic.
+- Ordinary display reads are not chain-id probed before use; a proven wrong-chain node is
+  excluded from them.
+- Recipient facts and the clear-signing `no_code` probe are one node's word, and only add
+  cautions.
+- The signing page is unchanged; it draws "… anyway" as the app's word.
