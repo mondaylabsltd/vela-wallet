@@ -955,6 +955,10 @@ struct SendConfirmModel {
     /// send-11: the passkey prompt signed nothing — said calmly over the
     /// confirm, which is the way to try again.
     var passkeyNote: String? = nil
+    /// §34: the last press signed nothing — the fee moved between the press
+    /// and the signature (`SendView.fee_moved`). Beside the confirm, over the
+    /// new figures; the next press signs exactly those.
+    var feeMovedNote: String? = nil
     var cta: String
     /// Spec 102: this account reviews and signs on a trusted page — the
     /// page, the key, its integrity line — and the CTA goes there.

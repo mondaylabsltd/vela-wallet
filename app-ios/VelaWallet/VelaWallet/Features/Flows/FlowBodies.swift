@@ -1590,6 +1590,14 @@ struct SendConfirmBody: View {
                 .accessibilityElement(children: .contain)
             }
 
+            // §34: the press signed nothing — the fee moved before the
+            // signature; the new figures are drawn above, and the confirm
+            // below signs exactly them.
+            if model.notice == nil, let moved = model.feeMovedNote {
+                NoticeBannerView(text: moved)
+                    .accessibilityIdentifier("send.confirm.feeMoved")
+            }
+
             // send-11: the prompt signed nothing — calmly, over the confirm
             // that is the way to try again.
             if model.notice == nil, let passkey = model.passkeyNote {

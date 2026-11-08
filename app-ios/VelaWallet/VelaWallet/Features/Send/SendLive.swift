@@ -1135,7 +1135,10 @@ enum SendLive {
         // The fee being signed stays on screen (round 5): while the passkey is
         // up or the op is on its way, a newer quote or a failure of the fee
         // machine's next question is not the figure that was agreed to.
+        // §34: …and from the press itself, while it prepares — the core
+        // serves the fee the press was made on (`fee_signing_key`).
         let frozen = view.txStatus == "signing" || view.txStatus == "submitting"
+            || view.feeSigningKey != nil
         let failure = frozen ? nil : formFailure(fee, view: view)
         let failureChain = networkChainId.flatMap { networks.meta($0)?.displayName } ?? chain
 
@@ -1186,7 +1189,10 @@ enum SendLive {
                         ? loc.t("send.estimatingFee") : "—"),
                 // Why, under the row: the chain by name, the relay, or Vela's
                 // own fault — the core's words.
-                note: failure?.reason(loc, chain: failureChain),
+                note: failure?.reason(loc, chain: failureChain)
+                    // §34: the fee and amount drawn are the ones being
+                    // signed, frozen until the signature, a cancel or a stop.
+                    ?? view.feeSigningKey.map { loc.t($0) },
                 // The coin's figure and its price in the person's currency:
                 // a second line between the two, never a figure cut short.
                 wraps: true,
@@ -1325,6 +1331,7 @@ enum SendLive {
             recipientCheck: recipientCheck(view, loc: loc),
             maxNote: maxMovedNote(view, loc: loc),
             passkeyNote: passkeyNote(view, loc: loc),
+            feeMovedNote: feeMovedNote(view, loc: loc),
             // A multisig's confirm proposes (and approves, as a member here).
             cta: view.multisig != nil ? loc.t("home.multisig.send.propose") : live.cta,
             heldNote: heldNote(view, fee: fee, loc: loc)
@@ -1483,6 +1490,17 @@ enum SendLive {
     static func networkName(_ view: SendViewWire, networks: WalletNetworks = .builtin) -> String {
         let chainId = (view.multiSelectMode ? view.multiChainId : nil) ?? view.selectedToken?.chainId
         return chainId.flatMap { networks.meta($0)?.displayName } ?? view.selectedToken?.network ?? ""
+    }
+
+    /// §34: the last press signed nothing — the quote at the signature was
+    /// not the one shown (`fee_moved`). Beside the confirm, in the core's
+    /// words, a Max's new figure with them; the page draws the new figures.
+    static func feeMovedNote(_ view: SendViewWire, loc: Loc) -> String? {
+        guard let moved = view.feeMoved else { return nil }
+        return loc.t(moved.key, vars: [
+            "from": moved.max?.from ?? "", "to": moved.max?.to ?? "",
+            "symbol": view.selectedToken?.symbol ?? "",
+        ])
     }
 
     /// r5reg-3: "Max is now 0.156382 USDC (it was 0.156387): …" — or nothing.
