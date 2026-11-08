@@ -14,7 +14,7 @@
  *   is hashed by the config). No remote script origin at all: the wallet's
  *   code is its own. `'wasm-unsafe-eval'` because the core, PeerConnect and
  *   the QR decoder are WebAssembly. `connect-src` stays open to any `https:` /
- *   `wss:` host (and local http): a person may point the wallet at their own
+ *   `wss:` host (and local http / ws): a person may point the wallet at their own
  *   RPC, relay, index or a site's network — that is the product, and the
  *   core's own rules (`network_admin::is_allowed_endpoint_url`) decide which.
  *   `style-src 'unsafe-inline'`: Svelte renders `style:` bindings into the
@@ -39,7 +39,17 @@ export const CSP_DIRECTIVES = {
 	'style-src': ['self', 'unsafe-inline'],
 	'img-src': ['self', 'data:', 'blob:', 'https:'],
 	'font-src': ['self', 'data:'],
-	'connect-src': ['self', 'https:', 'wss:', 'http://localhost:*', 'http://127.0.0.1:*'],
+	// Local http and ws: a person's own node or relay on this machine (the
+	// core allows plain http to localhost only), and the dev harness's.
+	'connect-src': [
+		'self',
+		'https:',
+		'wss:',
+		'http://localhost:*',
+		'http://127.0.0.1:*',
+		'ws://localhost:*',
+		'ws://127.0.0.1:*'
+	],
 	'media-src': ['self', 'blob:'],
 	'worker-src': ['self'],
 	'frame-src': ['none'],
