@@ -17,6 +17,7 @@ import {
 	derSignatureToRaw,
 	fromHex,
 	hashTypedData,
+	messageSignature,
 	typedDataDocument,
 	keccak256,
 	stripHexPrefix,
@@ -56,6 +57,7 @@ import { assertChallengeSigned, attestedSafeMessageHash } from './sign-attest';
 import { findAccountByAddress, findAccountByCredentialId, type SignerAccount } from './accounts';
 import { spaceNetworksSync } from './networks';
 import { resolveChainId } from './chain-id';
+import { rpcCall } from './rpc-adapter';
 
 /**
  * The stored record for the wallet a request is FOR — by ADDRESS, never by
@@ -326,7 +328,7 @@ async function signSafeMessage(
 	chainId: number,
 	safeHash: Uint8Array,
 	hooks?: DAppSubmitHooks
-): Promise<{ assertion: Assertion; signerAddress?: string }> {
+): Promise<{ assertion: Assertion; signerAddress?: string; stored?: SignerAccount }> {
 	const stored = storedWalletFor(account, safeAddress);
 	const keySet = stored?.keys && stored.keys.length > 1 ? keySetOf(stored) : null;
 	const credentials = keySet
@@ -341,7 +343,49 @@ async function signSafeMessage(
 	// (spec 028 Phase 8).
 	assertChallengeSigned(fromHex(stripHexPrefix(assertion.clientDataJSONHex)), safeHash);
 	const signerAddress = keySet ? signerAddressFor(keySet, assertion.credentialId) : undefined;
-	return { assertion, signerAddress };
+	return { assertion, signerAddress, stored };
+}
+
+/**
+ * The account's code on `chainId`, read through the wallet's own RPC — `null`
+ * when it could not be read (the core then wraps, which every ERC-6492
+ * verifier also accepts from a deployed account).
+ */
+async function accountCode(safeAddress: string, chainId: number): Promise<string | null> {
+	try {
+		const response = await rpcCall('eth_getCode', [safeAddress, 'latest'], chainId);
+		return !response.error && typeof response.result === 'string' ? response.result : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * §37 (review 1-11, ERC-6492): the signature a site is answered with for a
+ * message — `personal_sign` (a sign-in too) and typed data, on the passkey
+ * and through the trusted page alike. The EIP-1271 signature as built, when
+ * the account holds code on the request's chain; else the core wraps it in
+ * the envelope that deploys the account in a verifier's simulation (a fresh
+ * account has no code for `isValidSignature` to run). The founding keys are
+ * the stored record's, in order — the core refuses keys that do not make
+ * this account, so nothing is guessed.
+ */
+export async function messageSignatureFor(
+	signature: string,
+	stored: SignerAccount | undefined,
+	safeAddress: string,
+	chainId: number
+): Promise<string> {
+	if (!stored) throw new Error('Public key not found');
+	const keys =
+		stored.keys && stored.keys.length > 0
+			? stored.keys.map((key) => ({
+					credential_id: key.credentialId,
+					public_key_hex: key.publicKeyHex
+				}))
+			: [{ credential_id: stored.id, public_key_hex: stored.publicKeyHex }];
+	const code = await accountCode(safeAddress, chainId);
+	return messageSignature(signature, keys, safeAddress, code);
 }
 
 /**
@@ -408,7 +452,7 @@ export async function handlePersonalSign(
 	const originalHash = keccak256(combined);
 
 	const safeHash = attestedMessageHash(originalHash, chainId, safeAddress);
-	const { assertion, signerAddress } = await signSafeMessage(
+	const { assertion, signerAddress, stored } = await signSafeMessage(
 		request,
 		account,
 		safeAddress,
@@ -416,7 +460,12 @@ export async function handlePersonalSign(
 		safeHash,
 		hooks
 	);
-	return buildContractSignature(assertion, signerAddress);
+	return messageSignatureFor(
+		buildContractSignature(assertion, signerAddress),
+		stored,
+		safeAddress,
+		chainId
+	);
 }
 
 /**
@@ -444,7 +493,7 @@ export async function handleSignTypedData(
 
 	const originalHash = hashTypedData(typedData);
 	const safeHash = attestedMessageHash(originalHash, effectiveChainId, safeAddress);
-	const { assertion, signerAddress } = await signSafeMessage(
+	const { assertion, signerAddress, stored } = await signSafeMessage(
 		request,
 		account,
 		safeAddress,
@@ -452,7 +501,12 @@ export async function handleSignTypedData(
 		safeHash,
 		hooks
 	);
-	return buildContractSignature(assertion, signerAddress);
+	return messageSignatureFor(
+		buildContractSignature(assertion, signerAddress),
+		stored,
+		safeAddress,
+		effectiveChainId
+	);
 }
 
 /**
@@ -682,7 +736,7 @@ export async function handleGenericSign(
 	const originalHash = keccak256(jsonBytes);
 
 	const safeHash = attestedMessageHash(originalHash, chainId, safeAddress);
-	const { assertion, signerAddress } = await signSafeMessage(
+	const { assertion, signerAddress, stored } = await signSafeMessage(
 		request,
 		account,
 		safeAddress,
@@ -690,7 +744,12 @@ export async function handleGenericSign(
 		safeHash,
 		hooks
 	);
-	return buildContractSignature(assertion, signerAddress);
+	return messageSignatureFor(
+		buildContractSignature(assertion, signerAddress),
+		stored,
+		safeAddress,
+		chainId
+	);
 }
 
 /**

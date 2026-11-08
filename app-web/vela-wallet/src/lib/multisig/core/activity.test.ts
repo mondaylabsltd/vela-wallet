@@ -73,7 +73,10 @@ vi.mock('./proposals.svelte', () => ({
 		},
 		get readAt() {
 			return seams.readAt;
-		}
+		},
+		// §37: no proposal from a non-member left out.
+		nonMembers: 0,
+		showingNonMembers: false
 	}
 }));
 vi.mock('./display', () => ({

@@ -25,7 +25,12 @@ import { ClearSigningCore, FeeSpeedCore } from '$lib/core/client';
 import { toClearLocale } from './core/clear-types';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignView } from '$lib/core/generated/SignView';
-import { rawResolve, resolveSigningMessages } from '$lib/i18n/engine.server';
+import {
+	GUARD_WARNING_KEYS,
+	rawResolve,
+	resolveSigningMessages,
+	SIGN_IN_KEYS
+} from '$lib/i18n/engine.server';
 import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
 import { judgedByFreshMachine, simOutcome } from '$lib/core/kernels';
 import type { SimVerdict } from '$lib/core/generated/SimVerdict';
@@ -4084,5 +4089,123 @@ describe('typed data nobody describes reads as a structured message (dapp-9)', (
 			tone: 'danger',
 			text: m.warnHiddenChars
 		});
+	});
+});
+
+/**
+ * §37 (review 1-11, 1-12): the sheet draws the core's sentence for a guard
+ * warning and for a refused sign-in, and carries the batch legs the screen
+ * kept unlimited — every word and every waiver the core's.
+ */
+describe('§37: the guard’s key, the legs kept unlimited, and a refused sign-in', () => {
+	const kept: GuardView = {
+		...INITIAL_GUARD_VIEW,
+		surface: 'approval_editor',
+		confirm_allowed: true,
+		unlimited_consented: true,
+		unlimited_warning: true,
+		meta: { symbol: 'USDC', decimals: 6, verified: true, loading: false },
+		editor: {
+			mode: 'requested',
+			custom_text: '',
+			error: null,
+			choice: { type: 'unlimited' },
+			display_amount_raw: null,
+			requested_finite: false,
+			requested_unlimited: true,
+			has_balance_cap: true,
+			revoke_offered: true,
+			balance_raw: '1000'
+		}
+	};
+
+	it('draws the sentence the core names — "Over 100× your balance", not the hardcoded unlimited line', () => {
+		const far: GuardView = {
+			...kept,
+			unlimited_warning_key: 'componentsUi.signing.farAboveBalanceWarning'
+		};
+		const model = buildSigningModel(inputs({ guard: far }))!;
+		const said = m.guardWarnings['componentsUi.signing.farAboveBalanceWarning'];
+		expect(said).toMatch(/100×/);
+		expect(model.blocks).toContainEqual({ kind: 'warning', tone: 'danger', text: said });
+		expect(model.blocks).not.toContainEqual({
+			kind: 'warning',
+			tone: 'danger',
+			text: m.warnUnlimited
+		});
+		// The unlimited key is the unlimited line.
+		const unlimited = buildSigningModel(inputs({ guard: kept }))!;
+		expect(unlimited.blocks).toContainEqual({
+			kind: 'warning',
+			tone: 'danger',
+			text: m.warnUnlimited
+		});
+	});
+
+	it('every key the guard can name has words in every locale', () => {
+		for (const locale of SUPPORTED_LOCALES) {
+			const words = resolveSigningMessages(locale);
+			for (const key of GUARD_WARNING_KEYS) expect(words.guardWarnings[key], key).toBeTruthy();
+			for (const key of SIGN_IN_KEYS) expect(words.signIn[key], key).toBeTruthy();
+			expect(words.signInRefusedTitle).toBeTruthy();
+		}
+	});
+
+	it('the guard and sign-in keys are the ones the core’s source names', () => {
+		const guard = readFileSync('../../rust/crates/vela-core/src/app/approval_guard.rs', 'utf8');
+		const named = (name: string) =>
+			new RegExp(`pub const ${name}: &str =\\s*"([^"]+)";`).exec(guard)?.[1];
+		expect([named('UNLIMITED_WARNING_KEY'), named('FAR_ABOVE_BALANCE_KEY')]).toEqual([
+			...GUARD_WARNING_KEYS
+		]);
+		const clear = readFileSync('../../rust/crates/vela-core/src/app/clear_signing.rs', 'utf8');
+		const keys = [...clear.matchAll(/=> "(componentsUi\.signing\.signIn\.[a-zA-Z]+)"/g)].map(
+			(hit) => hit[1]
+		);
+		expect(new Set(keys)).toEqual(new Set(SIGN_IN_KEYS));
+	});
+
+	it('the approve carries the legs the screen kept unlimited, as the guard named them', () => {
+		const batch: GuardView = {
+			...kept,
+			unlimited_consented: false,
+			unlimited_consented_legs: [0, 2]
+		};
+		const opts = approveOptsOf(QUOTED_FEE, INITIAL_CLEAR_VIEW, batch);
+		expect(opts.unlimited_approved).toBe(false);
+		expect(opts.unlimited_approved_legs).toEqual([0, 2]);
+		expect(
+			approveOptsOf(null, INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW).unlimited_approved_legs
+		).toEqual([]);
+	});
+
+	it('a refused sign-in says the sign-in title and the core’s sentence, filled — never the self-call text', () => {
+		const refused: SignView = {
+			...OPEN_SIGN,
+			request: { ...REQUEST, method: 'personal_sign', kind: 'personal_sign' },
+			blocked: {
+				function: 'signIn',
+				selector: '',
+				leg_index: null,
+				nested: false,
+				parent: null,
+				reason: null,
+				sign_in: {
+					reason: 'domain',
+					key: 'componentsUi.signing.signIn.wrongDomain',
+					params: { domain: 'bank.example', origin: 'evil.example' }
+				}
+			}
+		};
+		const model = buildSigningModel(inputs({ sign: refused }))!;
+		expect(model.blocks[0]).toEqual({ kind: 'intent', text: m.signInRefusedTitle, tone: 'danger' });
+		const sentence = model.blocks[1];
+		expect(sentence).toMatchObject({ kind: 'warning', tone: 'danger' });
+		if (sentence?.kind !== 'warning') throw new Error('kind');
+		expect(sentence.text).toContain('bank.example');
+		expect(sentence.text).toContain('evil.example');
+		expect(sentence.text).not.toMatch(/\{\{/);
+		expect(model.blocks.some((b) => 'text' in b && b.text === m.selfCallBlockedTitle)).toBe(false);
+		expect(model.dismissOnly).toBe(m.close);
 	});
 });

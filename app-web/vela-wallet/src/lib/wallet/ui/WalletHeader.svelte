@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { networkSpace } from '$lib/network-space/network-space.svelte';
 	import { identiconViewer } from '../identicon-viewer.svelte';
+	import { receiveIdentity } from '$lib/onboarding/core/receive-identity.svelte';
 	import { session } from '$lib/session/core/session.svelte';
 	import type { WalletHeaderModel } from '../model';
 	import { UTILITY_ICONS } from '../icons';
@@ -30,6 +31,7 @@
 	$effect(() => () => clearTimeout(copiedTimer));
 
 	async function copyAddress(): Promise<void> {
+		if (receiveIdentity.held(header.addressFull) !== null) return;
 		try {
 			await navigator.clipboard.writeText(header.addressFull);
 		} catch {
@@ -89,7 +91,9 @@
 			>
 		</button>
 		<span class="facts">
-			{#if onclick && header.addressFull !== ''}
+			<!-- §37: an account the core holds the address of back (not yet
+			     confirmed on-chain, or refuted) offers no copy of it. -->
+			{#if onclick && header.addressFull !== '' && receiveIdentity.held(header.addressFull) === null}
 				<!-- home-19: the address copies itself (the glyph says so) and
 				     confirms it in words; the name above opens the switcher. -->
 				<button

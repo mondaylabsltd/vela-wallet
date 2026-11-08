@@ -77,6 +77,14 @@ export const WALLET_FLOW_KEYS = [
 	'receive.includeNetworkHint',
 	// home-6: the code on screen is being watched, and a deposit is said there.
 	'receive.listeningForDeposits',
+	// §37 (review 1-7): Receive with no address — an account the chain has not
+	// confirmed yet, or one it refuted (`receive_standing`'s keys).
+	'receive.unconfirmed.title',
+	'receive.unconfirmed.body',
+	'receive.unconfirmed.checkAgain',
+	'receive.unconfirmed.checking',
+	'receive.refuted.title',
+	'receive.refuted.body',
 	'home.toastReceived',
 	// 087 F13: a receive row's button that shows its network's code.
 	'componentsUi.funding.showQr',

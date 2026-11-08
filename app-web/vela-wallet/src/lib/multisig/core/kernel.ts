@@ -484,7 +484,12 @@ export type Refusal =
 	/** Its setup pays `amount` (base units) of `token` (zero: the coin) to `receiver` on deployment. */
 	| { kind: 'payment'; token: string; amount: string; receiver: string }
 	| { kind: 'missingCode'; name: string; address: string }
-	| { kind: 'wrongCode'; name: string; address: string };
+	| { kind: 'wrongCode'; name: string; address: string }
+	/**
+	 * §37 (review 1-13): a member at `address` is a contract nothing ties to
+	 * its own creation on this chain — whoever can deploy there would vote.
+	 */
+	| { kind: 'ownerNotBound'; address: string };
 
 /** Who can act for a Safe not deployed on a chain yet, once deployed there (the core's verdict). */
 export type Authority =
