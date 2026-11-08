@@ -5,5 +5,14 @@
 # and every script it loads, from calling navigator.credentials at all.
 # A signing page ever served from this origin must detach this header for its
 # own path (`! Permissions-Policy`).
+#
+# §35 (review 1-1): nothing this origin serves is framed — `frame-ancestors
+# 'none'` and X-Frame-Options for browsers before CSP 2 — and no response is
+# content-sniffed. src/lib/security-headers.ts is the one list (the Worker's
+# responses get it from hooks.server.ts); security-headers.test.ts pins this
+# block to it.
 /*
   Permissions-Policy: publickey-credentials-get=(), publickey-credentials-create=()
+  Content-Security-Policy: frame-ancestors 'none'
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff

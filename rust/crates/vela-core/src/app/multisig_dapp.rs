@@ -133,6 +133,43 @@ pub fn parent_refusal(
     }
 }
 
+/// §35 (SEC-PARENT-2): the request would make this multisig call ITSELF with
+/// a Safe-admin selector — an owner, threshold, module, guard, fallback
+/// handler or setup change, `execTransaction` on itself, or a delegatecall leg
+/// (`self_call_guard`, the account's own rule held to the multisig's
+/// address). Refused, with no "anyway", at arrival and again where the
+/// proposal is made, in the same words: a site never proposes a change of
+/// who controls the multisig — members change it from its own screen.
+/// `data` names the call and the multisig.
+pub fn self_call_refusal(
+    block: &super::self_call_guard::SelfCallBlock,
+    multisig: &str,
+) -> DappError {
+    DappError {
+        code: -32603,
+        message: format!(
+            "{} ({} on the multisig {multisig}; nothing was proposed)",
+            super::dapp_rpc::sign_error_message(
+                super::sign_request::SignErrorKind::SelfCallBlocked
+            ),
+            block.function.as_str(),
+        ),
+        data: Some(json!({
+            "reason": "self_call",
+            "safe": multisig,
+            "function": block.function.as_str(),
+            "leg": block.leg_index,
+            "key": SELF_CALL_BLOCKED_KEY,
+        })),
+    }
+}
+
+/// The sentence a multisig's self-call refusal is said in (§35): "This site
+/// asked this multisig to change who controls it ({{function}}). Vela never
+/// lets a site do that — members change it from the multisig's own screen.
+/// Nothing was proposed."
+pub const SELF_CALL_BLOCKED_KEY: &str = "componentsUi.signing.multisigSelfCallBlocked";
+
 /// The sentences a parent-Safe refusal is said in (§31).
 pub const PARENT_BLOCKED_KEY: &str = "componentsUi.signing.parentSafeBlocked";
 pub const PARENT_UNCHECKED_KEY: &str = "componentsUi.signing.parentSafeUnchecked";

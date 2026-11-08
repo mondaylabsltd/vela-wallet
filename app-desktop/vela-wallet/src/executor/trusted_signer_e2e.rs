@@ -53,7 +53,7 @@ use serde_json::{Value, json};
 use vela_core::primitives::{to_base64url, to_hex};
 use vela_core::user_op::{
     MultiSendCall, UserOperation, WalletKey, build_in_band_fee_leg,
-    build_multi_send_execute_call_data, calculate_safe_op_hash,
+    build_multi_send_execute_call_data, calculate_safe_op_hash, stamp_validity,
 };
 
 use vela_core::app::KeyMethod;
@@ -535,8 +535,16 @@ fn why(tab: &mut Tab) -> String {
 }
 
 /// The wallet's own send, as the spine assembles it: the person's calls,
-/// then the in-band fee leg, in one MultiSend.
+/// then the in-band fee leg, in one MultiSend — stamped with its validity
+/// window from now, as the spine stamps it before the hash (§35): the page
+/// refuses an operation that never expires.
 fn assembled(calls: &[MultiSendCall]) -> UserOperation {
+    let mut op = unstamped(calls);
+    stamp_validity(&mut op, crate::executor::now_ms());
+    op
+}
+
+fn unstamped(calls: &[MultiSendCall]) -> UserOperation {
     let mut legs = calls.to_vec();
     legs.push(
         build_in_band_fee_leg(None, "0x4d2C7a3B1e9F0a8b7C6d5E4f3A2b1C0d9E8f7A6b", 420_000)
@@ -554,6 +562,8 @@ fn assembled(calls: &[MultiSendCall]) -> UserOperation {
         max_fee_per_gas: 0,
         max_priority_fee_per_gas: 0,
         paymaster_and_data: vec![],
+        valid_after: 0,
+        valid_until: 0,
         signature: vec![],
     }
 }

@@ -8,6 +8,9 @@
  *   sentence the core names in `data.key` (`componentsUi.signing.
  *   parentSafeBlocked`, or `…Unchecked` when ownership could not be read),
  *   with the call and the Safe;
+ * - §35 (`data.reason === "self_call"`, SEC-PARENT-2): the site asked this
+ *   multisig to call itself and change who controls it — the same title, the
+ *   sentence `componentsUi.signing.multisigSelfCallBlocked` with the call;
  * - anything else: dapp-7's "a multisig can't sign messages yet".
  *
  * The core decides which; this only reads its answer.
@@ -46,6 +49,7 @@ export function multisigRefusalWords(
 		| 'parentSafeTitle'
 		| 'parentSafeBlocked'
 		| 'parentSafeUnchecked'
+		| 'multisigSelfCallBlocked'
 	>
 ): MultisigRefusalWords {
 	const data = (error?.data ?? null) as {
@@ -61,6 +65,15 @@ export function multisigRefusalWords(
 			body: sentence
 				.replaceAll('{{function}}', typeof data.function === 'string' ? data.function : '')
 				.replaceAll('{{safe}}', typeof data.safe === 'string' ? safeShort(data.safe) : '')
+		};
+	}
+	if (data?.reason === 'self_call') {
+		return {
+			title: m.parentSafeTitle,
+			body: m.multisigSelfCallBlocked.replaceAll(
+				'{{function}}',
+				typeof data.function === 'string' ? data.function : ''
+			)
 		};
 	}
 	return {

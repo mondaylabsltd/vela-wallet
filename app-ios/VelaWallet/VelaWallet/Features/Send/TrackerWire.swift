@@ -56,11 +56,12 @@ struct TrackEntryWire: Decodable, Equatable {
     /// here so a re-encoded entry still says it.
     var sender: String? = nil
     /// `rejected` only: why the relay refused it — `RefusalReason`'s wire
-    /// name (`fee_below_market`, `nonce_used`, …, `unknown`).
+    /// name (`fee_below_market`, `nonce_used`, `expired`, …, `unknown`).
     var refusal: String? = nil
     /// `rejected` only: the corpus key of the sentence that says why — the
     /// fee sentence only for `fee_below_market`, `componentsUi.signing.wentFirst`
-    /// for `nonce_used`, else `componentsUi.signing.refused`. Every surface
+    /// for `nonce_used`, `componentsUi.signing.expired` for `expired` (§35),
+    /// else `componentsUi.signing.refused`. Every surface
     /// that tells a refusal draws THIS.
     var refusalKey: String? = nil
     /// Not final, and the relay has said nothing new of it for ten minutes:

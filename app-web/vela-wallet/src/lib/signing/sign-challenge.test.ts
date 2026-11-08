@@ -527,7 +527,10 @@ function signature(
 		preVerificationGas: '110000',
 		maxFeePerGas: '1500000007',
 		maxPriorityFeePerGas: '1500000000',
-		paymasterAndData: '0x'
+		paymasterAndData: '0x',
+		// Stamped, as the spine stamps every operation it signs (§35).
+		validAfter: '0',
+		validUntil: '1800001800'
 	};
 	const operation = {
 		userOp,
@@ -607,6 +610,8 @@ async function safeOpOf(op: Record<string, string>): Promise<Uint8Array> {
 			maxFeePerGas: BigInt(op.maxFeePerGas),
 			maxPriorityFeePerGas: BigInt(op.maxPriorityFeePerGas),
 			paymasterAndData: bytes(op.paymasterAndData),
+			validAfter: BigInt(op.validAfter ?? '0'),
+			validUntil: BigInt(op.validUntil ?? '0'),
 			signature: new Uint8Array()
 		} as never,
 		CHAIN

@@ -1098,6 +1098,15 @@ fn dapp_request(
         }
     };
     held.view.calls.clone_from(&calls);
+    // §35 (SEC-PARENT-2): nor make it call itself to change who controls it
+    // — the self-call rule the account is held to, held to the multisig's
+    // own address. Refused at once; the proposal step checks again.
+    if let Some(block) = self_call_of(&calls, &account.address) {
+        held.view.stage = HeldStage::Refused;
+        held.view.refusal = Some(dapp::self_call_refusal(&block, &account.address));
+        s.more.dapp.insert(id, held);
+        return render();
+    }
     // §31: a site may never make this multisig act for a Safe it owns — one
     // of this device's multisigs, refused at once; any other Safe a call
     // would act for, read (`isOwner`) before anything is drafted.
@@ -1208,6 +1217,47 @@ fn start_dapp_draft(s: &mut State, id: String, mut held: Held, account: Multisig
     s.actions.insert("propose".to_owned(), ActionState::Working);
     held.round = s.draft_round;
     s.more.dapp.insert(id, held);
+}
+
+/// §35: the self-call rule (`self_call_guard`) over a site's calls, with the
+/// multisig as the account they would run as.
+fn self_call_of(
+    calls: &[crate::multisig::CallArg],
+    multisig: &str,
+) -> Option<super::super::self_call_guard::SelfCallBlock> {
+    let calls: Vec<Value> = calls
+        .iter()
+        .map(|c| json!({ "to": c.to, "data": c.data }))
+        .collect();
+    super::super::self_call_guard::detect_self_call(
+        "wallet_sendCalls",
+        Some(&json!([{ "calls": calls }])),
+        multisig,
+    )
+}
+
+/// §35: the proposal step's check of a site's draft — the transaction about
+/// to be proposed (one call to `to`, or a batch through MultiSendCallOnly),
+/// read by the same rule. `Some` refuses: the held request is refused in
+/// the arrival's words, and nothing is proposed.
+pub fn self_call_at_proposal(
+    s: &mut State,
+    round: u64,
+    multisig: &str,
+    tx: &crate::multisig::SafeTx,
+) -> Option<super::super::self_call_guard::SelfCallBlock> {
+    let block = super::super::self_call_guard::detect_self_call(
+        "eth_sendTransaction",
+        Some(&json!([{ "to": tx.to, "data": tx.data }])),
+        multisig,
+    )?;
+    if let Some(id) = reviewing(s, round) {
+        if let Some(held) = s.more.dapp.get_mut(&id) {
+            held.view.stage = HeldStage::Refused;
+            held.view.refusal = Some(dapp::self_call_refusal(&block, multisig));
+        }
+    }
+    Some(block)
 }
 
 /// §31: the Safes other than `safe` these calls would act for.

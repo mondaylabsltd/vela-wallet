@@ -1269,6 +1269,8 @@ class SigningLiveTest {
         assertEquals(strings.t("componentsUi.gas.reasonFeeToken"), warning(app.getvela.wallet.feature.send.core.FeeFailure.FeeTokenUnavailable))
         assertEquals(strings.t("componentsUi.gas.reasonSimulation"), warning(app.getvela.wallet.feature.send.core.FeeFailure.EstimateFailed))
         assertEquals(strings.t("componentsUi.gas.reasonQuoteHigh"), warning(app.getvela.wallet.feature.send.core.FeeFailure.GasQuoteTooHigh))
+        // §35: a relay billing more gas than the operation can use — its own sentence.
+        assertEquals(strings.t(I18nKeys.Flows.FEE_REASON_SETTLEMENT_HIGH), warning(app.getvela.wallet.feature.send.core.FeeFailure.SettlementGasTooHigh))
         assertNull(warning(app.getvela.wallet.feature.send.core.FeeFailure.CalculationFailed))
         val down = SigningLive.feeModel(ClearSigningView(), failedFee(app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(true)), ctx) as FeeModel.OnChain
         assertTrue("a chain read that failed is tapped to ask again", down.tappable)

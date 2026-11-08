@@ -69,11 +69,11 @@ delegatecall、改模块 / guard / handler / singleton 的自调用和 gas 退�
 node samples/multisig-test.mjs  # 320 项：多签批准 —— 哈希、批准字节、读法与发布的 vela-core wasm 逐例对拍；钱包的唯一审阅（multisigReview）拒的本页一律拒，含状态差异守卫的 Bybit 向量；哈希不符、看不见的字符、超大载荷、非钱包打开者；第 3 段：多签的执行（执行者自己的操作：execTransaction 里的 SafeTx 按批准的规则读、部署腿从 setup 核实、其余一律拒；36 个 SafeTx 逐个执行，核心拒的本页必拒）；Arc 的 USDC 按单位读；十五种语言
 bun samples/serve-dist.mjs      # 本机按托管方的样子提供 dist/（含 _headers 的规则与 /b/<hash>/sign），部署前先试
 bun samples/answer-test.mjs     # 55 项：答复只交给钱包 —— 钓鱼站的 cb、postMessage、框架、回环，在发布出去的字节上；G 段：网页钱包的多签批准与消息被答、子域被拒；H 段：真的未打包扩展 —— 已发布 id 的 personal_sign / typed data / 交易被答，别的 id 被拒
-node samples/hostile-test.mjs   # 35 项：请求方能控制的字段全填毒串，断言一个都不当事实显示
+node samples/hostile-test.mjs   # 44 项：请求方能控制的字段全填毒串，断言一个都不当事实显示；读不出的有效期（§35）拒签
 node samples/channels-test.mjs  # 41 项：URL 片段 → velawallet:// + 真 WebAuthn + 交易 + 篡改拒签；postMessage 上的签名被拒；坏链接、读不了的钥匙 id 都有一句话
 node samples/claims-test.mjs    # 62 项：谁的说法 —— 「本账户」、网络费的币种、本页不认识的链上 App 给的币名（标「币名由 App 提供」、显示链 ID）、法币与币种、看不见的字符、读不了的钥匙 id
 node samples/provenance-test.mjs # 96 项：意图的读法从哪来 —— 同一函数形状打在陌生合约上、换一条链、App 说的金库资产、App 的模拟、去向不是本账户、App 说的现有额度；五种来源行十五种语言
-node samples/safeop-test.mjs    #  9 项：SafeOp / SafeMessage 对拍 vela-core
+node samples/safeop-test.mjs    # 47 项：SafeOp / SafeMessage 对拍 vela-core，含 §35 的有效期（无期限的操作拒签）
 node samples/identicon-test.mjs #  9 项：identicon 与 vela-core 逐字节一致（含 1000 随机地址）
 node samples/takeover-test.mjs  # 67 项：自调用 / delegatecall / SafeTx 拒签 —— 与 vela-core self_call_guard 同一规则；替成员所在 Safe（多签）执行 / approveHash / 改配置、SafeMessage 一律拒签（§31，parent_safe_guard 的向量逐条重放）
 node samples/unlimited-line-test.mjs # 11 项：「无限额」从哪里开始 —— 与 vela-core approval_guard 同一条线
@@ -112,7 +112,7 @@ EIP-191 / EIP-712 对上权威向量，SafeOp 与 SafeMessage 与 **vela-core �
 检查的是**操作里的每一条腿**，不只是站点要的那几条。
 
 ```sh
-node samples/safeop-test.mjs    # 9 项：SafeOp / SafeMessage 对拍 vela-core + calldata 解码
+node samples/safeop-test.mjs    # 47 项：SafeOp / SafeMessage 对拍 vela-core + 有效期（§35）+ calldata 解码
 ```
 
 ## 三条不可动摇的规矩

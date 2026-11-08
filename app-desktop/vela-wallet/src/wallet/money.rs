@@ -3351,6 +3351,15 @@ mod tests {
             SendEstimateFailure::from(FeeFailure::Internal).body_key(),
             vela_core::app::fee_policy::REASON_INTERNAL_KEY
         );
+        // §35: the relay's settlement gas past the cap, said as that.
+        assert_eq!(
+            SendEstimateFailure::from(FeeFailure::SettlementGasTooHigh),
+            SendEstimateFailure::SettlementGasTooHigh
+        );
+        assert_eq!(
+            SendEstimateFailure::SettlementGasTooHigh.body_key(),
+            "componentsUi.gas.reasonSettlementHighStopped"
+        );
         assert!(matches!(
             estimate_failed(),
             SendShellResult::FeeEstimated {

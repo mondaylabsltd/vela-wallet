@@ -159,10 +159,13 @@ fun MultisigDappSheet(hub: MultisigHub, id: String, context: MultisigHostContext
                 else -> words.t("proposal.siteWaits", "host" to host)
             },
         )
-        held["stage"].str == "refused" -> MsSheet(words.t("proposal.title"), words.raw("common.done"), onClose = leave, tag = "multisig.dapp") {
+        // §35: a site asking the multisig to change who controls it is titled
+        // "Vela can't sign this" (the core's self-call refusal).
+        held["stage"].str == "refused" -> MsSheet(words.dappRefusalTitle(held["refusal"]) ?: words.t("proposal.title"), words.raw("common.done"), onClose = leave, tag = "multisig.dapp") {
             MsNote(words.t("proposal.siteAsks", "host" to host))
             // §31: a request that would act for a Safe the multisig owns is
-            // said in the core's sentence for it, never its English message.
+            // said in the core's sentence for it, never its English message;
+            // §35: so is one that would make it call itself.
             MsNote(
                 words.dappRefusal(held["refusal"]) ?: held["refusal"]["message"].str ?: words.t("action.unsupported"),
                 tone = MsTone.Warning,

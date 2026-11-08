@@ -482,11 +482,9 @@
 				signRequest.syncNetworks();
 				signRequest.syncAccounts();
 				const outcome = await startEthereumBackup(account);
-				if (outcome.kind === 'requested') {
-					track('backup_keys_started');
-					const settled = await outcome.settled;
-					if (settled.kind === 'submitted') track('backup_keys_done');
-				}
+				// No usage statistics here (§35, review 1-8): the backup is an
+				// on-chain operation, and no event may be linked to one.
+				if (outcome.kind === 'requested') await outcome.settled;
 			} finally {
 				backupOpening = false;
 				backupAsked += 1;

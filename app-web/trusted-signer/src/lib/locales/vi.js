@@ -147,6 +147,8 @@ window.VelaCS.i18n.register('vi', {
 
   'refuse.ethSign': 'Trang này không ký eth_sign. eth_sign ký một hash không đọc được — chính là thứ mà clear signing ra đời để loại bỏ.',
   'refuse.noSafeOp': 'Chưa thể tính mã băm giao dịch ở đây: đó là hash SafeOp của Safe 4337, cần tài khoản, EntryPoint và địa chỉ module. Trang này sẽ không ký một mã băm đoán mò.',
+  'refuse.noExpiry': 'Thao tác này không bao giờ hết hạn (không có validUntil): relay có thể giữ lại và gửi bất cứ lúc nào. Vela chỉ ký các thao tác có hạn. Không ký.',
+  'refuse.badWindow': 'Khoảng hiệu lực của thao tác này (validAfter / validUntil) không đọc được thành hai giá trị giây uint48, nên không xác định được thứ sẽ được ký. Không ký.',
   'refuse.typedShape': 'Yêu cầu này không mang đúng một thông điệp cần ký cho đúng một tài khoản — những gì hiển thị có thể khác với những gì sẽ được ký. Không ký.',
   'refuse.unknownMethod': 'Không thể tính mã băm cần ký cho phương thức này, nên sẽ không ký.',
   'ui.cannotSign': 'Không thể ký yêu cầu này ở đây — lý do ở phía trên. Đóng trang này là từ chối.',

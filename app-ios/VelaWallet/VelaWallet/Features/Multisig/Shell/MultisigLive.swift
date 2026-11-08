@@ -333,6 +333,9 @@ final class MultisigLive: MultisigPorts {
         case .rejected(let message): return .unknown(message ?? "The network refused this transaction.")
         case .previousPending: return .unknown("Waiting for the last transaction of this account on this network.")
         case .nonceUsed: return .unknown("Another transaction of this account went first.")
+        // §35: the window closed before the EntryPoint saw it — nothing was
+        // sent, and the next press signs anew with its own window.
+        case .expired: return .unknown("The transaction expired before it was submitted; nothing was sent.")
         }
     }
 

@@ -610,6 +610,10 @@ fn user_op_json(op: &UserOperation) -> Value {
         "maxFeePerGas": op.max_fee_per_gas.to_string(),
         "maxPriorityFeePerGas": op.max_priority_fee_per_gas.to_string(),
         "paymasterAndData": crate::primitives::to_hex(&op.paymaster_and_data, true),
+        // §35: the window the digest covers — the page hashes it and says
+        // when the operation expires; one without an expiry it refuses.
+        "validAfter": op.valid_after.to_string(),
+        "validUntil": op.valid_until.to_string(),
     })
 }
 
@@ -632,6 +636,14 @@ pub fn user_op_from_json(value: &Value) -> Option<UserOperation> {
             _ => None,
         }
     };
+    let window = |name: &str| -> Option<u64> {
+        if value.get(name).is_none_or(Value::is_null) {
+            return Some(0);
+        }
+        u64::try_from(gas(name)?)
+            .ok()
+            .filter(|v| *v <= crate::user_op::UINT48_MAX)
+    };
     Some(UserOperation {
         sender: text("sender")?.to_owned(),
         nonce: text("nonce")?.to_owned(),
@@ -643,6 +655,9 @@ pub fn user_op_from_json(value: &Value) -> Option<UserOperation> {
         max_fee_per_gas: gas("maxFeePerGas")?,
         max_priority_fee_per_gas: gas("maxPriorityFeePerGas")?,
         paymaster_and_data: bytes("paymasterAndData")?,
+        // Absent is zero ("never expires") — which nothing signs (§35).
+        valid_after: window("validAfter")?,
+        valid_until: window("validUntil")?,
         signature: Vec::new(),
     })
 }
@@ -784,7 +799,8 @@ pub fn digest_of(request: &Value) -> Result<Vec<u8>, TrustedSignerError> {
                 .pointer("/operation/userOp")
                 .and_then(user_op_from_json)
                 .ok_or_else(|| malformed("no assembled operation"))?;
-            crate::user_op::calculate_safe_op_hash(&op, chain_id)
+            // §35: an operation that never expires is no operation the page signs.
+            crate::user_op::signable_safe_op_hash(&op, chain_id)
                 .map_err(|error| TrustedSignerError::Malformed(error.to_string()))
         }
         Some(SignatureKind::PersonalSign | SignatureKind::TypedData) => {

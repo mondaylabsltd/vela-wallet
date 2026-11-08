@@ -77,7 +77,7 @@ function sign(target, chainId, extra = {}) {
       MULTI_SEND, 0n, call('multiSend(bytes)', [ns.encode.packMultiSend([leg, fee])]), 1,
     ]),
     verificationGasLimit: '0', callGasLimit: '0', preVerificationGas: '0',
-    maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x',
+    maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x', validAfter: '0', validUntil: '1800001800',
   };
   const intent = {
     method: 'eth_sendTransaction', origin: 'https://explore.example',

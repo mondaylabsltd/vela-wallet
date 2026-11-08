@@ -6,7 +6,7 @@
 # Run on a RELEASE build — the archive ios-package.yml makes, or
 #   xcodebuild -scheme VelaWallet -configuration Release -sdk iphonesimulator build
 # — the iOS sibling of app-desktop/vela-wallet/scripts/check-store-binary.sh.
-# Three assertions:
+# Five assertions:
 #
 #   1. None of the Debug-only launch inputs is in the binary, by NAME: every
 #      `VELA_*` literal in the files Release excludes
@@ -24,6 +24,11 @@
 #      `key`, no `nativeMessaging`, the app's version), links no core, calls
 #      no keychain / biometry / passkey or required-reason API, and — when
 #      signed — is entitled to nothing.
+#   5. §35 (review 0-1): the app carries no test passkey domain — its
+#      Info.plist's `VelaTestRpDomain` (the `TEST_RP_DOMAIN` build setting) is
+#      empty or absent. A release build passes `test_build = false` to the
+#      core's `relying_party_id` and is `getvela.app` whatever it says; an
+#      archive built with a test domain is still not a store binary.
 #
 # Pure inspection: strings, nm and grep — no signing identity, no network.
 set -euo pipefail
@@ -185,9 +190,20 @@ else
   fi
 fi
 
+# 5. The test passkey domain (§35): empty in a store build. `plutil` exits
+#    non-zero for a key that is absent, which is as good as empty.
+app_plist="$(dirname "$target")/Info.plist"
+if [[ ! -f "$app_plist" ]]; then
+  fail "the app has no Info.plist beside its executable"
+else
+  rp_domain="$(/usr/bin/plutil -extract VelaTestRpDomain raw -o - "$app_plist" 2>/dev/null || true)"
+  [[ -z "$rp_domain" ]] || fail "the app carries a test passkey domain: VelaTestRpDomain = '$rp_domain' (a store build sets no TEST_RP_DOMAIN)"
+fi
+
 if (( failed )); then
   exit 1
 fi
 echo "ok: none of $count developer inputs, no fixture symbol, no parallel-space binding;" \
   "the widget extension links no core, no network stack, no keychain;" \
-  "the Safari extension is the release package, links no core and is entitled to nothing"
+  "the Safari extension is the release package, links no core and is entitled to nothing;" \
+  "no test passkey domain"

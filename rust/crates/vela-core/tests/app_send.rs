@@ -4220,6 +4220,8 @@ fn spine_operation(submit: &Op) -> vela_core::user_op::UserOperation {
         max_fee_per_gas: 0,
         max_priority_fee_per_gas: 0,
         paymaster_and_data: Vec::new(),
+        valid_after: 0,
+        valid_until: 1_800_001_800, // stamped, as every spine stamps it (§35)
         signature: Vec::new(),
     }
 }

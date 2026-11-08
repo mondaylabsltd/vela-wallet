@@ -451,6 +451,8 @@ window.VelaCS = window.VelaCS || {};
     if (view.fee.unknown) {
       row.appendChild(el('span', 'fee-value', t('ui.feeUnstated')));
       wrap.appendChild(row);
+      // §35: with no fee to fold under, the expiry still shows.
+      if (view.expires) wrap.appendChild(el('div', 'fee-note fee-expires', t('field.validUntil') + ' ' + view.expires));
       return wrap;
     }
 
@@ -488,6 +490,8 @@ window.VelaCS = window.VelaCS || {};
       }
     }
     if (view.fee.gas) note.appendChild(el('div', null, t('ui.feeGas', { gas: view.fee.gas.gas })));
+    // §35: the operation's own expiry, read from the bytes being signed.
+    if (view.expires) note.appendChild(el('div', 'fee-expires', t('field.validUntil') + ' ' + view.expires));
     var feeCoin = view.fee.leg ? view.fee.leg.symbolClaimed && view.fee.leg.symbol
       : view.fee.gas && view.fee.gas.symbolClaimed && view.fee.gas.symbol;
     if (feeCoin) note.appendChild(coinClaim('fee-coin', feeCoin));

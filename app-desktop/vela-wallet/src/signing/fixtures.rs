@@ -2140,14 +2140,17 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
     model
 }
 
-/// `VELA_SIGNING_REFUSAL=held|refused|went-first|fees` — with `VELA_PAGE=
+/// `VELA_SIGNING_REFUSAL=held|refused|went-first|fees|expired|expired-tracked` — with `VELA_PAGE=
 /// gallery` and a signing state: the sheet after the relay did not take the
 /// operation, through the real `sign_request` core, so its failure line is
 /// the core's one sentence for it (`SignView.failure_refusal_key`, PR 2 note
 /// 9). At submit: another operation of the account holds the nonce (`held`
 /// — "Try again" stays) or a plain refusal; after it, the tracker's verdict
 /// with its reason (`went-first`: the nonce another operation used; `fees`:
-/// fees stayed above). Same env-pin family as `VELA_SIGNING_STATE`.
+/// fees stayed above). §35: `expired` — its window closed before the
+/// EntryPoint saw it, answered at submit as the shell does (not sent, Try
+/// again); `expired-tracked` — the tracker's `RefusalReason::Expired`. Same
+/// env-pin family as `VELA_SIGNING_STATE`.
 #[must_use]
 pub fn refusal_pin() -> Option<vela_core::app::sign_request::SignView> {
     let want = crate::dev_env::var!("VELA_SIGNING_REFUSAL")?;
@@ -2181,6 +2184,13 @@ pub fn refusal_view(want: &str) -> Option<vela_core::app::sign_request::SignView
         },
         "went-first" => Ends::Tracked(RefusalReason::NonceUsed),
         "fees" => Ends::Tracked(RefusalReason::FeeBelowMarket),
+        // §35: its window closed before the EntryPoint saw it — the shell's
+        // answer for an expired submit (`sign_request::submit_failure`).
+        "expired" => Ends::AtSubmit {
+            message: vela_core::user_op::EXPIRED_DETAIL.to_owned(),
+            refused: true,
+        },
+        "expired-tracked" => Ends::Tracked(RefusalReason::Expired),
         _ => return None,
     };
     let mut host = CoreHost::<SignRequest>::new();
@@ -2968,7 +2978,9 @@ mod tests {
     fn the_refusal_pins_say_why() {
         use crate::flows::fixtures::ReceiptStage;
         use vela_core::app::sign_confirm::NOT_SENT_BODY_KEY;
-        use vela_core::app::tx_tracker::{REFUSED_FEES_KEY, REFUSED_KEY, REFUSED_NONCE_KEY};
+        use vela_core::app::tx_tracker::{
+            REFUSED_EXPIRED_KEY, REFUSED_FEES_KEY, REFUSED_KEY, REFUSED_NONCE_KEY,
+        };
         let s = SigningStrings::resolve(&Loc::from_env());
         let clock = crate::signing::status::Clock {
             now_ms: 20_000.0,
@@ -2980,6 +2992,11 @@ mod tests {
             ("refused", REFUSED_KEY, false),
             ("went-first", REFUSED_NONCE_KEY, false),
             ("fees", REFUSED_FEES_KEY, false),
+            // §35: expired before it was submitted — not sent, its own
+            // sentence, and Try again (a new signature, its own window).
+            ("expired", REFUSED_EXPIRED_KEY, true),
+            // …and a relay's "expired" refusal the tracker names after it.
+            ("expired-tracked", REFUSED_EXPIRED_KEY, false),
         ] {
             let view = refusal_view(want).unwrap_or_else(|| unreachable!("{want}"));
             assert_eq!(view.failure_refusal_key.as_deref(), Some(key), "{want}");
@@ -2993,7 +3010,21 @@ mod tests {
             assert_eq!(receipt.retry.is_some(), retry, "{want}");
             // PR 2 polish: the held nonce is "Not sent yet" — the calm disc
             // and its own title, never "Failed" in red.
-            if want == "held" {
+            // §35: expired is "not sent" however it was learnt — at submit
+            // (with Try again) or from the tracker after it (the core's
+            // `failure_not_sent`): calm, never the failure's red.
+            if want.starts_with("expired") {
+                assert!(view.failure_not_sent, "{want}");
+                if want == "expired" {
+                    assert!(!view.failure_refused, "Try again stays");
+                }
+                assert_eq!(receipt.stage, ReceiptStage::NotSent);
+                assert_eq!(
+                    receipt.captions,
+                    vec![Loc::from_env().t(REFUSED_EXPIRED_KEY)]
+                );
+                assert_ne!(receipt.captions, vec![s.refused.clone()]);
+            } else if want == "held" {
                 assert!(view.failure_not_sent);
                 assert_eq!(receipt.stage, ReceiptStage::NotSent);
                 assert_eq!(receipt.title, s.not_sent_title);

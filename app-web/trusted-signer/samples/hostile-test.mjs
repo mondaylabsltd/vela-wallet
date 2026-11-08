@@ -75,7 +75,7 @@ const userOp = {
   ]),
   // Zero, as they are on Vela: the fee is the leg above, not gas.
   verificationGasLimit: '0', callGasLimit: '0', preVerificationGas: '0',
-  maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x',
+  maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x', validAfter: '0', validUntil: '1800001800',
 };
 
 const hostile = {
@@ -350,6 +350,63 @@ try {
       (await viaUrl.ev("document.querySelector('.confirm').disabled")),
       String(await viaUrl.text()).replace(/\n/g, ' / ').slice(0, 220));
     await viaUrl.close();
+  }
+
+  // --- 3. a validity window the requester garbled (§35)
+  //
+  // The operation's validAfter / validUntil are in the digest. One that does
+  // not read as the core reads it — past uint48, negative, not a number, a
+  // window that opens after it closes — is no window: the page refuses it on
+  // the card, before any passkey prompt, and never derives a digest. One with
+  // no expiry is refused in its own words. Over the URL channel, answered to
+  // the wallet, exactly as the apps open the page.
+  {
+    const windowWords = 'validity window (validAfter / validUntil) doesn’t read';
+    const neverWords = 'never expires';
+    const cases = [
+      ['validUntil one past uint48 max', { validAfter: '0', validUntil: String(1n << 48n) }, windowWords],
+      ['validUntil past u64', { validAfter: '0', validUntil: '18446744073709551616' }, windowWords],
+      ['a negative validUntil', { validAfter: '0', validUntil: '-1' }, windowWords],
+      ['a non-numeric validUntil', { validAfter: '0', validUntil: 'POISONWINDOW' }, windowWords],
+      ['validUntil as true', { validAfter: '0', validUntil: true }, windowWords],
+      ['a window that opens after it closes', { validAfter: '1800001801', validUntil: '1800001800' }, windowWords],
+      ['no validUntil at all', { validAfter: '0', validUntil: undefined }, neverWords],
+      ['validUntil "0"', { validAfter: '0', validUntil: '0' }, neverWords],
+    ];
+    let n = 0;
+    for (const [what, garbled, words] of cases) {
+      n++;
+      const op = { ...userOp, ...garbled };
+      if (garbled.validUntil === undefined) delete op.validUntil;
+      const request = {
+        intent: { method: 'eth_sendTransaction', origin: 'https://app.uniswap.org', params: [{ to: USDC, value: '0x0', data: transferCall }] },
+        context: { chainId: 1, account: SAFE, allowCredentials: [b64url(new Uint8Array(16).fill(7))], operation: { userOp: op, feeLegIndex: 1 } },
+      };
+      await page.navigate(`${SIGNER}?ch=url&lang=en&n=w${n}#i=${b64url(JSON.stringify(request))}` +
+        `&cb=${b64url('velawallet://sign-result')}&t=tok-window-${n}`);
+      const settled = await page.waitFor("!!window.__velaState && window.__velaState.phase === 'refused'", 8000);
+      const warnings = String(await page.ev("[...document.querySelectorAll('.warning-text')].map(n => n.textContent).join(' | ')"));
+      // Pushed past the disabled button, the tap still opens nothing.
+      await page.ev("(() => { const b = document.querySelector('.confirm'); if (b) { b.disabled = false; b.click(); } return true; })()", true);
+      await sleep(300);
+      check(`window: ${what} — refused on the card, in its words, no digest, no passkey prompt`,
+        settled && warnings.includes(words) && !(await page.ev('!!window.__slider')) &&
+        !(await page.ev("!!document.querySelector('.fee-expires')")) &&
+        (await page.ev('window.__webauthnCalls')) === 0,
+        warnings.slice(0, 100));
+    }
+    // The control: the same operation with the window the core stamps signs.
+    const good = {
+      intent: { method: 'eth_sendTransaction', origin: 'https://app.uniswap.org', params: [{ to: USDC, value: '0x0', data: transferCall }] },
+      context: { chainId: 1, account: SAFE, operation: { userOp, feeLegIndex: 1 } },
+    };
+    await page.navigate(`${SIGNER}?ch=url&lang=en&n=wgood#i=${b64url(JSON.stringify(good))}` +
+      `&cb=${b64url('velawallet://sign-result')}&t=tok-window-good`);
+    const armed = await page.waitFor('!!window.__slider', 8000);
+    await page.ev("[...document.querySelectorAll('details')].forEach(d => d.open = true); true");
+    const expiry = String(await page.ev("(document.querySelector('.fee-expires') || {}).textContent || ''"));
+    check('window: the stamped operation is signable, and its card says until when',
+      armed && /^Valid until \d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(expiry), expiry);
   }
 
   const errors = page.console.filter((line) => !/favicon|ERR_NAME_NOT_RESOLVED|Failed to load resource/.test(line));

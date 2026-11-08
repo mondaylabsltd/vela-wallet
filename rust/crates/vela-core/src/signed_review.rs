@@ -26,7 +26,7 @@ use ts_rs::TS;
 use crate::error::CoreError;
 use crate::primitives::{function_selector, parse_address, to_hex};
 use crate::safe::MULTI_SEND;
-use crate::user_op::{calculate_safe_op_hash, UserOperation};
+use crate::user_op::{signable_safe_op_hash, UserOperation};
 
 /// One transfer the review showed: `amount` of `token` (`None`: the chain's
 /// native coin) to `to`, in base units as a decimal string.
@@ -337,14 +337,16 @@ pub fn from_json(review_json: &str) -> Result<SignedReview, CoreError> {
 }
 
 /// The SafeOp hash the passkey signs ([`calculate_safe_op_hash`]) — only for
-/// an operation that is the reviewed transfer ([`check`]).
+/// an operation that is the reviewed transfer ([`check`]) and expires
+/// ([`crate::user_op::signable_safe_op_hash`], §35).
 pub fn reviewed_safe_op_hash(
     op: &UserOperation,
     chain_id: u64,
     review: &SignedReview,
 ) -> Result<Vec<u8>, CoreError> {
     check(op, chain_id, review)?;
-    calculate_safe_op_hash(op, chain_id)
+    // §35: and only one that expires.
+    signable_safe_op_hash(op, chain_id)
 }
 
 #[cfg(test)]
@@ -352,7 +354,7 @@ mod tests {
     use super::*;
     use crate::user_op::{
         build_execute_call_data, build_in_band_fee_leg, build_multi_send_execute_call_data,
-        encode_erc20_transfer, in_band_batch, MultiSendCall,
+        calculate_safe_op_hash, encode_erc20_transfer, in_band_batch, MultiSendCall,
     };
 
     const SAFE: &str = "0x1100000000000000000000000000000000045aC0";
@@ -385,6 +387,8 @@ mod tests {
             max_fee_per_gas: 0,
             max_priority_fee_per_gas: 0,
             paymaster_and_data: Vec::new(),
+            valid_after: 0,
+            valid_until: 1_800_000_000,
             signature: Vec::new(),
         }
     }

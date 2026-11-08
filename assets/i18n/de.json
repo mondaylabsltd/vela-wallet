@@ -124,7 +124,7 @@
   },
   "analytics": {
    "title": "Anonyme Nutzungsstatistik teilen",
-   "subtitle": "Nur welche Seiten geöffnet und welche Schritte abgeschlossen werden — nie Adressen, Beträge oder Namen."
+   "subtitle": "Aus, solange du es nicht einschaltest. Nur welche Seiten geöffnet und welche Schritte abgeschlossen werden — nie Adressen, Beträge, Namen oder Transaktionen."
   },
   "agent": {
    "title": "KI-Agent",
@@ -1575,10 +1575,12 @@
    "selfCallBlockedSafeTx": "Diese Anfrage will, dass dein Schlüssel eine Safe-Transaktion für eine spätere Ausführung freigibt. Vela lehnt ab: So eine Signatur lässt sich auch ohne dich verwenden. Es wurde nichts signiert.",
    "parentSafeBlocked": "Diese Website wollte, dass dein Konto für ein Multisig, dessen Mitglied du bist, etwas ändert oder freigibt ({{function}} auf {{safe}}). Vela lässt das keine Website tun – nutze die eigene Ansicht des Multisigs. Es wurde nichts signiert.",
    "parentSafeUnchecked": "Diese Website wollte, dass dein Konto für einen Safe handelt ({{function}} auf {{safe}}), und Vela konnte nicht prüfen, ob du einer seiner Eigentümer bist. Vela lehnt ab, statt zu raten – versuche es online erneut oder nutze die eigene Ansicht des Multisigs. Es wurde nichts signiert.",
+   "multisigSelfCallBlocked": "Diese Website hat diesen Multisig aufgefordert, zu ändern, wer ihn kontrolliert ({{function}}). Vela lässt das eine Website nie tun – Mitglieder ändern das auf der eigenen Seite des Multisigs. Es wurde nichts vorgeschlagen.",
    "stillConfirming": "Noch nicht in der Chain. Vela prüft weiter – bitte nicht erneut senden.",
    "maybeSent": "Möglicherweise schon gesendet. Vela prüft weiter – bitte nicht erneut senden.",
    "refused": "Das Netzwerk hat sie abgelehnt – es wurde nichts gesendet.",
    "wentFirst": "Eine andere Transaktion dieses Kontos war schneller – es wurde nichts gesendet.",
+   "expired": "Sie ist abgelaufen, bevor sie eingereicht wurde – es wurde nichts gesendet.",
    "notSentTitle": "Noch nicht gesendet",
    "notSentBody": "Deine vorige Transaktion in diesem Netzwerk wird noch verarbeitet. Versuche es erneut, sobald sie fertig ist.",
    "unknownOutcome": "Nach 24 Stunden noch unbestätigt.",
@@ -1763,6 +1765,7 @@
    "reasonFeeToken": "Das Relay kann diesen Coin gerade nicht bepreisen. Wird erneut versucht – oder zahle die Gebühr mit einem anderen Coin.",
    "reasonSimulation": "Das Relay konnte diese Transaktion noch nicht testweise ausführen. Wird automatisch erneut versucht.",
    "reasonQuoteHigh": "Der Gaspreis des Relays liegt gerade weit über dem des Netzwerks. Wird automatisch erneut versucht.",
+   "reasonSettlementHigh": "Das Relay will mehr Gas berechnen, als diese Transaktion verbrauchen kann – Vela nimmt dieses Angebot nicht an. Wird automatisch erneut versucht.",
    "reasonChainDown": "{{chain}} ist nicht erreichbar, die Gebühr kann nicht berechnet werden. Wird automatisch erneut versucht.",
    "reasonInternal": "In Vela ist etwas schiefgelaufen. Falls es so bleibt, öffne die App neu.",
    "rowShort": "Benötigt ~{{need}}, vorhanden {{have}}",
@@ -1771,6 +1774,7 @@
    "reasonFeeTokenStopped": "Das Relay kann diesen Coin gerade nicht bepreisen. Zahle mit einem anderen Coin oder versuche es erneut.",
    "reasonSimulationStopped": "Das Relay konnte diese Transaktion nicht testweise ausführen.",
    "reasonQuoteHighStopped": "Der Gaspreis des Relays liegt gerade weit über dem des Netzwerks.",
+   "reasonSettlementHighStopped": "Das Relay will mehr Gas berechnen, als diese Transaktion verbrauchen kann – Vela nimmt dieses Angebot nicht an.",
    "reasonChainDownStopped": "{{chain}} ist nicht erreichbar, die Gebühr kann nicht berechnet werden."
   },
   "dock": {

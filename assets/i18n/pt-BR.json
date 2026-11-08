@@ -124,7 +124,7 @@
   },
   "analytics": {
    "title": "Compartilhar estatísticas de uso anônimas",
-   "subtitle": "Só quais telas são abertas e quais etapas terminam — nunca endereços, valores ou nomes."
+   "subtitle": "Desligado a menos que você ative. Só quais telas são abertas e quais etapas terminam — nunca endereços, valores, nomes ou transações."
   },
   "agent": {
    "title": "Agente de IA",
@@ -1580,10 +1580,12 @@
    "selfCallBlockedSafeTx": "Esta solicitação pede que a sua chave autorize uma transação Safe para ser executada depois. A Vela recusa — uma assinatura dessas pode ser usada sem você. Nada foi assinado.",
    "parentSafeBlocked": "Este site pediu para sua conta alterar ou aprovar algo para um multisig do qual você é membro ({{function}} em {{safe}}). A Vela nunca deixa um site fazer isso — use a tela do próprio multisig. Nada foi assinado.",
    "parentSafeUnchecked": "Este site pediu para sua conta agir por um Safe ({{function}} em {{safe}}), e a Vela não conseguiu verificar se você é um dos donos. A Vela recusa em vez de adivinhar — tente de novo quando estiver online ou use a tela do próprio multisig. Nada foi assinado.",
+   "multisigSelfCallBlocked": "Este site pediu que este multisig mude quem o controla ({{function}}). A Vela nunca deixa um site fazer isso — os membros mudam isso na tela do próprio multisig. Nada foi proposto.",
    "stillConfirming": "Ainda não está na rede. O Vela continua verificando — não envie de novo.",
    "maybeSent": "Talvez já tenha sido enviada. O Vela continua verificando — não envie de novo.",
    "refused": "A rede recusou — nada foi enviado.",
    "wentFirst": "Outra transação desta conta passou antes — nada foi enviado.",
+   "expired": "Expirou antes de ser enviada — nada foi enviado.",
    "notSentTitle": "Ainda não enviada",
    "notSentBody": "Sua transação anterior nesta rede ainda está sendo processada. Tente de novo quando ela terminar.",
    "unknownOutcome": "Ainda sem confirmação após 24 horas.",
@@ -1768,6 +1770,7 @@
    "reasonFeeToken": "O relay não consegue cotar esta moeda agora. Tentando de novo — ou pague a taxa com outra moeda.",
    "reasonSimulation": "O relay ainda não conseguiu simular esta transação. Tentando de novo automaticamente.",
    "reasonQuoteHigh": "O preço do gas do relay está bem acima do preço da rede agora. Tentando de novo automaticamente.",
+   "reasonSettlementHigh": "O relay pediu para cobrar mais gás do que esta transação pode usar — a Vela não aceita essa cotação. Tentando de novo automaticamente.",
    "reasonChainDown": "Não foi possível conectar à {{chain}} para calcular a taxa. Tentando de novo automaticamente.",
    "reasonInternal": "Algo deu errado dentro do Vela. Se continuar, reabra o app.",
    "rowShort": "Precisa de ~{{need}}, tem {{have}}",
@@ -1776,6 +1779,7 @@
    "reasonFeeTokenStopped": "O relay não consegue cotar esta moeda agora. Pague com outra moeda ou tente de novo.",
    "reasonSimulationStopped": "O relay não conseguiu simular esta transação.",
    "reasonQuoteHighStopped": "O preço do gas do relay está bem acima do preço da rede agora.",
+   "reasonSettlementHighStopped": "O relay pediu para cobrar mais gás do que esta transação pode usar — a Vela não aceita essa cotação.",
    "reasonChainDownStopped": "Não foi possível conectar à {{chain}} para calcular a taxa."
   },
   "dock": {

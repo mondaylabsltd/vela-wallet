@@ -253,6 +253,8 @@ fn run(func: &str, i: &Value) -> Value {
                 max_fee_per_gas: "0".into(),
                 max_priority_fee_per_gas: "0".into(),
                 paymaster_and_data: Vec::new(),
+                valid_after: 0,
+                valid_until: 0,
                 signature: Vec::new(),
             };
             let applied = crate::user_op_apply_estimate(
@@ -318,6 +320,7 @@ fn run(func: &str, i: &Value) -> Value {
             crate::RelayRejection::RelayerUnavailable => json!("relayer_unavailable"),
             crate::RelayRejection::BundlerUnderfunded => json!("bundler_underfunded"),
             crate::RelayRejection::NonceUsed => json!("nonce_used"),
+            crate::RelayRejection::Expired => json!("expired"),
             crate::RelayRejection::NonceHeld { user_op_hash } => {
                 json!({ "nonce_held": { "user_op_hash": user_op_hash } })
             }

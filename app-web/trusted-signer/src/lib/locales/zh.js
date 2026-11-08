@@ -154,6 +154,8 @@ window.VelaCS.i18n.register('zh', {
 
   'refuse.ethSign': '这一页不签 eth_sign。它签的是一段无法解读的哈希，正是清晰签名要消灭的东西。',
   'refuse.noSafeOp': '交易摘要还接不出来：它是 Safe 4337 的 SafeOp 哈希，需要账户、EntryPoint 与模块地址。这一页不会拿一个猜的摘要去签。',
+  'refuse.noExpiry': '这笔操作永不过期（没有 validUntil）：中继可以一直扣着它，在任何时候发出。Vela 只签会过期的操作。不签。',
+  'refuse.badWindow': '这笔操作的有效期（validAfter / validUntil）读不成两个 uint48 秒数，算不出将要签的是什么。不签。',
   'refuse.typedShape': '这个请求没有恰好为一个账户携带一份签名内容——显示的内容可能与将签署的不同。不签名。',
   'refuse.unknownMethod': '这个方法的签名摘要无从推导，因此不签。',
   'ui.cannotSign': '这笔请求不能在这里签 —— 理由在上面。关掉这一页即拒绝。',

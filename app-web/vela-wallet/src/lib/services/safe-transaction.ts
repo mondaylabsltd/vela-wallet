@@ -49,7 +49,8 @@ import {
 	userOpPreviousPendingDetail,
 	userOpSubmitStep,
 	type RelayRejection,
-	type SubmitReply
+	type SubmitReply,
+	userOpValidityWindow
 } from '$lib/core/kernels';
 import { rpcCall } from './rpc-adapter';
 import { maybeDeliveredOf, PoolFailedError } from './rpc-pool';
@@ -112,7 +113,25 @@ export interface UserOperation {
 	maxFeePerGas: bigint;
 	maxPriorityFeePerGas: bigint;
 	paymasterAndData: Uint8Array;
+	/**
+	 * §35: the SafeOp's validity window, Unix seconds — hashed, and carried in
+	 * the signature's first 12 bytes. Absent (an estimate's draft) is 0, which
+	 * nothing signs: {@link stampValidity} sets it just before the hash.
+	 */
+	validAfter?: bigint;
+	validUntil?: bigint;
 	signature: Uint8Array;
+}
+
+/**
+ * §35: stamp the FINAL operation with the window it is signed with — the
+ * core's rule (`userOpValidityWindow`): validAfter 0, validUntil now + 30
+ * minutes. Every attempt stamps again, so a re-sign has its own window.
+ */
+export function stampValidity(userOp: UserOperation, nowMs: number = Date.now()): void {
+	const { validAfter, validUntil } = userOpValidityWindow(nowMs);
+	userOp.validAfter = validAfter;
+	userOp.validUntil = validUntil;
 }
 
 export interface TransactionResult {
@@ -230,7 +249,11 @@ function operationToSign(userOp: UserOperation, innerCalls: MultiSendCall[]): Op
 			preVerificationGas: userOp.preVerificationGas.toString(),
 			maxFeePerGas: userOp.maxFeePerGas.toString(),
 			maxPriorityFeePerGas: userOp.maxPriorityFeePerGas.toString(),
-			paymasterAndData: hex(userOp.paymasterAndData)
+			paymasterAndData: hex(userOp.paymasterAndData),
+			// §35: the window the digest covers; the page shows it and refuses an
+			// operation without one.
+			validAfter: (userOp.validAfter ?? 0n).toString(),
+			validUntil: (userOp.validUntil ?? 0n).toString()
 		},
 		calls: innerCalls.map((call) => ({
 			to: call.to,
@@ -2022,6 +2045,7 @@ async function sendUserOpTempo(
 	// stablecoin to charge for the outer 0x76. The core rebuilds the batch from the
 	// calls and the reimbursement it was shown and attests the hash first (spec 028
 	// Phase 8); an assertion over any other challenge is discarded.
+	stampValidity(userOp); // §35: just before the hash
 	const safeOpHash = attestedSafeOpHash(
 		userOp,
 		chainId,
@@ -2041,6 +2065,7 @@ async function sendUserOpTempo(
 	}
 	const clientDataFields = extractClientDataFields(assertion.clientDataJSON);
 	userOp.signature = buildUserOpSignature(
+		{ validAfter: userOp.validAfter ?? 0n, validUntil: userOp.validUntil ?? 0n },
 		assertion.authenticatorData,
 		clientDataFields,
 		rawSig.slice(0, 32),
@@ -2310,6 +2335,7 @@ async function sendUserOpInBand(
 	// is Tempo-envelope-specific; the generic outer tx is a native raw tx. The core
 	// rebuilds the batch from the calls and the displayed fee and attests the hash
 	// first (spec 028 Phase 8); an assertion over any other challenge is discarded.
+	stampValidity(userOp); // §35: just before the hash
 	const safeOpHash = attestedSafeOpHash(
 		userOp,
 		chainId,
@@ -2329,6 +2355,7 @@ async function sendUserOpInBand(
 	}
 	const clientDataFields = extractClientDataFields(assertion.clientDataJSON);
 	userOp.signature = buildUserOpSignature(
+		{ validAfter: userOp.validAfter ?? 0n, validUntil: userOp.validUntil ?? 0n },
 		assertion.authenticatorData,
 		clientDataFields,
 		rawSig.slice(0, 32),
@@ -2531,8 +2558,8 @@ export function calculateSafeOpHash(userOp: UserOperation, chainId: number): Uin
 			abiEncodeUint256(userOp.maxPriorityFeePerGas),
 			abiEncodeUint256(userOp.maxFeePerGas),
 			keccak256(userOp.paymasterAndData), // hash of dynamic
-			abiEncodeUint256(0n), // validAfter
-			abiEncodeUint256(0n), // validUntil
+			abiEncodeUint256(userOp.validAfter ?? 0n), // §35: the window signed
+			abiEncodeUint256(userOp.validUntil ?? 0n),
 			abiEncodeAddress(ENTRY_POINT)
 		)
 	);
@@ -2661,6 +2688,9 @@ export function extractClientDataFields(clientDataJSON: Uint8Array): string {
  * dynamicData = abi.encode(bytes authenticatorData, string clientDataFields, uint256 sigR, uint256 sigS)
  */
 export function buildUserOpSignature(
+	// §35: the window the SafeOp hash covered — `validAfter(6) ‖ validUntil(6)`,
+	// big-endian, what Safe4337Module._getSafeOp slices off signature[0:12].
+	window: { validAfter: bigint; validUntil: bigint },
 	authenticatorData: Uint8Array,
 	clientDataFields: string,
 	sigR: Uint8Array,
@@ -2670,8 +2700,16 @@ export function buildUserOpSignature(
 	// key's own proxy for a later founding key.
 	signerAddress: string = WEBAUTHN_SIGNER
 ): Uint8Array {
-	// Validity window: validAfter(6) + validUntil(6) = 12 bytes of zeros (4337 SafeModule only)
 	const validityPadding = new Uint8Array(12);
+	const uint48 = (n: bigint, at: number) => {
+		if (n < 0n || n > 0xffffffffffffn) throw new Error('validity window does not fit uint48');
+		for (let i = 5; i >= 0; i--) {
+			validityPadding[at + i] = Number(n & 0xffn);
+			n >>= 8n;
+		}
+	};
+	uint48(window.validAfter, 0);
+	uint48(window.validUntil, 6);
 	const core = buildContractSignatureCore(
 		authenticatorData,
 		clientDataFields,
@@ -2789,7 +2827,14 @@ function buildDummySignature(): Uint8Array {
 	// cannot diverge from a submitted UserOp. r/s intentionally cannot verify
 	// this assertion: producing a valid assertion here would require a passkey
 	// prompt before the user confirms the transaction.
-	return buildUserOpSignature(fakeAuthData, fakeClientFields, fakeR, fakeS);
+	// The estimate's window is zero ("never expires"): it is never signed.
+	return buildUserOpSignature(
+		{ validAfter: 0n, validUntil: 0n },
+		fakeAuthData,
+		fakeClientFields,
+		fakeR,
+		fakeS
+	);
 }
 
 // ---------------------------------------------------------------------------

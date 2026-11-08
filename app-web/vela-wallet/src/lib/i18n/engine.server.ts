@@ -1083,6 +1083,7 @@ export function resolveRequestMessages(locale: Locale): RequestMessages {
 		parentSafeTitle: k('componentsUi.signing.selfCallBlockedTitle'),
 		parentSafeBlocked: k('componentsUi.signing.parentSafeBlocked'),
 		parentSafeUnchecked: k('componentsUi.signing.parentSafeUnchecked'),
+		multisigSelfCallBlocked: k('componentsUi.signing.multisigSelfCallBlocked'),
 		spaceMoved: k('connect.browser.spaceMoved'),
 		gotIt: k('common.gotIt'),
 		addNetwork: {
@@ -1370,6 +1371,9 @@ export { FEE_REASON_KEYS };
 export const REFUSAL_KEYS = [
 	'send.txRejectedFees',
 	'componentsUi.signing.wentFirst',
+	// §35: it expired before it was submitted (`RefusalReason::Expired`, and
+	// the sheet's `failure_refusal_key` for a submit the EntryPoint refused AA22).
+	'componentsUi.signing.expired',
 	'componentsUi.signing.refused',
 	// PR 2 polish: at submit, the relay turned it back because the account's
 	// previous operation on this network still holds the nonce

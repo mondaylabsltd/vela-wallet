@@ -143,6 +143,8 @@ struct SigningFeeRetryTests {
             ("fee_token_unavailable", "componentsUi.gas.reasonFeeToken"),
             ("estimate_failed", "componentsUi.gas.reasonSimulation"),
             ("gas_quote_too_high", "componentsUi.gas.reasonQuoteHigh"),
+            // §35: the relay billed more gas than the operation can use.
+            ("settlement_gas_too_high", "componentsUi.gas.reasonSettlementHigh"),
         ] {
             #expect(warning(SigningLive.feeModel(clear: clear(.clearSign), fee: fee(failed: failure), context: context()))
                     == loc.t(key), "\(failure)")

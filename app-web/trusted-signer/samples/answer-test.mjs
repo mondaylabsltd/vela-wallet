@@ -95,7 +95,7 @@ const userOp = {
   sender: SAFE, nonce: '0x7', initCode: '0x',
   callData: lib.encode.call('executeUserOp(address,uint256,bytes,uint8)', [USDC, 0n, drain, 0]),
   verificationGasLimit: '300000', callGasLimit: '200000', preVerificationGas: '110000',
-  maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x',
+  maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x', validAfter: '0', validUntil: '1800001800',
 };
 const intent = {
   method: 'eth_sendTransaction', origin: 'https://app.uniswap.org',

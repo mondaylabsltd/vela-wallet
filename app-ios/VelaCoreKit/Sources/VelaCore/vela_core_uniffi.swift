@@ -14637,11 +14637,23 @@ public struct UserOpDraft: Equatable, Hashable {
     public var maxFeePerGas: String
     public var maxPriorityFeePerGas: String
     public var paymasterAndData: Data
+    /**
+     * The SafeOp's validity window, Unix seconds (§35): zero on a draft,
+     * stamped by [`user_op_stamp_validity`] just before the hash is asked
+     * for. The hash and the signature both carry it.
+     */
+    public var validAfter: UInt64
+    public var validUntil: UInt64
     public var signature: Data
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(sender: String, nonce: String, initCode: Data, callData: Data, verificationGasLimit: String, callGasLimit: String, preVerificationGas: String, maxFeePerGas: String, maxPriorityFeePerGas: String, paymasterAndData: Data, signature: Data) {
+    public init(sender: String, nonce: String, initCode: Data, callData: Data, verificationGasLimit: String, callGasLimit: String, preVerificationGas: String, maxFeePerGas: String, maxPriorityFeePerGas: String, paymasterAndData: Data, 
+        /**
+         * The SafeOp's validity window, Unix seconds (§35): zero on a draft,
+         * stamped by [`user_op_stamp_validity`] just before the hash is asked
+         * for. The hash and the signature both carry it.
+         */validAfter: UInt64, validUntil: UInt64, signature: Data) {
         self.sender = sender
         self.nonce = nonce
         self.initCode = initCode
@@ -14652,6 +14664,8 @@ public struct UserOpDraft: Equatable, Hashable {
         self.maxFeePerGas = maxFeePerGas
         self.maxPriorityFeePerGas = maxPriorityFeePerGas
         self.paymasterAndData = paymasterAndData
+        self.validAfter = validAfter
+        self.validUntil = validUntil
         self.signature = signature
     }
 
@@ -14681,6 +14695,8 @@ public struct FfiConverterTypeUserOpDraft: FfiConverterRustBuffer {
                 maxFeePerGas: FfiConverterString.read(from: &buf), 
                 maxPriorityFeePerGas: FfiConverterString.read(from: &buf), 
                 paymasterAndData: FfiConverterData.read(from: &buf), 
+                validAfter: FfiConverterUInt64.read(from: &buf), 
+                validUntil: FfiConverterUInt64.read(from: &buf), 
                 signature: FfiConverterData.read(from: &buf)
         )
     }
@@ -14696,6 +14712,8 @@ public struct FfiConverterTypeUserOpDraft: FfiConverterRustBuffer {
         FfiConverterString.write(value.maxFeePerGas, into: &buf)
         FfiConverterString.write(value.maxPriorityFeePerGas, into: &buf)
         FfiConverterData.write(value.paymasterAndData, into: &buf)
+        FfiConverterUInt64.write(value.validAfter, into: &buf)
+        FfiConverterUInt64.write(value.validUntil, into: &buf)
         FfiConverterData.write(value.signature, into: &buf)
     }
 }
@@ -16305,6 +16323,13 @@ public enum RelayRejection: Equatable, Hashable {
      * hears [`user_op_nonce_used_detail`].
      */
     case nonceUsed
+    /**
+     * §35: the operation expired before the EntryPoint saw it (the relay's
+     * `AA22 expired or not due`). Nothing was sent; the send says so calmly
+     * (`SendSubmitFailure::Expired`) and signs anew; a dApp hears
+     * [`user_op_expired_detail`].
+     */
+    case expired
     case other(message: String
     )
 
@@ -16337,7 +16362,9 @@ public struct FfiConverterTypeRelayRejection: FfiConverterRustBuffer {
         
         case 4: return .nonceUsed
         
-        case 5: return .other(message: try FfiConverterString.read(from: &buf)
+        case 5: return .expired
+        
+        case 6: return .other(message: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -16365,8 +16392,12 @@ public struct FfiConverterTypeRelayRejection: FfiConverterRustBuffer {
             writeInt(&buf, Int32(4))
         
         
-        case let .other(message):
+        case .expired:
             writeInt(&buf, Int32(5))
+        
+        
+        case let .other(message):
+            writeInt(&buf, Int32(6))
             FfiConverterString.write(message, into: &buf)
             
         }
@@ -21026,6 +21057,17 @@ public func userOpEstimateFailure(errorJson: String) -> UserOpEstimateFailure  {
 })
 }
 /**
+ * The dApp's `-32603` detail for a request whose operation expired before it
+ * was submitted ([`RelayRejection::Expired`], §35) — a fixed sentence.
+ */
+public func userOpExpiredDetail() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_expired_detail(uniffiCallStatus
+    )
+})
+}
+/**
  * The floors for a chain and a deployment state: the in-band pair, or
  * Tempo's (its call floor grows with the sub-call count — the person's
  * calls plus the reimbursement leg).
@@ -21163,7 +21205,8 @@ public func userOpReviewedSafeOpHash(draft: UserOpDraft, chainId: UInt32, review
 })
 }
 /**
- * The SafeOp EIP-712 hash — the challenge the passkey signs.
+ * The SafeOp EIP-712 hash — the challenge the passkey signs. Refused for a
+ * draft that never expires (§35: [`user_op_stamp_validity`] first).
  */
 public func userOpSafeOpHash(draft: UserOpDraft, chainId: UInt32)throws  -> Data  {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
@@ -21187,6 +21230,20 @@ public func userOpSign(draft: UserOpDraft, assertion: WebAuthnAssertion, credent
         FfiConverterTypeWebAuthnAssertion_lower(assertion),
         FfiConverterString.lower(credentialId),
         FfiConverterSequenceTypeWalletKeyRecord.lower(keys),uniffiCallStatus
+    )
+})
+}
+/**
+ * The draft stamped with the window it is signed with (§35): `valid_after`
+ * 0, `valid_until` `now_ms` (the shell's clock) + 30 minutes. Every spine
+ * calls it on the final operation, just before the hash.
+ */
+public func userOpStampValidity(draft: UserOpDraft, nowMs: Double)throws  -> UserOpDraft  {
+    return try  FfiConverterTypeUserOpDraft_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_stamp_validity(
+        FfiConverterTypeUserOpDraft_lower(draft),
+        FfiConverterDouble.lower(nowMs),uniffiCallStatus
     )
 })
 }
@@ -22368,6 +22425,36 @@ public func productionWritesOptIn(value: String?) -> Bool  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_production_writes_opt_in(
         FfiConverterOptionString.lower(value),uniffiCallStatus
+    )
+})
+}
+/**
+ * §35: the relying party this build's platform passkeys use
+ * (`service_defaults::relying_party_id`): `getvela.app` for a release
+ * build; `localhost` for a test build on a simulator or emulator; the
+ * build's `TEST_RP_DOMAIN` (`test_domain`) for a test build on a device —
+ * and, with none, an error that says how to set it (never `getvela.app`).
+ */
+public func relyingPartyId(testBuild: Bool, simulator: Bool, testDomain: String?)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_relying_party_id(
+        FfiConverterBool.lower(testBuild),
+        FfiConverterBool.lower(simulator),
+        FfiConverterOptionString.lower(testDomain),uniffiCallStatus
+    )
+})
+}
+/**
+ * `relying_party_id` over JSON — the shared vector's `native` ask in,
+ * `{"rpId": …}` or `{"error": {kind, message}}` out (the shells' vector
+ * replays).
+ */
+public func relyingPartyJson(askJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_relying_party_json(
+        FfiConverterString.lower(askJson),uniffiCallStatus
     )
 })
 }
@@ -23767,6 +23854,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_user_op_estimate_failure() != 19910) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_expired_detail() != 39685) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_floors() != 34703) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23797,10 +23887,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_user_op_reviewed_safe_op_hash() != 6000) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_user_op_safe_op_hash() != 40057) {
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_safe_op_hash() != 54593) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_sign() != 20352) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_stamp_validity() != 23869) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_status_method() != 9391) {
@@ -24059,6 +24152,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_production_writes_opt_in() != 1203) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_relying_party_id() != 40812) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_relying_party_json() != 36380) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_service_defaults() != 64319) {

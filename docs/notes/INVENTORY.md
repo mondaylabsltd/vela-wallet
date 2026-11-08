@@ -67,7 +67,7 @@ security adds. Same rules as every other note: one point, a source, the cost sta
 | 28 | Several wallets on one device | One wallet is one row; lists aren't synced between devices | session.rs 50–57; ledger C-sync-1 | ✅ |
 | 29 | Your keys, as the wallet sees them | Read-only; which key signs on this device | W/settings/live.ts 1525–1600 | ✅ |
 | 30 | Backing up your public keys to Ethereum | One transaction, one signature; status read from the chain | core/registry_backup.rs | ⏸ Ethereum fee |
-| 31 | Usage statistics on web and the extension | On by default, cookieless, never addresses or amounts; native apps send none | W/analytics/consent.svelte.ts; privacy page | 🗣 requirements A03 still says "no analytics" |
+| 31 | Usage statistics on web and the extension | Opt-in (off by default, R21 §35), cookieless, never addresses, amounts or a transaction's outcome; native apps send none | W/analytics/consent.svelte.ts; privacy page; requirements A03 | ✅ |
 | 32 | Send feedback: exactly what is sent | Never addresses, balances or RPC URLs; always goes to getvela.app, even for self-hosters | W/services/bug-report.ts 1–63 | 🗣 not in self-hosting's list |
 | 33 | Debug mode: http dApps on your own network | Developer builds only; 7 taps on the version; never public http | core/prefs.rs 187–330; S/091 | ✅ |
 | 34 | Contacts: import and export | JSON or CSV; existing contacts win; lists don't sync, so this is how you move them | core/app/contacts_io.rs 1–40 | ✅ |

@@ -478,61 +478,75 @@ final class SignExecutor {
                 userOpHash: hash, receipt: receipt?.txHash, reverted: receipt?.confirmed == false
             )
         } catch let refused as UserOpSpine.Refused {
-            switch refused.failure {
-            case .passkeyCancelled:
-                return ["type": "passkey_cancelled"]
-            // send-11: the prompt ran out of the core's time — handled as a
-            // cancel, and the sheet says which (`passkey_note`).
-            case .passkeyTimedOut:
-                return ["type": "passkey_timed_out"]
-            case .signer(let kind, let message):
-                return Self.signerFailed(kind, message)
-            // Round 7: the page is the venue, so its ending is the answer —
-            // declined there (the core answers 4001 and clears the sheet), or
-            // the page's failure, which the core says on the sheet and to the
-            // site (`SignErrorKind::page_*`). Never "cancelled".
-            case .trustedSigner(let notice):
-                return notice.signOutcome
-            // Spec 102: this account cannot sign here. The core answers the
-            // page and draws the reason (`SignErrorNotice.venue_block`).
-            case .venueBlocked(let block):
-                return Self.venueBlocked(block)
-            case .askerGone:
-                VelaLog.notice(.sign, "asker gone before \(method) was sent — nothing signed or sent")
-                return ["type": "asker_gone"]
-            case .bundlerUnderfunded:
-                return [
-                    "type": "underfunded",
-                    "message": "The relay's gas account is underfunded",
-                    "funding": NSNull(),
-                ]
-            case .relayerUnavailable:
-                return Self.failed("The gas relayer is unavailable right now")
-            case .notSent:
-                // The core's fixed sentence, never the pool's text (RA10):
-                // true, and nothing in it for a page to misread.
-                return Self.failed(userOpNotSentDetail())
-            // The relay refused it (RJ3): the page is answered the core's
-            // "the network refused this" whatever the sentence, and the sheet
-            // never says "try again".
-            case .rejected(let message):
-                VelaLog.failure(.sign, kind: "refused", "chain=\(chainId)")
-                return Self.failed(message ?? userOpRefusedDappDetail(), refused: true)
-            case .other(let message):
-                return Self.failed(message ?? "Signing failed")
-            // PR 2 §3: an earlier op of this account holds the nonce. The page
-            // keeps its sentence (`PREVIOUS_PENDING_DETAIL`); nothing was sent.
-            case .previousPending:
-                return Self.failed(userOpPreviousPendingDetail())
-            // send-15: another transaction of this account spent the nonce
-            // first — the relay's refusal (RJ3), and the page hears the
-            // core's fixed sentence for it, never the relay's.
-            case .nonceUsed:
-                VelaLog.failure(.sign, kind: "nonce_used", "chain=\(chainId)")
-                return Self.failed(userOpNonceUsedDetail(), refused: true)
-            }
+            return Self.refusedOutcome(refused.failure, method: method, chainId: chainId)
         } catch {
             return Self.failed("Signing failed")
+        }
+    }
+
+    /// A spine refusal as the sign machine's `SignSubmitOutcome`: what the
+    /// sheet says and what the page hears are the core's, from this.
+    static func refusedOutcome(_ failure: UserOpSpine.Failure, method: String, chainId: Int) -> [String: Any] {
+        switch failure {
+        case .passkeyCancelled:
+            return ["type": "passkey_cancelled"]
+        // send-11: the prompt ran out of the core's time — handled as a
+        // cancel, and the sheet says which (`passkey_note`).
+        case .passkeyTimedOut:
+            return ["type": "passkey_timed_out"]
+        case .signer(let kind, let message):
+            return Self.signerFailed(kind, message)
+        // Round 7: the page is the venue, so its ending is the answer —
+        // declined there (the core answers 4001 and clears the sheet), or
+        // the page's failure, which the core says on the sheet and to the
+        // site (`SignErrorKind::page_*`). Never "cancelled".
+        case .trustedSigner(let notice):
+            return notice.signOutcome
+        // Spec 102: this account cannot sign here. The core answers the
+        // page and draws the reason (`SignErrorNotice.venue_block`).
+        case .venueBlocked(let block):
+            return Self.venueBlocked(block)
+        case .askerGone:
+            VelaLog.notice(.sign, "asker gone before \(method) was sent — nothing signed or sent")
+            return ["type": "asker_gone"]
+        case .bundlerUnderfunded:
+            return [
+                "type": "underfunded",
+                "message": "The relay's gas account is underfunded",
+                "funding": NSNull(),
+            ]
+        case .relayerUnavailable:
+            return Self.failed("The gas relayer is unavailable right now")
+        case .notSent:
+            // The core's fixed sentence, never the pool's text (RA10):
+            // true, and nothing in it for a page to misread.
+            return Self.failed(userOpNotSentDetail())
+        // The relay refused it (RJ3): the page is answered the core's
+        // "the network refused this" whatever the sentence, and the sheet
+        // never says "try again".
+        case .rejected(let message):
+            VelaLog.failure(.sign, kind: "refused", "chain=\(chainId)")
+            return Self.failed(message ?? userOpRefusedDappDetail(), refused: true)
+        case .other(let message):
+            return Self.failed(message ?? "Signing failed")
+        // PR 2 §3: an earlier op of this account holds the nonce. The page
+        // keeps its sentence (`PREVIOUS_PENDING_DETAIL`); nothing was sent.
+        case .previousPending:
+            return Self.failed(userOpPreviousPendingDetail())
+        // send-15: another transaction of this account spent the nonce
+        // first — the relay's refusal (RJ3), and the page hears the
+        // core's fixed sentence for it, never the relay's.
+        case .nonceUsed:
+            VelaLog.failure(.sign, kind: "nonce_used", "chain=\(chainId)")
+            return Self.failed(userOpNonceUsedDetail(), refused: true)
+        // §35: it expired before it was submitted — nothing was sent and
+        // it can never land. The page hears the core's fixed sentence;
+        // the core says it calmly on the sheet
+        // (`componentsUi.signing.expired`) and offers Try again, which
+        // signs anew with a window of its own.
+        case .expired:
+            VelaLog.failure(.sign, kind: "expired", "chain=\(chainId)")
+            return Self.failed(userOpExpiredDetail(), refused: true)
         }
     }
 

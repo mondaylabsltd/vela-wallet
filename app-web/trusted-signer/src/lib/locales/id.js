@@ -147,6 +147,8 @@ window.VelaCS.i18n.register('id', {
 
   'refuse.ethSign': 'Halaman ini tidak menandatangani eth_sign. eth_sign menandatangani hash yang tak terbaca — hal yang justru ingin dihapuskan oleh clear signing.',
   'refuse.noSafeOp': 'Digest transaksi belum bisa dihitung di sini: itu adalah hash SafeOp Safe 4337, yang memerlukan akun, EntryPoint, dan alamat modul. Halaman ini tidak akan menandatangani digest hasil tebakan.',
+  'refuse.noExpiry': 'Operasi ini tidak pernah kedaluwarsa (tanpa validUntil): relay bisa menahannya dan mengirimkannya kapan saja. Vela hanya menandatangani operasi yang kedaluwarsa. Tidak ditandatangani.',
+  'refuse.badWindow': 'Jendela validitas operasi ini (validAfter / validUntil) tidak terbaca sebagai dua detik uint48, sehingga apa yang akan ditandatangani tidak bisa dipastikan. Tidak ditandatangani.',
   'refuse.typedShape': 'Permintaan ini tidak membawa tepat satu pesan untuk ditandatangani oleh satu akun — yang ditampilkan bisa berbeda dari yang akan ditandatangani. Tidak akan ditandatangani.',
   'refuse.unknownMethod': 'Tidak ada digest yang bisa dihitung untuk metode ini, jadi tidak akan ditandatangani.',
   'ui.cannotSign': 'Permintaan ini tidak bisa ditandatangani di sini — alasannya ada di atas. Menutup halaman ini berarti menolaknya.',

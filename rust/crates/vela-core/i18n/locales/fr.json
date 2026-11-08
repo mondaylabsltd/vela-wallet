@@ -124,7 +124,7 @@
     },
     "analytics": {
       "title": "Partager des statistiques d'utilisation anonymes",
-      "subtitle": "Seulement les écrans ouverts et les étapes terminées — jamais d'adresses, de montants ni de noms."
+      "subtitle": "Désactivé sauf si vous l’activez. Seulement les écrans ouverts et les étapes terminées — jamais d’adresses, de montants, de noms ni de transactions."
     },
     "agent": {
       "title": "Agent IA",

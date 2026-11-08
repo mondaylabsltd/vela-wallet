@@ -17,6 +17,23 @@ pub fn service_defaults() -> String {
     vela_core::service_defaults::service_defaults_json()
 }
 
+/// §35: the relying party the web wallet uses on `host`
+/// (`service_defaults::web_relying_party_id`) — the rule `passkey.ts`
+/// follows, replayed against the shared vector.
+#[wasm_bindgen(js_name = webRelyingPartyId)]
+#[must_use]
+pub fn web_relying_party_id(host: &str, packaged_extension: bool) -> String {
+    vela_core::service_defaults::web_relying_party_id(host, packaged_extension)
+}
+
+/// `service_defaults::relying_party_id` over JSON (the native rule, for the
+/// shared vector's replay through the shipped wasm).
+#[wasm_bindgen(js_name = relyingPartyJson)]
+#[must_use]
+pub fn relying_party_json(ask_json: &str) -> String {
+    vela_core::service_defaults::relying_party_json(ask_json)
+}
+
 /// `service_defaults::write_verdict` over JSON: a `{ testBuild,
 /// allowProductionWrites, method, url, body }` ask in, a `{ verdict:
 /// "allowed" } | { verdict: "refused", host, key, message }` out.

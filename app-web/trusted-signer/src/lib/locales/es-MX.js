@@ -147,6 +147,8 @@ window.VelaCS.i18n.register('es-MX', {
 
   'refuse.ethSign': 'Esta página no firma eth_sign: ese método firma un hash ilegible — justo lo que la firma clara existe para eliminar.',
   'refuse.noSafeOp': 'Aquí todavía no se puede calcular el resumen de la transacción: es el hash SafeOp de Safe 4337, que necesita la cuenta, el EntryPoint y la dirección del módulo. Esta página no firmará un resumen adivinado.',
+  'refuse.noExpiry': 'La operación nunca vence (sin validUntil): un relay podría retenerla y enviarla en cualquier momento. Vela solo firma operaciones que vencen. No se firma.',
+  'refuse.badWindow': 'La ventana de validez de esta operación (validAfter / validUntil) no se lee como dos segundos uint48, así que no se puede saber qué se firmaría. No se firma.',
   'refuse.typedShape': 'Esta solicitud no trae exactamente un mensaje firmado para una sola cuenta — lo que se muestra podría ser distinto de lo que se firmaría. No se firmará nada.',
   'refuse.unknownMethod': 'No se puede calcular un resumen para este método, así que no se firmará.',
   'ui.cannotSign': 'Esta solicitud no se puede firmar aquí — las razones están arriba. Cerrar esta página la rechaza.',

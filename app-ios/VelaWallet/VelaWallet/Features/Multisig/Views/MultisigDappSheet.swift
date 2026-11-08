@@ -29,7 +29,7 @@ struct MultisigDappSheet: View {
                 onClose: leave, siteNote: siteNote(held)
             )
         } else if held?["stage"]?.string == "refused" {
-            MsSheet(title: words.t("proposal.title"), closeLabel: words.loc.t("common.done"), onClose: leave) {
+            MsSheet(title: Self.refusalTitle(held?["refusal"], words: words), closeLabel: words.loc.t("common.done"), onClose: leave) {
                 MsNote(text: words.t("proposal.siteAsks", ["host": host(held)]))
                 MsNote(text: Self.refusalText(held?["refusal"], words: words), tone: .warning, identifier: "multisig.dapp.refused")
             }
@@ -66,16 +66,31 @@ struct MultisigDappSheet: View {
     /// multisig act for a Safe it owns (`data.reason == "parent_safe"`) is
     /// said in the catalog's sentence the core names (`data.key` —
     /// `parentSafeBlocked` / `parentSafeUnchecked`), with the call and the
-    /// Safe; any other refusal in the core's own words.
+    /// Safe. §35 (SEC-PARENT-2): a request that would have made this multisig
+    /// call ITSELF to change who controls it (`data.reason == "self_call"`)
+    /// is said in its sentence (`data.key`,
+    /// `componentsUi.signing.multisigSelfCallBlocked`) with the function.
+    /// Any other refusal in the core's own words.
     static func refusalText(_ refusal: MsJSON?, words: MsWords) -> String {
         let data = refusal?["data"]
-        if data?["reason"]?.string == "parent_safe", let key = data?["key"]?.string, !key.isEmpty {
+        let reason = data?["reason"]?.string
+        if reason == "parent_safe" || reason == "self_call", let key = data?["key"]?.string, !key.isEmpty {
             return words.loc.t(key, vars: [
                 "function": data?["function"]?.string ?? "",
                 "safe": AddressText.short(data?["safe"]?.string ?? ""),
             ])
         }
         return refusal?["message"]?.string ?? words.t("action.unsupported")
+    }
+
+    /// The refused sheet's title: "Vela can't sign this"
+    /// (`componentsUi.signing.selfCallBlockedTitle`) over a site's attempt to
+    /// change who controls the multisig (§35) — the account's self-call
+    /// sheet's own title — else the proposal's.
+    static func refusalTitle(_ refusal: MsJSON?, words: MsWords) -> String {
+        refusal?["data"]?["reason"]?.string == "self_call"
+            ? words.loc.t(I18nKeys.CoreRound.selfCallBlockedTitle)
+            : words.t("proposal.title")
     }
 
     /// The draft's failure (the machine's `actions["propose"]`), worded.

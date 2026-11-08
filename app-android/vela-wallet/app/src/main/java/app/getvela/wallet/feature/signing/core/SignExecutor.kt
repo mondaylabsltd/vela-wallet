@@ -502,6 +502,10 @@ class SignExecutor(
             // first — a refusal of THIS operation (the web's `isRelayRefusal`),
             // and the page is told the core's fixed detail, never the relay's.
             UserOpSpine.Failure.NonceUsed -> SignSubmitOutcome.Failed(uniffi.vela_core_uniffi.userOpNonceUsedDetail(), refused = true)
+            // §35: it expired before it was submitted — the core's fixed
+            // detail; the core then says it calmly on the sheet
+            // (`componentsUi.signing.expired`, not sent) and offers Try again.
+            UserOpSpine.Failure.Expired -> SignSubmitOutcome.Failed(uniffi.vela_core_uniffi.userOpExpiredDetail(), refused = true)
         }
 
         /**

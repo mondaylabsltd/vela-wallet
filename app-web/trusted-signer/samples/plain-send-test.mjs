@@ -122,7 +122,7 @@ for (const data of ['0x12', '0x00', '0xdeadbeef']) {
         MULTI_SEND, 0n, ns.encode.call('multiSend(bytes)', [ns.encode.packMultiSend(calls)]), 1,
       ]),
       verificationGasLimit: '0', callGasLimit: '0', preVerificationGas: '0',
-      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x',
+      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x', validAfter: '0', validUntil: '1800001800',
     },
     feeLegIndex: 1,
   });
@@ -193,7 +193,7 @@ for (const data of ['0x12', '0x00', '0xdeadbeef']) {
         ns.encode.call('multiSend(bytes)', [ns.encode.packMultiSend([{ to: TO, value: 1, data: '0x' }, feeLeg])]), 1,
       ]),
       verificationGasLimit: '0', callGasLimit: '0', preVerificationGas: '0',
-      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x',
+      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x', validAfter: '0', validUntil: '1800001800',
     },
     feeLegIndex: 1,
   };
@@ -239,7 +239,7 @@ for (const data of ['0x12', '0x00', '0xdeadbeef']) {
         ns.encode.call('multiSend(bytes)', [ns.encode.packMultiSend([{ to: TO, value: 0, data: '0x' }, feeLeg])]), 1,
       ]),
       verificationGasLimit: '0', callGasLimit: '0', preVerificationGas: '0',
-      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x',
+      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x', validAfter: '0', validUntil: '1800001800',
     },
     feeLegIndex: 1,
   };
@@ -308,7 +308,7 @@ for (const data of ['0x12', '0x00', '0xdeadbeef']) {
         ns.encode.call('multiSend(bytes)', [ns.encode.packMultiSend([{ to: TO, value: wei, data: '0x' }, feeLeg])]), 1,
       ]),
       verificationGasLimit: '0', callGasLimit: '0', preVerificationGas: '0',
-      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x',
+      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x', validAfter: '0', validUntil: '1800001800',
     },
     feeLegIndex: 1,
   });
@@ -438,7 +438,7 @@ for (const data of ['0x12', '0x00', '0xdeadbeef']) {
         ns.encode.call('multiSend(bytes)', [ns.encode.packMultiSend([{ to: WETH, value: 5n * 10n ** 18n, data: deposit }, feeLeg])]), 1,
       ]),
       verificationGasLimit: '0', callGasLimit: '0', preVerificationGas: '0',
-      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x',
+      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x', validAfter: '0', validUntil: '1800001800',
     },
     feeLegIndex: 1,
   };

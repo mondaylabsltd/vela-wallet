@@ -40,6 +40,9 @@ struct PreparedGasSubmitTests {
     final class PostCapture: RelayPort {
         let inner: ScriptedRelayPort
         private(set) var posted: [[String: Any]] = []
+        /// What the POST is answered — a lost reply unless a test says
+        /// otherwise (§35: the relay's AA22).
+        var sendAnswer = RpcCallResult(outcome: .failed(rateLimited: false), maybeDelivered: true, heldErrorJson: nil)
         init(_ inner: ScriptedRelayPort) { self.inner = inner }
 
         func call(chainId: Int, method: String, params: [Any], kind: String) async -> RpcOutcome {
@@ -49,9 +52,9 @@ struct PreparedGasSubmitTests {
         func callDetailed(chainId: Int, method: String, params: [Any], kind: String) async -> RpcCallResult {
             if method == "eth_sendUserOperation" {
                 if let op = params.first as? [String: Any] { posted.append(op) }
-                // A lost reply: the op may have been sent, and nothing more
-                // is asked of this test's relay.
-                return RpcCallResult(outcome: .failed(rateLimited: false), maybeDelivered: true, heldErrorJson: nil)
+                // A lost reply by default: the op may have been sent, and
+                // nothing more is asked of this test's relay.
+                return sendAnswer
             }
             return await inner.callDetailed(chainId: chainId, method: method, params: params, kind: kind)
         }
@@ -256,5 +259,60 @@ struct PreparedGasSubmitTests {
         var bare = json
         bare.removeValue(forKey: "prepared")
         #expect(try CoreJSON.decode(FeeEstimateWire.self, from: bare).coreJSON["prepared"] == nil)
+    }
+
+    // MARK: - §35: every SafeOp expires
+
+    /// The window the posted operation was signed with: the signature's
+    /// first 12 bytes, `validAfter(6) ‖ validUntil(6)` big-endian.
+    private func window(_ op: [String: Any]) throws -> (after: UInt64, until: UInt64) {
+        let signature = try #require(op["signature"] as? String)
+        let hex = signature.hasPrefix("0x") ? String(signature.dropFirst(2)) : signature
+        try #require(hex.count >= 24, "\(signature)")
+        let after = try #require(UInt64(hex.prefix(12), radix: 16))
+        let until = try #require(UInt64(hex.dropFirst(12).prefix(12), radix: 16))
+        return (after, until)
+    }
+
+    /// §35 (review 1-6): the operation a send posts is signed with its
+    /// window — open now (validAfter 0) and closed 30 minutes from the
+    /// moment it was stamped, just before its hash. Through the real send,
+    /// fee and spine, as the app wires them: the page's request and the
+    /// envelope both carry it, or the core would have signed nothing.
+    @Test func theOperationPostedExpiresThirtyMinutesAfterItIsSigned() async throws {
+        let scripted = scripted()
+        let (send, port) = try await confirm(scripted)
+        let before = UInt64(Date().timeIntervalSince1970)
+        send.slideConfirm()
+        await Wait.until { !port.posted.isEmpty }
+        let after = UInt64(Date().timeIntervalSince1970)
+        let (validAfter, validUntil) = try window(try #require(port.posted.first))
+        #expect(validAfter == 0, "open from the start")
+        #expect(validUntil >= before + 1800 && validUntil <= after + 1800,
+                "closes 30 minutes after it was stamped: \(validUntil) vs \(before)…\(after)")
+    }
+
+    /// §35: the relay's `AA22 expired or not due` — the window closed before
+    /// the EntryPoint saw it. Nothing was sent: the send machine (the REAL
+    /// one, hearing the spine's `expired`) says `expired`, and the confirm
+    /// draws it as a used nonce is drawn — "Not sent", calmly, its sentence,
+    /// and Review again, which signs anew with a window of its own.
+    @Test func anOperationThatExpiredIsNotSentCalmlyAndReviewedAgain() async throws {
+        let scripted = scripted()
+        let (send, port) = try await confirm(scripted)
+        port.sendAnswer = RpcCallResult(
+            outcome: .rpcError(code: -32500, message: "AA22 expired or not due"),
+            maybeDelivered: false, heldErrorJson: nil
+        )
+        send.slideConfirm()
+        await Wait.until { send.view?.txStatus == "error" }
+        let view = try #require(send.view)
+        #expect(view.txStatus == "error")
+        #expect(view.txError == "expired", "\(String(describing: view.txError))")
+        let en = Loc(overrideTag: "en", preferredLanguages: [])
+        #expect(SendLive.confirmNotice(view, loc: en) == en.t("componentsUi.signing.expired"))
+        #expect(SendLive.confirmNotice(view, loc: en) == "It expired before it was submitted — nothing was sent.")
+        #expect(SendLive.confirmNoticeTitle(view, loc: en) == en.t("componentsTx.receipt.statusNotSent"))
+        #expect(port.posted.count == 1, "one POST, never a second by itself")
     }
 }

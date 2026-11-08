@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-R2AVugJkM9nVqepCkFujlj0A9iKcRBtfLM81q2A0Uic='; style-src 'sha256-IvjEd3Od02b8rk0e1KtXxPCSfUrwsnqsHIkMkYUW80A='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Er1S1jCsguC1kTYgwudWw7oOgvv3N/+IpvjKAtxE2hM='; style-src 'sha256-IvjEd3Od02b8rk0e1KtXxPCSfUrwsnqsHIkMkYUW80A='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vela</title>
     <style>
@@ -1481,6 +1481,8 @@ window.VelaCS.i18n.register('en', {
 
   'refuse.ethSign': 'This page does not sign eth_sign. It signs an unreadable hash — the very thing clear signing exists to abolish.',
   'refuse.noSafeOp': 'The transaction digest cannot be derived here yet: it is the Safe 4337 SafeOp hash, which needs the account, the EntryPoint and the module address. This page will not sign a guessed digest.',
+  'refuse.noExpiry': 'The operation never expires (no validUntil): a relay could hold it and send it at any time. Vela signs only operations that expire. Not signing.',
+  'refuse.badWindow': 'This operation’s validity window (validAfter / validUntil) doesn’t read as two uint48 seconds, so what would be signed can’t be worked out. Not signing.',
   'refuse.typedShape': 'This request does not carry exactly one signed message for one account — what is shown could differ from what would be signed. Not signing.',
   'refuse.unknownMethod': 'No digest can be derived for this method, so it will not be signed.',
   'ui.cannotSign': 'This request can’t be signed here — the reasons are above. Closing this page refuses it.',
@@ -1930,6 +1932,8 @@ window.VelaCS.i18n.register('zh', {
 
   'refuse.ethSign': '这一页不签 eth_sign。它签的是一段无法解读的哈希，正是清晰签名要消灭的东西。',
   'refuse.noSafeOp': '交易摘要还接不出来：它是 Safe 4337 的 SafeOp 哈希，需要账户、EntryPoint 与模块地址。这一页不会拿一个猜的摘要去签。',
+  'refuse.noExpiry': '这笔操作永不过期（没有 validUntil）：中继可以一直扣着它，在任何时候发出。Vela 只签会过期的操作。不签。',
+  'refuse.badWindow': '这笔操作的有效期（validAfter / validUntil）读不成两个 uint48 秒数，算不出将要签的是什么。不签。',
   'refuse.typedShape': '这个请求没有恰好为一个账户携带一份签名内容——显示的内容可能与将签署的不同。不签名。',
   'refuse.unknownMethod': '这个方法的签名摘要无从推导，因此不签。',
   'ui.cannotSign': '这笔请求不能在这里签 —— 理由在上面。关掉这一页即拒绝。',
@@ -2362,6 +2366,8 @@ window.VelaCS.i18n.register('zh-TW', {
 
   'refuse.ethSign': '這一頁不簽署 eth_sign。它簽的是一段無法解讀的雜湊——正是清晰簽署要消除的東西。',
   'refuse.noSafeOp': '這裡還無法推導出交易摘要：它是 Safe 4337 的 SafeOp 雜湊，需要帳戶、EntryPoint 和模組地址。這一頁不會拿猜測的摘要去簽署。',
+  'refuse.noExpiry': '這筆操作永不過期（沒有 validUntil）：中繼可以一直扣著它，在任何時候送出。Vela 只簽會過期的操作。不簽。',
+  'refuse.badWindow': '這筆操作的有效期（validAfter / validUntil）讀不成兩個 uint48 秒數，算不出將要簽的是什麼。不簽。',
   'refuse.typedShape': '這個請求並非恰好為一個帳戶帶有一則待簽署的訊息——畫面上顯示的可能和實際要簽署的不同。不簽署。',
   'refuse.unknownMethod': '這個方法無法推導出簽署摘要，所以不會簽署。',
   'ui.cannotSign': '這個請求無法在這裡簽署——原因列在上方。關閉這一頁就等於拒絕。',
@@ -2780,6 +2786,8 @@ window.VelaCS.i18n.register('zh-HK', {
 
   'refuse.ethSign': '這一頁不會簽署 eth_sign。它簽的是一段無法解讀的雜湊——正是清晰簽署要消除的東西。',
   'refuse.noSafeOp': '這裏暫時無法推算交易摘要：它是 Safe 4337 的 SafeOp 雜湊，需要帳戶、EntryPoint 和模組地址。這一頁不會用猜測的摘要簽署。',
+  'refuse.noExpiry': '這筆操作永不過期（沒有 validUntil）：中繼可以一直扣著它，在任何時候發出。Vela 只簽會過期的操作。不簽。',
+  'refuse.badWindow': '這筆操作的有效期（validAfter / validUntil）讀不成兩個 uint48 秒數，算不出將要簽的是甚麼。不簽。',
   'refuse.typedShape': '這個請求並非恰好為一個帳戶附上一份待簽署的訊息——畫面顯示的內容可能與實際簽署的不同。不會簽署。',
   'refuse.unknownMethod': '這個方法無法推算出簽署摘要，因此不會簽署。',
   'ui.cannotSign': '這個請求無法在這裏簽署——原因見上方。關閉這一頁即表示拒絕。',
@@ -3198,6 +3206,8 @@ window.VelaCS.i18n.register('ja', {
 
   'refuse.ethSign': 'このページは eth_sign には署名しません。eth_sign は読めないハッシュに署名するもので、Clear Signing がなくそうとしているものそのものです。',
   'refuse.noSafeOp': 'ここではまだ取引のダイジェストを導き出せません。これは Safe 4337 の SafeOp ハッシュで、アカウント、EntryPoint、モジュールのアドレスが必要です。このページは推測したダイジェストには署名しません。',
+  'refuse.noExpiry': 'この操作には期限がありません（validUntil なし）。リレーが保持して、いつでも送信できてしまいます。Vela は期限のある操作にだけ署名します。署名しません。',
+  'refuse.badWindow': 'この操作の有効期間（validAfter / validUntil）が 2 つの uint48 秒として読めないため、何に署名することになるのか確定できません。署名しません。',
   'refuse.typedShape': 'このリクエストには、1 つのアカウントに対する署名メッセージがちょうど 1 つだけ含まれているわけではありません — 表示内容と実際に署名される内容が異なる可能性があります。署名しません。',
   'refuse.unknownMethod': 'このメソッドからはダイジェストを導き出せないため、署名しません。',
   'ui.cannotSign': 'このリクエストはここでは署名できません — 理由は上に記載しています。このページを閉じると拒否されます。',
@@ -3614,6 +3624,8 @@ window.VelaCS.i18n.register('ko', {
 
   'refuse.ethSign': '이 페이지는 eth_sign에 서명하지 않습니다. eth_sign은 읽을 수 없는 해시에 서명하는 것으로, Clear Signing이 없애려는 바로 그것입니다.',
   'refuse.noSafeOp': '여기서는 아직 거래 다이제스트를 도출할 수 없습니다. 이것은 Safe 4337 SafeOp 해시로, 계정·EntryPoint·모듈 주소가 필요합니다. 이 페이지는 추측한 다이제스트에 서명하지 않습니다.',
+  'refuse.noExpiry': '이 작업은 만료되지 않습니다(validUntil 없음). 릴레이가 붙잡아 두었다가 언제든 보낼 수 있습니다. Vela는 만료되는 작업에만 서명합니다. 서명하지 않습니다.',
+  'refuse.badWindow': '이 작업의 유효 기간(validAfter / validUntil)을 두 개의 uint48 초로 읽을 수 없어 무엇에 서명하게 되는지 알 수 없습니다. 서명하지 않습니다.',
   'refuse.typedShape': '이 요청에는 한 계정에 대한 서명 메시지가 정확히 하나만 들어 있지 않습니다 — 화면에 보이는 내용과 실제로 서명될 내용이 다를 수 있습니다. 서명하지 않습니다.',
   'refuse.unknownMethod': '이 메서드로는 다이제스트를 도출할 수 없으므로 서명하지 않습니다.',
   'ui.cannotSign': '이 요청은 여기서 서명할 수 없습니다 — 이유는 위에 있습니다. 이 페이지를 닫으면 거부됩니다.',
@@ -4030,6 +4042,8 @@ window.VelaCS.i18n.register('vi', {
 
   'refuse.ethSign': 'Trang này không ký eth_sign. eth_sign ký một hash không đọc được — chính là thứ mà clear signing ra đời để loại bỏ.',
   'refuse.noSafeOp': 'Chưa thể tính mã băm giao dịch ở đây: đó là hash SafeOp của Safe 4337, cần tài khoản, EntryPoint và địa chỉ module. Trang này sẽ không ký một mã băm đoán mò.',
+  'refuse.noExpiry': 'Thao tác này không bao giờ hết hạn (không có validUntil): relay có thể giữ lại và gửi bất cứ lúc nào. Vela chỉ ký các thao tác có hạn. Không ký.',
+  'refuse.badWindow': 'Khoảng hiệu lực của thao tác này (validAfter / validUntil) không đọc được thành hai giá trị giây uint48, nên không xác định được thứ sẽ được ký. Không ký.',
   'refuse.typedShape': 'Yêu cầu này không mang đúng một thông điệp cần ký cho đúng một tài khoản — những gì hiển thị có thể khác với những gì sẽ được ký. Không ký.',
   'refuse.unknownMethod': 'Không thể tính mã băm cần ký cho phương thức này, nên sẽ không ký.',
   'ui.cannotSign': 'Không thể ký yêu cầu này ở đây — lý do ở phía trên. Đóng trang này là từ chối.',
@@ -4446,6 +4460,8 @@ window.VelaCS.i18n.register('id', {
 
   'refuse.ethSign': 'Halaman ini tidak menandatangani eth_sign. eth_sign menandatangani hash yang tak terbaca — hal yang justru ingin dihapuskan oleh clear signing.',
   'refuse.noSafeOp': 'Digest transaksi belum bisa dihitung di sini: itu adalah hash SafeOp Safe 4337, yang memerlukan akun, EntryPoint, dan alamat modul. Halaman ini tidak akan menandatangani digest hasil tebakan.',
+  'refuse.noExpiry': 'Operasi ini tidak pernah kedaluwarsa (tanpa validUntil): relay bisa menahannya dan mengirimkannya kapan saja. Vela hanya menandatangani operasi yang kedaluwarsa. Tidak ditandatangani.',
+  'refuse.badWindow': 'Jendela validitas operasi ini (validAfter / validUntil) tidak terbaca sebagai dua detik uint48, sehingga apa yang akan ditandatangani tidak bisa dipastikan. Tidak ditandatangani.',
   'refuse.typedShape': 'Permintaan ini tidak membawa tepat satu pesan untuk ditandatangani oleh satu akun — yang ditampilkan bisa berbeda dari yang akan ditandatangani. Tidak akan ditandatangani.',
   'refuse.unknownMethod': 'Tidak ada digest yang bisa dihitung untuk metode ini, jadi tidak akan ditandatangani.',
   'ui.cannotSign': 'Permintaan ini tidak bisa ditandatangani di sini — alasannya ada di atas. Menutup halaman ini berarti menolaknya.',
@@ -4862,6 +4878,8 @@ window.VelaCS.i18n.register('tr', {
 
   'refuse.ethSign': 'Bu sayfa eth_sign imzalamaz. eth_sign okunamayan bir hash imzalar — açık imzalama tam da bunu ortadan kaldırmak için vardır.',
   'refuse.noSafeOp': 'İşlem özeti burada henüz çıkarılamıyor: bu, Safe 4337 SafeOp hash\'idir ve hesabı, EntryPoint\'i ve modül adresini gerektirir. Bu sayfa tahminle elde edilmiş bir özeti imzalamaz.',
+  'refuse.noExpiry': 'Bu işlemin süresi hiç dolmaz (validUntil yok): bir aktarıcı onu tutup istediği zaman gönderebilir. Vela yalnızca süresi dolan işlemleri imzalar. İmzalanmıyor.',
+  'refuse.badWindow': 'Bu işlemin geçerlilik aralığı (validAfter / validUntil) iki uint48 saniye olarak okunamıyor; neyin imzalanacağı belirlenemiyor. İmzalanmıyor.',
   'refuse.typedShape': 'Bu istek, tek bir hesap için tam olarak tek bir imzalanacak mesaj taşımıyor — gösterilen, imzalanacak olandan farklı olabilir. İmzalanmayacak.',
   'refuse.unknownMethod': 'Bu yöntem için imzalanacak özet çıkarılamıyor, bu yüzden imzalanmayacak.',
   'ui.cannotSign': 'Bu istek burada imzalanamaz — nedenleri yukarıda. Bu sayfayı kapatmak isteği reddeder.',
@@ -5278,6 +5296,8 @@ window.VelaCS.i18n.register('es-MX', {
 
   'refuse.ethSign': 'Esta página no firma eth_sign: ese método firma un hash ilegible — justo lo que la firma clara existe para eliminar.',
   'refuse.noSafeOp': 'Aquí todavía no se puede calcular el resumen de la transacción: es el hash SafeOp de Safe 4337, que necesita la cuenta, el EntryPoint y la dirección del módulo. Esta página no firmará un resumen adivinado.',
+  'refuse.noExpiry': 'La operación nunca vence (sin validUntil): un relay podría retenerla y enviarla en cualquier momento. Vela solo firma operaciones que vencen. No se firma.',
+  'refuse.badWindow': 'La ventana de validez de esta operación (validAfter / validUntil) no se lee como dos segundos uint48, así que no se puede saber qué se firmaría. No se firma.',
   'refuse.typedShape': 'Esta solicitud no trae exactamente un mensaje firmado para una sola cuenta — lo que se muestra podría ser distinto de lo que se firmaría. No se firmará nada.',
   'refuse.unknownMethod': 'No se puede calcular un resumen para este método, así que no se firmará.',
   'ui.cannotSign': 'Esta solicitud no se puede firmar aquí — las razones están arriba. Cerrar esta página la rechaza.',
@@ -5694,6 +5714,8 @@ window.VelaCS.i18n.register('pt-BR', {
 
   'refuse.ethSign': 'Esta página não assina eth_sign: esse método assina um hash ilegível — exatamente o que a assinatura clara existe para eliminar.',
   'refuse.noSafeOp': 'O resumo da transação ainda não pode ser calculado aqui: é o hash SafeOp do Safe 4337, que precisa da conta, do EntryPoint e do endereço do módulo. Esta página não vai assinar um resumo adivinhado.',
+  'refuse.noExpiry': 'A operação nunca expira (sem validUntil): um relay poderia segurá-la e enviá-la a qualquer momento. A Vela só assina operações que expiram. Não será assinada.',
+  'refuse.badWindow': 'A janela de validade desta operação (validAfter / validUntil) não se lê como dois segundos uint48, então não dá para saber o que seria assinado. Não será assinada.',
   'refuse.typedShape': 'Esta solicitação não traz exatamente uma mensagem assinada para uma única conta — o que aparece pode ser diferente do que seria assinado. Nada será assinado.',
   'refuse.unknownMethod': 'Não é possível calcular um resumo para este método, então ele não será assinado.',
   'ui.cannotSign': 'Esta solicitação não pode ser assinada aqui — os motivos estão acima. Fechar esta página recusa o pedido.',
@@ -6110,6 +6132,8 @@ window.VelaCS.i18n.register('fr', {
 
   'refuse.ethSign': 'Cette page ne signe pas eth_sign. Il fait signer un hash illisible — exactement ce que la signature claire existe pour abolir.',
   'refuse.noSafeOp': 'Le condensé de la transaction ne peut pas encore être calculé ici : c’est le hash SafeOp de Safe 4337, qui exige le compte, l’EntryPoint et l’adresse du module. Cette page ne signera pas un condensé deviné.',
+  'refuse.noExpiry': 'L’opération n’expire jamais (pas de validUntil) : un relais pourrait la garder et l’envoyer à tout moment. Vela ne signe que des opérations qui expirent. Pas de signature.',
+  'refuse.badWindow': 'La fenêtre de validité de cette opération (validAfter / validUntil) ne se lit pas comme deux secondes uint48 : impossible de savoir ce qui serait signé. Pas de signature.',
   'refuse.typedShape': 'Cette demande ne contient pas exactement un message signé pour un seul compte — ce qui est affiché pourrait différer de ce qui serait signé. Signature refusée.',
   'refuse.unknownMethod': 'Aucun condensé ne peut être calculé pour cette méthode, elle ne sera donc pas signée.',
   'ui.cannotSign': 'Cette demande ne peut pas être signée ici — les raisons sont indiquées ci-dessus. Fermer cette page la refuse.',
@@ -6528,6 +6552,8 @@ window.VelaCS.i18n.register('de', {
 
   'refuse.ethSign': 'Diese Seite signiert kein eth_sign. Damit wird ein unlesbarer Hash signiert — genau das, was Clear Signing abschaffen soll.',
   'refuse.noSafeOp': 'Der Transaktions-Digest lässt sich hier noch nicht ableiten: Er ist der SafeOp-Hash von Safe 4337, für den das Konto, der EntryPoint und die Moduladresse nötig sind. Diese Seite signiert keinen geratenen Digest.',
+  'refuse.noExpiry': 'Die Operation läuft nie ab (kein validUntil): Ein Relay könnte sie zurückhalten und jederzeit senden. Vela signiert nur Operationen, die ablaufen. Keine Signatur.',
+  'refuse.badWindow': 'Das Gültigkeitsfenster dieser Operation (validAfter / validUntil) lässt sich nicht als zwei uint48-Sekunden lesen, daher ist unklar, was signiert würde. Keine Signatur.',
   'refuse.typedShape': 'Diese Anfrage enthält nicht genau eine signierte Nachricht für genau ein Konto — das Angezeigte könnte von dem abweichen, was signiert würde. Wird nicht signiert.',
   'refuse.unknownMethod': 'Für diese Methode lässt sich kein Digest ableiten, daher wird sie nicht signiert.',
   'ui.cannotSign': 'Diese Anfrage kann hier nicht signiert werden — die Gründe stehen oben. Wenn du diese Seite schließt, ist sie abgelehnt.',
@@ -6946,6 +6972,8 @@ window.VelaCS.i18n.register('ru', {
 
   'refuse.ethSign': 'Эта страница не подписывает eth_sign. Это подпись нечитаемого хеша — именно того, от чего Clear Signing призван избавить.',
   'refuse.noSafeOp': 'Дайджест транзакции здесь пока вычислить нельзя: это хеш SafeOp из Safe 4337, для него нужны аккаунт, EntryPoint и адрес модуля. Эта страница не станет подписывать угаданный дайджест.',
+  'refuse.noExpiry': 'У операции нет срока действия (нет validUntil): ретранслятор может придержать её и отправить когда угодно. Vela подписывает только операции со сроком. Не подписываем.',
+  'refuse.badWindow': 'Окно действия этой операции (validAfter / validUntil) не читается как две секунды uint48, поэтому нельзя понять, что будет подписано. Не подписываем.',
   'refuse.typedShape': 'Этот запрос не содержит ровно одно подписываемое сообщение для одного аккаунта — показанное может отличаться от того, что будет подписано. Подписи не будет.',
   'refuse.unknownMethod': 'Для этого метода нельзя вычислить дайджест, поэтому он не будет подписан.',
   'ui.cannotSign': 'Этот запрос нельзя подписать здесь — причины указаны выше. Закрыв эту страницу, вы его отклоните.',
@@ -7364,6 +7392,8 @@ window.VelaCS.i18n.register('it', {
 
   'refuse.ethSign': 'Questa pagina non firma eth_sign: quel metodo firma un hash illeggibile — proprio ciò che la firma chiara esiste per eliminare.',
   'refuse.noSafeOp': 'Il digest della transazione non si può ancora ricavare qui: è l’hash SafeOp di Safe 4337, che richiede l’account, l’EntryPoint e l’indirizzo del modulo. Questa pagina non firmerà un digest tirato a indovinare.',
+  'refuse.noExpiry': 'L’operazione non scade mai (nessun validUntil): un relay potrebbe trattenerla e inviarla in qualsiasi momento. Vela firma solo operazioni che scadono. Nessuna firma.',
+  'refuse.badWindow': 'La finestra di validità di questa operazione (validAfter / validUntil) non si legge come due secondi uint48, quindi non si può stabilire cosa verrebbe firmato. Nessuna firma.',
   'refuse.typedShape': 'Questa richiesta non contiene esattamente un messaggio firmato per un solo account — ciò che vedi potrebbe essere diverso da ciò che verrebbe firmato. Non verrà firmato nulla.',
   'refuse.unknownMethod': 'Per questo metodo non si può ricavare alcun digest, quindi non verrà firmato.',
   'ui.cannotSign': 'Questa richiesta non può essere firmata qui — i motivi sono qui sopra. Chiudere questa pagina la rifiuta.',
@@ -11261,6 +11291,16 @@ window.VelaCS = window.VelaCS || {};
   }
 
   /**
+   * When the operation stops being valid (§35), in the page's date form — or,
+   * past what a date can hold (a `uint48` second reaches year 8.9 million),
+   * the Unix second itself, so the card never says "NaN".
+   */
+  function expiryOf(until) {
+    var shown = formatDate(until.toString());
+    return shown.indexOf('NaN') >= 0 ? until.toString() : shown;
+  }
+
+  /**
    * When an assembled operation is present, IT is the subject: the digest
    * covers its calldata, so that is what must be on screen. The intent the
    * site sent is then only used to check that its call is really in there.
@@ -11269,6 +11309,16 @@ window.VelaCS = window.VelaCS || {};
     var operation = ctx.operation && ctx.operation.userOp;
     if (!operation) return intent;
 
+    // §35: the operation expires; one that never does is refused (the
+    // digest's own rule), and when it does the card says until when. A
+    // window that does not read is refused in its own words.
+    var validity = ns.safeop.windowOf(operation);
+    if (!validity || validity.until === BigInt(0)) {
+      view.refuse = true;
+      view.warnings.push({ tone: 'danger', key: validity ? 'refuse.noExpiry' : 'refuse.badWindow' });
+    } else {
+      view.expires = expiryOf(validity.until);
+    }
     var decoded = ns.safeop.decodeCallData(operation.callData);
     if (!decoded) {
       view.refuse = true;
@@ -12503,6 +12553,8 @@ window.VelaCS = window.VelaCS || {};
     if (view.fee.unknown) {
       row.appendChild(el('span', 'fee-value', t('ui.feeUnstated')));
       wrap.appendChild(row);
+      // §35: with no fee to fold under, the expiry still shows.
+      if (view.expires) wrap.appendChild(el('div', 'fee-note fee-expires', t('field.validUntil') + ' ' + view.expires));
       return wrap;
     }
 
@@ -12540,6 +12592,8 @@ window.VelaCS = window.VelaCS || {};
       }
     }
     if (view.fee.gas) note.appendChild(el('div', null, t('ui.feeGas', { gas: view.fee.gas.gas })));
+    // §35: the operation's own expiry, read from the bytes being signed.
+    if (view.expires) note.appendChild(el('div', 'fee-expires', t('field.validUntil') + ' ' + view.expires));
     var feeCoin = view.fee.leg ? view.fee.leg.symbolClaimed && view.fee.leg.symbol
       : view.fee.gas && view.fee.gas.symbolClaimed && view.fee.gas.symbol;
     if (feeCoin) note.appendChild(coinClaim('fee-coin', feeCoin));
@@ -12962,13 +13016,52 @@ window.VelaCS = window.VelaCS || {};
     return keccak.hash(concat([new Uint8Array([0x19, 0x01]), separator, structHash]));
   }
 
+  // The largest `uint48` a window field holds.
+  var UINT48_MAX = (BigInt(1) << BigInt(48)) - BigInt(1);
+
   /**
-   * The SafeOp digest. `validAfter` and `validUntil` are always zero, matching
-   * the core — a request that wants a time window would need a protocol change,
-   * not a quiet extra field here.
+   * An operation's validity window (§35): `validAfter` and `validUntil` as
+   * the operation carries them, `null` when they do not read as the core
+   * reads them (`trusted_signer::user_op_from_json` + `check_window`): each a
+   * decimal or `0x` string or a whole JSON number, within `uint48`, and a
+   * window that does not open after it closes. Absent is zero ("never
+   * expires") — which the digest refuses to sign (`digest.js`). `BigInt`
+   * alone is too lenient here: it reads `true`, `[5]` and `" 5 "` as numbers.
+   */
+  function windowOf(op) {
+    var read = function (v) {
+      if (v === undefined || v === null) return BigInt(0);
+      var n;
+      if (typeof v === 'number') {
+        if (!Number.isSafeInteger(v) || v < 0) return null;
+        n = BigInt(v);
+      } else if (typeof v === 'string' && /^[0-9]+$/.test(v)) {
+        n = BigInt(v);
+      } else if (typeof v === 'string' && /^0[xX][0-9a-fA-F]*$/.test(v)) {
+        n = v.length > 2 ? BigInt('0x' + v.slice(2)) : BigInt(0);
+      } else {
+        return null;
+      }
+      return n > UINT48_MAX ? null : n;
+    };
+    if (!op || typeof op !== 'object') return null;
+    var after = read(op.validAfter);
+    var until = read(op.validUntil);
+    if (after === null || until === null) return null;
+    if (until !== BigInt(0) && after > until) return null;
+    return { after: after, until: until };
+  }
+
+  /**
+   * The SafeOp digest, over the operation's own validity window (§35, the
+   * core's `calculate_safe_op_hash`): `validAfter` and `validUntil` are hashed
+   * exactly as the Safe4337Module reads them from the signature's first 12
+   * bytes. A window that does not read throws: no digest is guessed.
    */
   function safeOpHash(op, chainId, options) {
     options = options || {};
+    var window = windowOf(op);
+    if (!window) throw new Error('validity window is not a uint48 pair');
     var entryPoint = options.entryPoint || ENTRY_POINT;
     var module = options.module || SAFE_4337_MODULE;
 
@@ -12984,8 +13077,8 @@ window.VelaCS = window.VelaCS || {};
       word(BigInt(op.maxPriorityFeePerGas)),
       word(BigInt(op.maxFeePerGas)),
       keccak.hash(fromHex(op.paymasterAndData || '0x')),
-      word(0), // validAfter
-      word(0), // validUntil
+      word(window.after),
+      word(window.until),
       addressWord(entryPoint),
     ]));
     return eip712(domainSeparator(chainId, module), structHash);
@@ -13084,6 +13177,7 @@ window.VelaCS = window.VelaCS || {};
     SAFE_4337_MODULE: SAFE_4337_MODULE,
     MULTI_SEND: MULTI_SEND,
     hash: safeOpHash,
+    windowOf: windowOf,
     messageHash: safeMessageHash,
     decodeCallData: decodeCallData,
     sameCall: sameCall,
@@ -14298,6 +14392,13 @@ window.VelaCS = window.VelaCS || {};
       if (!operation || !operation.userOp || !context.chainId) {
         return { refuse: 'refuse.noSafeOp' };
       }
+      // §35: an operation that never expires (validUntil 0 or absent) is one a
+      // relay could hold and land at any time. The wallet stamps every
+      // operation it signs with a window; one without is refused here too,
+      // and so is a window that does not read (no digest is guessed).
+      var validity = ns.safeop.windowOf(operation.userOp);
+      if (!validity) return { refuse: 'refuse.badWindow' };
+      if (validity.until === BigInt(0)) return { refuse: 'refuse.noExpiry' };
       var result = {
         hash: ns.safeop.hash(operation.userOp, context.chainId, {
           entryPoint: operation.entryPoint,

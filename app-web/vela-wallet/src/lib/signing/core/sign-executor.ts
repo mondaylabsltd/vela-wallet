@@ -76,6 +76,7 @@ import {
 	type SigningAccount
 } from '$lib/services/dapp-submit';
 import { UserOpNotSentError } from '$lib/services/safe-transaction';
+import { userOpExpiredDetail } from '$lib/core/kernels';
 import {
 	dappReceiptWaitMs,
 	rpcReadTimeoutMs,
@@ -776,6 +777,12 @@ export function createSignExecutor(
 		// refusal by the relay (anything but "relayer unavailable") is said as
 		// one (spec 082 RJ3): the page is told the network refused it, and the
 		// sheet offers no Retry — trying again sends the same refused op.
+		// §35: it expired before it was submitted. The page hears the core's
+		// own sentence for it; the sheet says it calmly and offers Try again
+		// (the core reads the detail: a new signature, a new window).
+		if (error instanceof UserOpNotSentError && error.rejection === 'expired') {
+			return { type: 'failed', message: userOpExpiredDetail(), refused: true, signer: null };
+		}
 		return { type: 'failed', message, refused: isRelayRefusal(error), signer: null };
 	}
 

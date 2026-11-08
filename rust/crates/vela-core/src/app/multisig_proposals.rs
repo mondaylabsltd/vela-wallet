@@ -3664,7 +3664,23 @@ async fn confirm_draft(
     round: u64,
 ) -> ActionState {
     let (account, chain, tx, locals, last) = {
-        let s = lock(st);
+        let mut s = lock(st);
+        // §35 (SEC-PARENT-2): a site's transaction that would make the
+        // multisig change who controls it is never proposed — checked here
+        // on the very transaction about to be signed, whatever path the
+        // draft came by (arrival refused it already; a draft a site's calls
+        // reached another way did not pass arrival).
+        let site_tx = s
+            .draft
+            .as_ref()
+            .filter(|d| d.origin.is_some())
+            .map(|d| d.tx.clone());
+        let multisig = s.account.as_ref().map(|a| a.address.clone());
+        if let (Some(tx), Some(multisig)) = (site_tx, multisig) {
+            if flows::self_call_at_proposal(&mut s, round, &multisig, &tx).is_some() {
+                return ActionState::SigningBlocked;
+            }
+        }
         let Some(d) = s.draft.as_ref() else {
             return ActionState::Failed {
                 detail: failure::core_reason("no_draft"),

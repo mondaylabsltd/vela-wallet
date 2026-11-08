@@ -810,13 +810,28 @@ mod tests {
                 | FeeFailure::CalculationFailed
                 | FeeFailure::EstimateFailed
                 | FeeFailure::GasQuoteTooHigh
+                | FeeFailure::SettlementGasTooHigh
                 | FeeFailure::ChainRead { .. }
                 | FeeFailure::WouldFail
                 | FeeFailure::Internal => {}
             }
         }
         assert!(FEE_FAILURES.contains(&FeeFailure::Internal));
+        assert!(FEE_FAILURES.contains(&FeeFailure::SettlementGasTooHigh));
         let s = SigningStrings::resolve(&crate::loc::Loc::from_env());
+        // §35: the relay's settlement gas past the cap is said as that — its
+        // own sentence, never the "quote too high" one or a dash.
+        let settlement = s
+            .fee_reason(FeeFailure::SettlementGasTooHigh, "Gnosis")
+            .unwrap_or_default();
+        assert_eq!(
+            settlement,
+            crate::loc::Loc::from_env().t(vela_core::app::fee_policy::REASON_SETTLEMENT_HIGH_KEY),
+        );
+        assert_ne!(
+            Some(settlement),
+            s.fee_reason(FeeFailure::GasQuoteTooHigh, "Gnosis")
+        );
         assert!(
             !s.refused.starts_with("componentsUi."),
             "echoed a key: {}",

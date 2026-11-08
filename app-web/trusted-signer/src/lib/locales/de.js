@@ -147,6 +147,8 @@ window.VelaCS.i18n.register('de', {
 
   'refuse.ethSign': 'Diese Seite signiert kein eth_sign. Damit wird ein unlesbarer Hash signiert — genau das, was Clear Signing abschaffen soll.',
   'refuse.noSafeOp': 'Der Transaktions-Digest lässt sich hier noch nicht ableiten: Er ist der SafeOp-Hash von Safe 4337, für den das Konto, der EntryPoint und die Moduladresse nötig sind. Diese Seite signiert keinen geratenen Digest.',
+  'refuse.noExpiry': 'Die Operation läuft nie ab (kein validUntil): Ein Relay könnte sie zurückhalten und jederzeit senden. Vela signiert nur Operationen, die ablaufen. Keine Signatur.',
+  'refuse.badWindow': 'Das Gültigkeitsfenster dieser Operation (validAfter / validUntil) lässt sich nicht als zwei uint48-Sekunden lesen, daher ist unklar, was signiert würde. Keine Signatur.',
   'refuse.typedShape': 'Diese Anfrage enthält nicht genau eine signierte Nachricht für genau ein Konto — das Angezeigte könnte von dem abweichen, was signiert würde. Wird nicht signiert.',
   'refuse.unknownMethod': 'Für diese Methode lässt sich kein Digest ableiten, daher wird sie nicht signiert.',
   'ui.cannotSign': 'Diese Anfrage kann hier nicht signiert werden — die Gründe stehen oben. Wenn du diese Seite schließt, ist sie abgelehnt.',

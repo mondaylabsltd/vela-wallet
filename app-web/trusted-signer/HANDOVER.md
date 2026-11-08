@@ -1,5 +1,22 @@
 # 交接：可信签名器页面
 
+> **§35（2026-11-08，第二十一轮）：每一笔操作都会过期。** 新版本 **7ec6e9a3**（`BUILD_ALLOWED` 第一位，LAUNCH 不变）。
+> vela-core 现在给每一笔要签的 SafeOp 盖上有效期（`validAfter = 0`、`validUntil = 现在 + 1800` 秒，`user_op::stamp_validity`），
+> 请求里的 `context.operation.userOp` 带上 `validAfter` / `validUntil`（十进制字符串，`trusted_signer::user_op_json`）。
+> 本页的 SafeOp 摘要（`lib/safeop.js`）改为对操作**自己的**有效期取哈希（以前恒为 0），与 `calculate_safe_op_hash` 逐字节一致。
+> 永不过期的操作（`validUntil` 缺失、`null`、`"0"`）拒签 `refuse.noExpiry`（与核心 `signable_safe_op_hash` 同一条线）；
+> 读不出的有效期（超出 uint48、负数、文字、`true`、带空格、空串、开始晚于结束）拒签 `refuse.badWindow`，不猜摘要 ——
+> 读法与核心 `user_op_from_json` + `check_window` 相同（`BigInt` 太宽，会把 `true`、`" 5"` 读成数字，所以不用它来读）。
+> 卡上：网络费展开后的说明里多一行「有效至 <日期>」（`field.validUntil`，本机时区；网络费读不出时这一行也在；超出日期范围就写原始秒数）。
+> 十五种语言都有两个新键（`locales-test` 84/84）；PROTOCOL.md 8.1。测试：`safeop-test` 47/47（十种有效期含 uint48 上限与 wasm 对拍；
+> 核心 `trustedSignerSignatureRequest` 造的请求本页签出的就是核心的哈希；无期限与敌意有效期拒签、`safeop.hash` 本身也抛错）；
+> `fee-leg-test` 23/23（第 6 段：卡上的「有效至」、拒签、按钮不可按）；`hostile-test` 44/44（第 3 段：真页面上八种坏有效期都拒、不弹 passkey；
+> 盖了章的能签、卡上写有效至）；其余套件里的操作都盖上固定的 `validAfter = "0"`、`validUntil = "1800001800"`，输出确定。下面「先跑一遍」的 23 个套件（新列入 `fee-leg-test`）连同 `typed-shape-test`、`build-single --check`（bun 与 node 同一哈希）全过。
+> 部署顺序同上：`dist/` 先上线（含 `/b/7ec6e9a3…/sign`），`curl -I` 200 + immutable + `access-control-allow-origin: *`，**部署之后**才移 LAUNCH。
+> **在 LAUNCH 移到 7ec6e9a3 之前**，手机走签名页的交易会被核心以 `WrongChallenge` 拒收：旧的 LAUNCH 页（6d7172b4）对零有效期取哈希，
+> 核心按盖了章的操作算 —— 对不上，fail-closed，什么都没发出去。网页钱包与扩展部署前同理（`index.json` 里还没有 7ec6e9a3，打开的旧页算零有效期）。
+> 消息签名与多签批准不涉及 SafeOp，不受影响；多签的执行是一笔操作，同样被拒，直到新页面上线。
+
 > **§16（2026-11-05）：多签的成员证明有了自己的卡。** 新版本 **64363925**（`BUILD_ALLOWED` 第一位，LAUNCH 不变）。
 > 建多签（或再次共享记录）时成员签的赞助挑战码（`vela_multisigCreate`）现在交到本页：App 交来的是多签的 **genesis**，
 > 本页按 vela-core `trusted_signer::owner_proof::read` 逐条读出地址（CREATE2 推出，App 给的只比对）、成员与门槛（setup 必须正好是
@@ -134,9 +151,10 @@ export CHROME_BIN="$HOME/Library/Caches/ms-playwright/chromium-1234/chrome-mac-a
 export SB=<任意可写目录>   # 需要 tls-serve.py / cert.pem / key.pem，见下
 
 bun samples/answer-test.mjs        # 55/55 答复只交给钱包（102 R7；G 段：网页钱包的多签批准与消息，2026-10-29/30；H 段：Chrome 扩展的已发布 id，2026-10-30），在发布出去的字节上、按托管方的响应头：钓鱼站的 cb / postMessage / 登录 / 回环 / 框架都拒，velawallet:// 照签；--page=<哈希> 测任一旧版
-bun samples/safeop-test.mjs        #  9/9  摘要对拍 vela-core 的 wasm
+bun samples/safeop-test.mjs        # 47/47 摘要对拍 vela-core 的 wasm；§35 有效期：十种窗口（含 uint48 上限）对拍、核心造的请求签出核心的哈希、无期限 / 读不出的有效期拒签
+node samples/fee-leg-test.mjs      # 23/23 费用腿是费用行不是批量的一腿（079）；§35：卡上的「有效至」、无期限与坏有效期在卡上拒签
 bun samples/identicon-test.mjs     #  9/9  头像与 vela-core 逐字节一致
-bun samples/hostile-test.mjs       # 35/35 敌意上下文 + 敌意仪式（自带挑战码、网站要建钥匙、冒充钱包、撒谎的注册表）
+bun samples/hostile-test.mjs       # 44/44 敌意上下文 + 敌意仪式（自带挑战码、网站要建钥匙、冒充钱包、撒谎的注册表）+ 敌意有效期（§35：超出 uint48、负数、文字…… 拒签、不弹 passkey）
 bun samples/channels-test.mjs      # 41/41 URL 片段 → velawallet://（从 DevTools 截导航）+ 真 WebAuthn + 交易 + 篡改拒签；postMessage 上的签名被拒；坏掉的链接（截断、非 base64url、非 JSON、不是请求）说一句本页的话，不留「等待…」也不露引擎报错；读不了的钥匙 id 在卡片上拒签
 bun samples/ceremony-test.mjs      # 47/47 四种仪式 + 多请求会话
 bun samples/confirm-test.mjs       # 33/33 真触摸点按（规格 102）：passkey 弹窗在点按里发起、只问路线上那一把钥匙、等待时不接第二次点按；创建按所选位置；答复要交去别处就按不动；成员挑战码本地算；回车也能确认

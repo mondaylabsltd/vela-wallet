@@ -64,7 +64,7 @@ const userOpOf = (calls, gas = {}) => ({
     MULTI_SEND, 0n, ns.encode.call('multiSend(bytes)', [ns.encode.packMultiSend(calls)]), 1,
   ]),
   verificationGasLimit: '0', callGasLimit: '0', preVerificationGas: '0',
-  maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x', ...gas,
+  maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x', validAfter: '0', validUntil: '1800001800', ...gas,
 });
 const feeLeg = { to: USDC, value: 0, data: ns.encode.call('transfer(address,uint256)', [RELAYER, 5000n]) };
 const asked = { method: 'eth_sendTransaction', origin: 'https://app.uniswap.org', params: [{ to: USDC, value: '0x0', data: transfer }] };

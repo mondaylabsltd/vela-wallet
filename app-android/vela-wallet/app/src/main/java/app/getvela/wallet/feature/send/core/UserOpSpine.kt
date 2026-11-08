@@ -41,6 +41,7 @@ import uniffi.vela_core_uniffi.CoreException
 import uniffi.vela_core_uniffi.userOpReviewedSafeOpHash
 import uniffi.vela_core_uniffi.userOpSafeOpHash
 import uniffi.vela_core_uniffi.userOpSign
+import uniffi.vela_core_uniffi.userOpStampValidity
 import uniffi.vela_core_uniffi.userOpWithCalls
 
 /**
@@ -90,6 +91,11 @@ class UserOpSpine(
     private val signDeadlineMs: Long = passkeySignTimeoutMs().toLong(),
     /** A monotonic clock, ms: how long the prompt was up, for the core's `passkey_ceremony_end`. */
     private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
+    /**
+     * §35: the wall clock, Unix ms — what the core stamps the operation's
+     * validity window from (`userOpStampValidity`). A seam for the tests only.
+     */
+    private val wallClockMs: () -> Long = System::currentTimeMillis,
 ) {
     /**
      * Where one ceremony goes — the core's `signing_plan` (spec 102), read
@@ -393,6 +399,16 @@ class UserOpSpine(
         data object NonceUsed : Failure()
 
         /**
+         * §35: the operation's validity window closed before the EntryPoint
+         * saw it (`RelayRejection::Expired`, the relay's `AA22 expired or not
+         * due`). Nothing was sent, and it can never land. Send says it calmly
+         * (`SendSubmitFailure.Expired`) with Try again, which signs anew with
+         * a window of its own; a page is told the core's fixed detail
+         * (`userOpExpiredDetail()`).
+         */
+        data object Expired : Failure()
+
+        /**
          * Spec 082 RA1: the relay was never reached and nothing left the device
          * — the one failure after the passkey where "not sent, try again" is
          * true. A page is told the core's fixed sentence, never the pool's.
@@ -679,6 +695,13 @@ class UserOpSpine(
             }
         }
         draft = userOpWithCalls(draft, calls, settled)
+        // §35: the FINAL operation carries its validity window — validAfter
+        // 0, validUntil now + 30 min, the core's rule over this device's
+        // clock — stamped on every attempt just before its hash: the hash,
+        // the signature and the page's request all carry it, and what signs
+        // refuses an operation that never expires.
+        draft = runCatching { userOpStampValidity(draft, wallClockMs().toDouble()) }
+            .getOrElse { other(it.message ?: "The operation could not be given its expiry.") }
         val challenge = if (review == null) {
             userOpSafeOpHash(draft, chainId.toUInt())
         } else {
@@ -746,6 +769,8 @@ class UserOpSpine(
                     // send-15: the core's reading of a bare AA25 — another
                     // transaction of the account spent the nonce first.
                     RelayRejection.NonceUsed -> Failure.NonceUsed
+                    // §35: the window closed before the EntryPoint saw it.
+                    RelayRejection.Expired -> Failure.Expired
                 },
             )
         }

@@ -100,6 +100,16 @@ pub struct UserOperation {
     pub max_fee_per_gas: u128,
     pub max_priority_fee_per_gas: u128,
     pub paymaster_and_data: Vec<u8>,
+    /// The SafeOp's validity window (`uint48` seconds, Safe4337Module
+    /// v0.3.0): the module packs `validUntil` / `validAfter` into the
+    /// validation data it answers, and the EntryPoint refuses the operation
+    /// outside them (`AA22 expired or not due`). Both are signed — in the
+    /// SafeOp hash and in the signature's first 12 bytes. `valid_until = 0`
+    /// is "never expires", which only an estimate or a test carries: an
+    /// operation the wallet signs is stamped by [`stamp_validity`] (§35) and
+    /// [`signable_safe_op_hash`] refuses one that is not.
+    pub valid_after: u64,
+    pub valid_until: u64,
     pub signature: Vec<u8>,
 }
 
@@ -391,8 +401,14 @@ fn eip712_digest(domain_separator: &[u8], struct_hash: &[u8]) -> Vec<u8> {
 }
 
 /// The SafeOp EIP-712 hash the passkey signs — the Safe4337Module's domain,
-/// `validAfter = validUntil = 0`.
+/// the operation's own validity window (`valid_after`, `valid_until`).
+///
+/// Any window hashes, a zero one included: this is the module's digest, which
+/// verification and tests need for any operation. What the wallet SIGNS goes
+/// through [`signable_safe_op_hash`], which refuses an operation that never
+/// expires.
 pub fn calculate_safe_op_hash(op: &UserOperation, chain_id: u64) -> Result<Vec<u8>, CoreError> {
+    check_window(op.valid_after, op.valid_until)?;
     let mut preimage = keccak256(SAFE_OP_TYPE.as_bytes());
     preimage.extend(abi_encode_address(&op.sender)?);
     preimage.extend(abi_encode_uint256(&op.nonce)?);
@@ -404,14 +420,111 @@ pub fn calculate_safe_op_hash(op: &UserOperation, chain_id: u64) -> Result<Vec<u
     preimage.extend(word_u128(op.max_priority_fee_per_gas));
     preimage.extend(word_u128(op.max_fee_per_gas));
     preimage.extend(keccak256(&op.paymaster_and_data));
-    preimage.extend(word_u128(0)); // validAfter
-    preimage.extend(word_u128(0)); // validUntil
+    preimage.extend(word_u128(u128::from(op.valid_after)));
+    preimage.extend(word_u128(u128::from(op.valid_until)));
     preimage.extend(abi_encode_address(ENTRY_POINT)?);
     let struct_hash = keccak256(&preimage);
     Ok(eip712_digest(
         &domain_separator(chain_id, SAFE_4337_MODULE)?,
         &struct_hash,
     ))
+}
+
+// ---------------------------------------------------------------------------
+// The validity window (§35, review 1-6)
+// ---------------------------------------------------------------------------
+
+/// How long a signed operation stays valid: 30 minutes from the moment it is
+/// stamped (just before the passkey is asked).
+///
+/// Until R21 every SafeOp was signed with `validUntil = 0`, so a relay could
+/// hold a signed operation and land it whenever it liked — a swap at the worst
+/// moment within its slippage, a transfer the person thought had failed days
+/// later. The window bounds that: past `validUntil` the EntryPoint refuses the
+/// operation (`AA22 expired or not due`) and it can never land.
+///
+/// Why 30 minutes (§35): long enough for the slow honest cases — a passkey
+/// prompt left open, a hybrid (phone-as-key) ceremony, a relay queue on a
+/// congested chain, a device clock a few minutes behind — short enough that
+/// "I pressed Send, it did not go, I walked away" cannot become a landing
+/// hours later. Below ~10 minutes a hybrid ceremony plus a busy queue would
+/// expire honest operations; above an hour the window stops meaning anything
+/// to a person. The relay waits up to ~35 minutes for fees before giving up,
+/// so an operation it holds that long now expires in its queue instead of
+/// landing late — which is the point.
+pub const SAFE_OP_LIFETIME_SECS: u64 = 30 * 60;
+
+/// The largest value a `uint48` window field holds.
+pub const UINT48_MAX: u64 = (1 << 48) - 1;
+
+/// The window an operation stamped at `now_ms` (the shell's clock, Unix
+/// milliseconds) is signed with: `(valid_after, valid_until)`.
+///
+/// `valid_after` is 0, deliberately: a lower bound buys nothing for an
+/// operation that is submitted at once (the wallet never signs one for later),
+/// and it adds a failure — a device clock running ahead of the chain would
+/// make every operation "not due" (AA22) until the chain caught up. The upper
+/// bound is the protection; `valid_until` is `now + SAFE_OP_LIFETIME_SECS`.
+#[must_use]
+pub fn validity_window(now_ms: f64) -> (u64, u64) {
+    let now_s = if now_ms.is_finite() && now_ms > 0.0 {
+        // Saturating cast: an absurd clock yields the largest u64, which the
+        // window check then refuses rather than wraps.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let secs = (now_ms / 1000.0).floor() as u64;
+        secs
+    } else {
+        0
+    };
+    (0, now_s.saturating_add(SAFE_OP_LIFETIME_SECS))
+}
+
+/// Stamp the operation with the window it is signed with (§35): every shell
+/// calls this on the final operation, just before it hashes it for the
+/// passkey — so each attempt (and each re-sign after an expiry) gets its own
+/// 30 minutes.
+pub fn stamp_validity(op: &mut UserOperation, now_ms: f64) {
+    let (valid_after, valid_until) = validity_window(now_ms);
+    op.valid_after = valid_after;
+    op.valid_until = valid_until;
+}
+
+fn check_window(valid_after: u64, valid_until: u64) -> Result<(), CoreError> {
+    if valid_after > UINT48_MAX || valid_until > UINT48_MAX {
+        return Err(CoreError::InvalidQuantity(format!(
+            "validity window {valid_after}..{valid_until} does not fit uint48"
+        )));
+    }
+    if valid_until != 0 && valid_after > valid_until {
+        return Err(CoreError::InvalidQuantity(format!(
+            "validity window opens ({valid_after}) after it closes ({valid_until})"
+        )));
+    }
+    Ok(())
+}
+
+/// What a shell is told when it asks to sign an operation with no expiry.
+pub const NO_EXPIRY_DETAIL: &str =
+    "The operation carries no expiry (validUntil = 0); Vela signs no operation that never expires.";
+
+/// The SafeOp hash the passkey is asked to sign — [`calculate_safe_op_hash`],
+/// only for an operation that expires (§35): `valid_until = 0` is refused, so
+/// a path that forgot [`stamp_validity`] signs nothing rather than an
+/// operation a relay could land at any time.
+pub fn signable_safe_op_hash(op: &UserOperation, chain_id: u64) -> Result<Vec<u8>, CoreError> {
+    if op.valid_until == 0 {
+        return Err(CoreError::InvalidQuantity(NO_EXPIRY_DETAIL.to_owned()));
+    }
+    calculate_safe_op_hash(op, chain_id)
+}
+
+/// Whether an operation signed with `valid_until` has expired at `now_ms`
+/// (the shell's clock): the EntryPoint refuses it from the first second past
+/// `valid_until`. `valid_until = 0` never expires.
+#[must_use]
+pub fn has_expired(valid_until: u64, now_ms: f64) -> bool {
+    let (_, now_plus) = validity_window(now_ms);
+    valid_until != 0 && now_plus.saturating_sub(SAFE_OP_LIFETIME_SECS) > valid_until
 }
 
 /// `keccak256("UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)")`
@@ -530,16 +643,22 @@ fn build_contract_signature_core(
     Ok(out)
 }
 
-/// The 4337 user-operation signature: a 12-byte validity window
-/// (`validAfter(6) ‖ validUntil(6)`, zeros) before the contract signature.
+/// The 4337 user-operation signature: the 12-byte validity window
+/// (`validAfter(6) ‖ validUntil(6)`, big-endian `uint48`s — what
+/// `Safe4337Module._getSafeOp` slices off `signature[0:12]`) before the
+/// contract signature. The window must be the one the SafeOp hash was
+/// computed over, or the module rejects the signature.
 pub fn build_user_op_signature(
+    valid_after: u64,
+    valid_until: u64,
     authenticator_data: &[u8],
     client_data_fields: &str,
     r: &[u8],
     s: &[u8],
     signer_address: &str,
 ) -> Result<Vec<u8>, CoreError> {
-    let mut out = vec![0u8; 12];
+    check_window(valid_after, valid_until)?;
+    let mut out = validity_prefix(valid_after, valid_until);
     out.extend(build_contract_signature_core(
         authenticator_data,
         client_data_fields,
@@ -548,6 +667,28 @@ pub fn build_user_op_signature(
         signer_address,
     )?);
     Ok(out)
+}
+
+/// `validAfter(6) ‖ validUntil(6)`, big-endian.
+fn validity_prefix(valid_after: u64, valid_until: u64) -> Vec<u8> {
+    let mut out = valid_after.to_be_bytes()[2..].to_vec();
+    out.extend_from_slice(&valid_until.to_be_bytes()[2..]);
+    out
+}
+
+/// The window a 4337 signature carries in its first 12 bytes; `None` when
+/// the signature is shorter than that.
+#[must_use]
+pub fn signature_window(signature: &[u8]) -> Option<(u64, u64)> {
+    if signature.len() < 12 {
+        return None;
+    }
+    let read = |bytes: &[u8]| {
+        let mut word = [0u8; 8];
+        word[2..].copy_from_slice(bytes);
+        u64::from_be_bytes(word)
+    };
+    Some((read(&signature[..6]), read(&signature[6..12])))
 }
 
 /// The EIP-1271 `isValidSignature` form: the same envelope WITHOUT the
@@ -575,7 +716,13 @@ pub fn build_dummy_signature() -> Result<Vec<u8>, CoreError> {
     auth_data.extend_from_slice(&[0, 0, 0, 0]);
     let mut one = [0u8; 32];
     one[31] = 0x01;
+    // The estimate's window is zero ("never expires"): it is never signed,
+    // and the relay's simulation must not refuse it as expired. Twelve zero
+    // bytes against a real window's few non-zero ones is at most 144
+    // calldata gas, inside the relay's 5,000+ preVerificationGas buffer.
     build_user_op_signature(
+        0,
+        0,
         &auth_data,
         "\"origin\":\"https://getvela.app\",\"crossOrigin\":false",
         &one,
@@ -1167,6 +1314,8 @@ mod tests {
             max_fee_per_gas: 0,
             max_priority_fee_per_gas: 0,
             paymaster_and_data: Vec::new(),
+            valid_after: 0,
+            valid_until: 0,
             signature: vec![1, 2, 3],
         };
         let sponsored = UserOperation {
@@ -1182,6 +1331,8 @@ mod tests {
             paymaster_and_data: ok(primitives::from_hex(
                 "0x2222222222222222222222222222222222222222abcdef",
             )),
+            valid_after: 0,
+            valid_until: 0,
             signature: Vec::new(),
         };
         [deploying, sponsored]
@@ -1327,6 +1478,8 @@ mod tests {
             max_fee_per_gas: 0,
             max_priority_fee_per_gas: 0,
             paymaster_and_data: Vec::new(),
+            valid_after: 0,
+            valid_until: 0,
             signature: ok(build_dummy_signature()),
         }
     }
@@ -1335,7 +1488,16 @@ mod tests {
     /// produces for the same typed data — two implementations, one digest.
     #[test]
     fn the_safe_op_hash_agrees_with_the_eip712_hasher() {
-        let op = sample_op();
+        // The estimate's window (zero) and signed ones (§35).
+        for (after, until) in [(0u64, 0u64), (0, 1_800_001_800), (7, UINT48_MAX)] {
+            the_safe_op_hash_agrees_for_window(after, until);
+        }
+    }
+
+    fn the_safe_op_hash_agrees_for_window(after: u64, until: u64) {
+        let mut op = sample_op();
+        op.valid_after = after;
+        op.valid_until = until;
         let typed = serde_json::json!({
             "types": {
                 "EIP712Domain": [
@@ -1371,8 +1533,8 @@ mod tests {
                 "maxPriorityFeePerGas": op.max_priority_fee_per_gas.to_string(),
                 "maxFeePerGas": op.max_fee_per_gas.to_string(),
                 "paymasterAndData": "0x",
-                "validAfter": "0",
-                "validUntil": "0",
+                "validAfter": after.to_string(),
+                "validUntil": until.to_string(),
                 "entryPoint": ENTRY_POINT
             }
         });
@@ -1383,6 +1545,55 @@ mod tests {
             expected,
             "the chain id is in the domain"
         );
+    }
+
+    /// §35: the window the wallet signs, decided once.
+    #[test]
+    fn a_signed_operation_expires_thirty_minutes_after_it_is_stamped() {
+        assert_eq!(SAFE_OP_LIFETIME_SECS, 1800);
+        // validAfter 0 (no lower bound: a clock ahead of the chain never makes
+        // an operation "not due"); validUntil now + 30 minutes, whole seconds.
+        assert_eq!(validity_window(1_800_000_000_999.0), (0, 1_800_001_800));
+        // A clock that cannot be read still yields a closed window.
+        assert_eq!(validity_window(f64::NAN), (0, SAFE_OP_LIFETIME_SECS));
+        let mut op = sample_op();
+        assert_eq!((op.valid_after, op.valid_until), (0, 0));
+        stamp_validity(&mut op, 1_800_000_000_000.0);
+        assert_eq!((op.valid_after, op.valid_until), (0, 1_800_001_800));
+        // The window is in the hash.
+        let mut later = op.clone();
+        stamp_validity(&mut later, 1_800_000_001_000.0);
+        assert_ne!(
+            ok(calculate_safe_op_hash(&op, 100)),
+            ok(calculate_safe_op_hash(&later, 100))
+        );
+        // Expired from the first second past validUntil, never at it.
+        assert!(!has_expired(op.valid_until, 1_800_001_800_999.0));
+        assert!(has_expired(op.valid_until, 1_800_001_801_000.0));
+        assert!(!has_expired(0, 9e15), "a zero window never expires");
+    }
+
+    /// §35: what the passkey is asked to sign always expires.
+    #[test]
+    fn an_operation_that_never_expires_is_never_signed() {
+        let op = sample_op();
+        assert!(
+            calculate_safe_op_hash(&op, 100).is_ok(),
+            "the digest exists"
+        );
+        let Err(error) = signable_safe_op_hash(&op, 100) else {
+            unreachable!("a zero window was signable");
+        };
+        assert!(error.to_string().contains("never expires"), "{error}");
+        let mut stamped = op;
+        stamp_validity(&mut stamped, 1_800_000_000_000.0);
+        assert_eq!(
+            ok(signable_safe_op_hash(&stamped, 100)),
+            ok(calculate_safe_op_hash(&stamped, 100))
+        );
+        let mut wide = stamped.clone();
+        wide.valid_until = UINT48_MAX + 1;
+        assert!(signable_safe_op_hash(&wide, 100).is_err());
     }
 
     #[test]
@@ -1452,14 +1663,32 @@ mod tests {
         assert_eq!(&core[97..], &dynamic[..]);
 
         let user_op = ok(build_user_op_signature(
+            0x0102_0304_0506,
+            0x0a0b_0c0d_0e0f,
             &auth,
             fields,
             &r,
             &s,
             WEBAUTHN_SIGNER,
         ));
-        assert_eq!(&user_op[..12], &[0u8; 12]);
+        // `validAfter(6) ‖ validUntil(6)`, big-endian — `_getSafeOp`'s
+        // `bytes6(signature[0:6])`, `bytes6(signature[6:12])`.
+        assert_eq!(
+            &user_op[..12],
+            &[1, 2, 3, 4, 5, 6, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f]
+        );
         assert_eq!(&user_op[12..], &core[..]);
+        assert_eq!(
+            signature_window(&user_op),
+            Some((0x0102_0304_0506, 0x0a0b_0c0d_0e0f))
+        );
+        // A window that does not fit uint48, or closes before it opens, is
+        // never encoded.
+        assert!(
+            build_user_op_signature(0, UINT48_MAX + 1, &auth, fields, &r, &s, WEBAUTHN_SIGNER)
+                .is_err()
+        );
+        assert!(build_user_op_signature(10, 9, &auth, fields, &r, &s, WEBAUTHN_SIGNER).is_err());
     }
 
     #[test]
@@ -1813,6 +2042,8 @@ pub fn draft_operation(
         max_fee_per_gas: 0,
         max_priority_fee_per_gas: 0,
         paymaster_and_data: Vec::new(),
+        valid_after: 0,
+        valid_until: 0,
         signature: build_dummy_signature()?,
     })
 }
@@ -1838,7 +2069,12 @@ pub fn replace_calls(op: &mut UserOperation, calls: &[MultiSendCall]) -> Result<
 /// credential that signed. `credential_id` is the one the authenticator
 /// answered with; a credential outside the wallet is refused, never
 /// mis-encoded.
+///
+/// `op` is the operation signed: the envelope carries ITS window (§35), and
+/// one with no expiry is refused — the hash it was asked to sign
+/// ([`signable_safe_op_hash`]) was refused the same way.
 pub fn envelope_signature(
+    op: &UserOperation,
     authenticator_data: &[u8],
     client_data_json: &[u8],
     signature_der: &[u8],
@@ -1863,7 +2099,18 @@ pub fn envelope_signature(
     }
     let fields = extract_client_data_fields(client_data_json);
     let signer = signer_address_for(keys, Some(credential_id))?;
-    build_user_op_signature(authenticator_data, &fields, &raw[..32], &raw[32..], &signer)
+    if op.valid_until == 0 {
+        return Err(CoreError::InvalidQuantity(NO_EXPIRY_DETAIL.to_owned()));
+    }
+    build_user_op_signature(
+        op.valid_after,
+        op.valid_until,
+        authenticator_data,
+        &fields,
+        &raw[..32],
+        &raw[32..],
+        &signer,
+    )
 }
 
 /// `parseBundlerUnderfunded`: is this the relay saying the per-Safe gas
@@ -1937,8 +2184,42 @@ pub enum RelayRejection {
     /// (`SendSubmitFailure::NonceUsed`); a dApp hears [`NONCE_USED_DETAIL`].
     /// Unlike [`Self::NonceHeld`] there is no other operation to wait for.
     NonceUsed,
+    /// The operation's validity window closed before the EntryPoint saw it
+    /// (§35): the relay's `AA22 expired or not due`, read by
+    /// [`is_expired_rejection`]. Nothing was sent, and this operation can
+    /// never go out as signed — a shell says "it expired before it was
+    /// submitted; nothing was sent" and signs anew
+    /// (`SendSubmitFailure::Expired`); a dApp hears [`EXPIRED_DETAIL`].
+    Expired,
     /// Diagnostics only; the core words the screen.
     Other(String),
+}
+
+/// What a request whose operation expired before it was submitted
+/// ([`RelayRejection::Expired`], §35) tells its page — for the developer; the
+/// screen has its own words (`componentsUi.signing.expired`).
+pub const EXPIRED_DETAIL: &str = "The transaction expired before it was submitted, so nothing was sent. Review it again to send it.";
+
+/// The core's own sentence for an expired operation ([`relay_error_message`]).
+const EXPIRED_SENTENCE: &str = "The transaction expired before it was submitted. Nothing was sent.";
+
+/// The EntryPoint's refusal of an operation outside its validity window —
+/// `AA22 expired or not due` (§35) — however the relay words it around the
+/// code: `AA22` as a word of its own, the EntryPoint's own phrase, or the
+/// core's own sentence for it ([`relay_error_message`]).
+#[must_use]
+pub fn is_expired_rejection(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    if lower.contains("expired or not due") || lower.contains("expired before it was submitted") {
+        return true;
+    }
+    let bytes = lower.as_bytes();
+    let word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    lower.match_indices("aa22").any(|(at, _)| {
+        let before = at.checked_sub(1).map(|i| bytes[i]);
+        let after = bytes.get(at + 4).copied();
+        !before.is_some_and(word) && !after.is_some_and(word)
+    })
 }
 
 /// What a request that could not go out behind another of the account's
@@ -1992,6 +2273,9 @@ pub fn classify_relay_rejection(message: &str) -> RelayRejection {
     if is_nonce_spent(message) {
         return RelayRejection::NonceUsed;
     }
+    if is_expired_rejection(message) {
+        return RelayRejection::Expired;
+    }
     RelayRejection::Other(message.to_owned())
 }
 
@@ -2013,6 +2297,12 @@ pub fn relay_error_message(error_json: &str) -> String {
         .or_else(|| error.get("data").and_then(Value::as_str))
         .unwrap_or_default();
     let has = |needle: &str| message.contains(needle);
+    // §35: the window closed before the EntryPoint saw it. Checked before
+    // every other reading (a relay says "simulation failed: AA22 …"), so
+    // the sentence names what happened.
+    if is_expired_rejection(message) {
+        return EXPIRED_SENTENCE.to_owned();
+    }
     if has("insufficient funds") || has("balance too low") {
         return "Insufficient balance to cover gas fees. Please fund your account.".to_owned();
     }
@@ -2348,6 +2638,48 @@ mod submit_spine_tests {
         ));
     }
 
+    /// §35: an operation that reached the EntryPoint past its `validUntil`
+    /// is refused `AA22 expired or not due` — read as "expired", nothing
+    /// sent, however the relay wraps the code.
+    #[test]
+    fn an_expired_operation_is_its_own_rejection_and_nothing_was_sent() {
+        for expired in [
+            "AA22 expired or not due",
+            "simulation failed: FailedOp(0, \"AA22 expired or not due\")",
+            "UserOperation reverted during simulation with reason: aa22",
+            "expired or not due",
+        ] {
+            assert_eq!(
+                classify_relay_rejection(expired),
+                RelayRejection::Expired,
+                "{expired}"
+            );
+            let json = serde_json::json!({ "code": -32500, "message": expired }).to_string();
+            assert_eq!(
+                relay_error_message(&json),
+                "The transaction expired before it was submitted. Nothing was sent.",
+                "{expired}"
+            );
+            // The submit's verdict: not sent, expired — never "may have
+            // been sent", never retried as busy.
+            let step = submit_step(&SubmitReply::Error(json), 0, false, "0xabc");
+            assert_eq!(
+                step,
+                SubmitStep::Done(SubmitVerdict::NotSent {
+                    rejection: Some(RelayRejection::Expired)
+                }),
+                "{expired}"
+            );
+        }
+        for other in ["AA220", "0xaa22ff", "AA23 reverted"] {
+            assert!(!is_expired_rejection(other), "{other}");
+        }
+        assert_eq!(
+            serde_json::to_value(RelayRejection::Expired).ok(),
+            Some(serde_json::json!("expired"))
+        );
+    }
+
     #[test]
     fn the_relay_s_sentence_is_classified_the_way_classify_submit_does() {
         assert_eq!(
@@ -2494,19 +2826,47 @@ mod submit_spine_tests {
             .unwrap_or_else(|e| unreachable!("{e}"));
         let der =
             primitives::from_hex(&signed.signature_der_hex).unwrap_or_else(|e| unreachable!("{e}"));
-        let sig = envelope_signature(&auth, &client, &der, &signed.credential_id_hex, &keys)
+        let unstamped = UserOperation {
+            sender: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+            nonce: "0x0".to_owned(),
+            init_code: Vec::new(),
+            call_data: Vec::new(),
+            verification_gas_limit: 1,
+            call_gas_limit: 1,
+            pre_verification_gas: 1,
+            max_fee_per_gas: 0,
+            max_priority_fee_per_gas: 0,
+            paymaster_and_data: Vec::new(),
+            valid_after: 0,
+            valid_until: 0,
+            signature: Vec::new(),
+        };
+        let mut op = unstamped.clone();
+        stamp_validity(&mut op, 1_800_000_000_000.0);
+        let sig = envelope_signature(&op, &auth, &client, &der, &signed.credential_id_hex, &keys)
             .unwrap_or_else(|e| unreachable!("{e:?}"));
         let key = crate::safe::parse_public_key(&keys[1].public_key_hex)
             .unwrap_or_else(|e| unreachable!("{e}"));
         let proxy = crate::safe::compute_webauthn_signer_address(&key.x, &key.y)
             .unwrap_or_else(|e| unreachable!("{e}"));
-        assert_eq!(&sig[..12], &[0u8; 12]);
+        // §35: the window the hash covered, in the first 12 bytes.
+        assert_eq!(signature_window(&sig), Some((0, 1_800_001_800)));
         assert_eq!(
             primitives::to_hex(&sig[24..44], true).to_lowercase(),
             proxy.to_lowercase()
         );
         // A credential outside the wallet is refused, never mis-encoded.
-        assert!(envelope_signature(&auth, &client, &der, "cafe", &keys).is_err());
+        assert!(envelope_signature(&op, &auth, &client, &der, "cafe", &keys).is_err());
+        // An operation that never expires is never enveloped (§35).
+        assert!(envelope_signature(
+            &unstamped,
+            &auth,
+            &client,
+            &der,
+            &signed.credential_id_hex,
+            &keys
+        )
+        .is_err());
     }
 }
 
@@ -2535,6 +2895,8 @@ mod op_hash_tests {
             max_fee_per_gas: 2_000_000_000,
             max_priority_fee_per_gas: 1_000_000_000,
             paymaster_and_data: Vec::new(),
+            valid_after: 0,
+            valid_until: 0,
             signature: vec![0xab; 65],
         }
     }

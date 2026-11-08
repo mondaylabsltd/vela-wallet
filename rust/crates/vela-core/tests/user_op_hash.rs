@@ -97,6 +97,8 @@ fn unpack(tuple: &DynSolValue) -> UserOperation {
         max_fee_per_gas,
         max_priority_fee_per_gas,
         paymaster_and_data,
+        valid_after: 0,
+        valid_until: 0,
         signature: bytes(signature),
     }
 }

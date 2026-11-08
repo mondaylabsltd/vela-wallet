@@ -129,11 +129,12 @@ export const EVENTS = {
 	sign_in_started: ['method'],
 	sign_in_completed: ['method'],
 	sign_in_failed: ['method', 'reason'],
-	// Send.
+	// Send. Only that the screen opened: §35 (review 1-8) removed every
+	// transaction-outcome event (`send_submitted`, `send_confirmed`,
+	// `send_failed`, `backup_keys_done`, a site's transaction approved), so no
+	// event — with its network and time, beside the IP every request carries —
+	// can be matched to a transaction on chain. See TX_OUTCOME_EVENTS.
 	send_opened: [],
-	send_submitted: ['chain'],
-	send_confirmed: ['chain'],
-	send_failed: ['chain', 'reason'],
 	// Receive.
 	receive_opened: [],
 	receive_address_copied: [],
@@ -151,8 +152,7 @@ export const EVENTS = {
 	network_added: ['chain'],
 	network_removed: ['chain'],
 	network_rpc_set: ['chain'],
-	backup_keys_started: [],
-	backup_keys_done: [],
+
 	// Contacts.
 	contact_added: [],
 	contacts_imported: [],
@@ -164,6 +164,23 @@ export const EVENTS = {
 } as const satisfies Record<string, readonly AnalyticsProperty[]>;
 
 export type AnalyticsEventName = keyof typeof EVENTS;
+
+/**
+ * §35 (review 1-8): the events that told how a transaction ended, removed so
+ * that no hit can be linked to an on-chain transaction. Never to be added back
+ * (`payload.test.ts` holds the catalog to it); a site's request is counted
+ * only for the kinds that put nothing on chain ({@link TX_REQUEST_KINDS}).
+ */
+export const TX_OUTCOME_EVENTS = [
+	'send_submitted',
+	'send_confirmed',
+	'send_failed',
+	'backup_keys_started',
+	'backup_keys_done'
+] as const;
+
+/** A site's request kinds that become a transaction: never counted (§35). */
+export const TX_REQUEST_KINDS: readonly AnalyticsDappKind[] = ['send_transaction', 'send_calls'];
 
 /** The properties a call site may pass with `name` — each optional, each coarse. */
 export type AnalyticsEventProps<E extends AnalyticsEventName> = {

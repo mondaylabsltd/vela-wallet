@@ -324,6 +324,16 @@ sealed class SendSubmitFailure {
     @SerialName("nonce_used")
     data object NonceUsed : SendSubmitFailure()
 
+    /**
+     * §35: the operation's validity window closed before the EntryPoint saw
+     * it (the relay's `AA22 expired or not due`, the core's
+     * `RelayRejection::Expired`). Nothing was sent and it can never land;
+     * Try again signs anew, with a window of its own.
+     */
+    @Serializable
+    @SerialName("expired")
+    data object Expired : SendSubmitFailure()
+
     /** r5reg-3: the reads before the passkey did not get through — [busy]: the nodes answered "busy". */
     @Serializable
     @SerialName("chain_unreachable")
@@ -408,6 +418,13 @@ enum class SendTxErrorKey {
 
     /** send-15: another transaction of this account spent the nonce first. Nothing was sent: Review again. */
     @SerialName("nonce_used") NonceUsed,
+
+    /**
+     * §35: it expired before it was submitted — nothing was sent. Said like
+     * [NonceUsed] ("Not sent", calmly) over `componentsUi.signing.expired`;
+     * Try again signs anew.
+     */
+    @SerialName("expired") Expired,
 
     /** A multisig's proposal: its own words replace these (web-only today). */
     @SerialName("proposal_mailbox_down") ProposalMailboxDown,

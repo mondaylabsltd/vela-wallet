@@ -747,6 +747,50 @@ class SendLiveTest {
     }
 
     /**
+     * §35: an operation whose validity window closed before the EntryPoint saw
+     * it (`AA22`) — nothing was sent. Drawn exactly as a used nonce: "Not
+     * sent", calmly, with Review again (a new signature, its own window) —
+     * over its own sentence, `componentsUi.signing.expired`.
+     */
+    @Test
+    fun `an operation that expired before it was submitted is said calmly, with Review again`() {
+        val drawn = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
+        val confirm = SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee())
+        val expired = SendLive.confirm(drawn, confirm.copy(tx_status = SendTxStatus.Error, tx_error = SendTxErrorKey.Expired), ctx())
+        val wentFirst = SendLive.confirm(drawn, confirm.copy(tx_status = SendTxStatus.Error, tx_error = SendTxErrorKey.NonceUsed), ctx())
+        assertEquals(strings.t(I18nKeys.Flows.RECEIPT_NOT_SENT), expired.noticeTitle)
+        assertEquals(strings.t(I18nKeys.Flows.EXPIRED), expired.notice)
+        assertEquals("It expired before it was submitted — nothing was sent.", expired.notice)
+        assertTrue("calm, never the warning tone", expired.noticeCalm)
+        assertEquals(strings.t(I18nKeys.Flows.TX_REVIEW_AGAIN), expired.noticeAction)
+        // Like NonceUsed in every way but its sentence.
+        assertEquals(wentFirst.noticeTitle, expired.noticeTitle)
+        assertEquals(wentFirst.noticeCalm, expired.noticeCalm)
+        assertEquals(wentFirst.noticeAction, expired.noticeAction)
+        assertNotEquals(wentFirst.notice, expired.notice)
+        // A relay stop over it is said in its own words instead.
+        val stopped = SendLive.confirm(
+            drawn,
+            confirm.copy(
+                tx_status = SendTxStatus.Error, tx_error = SendTxErrorKey.Expired,
+                relay_unreachable = app.getvela.wallet.feature.send.core.SendRelayUnreachable(chain_id = 100, operator_served = true),
+            ),
+            ctx(),
+        )
+        assertNull(stopped.noticeTitle)
+        // The core's view decodes it, and the submit failure crosses as the core writes it.
+        val wire = app.getvela.wallet.core.crux.Wire.json.decodeFromString(SendView.serializer(), """{"tx_error":"expired"}""")
+        assertEquals(SendTxErrorKey.Expired, wire.tx_error)
+        assertEquals(
+            """{"type":"expired"}""",
+            app.getvela.wallet.core.crux.Wire.json.encodeToString(
+                app.getvela.wallet.feature.send.core.SendSubmitFailure.serializer(),
+                app.getvela.wallet.feature.send.core.SendSubmitFailure.Expired,
+            ),
+        )
+    }
+
+    /**
      * A multisig's proposal this shell cannot make (`SendProposeFailure::
      * NotSupported`): said as that, in the corpus's own sentence — never the
      * mailbox's or the generic line — and with no retry that would meet the

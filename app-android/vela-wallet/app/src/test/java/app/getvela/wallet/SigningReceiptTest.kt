@@ -483,6 +483,38 @@ class SigningReceiptTest {
     }
 
     /**
+     * §35: the core's view of an operation that expired before it was
+     * submitted (the shell answered `userOpExpiredDetail()`, refused) —
+     * `failure_not_sent`, `componentsUi.signing.expired`, retryable, not
+     * refused: the calm "not sent" state with Try again, through the generic
+     * paths, the sentence resolved from the corpus.
+     */
+    @Test
+    fun `an operation that expired before it was submitted is the calm not-sent state, with Try again`() {
+        val expired = SignView(
+            surface = SignSurface.Sheet,
+            error = SignErrorNotice(SignErrorKind.SubmitFailed, uniffi.vela_core_uniffi.userOpExpiredDetail()),
+            failure_retryable = true,
+            failure_refusal_key = I18nKeys.Flows.EXPIRED,
+            failure_not_sent = true,
+        )
+        val words = strings.t(I18nKeys.Flows.EXPIRED)
+        assertEquals("It expired before it was submitted — nothing was sent.", words)
+        val receipt = SigningLive.receipt(expired, blocks, ctx)!!
+        assertEquals("its own calm state, never \"Failed\"", ReceiptStage.NotSent, receipt.stage)
+        assertTrue(receipt.captions.toString(), receipt.captions.contains(words))
+        assertEquals("Try again stays", strings.t(I18nKeys.Flows.TX_RETRY), receipt.retry)
+        val status = SigningLive.statusBlocks(expired, strings)
+        assertTrue(status.toString(), status.none { it is SigningBlock.Warning })
+        assertTrue(status.any { it is SigningBlock.Sentence && it.text == words && it.tone == SigningTone.Neutral })
+        // The tracker's refusal decodes and keys the same sentence.
+        assertEquals(
+            app.getvela.wallet.feature.send.core.RefusalReason.Expired,
+            app.getvela.wallet.core.crux.Wire.json.decodeFromString(app.getvela.wallet.feature.send.core.RefusalReason.serializer(), "\"expired\""),
+        )
+    }
+
+    /**
      * Spec 082 RJ3/RJ4: the ending follows the tracker — its `rejected` is the
      * Refused ending; but an answer that already holds a tx hash is never drawn
      * "refused" or "not sent" (the review's rule): it follows to the real verdict.

@@ -11,6 +11,7 @@
  *   sheet goes with it; leaving the surface owes the same, at once.
  */
 import '$lib/i18n/wasm-init.server';
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MultisigShellDeps } from './handler';
 
@@ -287,4 +288,72 @@ describe('§31: a request to act for a Safe this multisig owns', () => {
 		]);
 		expect(multisigUi.sheet).toBeNull();
 	});
+});
+
+// §35 (SEC-PARENT-2): the shared vector, through the real core at this entry.
+const SELF_CALL = JSON.parse(
+	readFileSync(
+		new URL(
+			'../../../../../../rust/crates/vela-core/tests/vectors/rules/multisig-self-call.json',
+			import.meta.url
+		),
+		'utf8'
+	)
+) as {
+	key: string;
+	cases: {
+		name: string;
+		calls: { to: string; value: string; data: string }[];
+		refused: string | null;
+		leg: number | null;
+	}[];
+};
+
+describe('§35: a request that would make this multisig call itself', () => {
+	const bare = SAFE.slice(2).toLowerCase();
+	const self = (to: string) =>
+		to === 'SELF' ? SAFE : to === 'SELF_UPPER' ? '0x' + bare.toUpperCase() : to;
+
+	for (const c of SELF_CALL.cases) {
+		it(c.name, async () => {
+			await boot();
+			const h = handOff('wallet_sendCalls');
+			h.request.params = [
+				{
+					version: '2.0.0',
+					chainId: '0x64',
+					from: SAFE,
+					calls: c.calls.map((call) => ({
+						to: self(call.to),
+						value: call.value,
+						data: call.data.replaceAll('SELFADDR', bare)
+					}))
+				}
+			] as never;
+			const hold = await holdDappRequest(h.request);
+			await settled();
+			if (c.refused === null) {
+				expect(h.refused).toEqual([]);
+				hold.leave();
+				return;
+			}
+			expect(h.refused).toEqual([
+				{
+					code: -32603,
+					message: expect.stringContaining(c.refused),
+					data: {
+						reason: 'self_call',
+						safe: SAFE,
+						function: c.refused,
+						leg: c.leg,
+						key: SELF_CALL.key
+					}
+				}
+			]);
+			expect(multisigUi.sheet).toBeNull();
+			expect(h.answers).toEqual([]);
+			hold.leave();
+			expect(h.answers).toEqual([{ error: h.refused[0] }]);
+		});
+	}
 });

@@ -102,6 +102,47 @@ const INBAND_MARKUP: u128 = 3;
 /// (requirement G05 / manual-test clue #14, "GasQuoteTooHigh").
 const MAX_QUOTE_VS_CHAIN_MULTIPLE: u128 = 3;
 
+/// §35 (review 1-6): the most `settlementGas` a relay may bill, as a share
+/// of the wallet's OWN gas model for the operation ([`static_limits`]: its
+/// verification constant for a deployed or undeployed Safe, the call limit
+/// raised to the inner calls' measured floor, the pre-verification constant
+/// and any L2 data adder), in percent — plus [`SETTLEMENT_GAS_MARGIN`].
+///
+/// The relay bills `used + 15% + 30,000` (vela-relay `docs/fees.md` §1a,
+/// `cost.rs` `billed_gas`) on a simulation it measured within ~6%: 1.15 ×
+/// 1.06 ≈ 1.22, rounded up to 1.25. The wallet's model is itself an upper
+/// bound of what such an operation uses (300,000 to validate a deployed Safe
+/// that validates in ~62,000; 2,000,000 for a first operation that deploys
+/// in ~412,000), so an honest quote sits far inside: the recorded real ones
+/// are 0.27–0.77 of the model (Ethereum send 208,070 of 600,000; swap 365,061
+/// of 682,863; first operation 610,301 of 2,300,000; the registry backup
+/// 5,831,838 of 7,595,156). Past it the relay is billing gas the operation
+/// cannot use, and the quote is refused ([`FeeFailure::SettlementGasTooHigh`]).
+pub const SETTLEMENT_GAS_FACTOR_PERCENT: u128 = 125;
+
+/// The constant part of the cap: the relay's own 30,000 plus the
+/// EntryPoint's 10,000 overhead it adds to `used`, and 10,000 of slack.
+pub const SETTLEMENT_GAS_MARGIN: u128 = 50_000;
+
+/// The most gas a relay may bill an operation (§35): never more than the
+/// limits it is signed with — gas it can never use — and, where the wallet
+/// has its own model of the operation, never more than
+/// [`SETTLEMENT_GAS_FACTOR_PERCENT`] of that model plus
+/// [`SETTLEMENT_GAS_MARGIN`]. `own_model` is `None` when a contract call's
+/// gas could not be measured: the model would not cover it, so only the
+/// signed limits bound the bill (recorded as weaker, §35 "Left open").
+#[must_use]
+pub fn settlement_gas_cap(signed_limits: u128, own_model: Option<u128>) -> u128 {
+    let own = own_model.map_or(u128::MAX, |model| {
+        model
+            .saturating_mul(SETTLEMENT_GAS_FACTOR_PERCENT)
+            .checked_div(100)
+            .unwrap_or(u128::MAX)
+            .saturating_add(SETTLEMENT_GAS_MARGIN)
+    });
+    signed_limits.min(own)
+}
+
 /// USD prices are fixed-point with 8 decimals (`safe-transaction.ts:337-339`).
 pub const USD_PRICE_DECIMALS: u32 = 8;
 const USD_PRICE_SCALE: u128 = 100_000_000;
@@ -964,6 +1005,11 @@ pub enum FeeFailure {
     /// times the client's own on-chain measurement — refused rather than
     /// signed, to protect the user from a runaway or hostile relayer quote.
     GasQuoteTooHigh,
+    /// §35 (review 1-6): the relay's `settlementGas` — the gas it would bill
+    /// this operation for — is past [`settlement_gas_cap`]: more than the
+    /// operation is signed to use, or far more than the wallet's own model
+    /// of it. A relay quote Vela won't accept; nothing is signed on it.
+    SettlementGasTooHigh,
     /// A chain read the quote needs (the account's deployment, today) got no
     /// answer from the chain's nodes (spec 082 RJ13, G48): nothing could be
     /// priced, and it is the chain node — not Vela's relay — that is out of
@@ -1030,6 +1076,7 @@ pub fn requote_delay_ms(failure: FeeFailure, attempt: u32) -> Option<u32> {
         | FeeFailure::FeeTokenUnavailable
         | FeeFailure::EstimateFailed
         | FeeFailure::GasQuoteTooHigh
+        | FeeFailure::SettlementGasTooHigh
         | FeeFailure::ChainRead { .. }
         | FeeFailure::Internal => Some(match attempt {
             0 | 1 => 3_000,
@@ -1046,6 +1093,12 @@ pub fn requote_delay_ms(failure: FeeFailure, attempt: u32) -> Option<u32> {
 /// (`{{chain}}` = the chain's name): "Can't reach {{chain}} to price this.
 /// Trying again…" — the fee's own words, never the browser's.
 pub const REASON_CHAIN_DOWN_KEY: &str = "componentsUi.gas.reasonChainDown";
+
+/// The fee row's reason when the relay bills more gas than the operation can
+/// use ([`FeeFailure::SettlementGasTooHigh`], §35): "The relay quoted more gas
+/// than this transaction can use — Vela won't accept that quote. Retrying
+/// automatically."
+pub const REASON_SETTLEMENT_HIGH_KEY: &str = "componentsUi.gas.reasonSettlementHigh";
 
 /// The fee row's reason when the read never left the app
 /// ([`FeeFailure::Internal`]).
@@ -1087,6 +1140,7 @@ pub fn failure_reason_key(failure: FeeFailure) -> Option<&'static str> {
         FeeFailure::FeeTokenUnavailable => Some("componentsUi.gas.reasonFeeToken"),
         FeeFailure::EstimateFailed => Some("componentsUi.gas.reasonSimulation"),
         FeeFailure::GasQuoteTooHigh => Some("componentsUi.gas.reasonQuoteHigh"),
+        FeeFailure::SettlementGasTooHigh => Some(REASON_SETTLEMENT_HIGH_KEY),
         FeeFailure::ChainRead { rate_limited: true } => Some("home.balanceDetailStatusRetrying"),
         // The fee row's own sentence (issue 483): the browser's "page data
         // may be incomplete" meant nothing under a fee.
@@ -1113,6 +1167,7 @@ pub fn stopped_reason_key(failure: FeeFailure) -> Option<&'static str> {
         FeeFailure::FeeTokenUnavailable => Some("componentsUi.gas.reasonFeeTokenStopped"),
         FeeFailure::EstimateFailed => Some("componentsUi.gas.reasonSimulationStopped"),
         FeeFailure::GasQuoteTooHigh => Some("componentsUi.gas.reasonQuoteHighStopped"),
+        FeeFailure::SettlementGasTooHigh => Some("componentsUi.gas.reasonSettlementHighStopped"),
         FeeFailure::ChainRead {
             rate_limited: false,
         } => Some("componentsUi.gas.reasonChainDownStopped"),
@@ -3870,14 +3925,26 @@ fn measured_inner_floor(calls: &[FeeCall], gas: &[Option<String>]) -> Option<u12
 /// limits then go through the one in-band rule (`user_op::in_band_gas_limits`)
 /// every simulated quote goes through, so their sum is the gas priced.
 fn static_limits(ctx: &RequestCtx, inner_floor: Option<u128>) -> crate::user_op::GasLimits {
-    let verification_gas = if ctx.deployed {
+    static_limits_for(ctx.chain_id, ctx.deployed, inner_floor)
+}
+
+/// The wallet's own gas model of an operation ([`static_limits`]) by its
+/// chain and deployment — what the §35 settlement cap measures a relay's
+/// `settlementGas` against ([`settlement_gas_cap`]).
+#[must_use]
+pub fn static_limits_for(
+    chain_id: u32,
+    deployed: bool,
+    inner_floor: Option<u128>,
+) -> crate::user_op::GasLimits {
+    let verification_gas = if deployed {
         VERIFICATION_GAS_DEPLOYED
     } else {
         VERIFICATION_GAS_UNDEPLOYED
     };
-    let adder = if ARBITRUM_CHAIN_IDS.contains(&ctx.chain_id) {
+    let adder = if ARBITRUM_CHAIN_IDS.contains(&chain_id) {
         ARBITRUM_STATIC_GAS_ADDER
-    } else if OP_STACK_CHAIN_IDS.contains(&ctx.chain_id) {
+    } else if OP_STACK_CHAIN_IDS.contains(&chain_id) {
         OP_STACK_STATIC_GAS_ADDER
     } else {
         0
@@ -3889,7 +3956,7 @@ fn static_limits(ctx: &RequestCtx, inner_floor: Option<u128>) -> crate::user_op:
             pre_verification_gas: add(PRE_VERIFICATION_GAS, adder),
             settlement_gas: None,
         },
-        ctx.deployed,
+        deployed,
         inner_floor,
     )
 }
@@ -4594,6 +4661,14 @@ fn accept_gas_outcome(
                     // calls with the Safe's code in place, and leaves
                     // `settlementGas` out when it cannot.
                     (Some(settlement), Some(per_gas)) => {
+                        // §35: never more than the operation can use, nor
+                        // far more than the wallet's own model of it.
+                        let measured =
+                            inner_floor.is_some() || !ctx.calls.iter().any(is_contract_call);
+                        let own = measured.then(|| static_limits(&ctx, inner_floor).total());
+                        if settlement > settlement_gas_cap(limits.total(), own) {
+                            return fail(model, FeeFailure::SettlementGasTooHigh);
+                        }
                         (settlement, Charge::Published { per_gas })
                     }
                     // A relay older than CONTRACT v2: its limits, as

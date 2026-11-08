@@ -536,6 +536,9 @@ pub struct FlowStrings {
     /// first — nothing was sent."
     pub status_not_sent: SharedString,
     pub went_first: SharedString,
+    /// §35: "Not sent" over "It expired before it was submitted — nothing
+    /// was sent." (`SendTxErrorKey::Expired`), with Try again.
+    pub expired: SharedString,
     /// Round 7: the account's signing page did not sign, said as what
     /// happened there — never "couldn't be submitted".
     pub page_unanswered: SharedString,
@@ -715,19 +718,25 @@ pub struct FlowStrings {
 
 /// Every sentence the core may tell a relay's refusal in, by its key
 /// (`tx_tracker::RefusalReason::key`): the fee sentence only for a fee
-/// refusal, "another transaction went first" for a nonce already used, and
-/// the plain "the network refused it" for every other reason.
+/// refusal, "another transaction went first" for a nonce already used, "it
+/// expired before it was submitted" for an operation whose window closed
+/// (§35), and the plain "the network refused it" for every other reason.
 #[must_use]
 pub fn refusal_sentences(loc: &Loc) -> Vec<(&'static str, SharedString)> {
     use vela_core::app::sign_confirm::NOT_SENT_BODY_KEY;
-    use vela_core::app::tx_tracker::{REFUSED_FEES_KEY, REFUSED_KEY, REFUSED_NONCE_KEY};
+    use vela_core::app::tx_tracker::{
+        REFUSED_EXPIRED_KEY, REFUSED_FEES_KEY, REFUSED_KEY, REFUSED_NONCE_KEY,
+    };
     // The held nonce at submit (`SignView.failure_refusal_key`, PR 2 note 9)
     // is "not sent yet" — its sentence says what to do (PR 2 polish); read
-    // as the plain refusal it would say the network refused it.
+    // as the plain refusal it would say the network refused it. So is an
+    // expired one (§35): the sheet's not-sent sentence at submit, and the
+    // tracker's `RefusalReason::Expired` after it.
     [
         REFUSED_KEY,
         REFUSED_FEES_KEY,
         REFUSED_NONCE_KEY,
+        REFUSED_EXPIRED_KEY,
         NOT_SENT_BODY_KEY,
     ]
     .into_iter()
@@ -737,7 +746,7 @@ pub fn refusal_sentences(loc: &Loc) -> Vec<(&'static str, SharedString)> {
 
 /// Every way a fee can fail, so the words for whichever the core names are
 /// resolved once — the core picks the key, a surface only reads it.
-pub const FEE_FAILURES: [vela_core::app::fee_policy::FeeFailure; 10] = {
+pub const FEE_FAILURES: [vela_core::app::fee_policy::FeeFailure; 11] = {
     use vela_core::app::fee_policy::FeeFailure as F;
     [
         F::MissingPublicKey,
@@ -746,6 +755,9 @@ pub const FEE_FAILURES: [vela_core::app::fee_policy::FeeFailure; 10] = {
         F::CalculationFailed,
         F::EstimateFailed,
         F::GasQuoteTooHigh,
+        // §35: the relay billed more settlement gas than the operation can
+        // use — a quote Vela won't accept, re-asked on the relay's schedule.
+        F::SettlementGasTooHigh,
         F::WouldFail,
         F::ChainRead { rate_limited: true },
         F::ChainRead {
@@ -1222,6 +1234,7 @@ impl FlowStrings {
             tx_retry: s("send.txRetryBtn"),
             status_not_sent: s("componentsTx.receipt.statusNotSent"),
             went_first: s("componentsUi.signing.wentFirst"),
+            expired: s(vela_core::app::send::EXPIRED_KEY),
             page_unanswered: s("componentsUi.signing.trustedSignerUnanswered"),
             page_mismatch: s("componentsUi.signing.trustedSignerMismatch"),
             page_refused: s("componentsUi.signing.trustedSignerRefused"),

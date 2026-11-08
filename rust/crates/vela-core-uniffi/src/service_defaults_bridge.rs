@@ -107,6 +107,32 @@ pub fn production_write_refusal(
     }
 }
 
+/// §35: the relying party this build's platform passkeys use
+/// (`service_defaults::relying_party_id`): `getvela.app` for a release
+/// build; `localhost` for a test build on a simulator or emulator; the
+/// build's `TEST_RP_DOMAIN` (`test_domain`) for a test build on a device —
+/// and, with none, an error that says how to set it (never `getvela.app`).
+#[uniffi::export]
+#[allow(clippy::needless_pass_by_value)]
+pub fn relying_party_id(
+    test_build: bool,
+    simulator: bool,
+    test_domain: Option<String>,
+) -> Result<String, crate::CoreError> {
+    rule::relying_party_id(test_build, simulator, test_domain.as_deref())
+        .map_err(|error| crate::CoreError::Internal(error.message().to_owned()))
+}
+
+/// `relying_party_id` over JSON — the shared vector's `native` ask in,
+/// `{"rpId": …}` or `{"error": {kind, message}}` out (the shells' vector
+/// replays).
+#[uniffi::export]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn relying_party_json(ask_json: String) -> String {
+    rule::relying_party_json(&ask_json)
+}
+
 /// Is `host` a production service host.
 #[uniffi::export]
 #[must_use]

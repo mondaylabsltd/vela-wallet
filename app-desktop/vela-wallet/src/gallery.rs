@@ -267,6 +267,24 @@ pub fn send_state_pin(
             other => other,
         };
     }
+    // `expired` — with the mock confirm (`VELA_FLOW=DSD3`): the operation's
+    // window closed before the EntryPoint saw it (§35, the core's
+    // `RelayRejection::Expired`) — "Not sent", calmly, "it expired before it
+    // was submitted", and Try again — through the real send core's error and
+    // the live notice.
+    if want.trim() == "expired" {
+        return match body {
+            FlowBody::SendConfirm(mut confirm) => {
+                let mut send =
+                    crate::core_host::CoreHost::<vela_core::app::send::Send>::new().view();
+                send.tx_status = vela_core::app::send::SendTxStatus::Error;
+                send.tx_error = Some(vela_core::app::send::SendTxErrorKey::Expired);
+                confirm.notice = crate::flows::live::tx_error_notice(&send, s);
+                FlowBody::SendConfirm(confirm)
+            }
+            other => other,
+        };
+    }
     // `nonce-used` — with the mock confirm (`VELA_FLOW=DSD3`): the relay
     // refused the submit because another transaction of this account spent
     // the nonce first (the core's `RelayRejection::NonceUsed`, send-15) —
@@ -297,6 +315,8 @@ pub fn send_state_pin(
             };
         }
         "went-first" => Some(RefusalReason::NonceUsed),
+        // §35: the tracker's verdict on an operation that expired unsent.
+        "expired-tracked" => Some(RefusalReason::Expired),
         "fees" => Some(RefusalReason::FeeBelowMarket),
         "refused" => Some(RefusalReason::SimulationFailed),
         _ => return body,

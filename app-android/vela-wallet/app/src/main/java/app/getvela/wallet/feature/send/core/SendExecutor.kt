@@ -656,6 +656,9 @@ class SendExecutor(
                 // send-15: another transaction of this account went first —
                 // nothing was sent; the core says it calmly, "Review again".
                 UserOpSpine.Failure.NonceUsed -> SendSubmitFailure.NonceUsed
+                // §35: it expired before it was submitted — nothing was sent;
+                // the core says it calmly, and Try again signs anew.
+                UserOpSpine.Failure.Expired -> SendSubmitFailure.Expired
             },
         )
     }

@@ -1842,6 +1842,12 @@ export function registryResolveKeyStep(public_key_hex: string, answers_json: str
 export function registryResolveUnitStep(unit_id: number, source: string, answers_json: string): string;
 
 /**
+ * `service_defaults::relying_party_id` over JSON (the native rule, for the
+ * shared vector's replay through the shipped wasm).
+ */
+export function relyingPartyJson(ask_json: string): string;
+
+/**
  * **The address a typed name points to** (`alice.eth`, a member to add):
  * `vela_core::app::name_verify::resolve_step` over JSON — the same forward
  * walk as [`verified_name_step`], handing back the address (EIP-55) for the
@@ -2350,6 +2356,12 @@ export function userOpEstimateFailure(error_json: string): string;
 export function userOpEventTopic(): string;
 
 /**
+ * What a dApp is told when its operation expired before it was submitted
+ * (`RelayRejection::Expired`, §35).
+ */
+export function userOpExpiredDetail(): string;
+
+/**
  * The gas limits a submit signs, from the relay's estimate — the core's one
  * rule (`vela_core::user_op::in_band_gas_limits`, or Tempo's padding on a
  * Tempo chain; `fee_policy::user_op_gas_floors` chooses), raised to the inner
@@ -2416,6 +2428,14 @@ export function userOpStatusMethod(): string;
 export function userOpSubmitStep(reply_json: string, attempt: number, maybe_delivered: boolean, local_hash: string): string;
 
 /**
+ * The window an operation stamped now is signed with (§35), `[validAfter,
+ * validUntil]` in Unix seconds — `user_op::validity_window`, the one rule:
+ * `validAfter` 0, `validUntil` `now_ms` (the shell's clock) + 30 minutes.
+ * The web stamps its final operation with it just before the hash.
+ */
+export function userOpValidityWindow(now_ms: number): Float64Array;
+
+/**
  * How long the page waits for `ClearToPost` after `OpSigned` before it gives
  * up without POSTing (spec 082 RJ1), in ms.
  */
@@ -2469,6 +2489,13 @@ export function verifiedNameStep(chain_id: number, registry: string, address: st
  * (`signInRoute`), empty for none: its row is marked `signs_here`.
  */
 export function walletKeysStep(address: string, device_keys_json: string, answers_json: string, sign_in_credential: string): string;
+
+/**
+ * §35: the relying party the web wallet uses on `host`
+ * (`service_defaults::web_relying_party_id`) — the rule `passkey.ts`
+ * follows, replayed against the shared vector.
+ */
+export function webRelyingPartyId(host: string, packaged_extension: boolean): string;
 
 export function webauthnSigningHash(authenticator_data: Uint8Array, client_data_json: Uint8Array): Uint8Array;
 
@@ -2797,6 +2824,7 @@ export interface InitOutput {
     readonly registryNameStep: (a: number, b: number, c: number, d: number) => [number, number];
     readonly registryResolveKeyStep: (a: number, b: number, c: number, d: number) => [number, number];
     readonly registryResolveUnitStep: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+    readonly relyingPartyJson: (a: number, b: number) => [number, number];
     readonly resolvedNameStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly rpcCooldownMs: (a: number) => number;
     readonly rpcEarlyVerdict: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
@@ -2898,6 +2926,7 @@ export interface InitOutput {
     readonly typicalInclusionSeconds: (a: number) => number;
     readonly userOpEstimateFailure: (a: number, b: number) => [number, number];
     readonly userOpEventTopic: () => [number, number];
+    readonly userOpExpiredDetail: () => [number, number];
     readonly userOpGasLimits: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number, number, number];
     readonly userOpHash: (a: number, b: number, c: bigint) => [number, number, number, number];
     readonly userOpNonceUsedDetail: () => [number, number];
@@ -2906,11 +2935,13 @@ export interface InitOutput {
     readonly userOpRefusedDappDetail: () => [number, number];
     readonly userOpStatusMethod: () => [number, number];
     readonly userOpSubmitStep: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly userOpValidityWindow: (a: number) => [number, number];
     readonly validateClientData: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly venueBlockLine: (a: number, b: number) => [number, number];
     readonly venueWords: (a: number, b: number) => [number, number];
     readonly verifiedNameStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly walletKeysStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+    readonly webRelyingPartyId: (a: number, b: number, c: number) => [number, number];
     readonly webauthnSigningHash: (a: number, b: number, c: number, d: number) => [number, number];
     readonly userOpWriteAheadWaitMs: () => number;
     readonly __wbindgen_malloc: (a: number, b: number) => number;

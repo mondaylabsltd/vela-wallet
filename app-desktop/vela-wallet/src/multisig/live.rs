@@ -539,6 +539,12 @@ fn execute_failure(
         user_op::SubmitFailure::Other(_) if !asked_passkey && failing => {
             failed(ShellFailure::ChainUnreachable { chain_id })
         }
+        // §35: the execution's window closed before the EntryPoint saw it —
+        // nothing was sent, and Execute again signs anew with a window of
+        // its own. Said as the core's "nothing was sent", as a spent nonce is.
+        user_op::SubmitFailure::Expired => failed(ShellFailure::Unknown {
+            message: EXECUTION_EXPIRED.to_owned(),
+        }),
         failure => {
             crate::diag::vlog!("multisig", "execute failed chain={chain_id}: {failure:?}");
             failed(ShellFailure::Unknown {
@@ -547,6 +553,11 @@ fn execute_failure(
         }
     }
 }
+
+/// What an execution that expired before it was submitted leaves in the log
+/// (§35); the sheet says the core's "nothing was sent".
+const EXECUTION_EXPIRED: &str =
+    "The transaction expired before it was submitted; nothing was sent.";
 
 /// How long one fee quote may take before it is no price at all.
 const QUOTE_BUDGET: Duration = Duration::from_secs(45);
@@ -1076,6 +1087,28 @@ mod tests {
             ),
             Res::CallsCancelled
         ));
+        // §35: an execution that expired before it was submitted is "nothing
+        // was sent" — never sent, never maybe-sent, never the relay's AA22.
+        let expired = execute_failure(user_op::SubmitFailure::Expired, true, 5_042_002, true);
+        assert!(
+            matches!(
+                &expired,
+                Res::CallsFailed {
+                    detail,
+                    maybe_sent: false,
+                } if read_failure(detail)
+                    == Some(ShellFailure::Unknown {
+                        message: EXECUTION_EXPIRED.to_owned()
+                    })
+            ),
+            "{expired:?}"
+        );
+        let line = said(expired);
+        assert!(line.contains("nothing was sent"), "{line}");
+        assert!(
+            !line.contains("AA22") && !line.contains("Expired"),
+            "{line}"
+        );
         // The core's own diagnostics are never said as they are either —
         // and plain text is never read for what it says (round 16 leftover
         // 4): the core serves it as `{"kind":"unknown"}`.

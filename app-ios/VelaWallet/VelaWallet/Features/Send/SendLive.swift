@@ -1298,8 +1298,9 @@ enum SendLive {
                     loc.t("componentsUi.relayUnreachable.retryBtn")
                 } else if view.treasuryBootstrap != nil {
                     loc.t("componentsUi.treasuryBootstrap.retryBtn")
-                } else if view.txError == "nonce_used" {
-                    // A fresh quote, nonce and signature (send-15).
+                } else if view.txError == "nonce_used" || view.txError == "expired" {
+                    // A fresh quote, nonce and signature (send-15) — and,
+                    // for an op that expired, a window of its own (§35).
                     loc.t("send.txReviewAgain")
                 } else if let error = view.txError, error != "venue_blocked", error != "page_refused",
                           error != "proposal_not_supported" {
@@ -1454,6 +1455,9 @@ enum SendLive {
         // send-15: another transaction of this account spent the nonce
         // first. Nothing was sent: "Not sent", calmly, and Review again.
         case "nonce_used": return loc.t("componentsUi.signing.wentFirst")
+        // §35: its validity window closed before the EntryPoint saw it.
+        // Nothing was sent: "Not sent", calmly, and Review again signs anew.
+        case "expired": return loc.t(I18nKeys.CoreRound.expired)
         // r5reg-3: the reads before the passkey did not get through — the
         // network's failure, by its name, never the passkey's.
         case "chain_busy":
@@ -1541,7 +1545,7 @@ enum SendLive {
         guard stopNotice(view, loc: loc) == nil else { return nil }
         switch view.txError {
         case "previous_pending": return loc.t(I18nKeys.CoreRound.notSentTitle)
-        case "nonce_used": return loc.t("componentsTx.receipt.statusNotSent")
+        case "nonce_used", "expired": return loc.t("componentsTx.receipt.statusNotSent")
         default: return nil
         }
     }
@@ -1702,6 +1706,14 @@ enum SendLive {
         case "submitted", "maybe_sent": return .submitted
         default: return .submitting
         }
+    }
+
+    /// Whether a receipt proven never sent offers "Review again" rather than
+    /// "Send again": another send used its nonce (send-15), or it expired
+    /// before it was submitted (§35) — either way a fresh quote, nonce and
+    /// signature, with a window of its own.
+    static func reviewsAgain(_ refusalKey: String?) -> Bool {
+        refusalKey == I18nKeys.CoreRound.wentFirst || refusalKey == I18nKeys.CoreRound.expired
     }
 
     /// The receipt, in whichever state the transaction is in.
@@ -1896,8 +1908,7 @@ enum SendLive {
             // left it. "Review again" when another send used the nonce
             // (send-15).
             retry: view.receipt?.canSendAgain == true
-                ? loc.t(view.receipt?.refusalKey == "componentsUi.signing.wentFirst"
-                        ? "send.txReviewAgain" : "send.txSendAgain")
+                ? loc.t(Self.reviewsAgain(view.receipt?.refusalKey) ? "send.txReviewAgain" : "send.txSendAgain")
                 : nil,
             ctaCancels: stage == .submitting && view.txStatus == "signing",
             eta: eta,

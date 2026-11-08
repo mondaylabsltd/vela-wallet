@@ -227,10 +227,12 @@
       "selfCallBlockedSafeTx": "Questa richiesta chiede alla tua chiave di autorizzare una transazione Safe da eseguire più tardi. Vela la rifiuta: una firma così può essere usata senza di te. Non è stato firmato nulla.",
       "parentSafeBlocked": "Questo sito ha chiesto al tuo account di modificare o approvare qualcosa per un multisig di cui sei membro ({{function}} su {{safe}}). Vela non lo permette mai a un sito: usa la schermata del multisig stesso. Non è stato firmato nulla.",
       "parentSafeUnchecked": "Questo sito ha chiesto al tuo account di agire per un Safe ({{function}} su {{safe}}) e Vela non è riuscita a verificare se ne sei proprietario. Vela rifiuta invece di tirare a indovinare: riprova quando sei online o usa la schermata del multisig stesso. Non è stato firmato nulla.",
+      "multisigSelfCallBlocked": "Questo sito ha chiesto a questo multisig di cambiare chi lo controlla ({{function}}). Vela non lo permette mai a un sito: i membri lo cambiano dalla schermata del multisig stesso. Non è stato proposto nulla.",
       "stillConfirming": "Non ancora sulla chain. Vela continua a controllare: non inviarla di nuovo.",
       "maybeSent": "Potrebbe essere già stata inviata. Vela continua a controllare: non inviarla di nuovo.",
       "refused": "La rete l’ha rifiutata: non è stato inviato nulla.",
       "wentFirst": "Un’altra transazione di questo account è passata prima: non è stato inviato nulla.",
+      "expired": "È scaduta prima di essere inviata: non è stato inviato nulla.",
       "notSentTitle": "Non ancora inviata",
       "notSentBody": "La tua transazione precedente su questa rete è ancora in elaborazione. Riprova quando sarà completata.",
       "unknownOutcome": "Ancora non confermata dopo 24 ore.",
@@ -415,6 +417,7 @@
       "reasonFeeToken": "Il relay non riesce a quotare questa moneta per ora. Nuovo tentativo in corso, oppure paga la commissione con un'altra moneta.",
       "reasonSimulation": "Il relay non è ancora riuscito a simulare questa transazione. Nuovo tentativo automatico.",
       "reasonQuoteHigh": "Il prezzo del gas del relay è ora molto più alto di quello della rete. Nuovo tentativo automatico.",
+      "reasonSettlementHigh": "Il relay vuole far pagare più gas di quanto questa transazione possa usare: Vela non accetta questo preventivo. Nuovo tentativo automatico.",
       "reasonChainDown": "Impossibile raggiungere {{chain}} per calcolare la commissione. Nuovo tentativo automatico.",
       "reasonInternal": "Qualcosa è andato storto in Vela. Se continua, riapri l’app.",
       "rowShort": "Servono ~{{need}}, hai {{have}}",
@@ -423,6 +426,7 @@
       "reasonFeeTokenStopped": "Il relay non riesce a quotare questa moneta per ora. Paga con un'altra moneta oppure riprova.",
       "reasonSimulationStopped": "Il relay non è riuscito a simulare questa transazione.",
       "reasonQuoteHighStopped": "Il prezzo del gas del relay è ora molto più alto di quello della rete.",
+      "reasonSettlementHighStopped": "Il relay vuole far pagare più gas di quanto questa transazione possa usare: Vela non accetta questo preventivo.",
       "reasonChainDownStopped": "Impossibile raggiungere {{chain}} per calcolare la commissione."
     },
     "dock": {

@@ -124,7 +124,7 @@
   },
   "analytics": {
    "title": "Bagikan statistik penggunaan anonim",
-   "subtitle": "Hanya layar yang dibuka dan langkah yang selesai — tidak pernah alamat, jumlah, atau nama."
+   "subtitle": "Mati kecuali Anda menyalakannya. Hanya layar yang dibuka dan langkah yang selesai — tidak pernah alamat, jumlah, nama, atau transaksi."
   },
   "agent": {
    "title": "Agen AI",
@@ -1575,10 +1575,12 @@
    "selfCallBlockedSafeTx": "Permintaan ini meminta kunci Anda menyetujui transaksi Safe untuk dijalankan nanti. Vela menolaknya — tanda tangan seperti itu bisa dipakai tanpa kehadiran Anda. Tidak ada yang ditandatangani.",
    "parentSafeBlocked": "Situs ini meminta akunmu mengubah atau menyetujui sesuatu untuk multisig yang kamu ikuti ({{function}} di {{safe}}). Vela tidak pernah membiarkan situs melakukan itu — gunakan layar multisig itu sendiri. Tidak ada yang ditandatangani.",
    "parentSafeUnchecked": "Situs ini meminta akunmu bertindak untuk sebuah Safe ({{function}} di {{safe}}), dan Vela tidak bisa memeriksa apakah kamu salah satu pemiliknya. Vela menolak daripada menebak — coba lagi saat online, atau gunakan layar multisig itu sendiri. Tidak ada yang ditandatangani.",
+   "multisigSelfCallBlocked": "Situs ini meminta multisig ini mengubah siapa yang mengendalikannya ({{function}}). Vela tidak pernah mengizinkan situs melakukannya — anggota mengubahnya dari layar multisig itu sendiri. Tidak ada yang diusulkan.",
    "stillConfirming": "Belum masuk ke chain. Vela terus memeriksa — jangan kirim ulang.",
    "maybeSent": "Mungkin sudah terkirim. Vela terus memeriksa — jangan kirim ulang.",
    "refused": "Jaringan menolaknya — tidak ada yang terkirim.",
    "wentFirst": "Transaksi lain dari akun ini lebih dulu diproses — tidak ada yang terkirim.",
+   "expired": "Transaksi kedaluwarsa sebelum dikirimkan — tidak ada yang terkirim.",
    "notSentTitle": "Belum terkirim",
    "notSentBody": "Transaksi Anda sebelumnya di jaringan ini masih diproses. Coba lagi setelah selesai.",
    "unknownOutcome": "Masih belum terkonfirmasi setelah 24 jam.",
@@ -1763,6 +1765,7 @@
    "reasonFeeToken": "Relay belum bisa memberi harga untuk koin ini. Mencoba lagi — atau bayar biaya dengan koin lain.",
    "reasonSimulation": "Relay belum bisa menjalankan uji transaksi ini. Mencoba lagi otomatis.",
    "reasonQuoteHigh": "Harga gas relay sedang jauh di atas harga jaringan. Mencoba lagi otomatis.",
+   "reasonSettlementHigh": "Relay meminta biaya untuk gas lebih banyak daripada yang bisa dipakai transaksi ini — Vela tidak menerima penawaran itu. Mencoba lagi secara otomatis.",
    "reasonChainDown": "Tidak bisa terhubung ke {{chain}} untuk menghitung biaya. Mencoba lagi otomatis.",
    "reasonInternal": "Terjadi kesalahan di dalam Vela. Jika terus terjadi, buka ulang aplikasinya.",
    "rowShort": "Perlu ~{{need}}, ada {{have}}",
@@ -1771,6 +1774,7 @@
    "reasonFeeTokenStopped": "Relay belum bisa memberi harga untuk koin ini. Bayar dengan koin lain, atau coba lagi.",
    "reasonSimulationStopped": "Relay tidak bisa menjalankan uji transaksi ini.",
    "reasonQuoteHighStopped": "Harga gas relay sedang jauh di atas harga jaringan.",
+   "reasonSettlementHighStopped": "Relay meminta biaya untuk gas lebih banyak daripada yang bisa dipakai transaksi ini — Vela tidak menerima penawaran itu.",
    "reasonChainDownStopped": "Tidak bisa terhubung ke {{chain}} untuk menghitung biaya."
   },
   "dock": {

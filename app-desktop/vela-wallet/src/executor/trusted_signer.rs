@@ -1714,7 +1714,7 @@ pub(crate) mod tests {
     #[test]
     fn the_request_is_the_sites_own_or_the_wallets_calls() {
         let keys = keys();
-        let op = UserOperation {
+        let mut op = UserOperation {
             sender: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
             nonce: "0x7".to_owned(),
             init_code: vec![],
@@ -1725,8 +1725,12 @@ pub(crate) mod tests {
             max_fee_per_gas: 0,
             max_priority_fee_per_gas: 0,
             paymaster_and_data: vec![],
+            valid_after: 0,
+            valid_until: 0,
             signature: vec![],
         };
+        // §35: stamped, as the spine stamps it before the hash.
+        vela_core::user_op::stamp_validity(&mut op, 1_800_000_000_000.0);
         let calls = vec![MultiSendCall {
             to: "0x031d7D57c99CAF891e1C250554691Fd12D84772b".to_owned(),
             value_hex: "0x38d7ea4c68000".to_owned(),
@@ -1766,6 +1770,12 @@ pub(crate) mod tests {
             site["context"]["operation"]["userOp"]["callData"],
             "0x7bb37428"
         );
+        // §35: the page is told the window its digest covers.
+        for request in [&own, &site] {
+            let user_op = &request["context"]["operation"]["userOp"];
+            assert_eq!(user_op["validAfter"], "0");
+            assert_eq!(user_op["validUntil"], "1800001800");
+        }
     }
 
     /// Spec 102 R3: a ceremony runs on the page its op names — and only then.

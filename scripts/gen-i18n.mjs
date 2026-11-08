@@ -1422,8 +1422,16 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `send.feeMovedMax` (the quote at the signature was not the one shown:
 //   nothing signed, the new figures drawn — a Max's with them —
 //   `SendView.fee_moved`). 2294 + 3 = 2297 paths, 2177 leaves, 120 branches.
-if (PATHS.length !== 2297) fail(`expected 2297 paths (2177 leaf + 120 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2177) fail(`expected 2177 leaf paths, got ${leafSet.size}`);
+// 2301 (Round 21, closing the doors, §35, 2026-11-08): +
+//   `componentsUi.signing.expired` (a transaction that expired before it was
+//   submitted — nothing sent, Try again signs anew: `SendTxErrorKey::Expired`,
+//   the sheet, the tracker), `componentsUi.signing.multisigSelfCallBlocked`
+//   (a site asking a multisig to change who controls it, SEC-PARENT-2), and
+//   `componentsUi.gas.reasonSettlementHigh{,Stopped}` (a relay billing more
+//   gas than the operation can use, `FeeFailure::SettlementGasTooHigh`).
+//   2297 + 4 = 2301 paths, 2181 leaves, 120 branches.
+if (PATHS.length !== 2301) fail(`expected 2301 paths (2181 leaf + 120 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2181) fail(`expected 2181 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.

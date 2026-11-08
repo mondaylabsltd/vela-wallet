@@ -79,6 +79,18 @@ struct SendRoundsP2Tests {
         #expect(model.noticeAction == en.t("send.txReviewAgain"))
     }
 
+    /// §35: an operation that expired before it was submitted is drawn as a
+    /// spent nonce is — "Not sent", calmly (the notice's title, so no
+    /// failure styling), its own sentence, and Review again.
+    @Test func anExpiredOperationIsNotSentCalmlyWithReviewAgain() throws {
+        let model = try confirm(try view(["tx_status": "error", "tx_error": "expired"]))
+        #expect(model.noticeTitle == en.t("componentsTx.receipt.statusNotSent"))
+        #expect(model.notice == en.t("componentsUi.signing.expired"))
+        #expect(model.noticeAction == en.t("send.txReviewAgain"))
+        #expect(try confirm(try view(["tx_status": "error", "tx_error": "expired"]), loc: zh).notice
+                == zh.t("componentsUi.signing.expired"))
+    }
+
     @Test func theNetworksFailureIsSaidByName() throws {
         let busy = try confirm(try view(["tx_status": "error", "tx_error": "chain_busy"]))
         #expect(busy.notice == "Gnosis's nodes are busy and didn't answer in time, so nothing was signed or sent. Try again in a moment.")
@@ -156,6 +168,7 @@ struct SendRoundsP2Tests {
         }
         #expect(try receipt(NSNull()).retry == en.t("send.txSendAgain"))
         #expect(try receipt("componentsUi.signing.wentFirst").retry == en.t("send.txReviewAgain"))
+        #expect(try receipt("componentsUi.signing.expired").retry == en.t("send.txReviewAgain"), "§35")
         let landed = try view([:])
         #expect(SendLive.receipt(landed, display: .usd, on: drawn, loc: en).retry == nil)
     }

@@ -147,6 +147,8 @@ window.VelaCS.i18n.register('pt-BR', {
 
   'refuse.ethSign': 'Esta página não assina eth_sign: esse método assina um hash ilegível — exatamente o que a assinatura clara existe para eliminar.',
   'refuse.noSafeOp': 'O resumo da transação ainda não pode ser calculado aqui: é o hash SafeOp do Safe 4337, que precisa da conta, do EntryPoint e do endereço do módulo. Esta página não vai assinar um resumo adivinhado.',
+  'refuse.noExpiry': 'A operação nunca expira (sem validUntil): um relay poderia segurá-la e enviá-la a qualquer momento. A Vela só assina operações que expiram. Não será assinada.',
+  'refuse.badWindow': 'A janela de validade desta operação (validAfter / validUntil) não se lê como dois segundos uint48, então não dá para saber o que seria assinado. Não será assinada.',
   'refuse.typedShape': 'Esta solicitação não traz exatamente uma mensagem assinada para uma única conta — o que aparece pode ser diferente do que seria assinado. Nada será assinado.',
   'refuse.unknownMethod': 'Não é possível calcular um resumo para este método, então ele não será assinado.',
   'ui.cannotSign': 'Esta solicitação não pode ser assinada aqui — os motivos estão acima. Fechar esta página recusa o pedido.',

@@ -4,9 +4,19 @@
 //!
 //! ## What this needs from the bundle
 //!
+//! ## Which relying party (§35)
+//!
+//! Not a constant: the core's rule (`service_defaults::relying_party_id`,
+//! through [`super::passkey::platform_relying_party`]). A release build's
+//! passkeys live under `getvela.app`; a test build's under its own
+//! `TEST_RP_DOMAIN`, and with none it refuses in the core's words before any
+//! sheet opens — never a quiet `getvela.app`, whose association file lists
+//! only the store apps. The vault builds clientDataJSON's origin from the
+//! relying party itself (`https://<rp>`).
+//!
 //! The system only serves an app whose signature carries the
 //! `com.apple.developer.associated-domains` entitlement naming
-//! `webcredentials:getvela.app`, AND whose appID the domain's
+//! `webcredentials:getvela.app` (a test build: its own domain), AND whose appID the domain's
 //! `apple-app-site-association` lists. The AASA already lists
 //! `F9W689P9NE.app.getvela.VelaWallet` — the same bundle id this app ships —
 //! so the remaining gate is signing with the real team identity
@@ -61,7 +71,7 @@ use objc2_foundation::{
 use vela_core::app::{Assertion, Registration};
 use vela_core::primitives;
 
-use super::passkey::{PasskeyFailure, RELYING_PARTY};
+use super::passkey::{PasskeyFailure, platform_relying_party};
 
 /// How long the ceremony thread waits for the person to finish with the system
 /// sheet — Touch ID, an iCloud approval, or a cancel.
@@ -107,6 +117,9 @@ enum Outcome {
 struct Job {
     /// Which sheet this is, for a cancel at its deadline.
     id: u64,
+    /// The relying party the vault is asked under — this build's, the
+    /// core's answer (§35).
+    rp_id: String,
     kind: JobKind,
     tx: Sender<Result<Outcome, PasskeyFailure>>,
 }
@@ -132,11 +145,14 @@ pub fn register(
     user_id: Vec<u8>,
     challenge: Vec<u8>,
 ) -> Result<Registration, PasskeyFailure> {
-    let outcome = run(JobKind::Register {
-        name: name.to_owned(),
-        user_id,
-        challenge,
-    })?;
+    let outcome = run(
+        platform_relying_party()?,
+        JobKind::Register {
+            name: name.to_owned(),
+            user_id,
+            challenge,
+        },
+    )?;
     match outcome {
         Outcome::Registered {
             credential_id,
@@ -162,10 +178,13 @@ pub fn register(
 /// credential (sign-in).
 pub fn assert(challenge: &[u8], credential_id: Option<&str>) -> Result<Assertion, PasskeyFailure> {
     let pinned = credential_id.and_then(|id| primitives::from_hex(id).ok());
-    let outcome = run(JobKind::Assert {
-        challenge: challenge.to_vec(),
-        credential_id: pinned,
-    })?;
+    let outcome = run(
+        platform_relying_party()?,
+        JobKind::Assert {
+            challenge: challenge.to_vec(),
+            credential_id: pinned,
+        },
+    )?;
     match outcome {
         Outcome::Asserted {
             credential_id,
@@ -209,8 +228,9 @@ const SIGN_DEADLINE: Duration =
 /// waited for before the cancel is taken as said.
 const CANCEL_GRACE: Duration = Duration::from_secs(5);
 
-/// Marshal one job onto the main queue and wait for its outcome.
-fn run(kind: JobKind) -> Result<Outcome, PasskeyFailure> {
+/// Marshal one job, under relying party `rp_id`, onto the main queue and
+/// wait for its outcome.
+fn run(rp_id: String, kind: JobKind) -> Result<Outcome, PasskeyFailure> {
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(1);
     let (tx, rx) = channel();
@@ -218,7 +238,12 @@ fn run(kind: JobKind) -> Result<Outcome, PasskeyFailure> {
     // person's own pace.
     let deadline = matches!(kind, JobKind::Assert { .. }).then_some(SIGN_DEADLINE);
     let id = NEXT.fetch_add(1, Ordering::Relaxed);
-    let job = Box::new(Job { id, kind, tx });
+    let job = Box::new(Job {
+        id,
+        rp_id,
+        kind,
+        tx,
+    });
     unsafe {
         dispatch_async_f(
             std::ptr::addr_of!(_dispatch_main_q).cast(),
@@ -296,7 +321,7 @@ extern "C" fn perform_on_main(context: *mut c_void) {
     let provider: Retained<ASAuthorizationPlatformPublicKeyCredentialProvider> = unsafe {
         msg_send_id![
             ASAuthorizationPlatformPublicKeyCredentialProvider::alloc(),
-            initWithRelyingPartyIdentifier: &*NSString::from_str(RELYING_PARTY)
+            initWithRelyingPartyIdentifier: &*NSString::from_str(&job.rp_id)
         ]
     };
 
