@@ -161,9 +161,10 @@ fork harness (`multisig_fork.rs` `parent::…`).
 
 **Platform:** desktop (dev-fixtures builds only). **Symptom:** entering the parallel space with a keyset re-created a fixture account over an existing one in the profile, instead of refusing or adding beside it. Release builds have no parallel space. **Severity:** S4.
 
-## SEC-PARENT-2 (open, S4, 2026-11-07, every platform; §31 left open) — a connected multisig's own address is not held to the self-call rule
+## SEC-PARENT-2 (✅ FIXED 2026-11-08, §35; found 2026-11-07, every platform; §31 left open) — a connected multisig's own address is not held to the self-call rule
 
 **Platform:** every wallet surface. **Symptom:** a site connected to a multisig is held to the parent-Safe rule (§31), but not to the self-call list for the multisig's own address: a site may propose an owner, threshold or module change of the multisig itself. Each such request is still a proposal every member reviews before it can run (the review names the member change), so nothing is signed or executed by the site alone. **Severity:** S4 (recorded in §31 "Left open").
+**Fix (§35, `docs/security/hardening.md` §5):** the account's self-call rule holds for the multisig's own address — refused at arrival (nothing drafted) and again at the proposal step on the very transaction about to be signed, in the same words (`componentsUi.signing.multisigSelfCallBlocked`, `data.reason = "self_call"`). Vector `multisig-self-call.json` (13 cases) replayed by the core and through the real core at every shell's multisig dApp entry.
 
 ## SEC-PARENT-3 (open, S4, 2026-11-07, every platform; §31 left open) — an unlisted Safe's ownership answer comes from one RPC
 

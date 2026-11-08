@@ -2499,3 +2499,50 @@ banner over the confirm); Android (`SendLive.outToSign`, the row's note,
 **Left open.** The signing sheet's approve reads the fee view at the handler,
 not the painted frame's (the same one-frame window the stale-tap stop closes
 for Send); no incident points at it.
+
+## 35. Round 21: closing the doors
+
+The code items of the 2026-11-07 core-dev security review that the P0 work
+(0-1 app associations, 0-2 the parent-Safe guard, §31) left open, decided by
+best practice under the core principle. **Every decision, with its reasons,
+the proofs and the go-live list, is in `docs/security/hardening.md`**; this is
+the summary. The disclosure process (`SECURITY.md`, `security.txt`,
+advisories) is the parallel `r21-disclosure` lane.
+
+| Item | Decision (one core rule) | Proof |
+| --- | --- | --- |
+| **SafeOps expire** (1-6) | `validAfter` 0, `validUntil` now + 30 min (`user_op::stamp_validity`, stamped on the final op just before the hash, every attempt); `signable_safe_op_hash` / `envelope_signature` / the page's digest refuse an op that never expires; AA22 → `RelayRejection::Expired` → "It expired before it was submitted — nothing was sent." (`componentsUi.signing.expired`) with Review again / Try again | the field order read from Safe4337Module v0.3.0's code, not its README (`_getSafeOp`: `sig[0:6]` = validAfter, `sig[6:12]` = validUntil; `_packValidationData(failed, validUntil, validAfter)`); fork `tests/safe_op_window_fork.rs` 4/4: the module's `getOperationHash` = the core's for four windows; past `validUntil` and before `validAfter` both AA22, at `validUntil` and past `validAfter` it lands; through the relay it lands |
+| **settlementGas cap** (1-6) | refuse a published bill past `min(signed limits, 125% × the wallet's own gas model + 50,000)` (`fee_policy::settlement_gas_cap`, `FeeFailure::SettlementGasTooHigh`, "a relay quote Vela won't accept") | vector `settlement-gas-cap.json` (16 cases: the recorded Ethereum and Gnosis quotes and Arc's unbilled one pass; hostile and boundary bills refuse), replayed by the rule and the fee machine |
+| **Analytics opt-in** (1-8) | off by default; only an explicit `on` counts (a browser that never chose is off); every transaction-outcome event removed | `consent.svelte.test.ts`, `payload.test.ts`; the privacy page, A03 |
+| **Origin hardening** (1-1) | wallet: hash-based CSP (kit `hash` mode + `app.html`'s hash; no remote script, `'wasm-unsafe-eval'`), `frame-ancestors 'none'` + XFO DENY, a minimal Permissions-Policy keeping passkeys for self, `no-referrer`, `nosniff`; getvela.app: passkeys denied + the anti-framing pair | `security-headers.test.ts` (both apps), `e2e/security-headers.e2e.ts`, the full e2e under `_headers` on the workerd preview |
+| **SEC-PARENT-2** | the self-call rule held to a connected multisig's own address — refused at arrival and at the proposal step, the same words (`multisigSelfCallBlocked`) | vector `multisig-self-call.json` (13 cases), core + a shell test per platform through the real core |
+| **Test RP ID** (0-1) | `service_defaults::relying_party_id`: release `getvela.app`; a test build on a simulator `localhost`; on a device `TEST_RP_DOMAIN` (placeholder, set per build), else an error that says how — never getvela.app; the web's rule is the core's (`web_relying_party_id`) | vector `rp-id.json` (14 native + 9 web), replayed on every platform; each release-binary check asserts no test domain |
+
+**Every surface.**
+
+| Surface | Window + Expired | settlementGas | self_call words | RP ID |
+| --- | --- | --- | --- | --- |
+| Core | `user_op` window, `submit_step`, Send `Expired`, sheet `failure_not_sent`, tracker `RefusalReason::Expired` | `accept_gas_outcome` | `multisig_dapp::self_call_refusal` | `service_defaults` |
+| Signing page | **7ec6e9a3** (first in `BUILD_ALLOWED`; `LAUNCH` unchanged): hashes the op's window, refuses `noExpiry` / `badWindow`, "Valid until" | — | — | — |
+| Web, Chrome, Safari | `safe-transaction.ts` `stampValidity` (core rule), the 12 bytes, `attestOpJson`; `send-executor` / `live-send` / `sign-executor` | `FEE_REASON_KEYS` | `multisig-refusal.ts` | `passkey.ts` = the core's, vector-replayed |
+| Android | `UserOpSpine.kt` (`userOpStampValidity`), Send/sign/multisig/tracker mappings | `FeeWire` | `MultisigWords.dappRefusal` | `BuildConfig.TEST_RP_DOMAIN`, emulator → localhost |
+| iOS | `UserOpSpine.swift`, Send/sign/multisig/tracker | `FeeWire` keys | `MultisigDappSheet` | Info.plist `VelaTestRpDomain` = `$(TEST_RP_DOMAIN)`, simulator → localhost |
+| Desktop | `executor/user_op.rs` `signed_operation`, the envelope | `FEE_FAILURES` (11) | `multisig/dapp.rs` | platform passkeys (macOS, Windows Hello) via the core; CTAP keeps getvela.app |
+
+**Go-live (the owner)** — `docs/security/hardening.md` "Go-live checklist":
+deploy `trusted-signer/dist/` then move `LAUNCH` to 7ec6e9a3 before the apps
+ship (until then a phone's page-route transaction is refused WrongChallenge:
+fail-closed, nothing sent); deploy both sites' headers; the other
+`*.getvela.app` hosts (relay, key index, ethereum-data, safe-genesis,
+currency) send `publickey-credentials-*=()`; pick the test RP domain and
+serve its association files; vela-relay names `expired` for AA22.
+
+**Left open** (each in `hardening.md`): the tracker says "expired" only when
+the relay names it; a device clock more than 30 min behind expires every op
+(said honestly each time, not diagnosed); a CONTRACT-v1 relay's limits-based
+fee is not capped against the wallet's model; an AI agent may still ask to
+switch statistics on (the person approves); CTAP security keys keep
+getvela.app in every build, and the key index's recorded RP for a test
+build's keys follows each shell's own reading (a core rule for it is open);
+the onchain `send-press` suite needs a harness of its own (it needs Parallel
+Three undeployed, which `multisig.onchain.ts` deploys).
