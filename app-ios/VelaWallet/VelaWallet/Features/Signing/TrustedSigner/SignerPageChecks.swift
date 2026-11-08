@@ -186,11 +186,15 @@ final class SignerPageChecks {
     // MARK: - Checking
 
     /// Check `base` unless a ruling stands that has not gone stale; answers
-    /// the ruling.
+    /// the ruling. An admission stands only while it still opens the page
+    /// (`isFresh`, ten minutes — §38); a refusal while its line stands.
     @discardableResult
     func ensure(_ base: String) async -> SignerPageAdmission {
-        if let standing = admission(for: base), standing.line(nowMs: nowMs).state != .checking {
-            return standing
+        if let standing = admission(for: base) {
+            let line = standing.line(nowMs: nowMs)
+            if standing.isFresh(nowMs: nowMs) || (line.state != .checking && !line.opens) {
+                return standing
+            }
         }
         return await check(base)
     }

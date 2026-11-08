@@ -2,7 +2,7 @@
 //  DevLaunchInputs.swift
 //  VelaWallet
 //
-//  Three launch inputs that point a Debug build at local services — the web
+//  The launch inputs that point a Debug build at local services — the web
 //  harness's `useHarness` (e2e/onchain/harness.ts), for a simulator or an
 //  XCUITest (native parity F0.5). Debug configurations only.
 //
@@ -27,6 +27,13 @@
 //    session goes through, stored at `vela.peerconnectRelay` as the web keeps
 //    it; the outside session's rooms (`MultisigPeerRooms`) go through it.
 //
+//  - `VELA_PAGE_LAUNCH` — §38: the signing page version this build opens, a
+//    sha256 from the core's `BUILD_ALLOWED` (refused otherwise), whatever the
+//    page's index lists — so a simulator can run the page this tree builds
+//    (`app-web/trusted-signer/dist`, served locally) before it is deployed.
+//    The core's `signer_page_set_test_launch`; it is still fetched, hashed and
+//    ruled on. Not stored: one launch's.
+//
 //  Applied in the app's init, before the object graph — and so before any
 //  machine has read a store. Persisted, like the parallel space: a relaunch
 //  without the inputs keeps them, and the Settings screens show (and reset)
@@ -37,6 +44,7 @@
 #if DEBUG
 
 import Foundation
+import VelaCore
 
 @MainActor
 enum DevLaunchInputs {
@@ -44,6 +52,7 @@ enum DevLaunchInputs {
     static let serviceEndpointsVar = "VELA_SERVICE_ENDPOINTS"
     static let rpcOverridesVar = "VELA_RPC_OVERRIDES"
     static let peerconnectRelayVar = "VELA_PEERCONNECT_RELAY"
+    static let pageLaunchVar = "VELA_PAGE_LAUNCH"
     /// The web's key for the relay (harness.ts `vela.peerconnectRelay`).
     static let peerconnectRelayKey = "vela.peerconnectRelay"
     /// Native parity N-I3: a link the app is "opened with" at launch, through
@@ -87,6 +96,12 @@ enum DevLaunchInputs {
             }
             defaults.set(relay, forKey: peerconnectRelayKey)
             print("[vela-wallet] dev: PeerConnect relay from \(peerconnectRelayVar)")
+        }
+        if let version = nonEmpty(environment[pageLaunchVar]) {
+            if let refused = signerPageSetTestLaunch(version: version, testBuild: true) {
+                throw InputError(description: "\(pageLaunchVar)=\(version): \(refused)")
+            }
+            print("[vela-wallet] dev: signing page version from \(pageLaunchVar)")
         }
     }
 

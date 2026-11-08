@@ -424,6 +424,18 @@ fn main() {
     let _ = executor::proxy::dev_proxy();
     // Spec 095: a developer build's sandbox report, when asked for.
     sandbox_probe::run_if_asked();
+    // §38: a developer build's signing page version (`VELA_PAGE_LAUNCH`), one
+    // of the core's BUILD_ALLOWED, whatever the page's index lists. A release
+    // build does not carry the name (dev_env, check-store-binary.sh).
+    if let Some(version) = dev_env::var!("VELA_PAGE_LAUNCH") {
+        if let Err(why) =
+            vela_core::trusted_signer::launch::set_test_launch(Some(&version), true)
+        {
+            eprintln!("[vela-wallet] VELA_PAGE_LAUNCH={version}: {why}");
+            std::process::exit(2);
+        }
+        eprintln!("[vela-wallet] dev: signing page version from VELA_PAGE_LAUNCH");
+    }
     // Windows: the in-app browser is a WebView2 CHILD window, and gpui's
     // default renderer composes the whole window through DirectComposition
     // with `CreateTargetForHwnd(hwnd, topmost = true)` — its visual sits ABOVE

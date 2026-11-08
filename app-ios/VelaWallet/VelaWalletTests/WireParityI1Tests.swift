@@ -570,6 +570,19 @@ struct WireParityI1Tests {
         #expect(RpcEndpoints.ownNodeOnly(chainId: 8453, store: store))
     }
 
+    /// §38: `VELA_PAGE_LAUNCH` names the page version this Debug build opens —
+    /// one the core accepts, or the launch stops with why. (Only the refusals
+    /// here: a version that is set is process-wide, and the page-check suites
+    /// run beside this one. The core's `test_launch_input.rs` drives the rest.)
+    @Test func thePageLaunchInputNamesAVersionTheCoreAccepts() throws {
+        let defaults = freshDefaults()
+        let newest = "674b73334dda36410fd5cecdaddd462a8193398328743ba2263d419d6be53b56"
+        #expect(throws: DevLaunchInputs.InputError.self) {
+            try DevLaunchInputs.apply(environment: ["VELA_PAGE_LAUNCH": String(repeating: "ab", count: 32)], defaults: defaults)
+        }
+        #expect(signerPageSetTestLaunch(version: newest, testBuild: false) != nil, "a release build is refused")
+    }
+
     @Test func thePeerConnectRelayIsKeptWhereTheWebKeepsIt() throws {
         let defaults = freshDefaults()
         try DevLaunchInputs.apply(environment: ["VELA_PEERCONNECT_RELAY": "ws://127.0.0.1:9092"], defaults: defaults)

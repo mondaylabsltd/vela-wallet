@@ -1173,6 +1173,21 @@ pub struct SignerHttpHeader {
     pub value: String,
 }
 
+/// §38: a TEST build's launch input `VELA_PAGE_LAUNCH` — the page version
+/// `SignerPageTarget.choose` picks, whatever the index lists
+/// (`launch::set_test_launch`). Called only from the shells' debug-only
+/// launch-input code (iOS `Dev/DevLaunchInputs.swift`, Android's debug
+/// `ServiceLaunchInputs`), which release builds do not contain. `None`: set;
+/// otherwise why it was refused (not a test build, or not a version this
+/// build accepts) — and nothing was set. An empty `version` clears it.
+#[uniffi::export]
+#[must_use]
+pub fn signer_page_set_test_launch(version: Option<String>, test_build: bool) -> Option<String> {
+    launch::set_test_launch(version.as_deref(), test_build)
+        .err()
+        .map(|why| why.to_string())
+}
+
 /// The headers a check's fetch of `SignerPageTarget::url()` sends — a
 /// browser's navigation `Accept` — so the host answers the check with the
 /// bytes it answers the launch with (a host may rewrite HTML for a navigation

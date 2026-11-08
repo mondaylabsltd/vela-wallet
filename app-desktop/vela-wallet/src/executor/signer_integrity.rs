@@ -693,18 +693,19 @@ mod tests {
         assert!(said.opens, "{said:?}");
         assert_eq!(said.version, &A[..8]);
         assert_eq!(said.checked_at_ms, Some(1_000));
-        // Too old to vouch for anything: nothing opens until it is checked
-        // again, the line reads "checking", and a screen asks for that check.
+        // §38: past ten minutes nothing opens on it — the launch checks again
+        // first (`launchable`) — while its line, with its time, still stands.
         let stale = 1_000 + launch::MAX_CHECK_AGE_MS + 1;
         assert!(checked_page(BASE, stale).is_none());
-        assert_eq!(line(BASE, stale).key, IntegrityLine::checking().key);
-        assert!(wants_check(BASE, stale));
+        assert_eq!(line(BASE, stale).checked_at_ms, Some(1_000));
         assert!(!wants_check(BASE, 2_000), "a fresh check is not run again");
-        // D-14: half a day on, a background refresh is due — while the page
-        // still opens, so Open almost never waits.
+        // D-14: half a day on, a background refresh is due.
         let due = 1_000 + launch::REFRESH_AFTER_MS + 1;
         assert!(wants_check(BASE, due));
-        assert!(checked_page(BASE, due).is_some());
+        // A day on, the line no longer stands: "checking", and a screen asks.
+        let gone = 1_000 + launch::LINE_MAX_AGE_MS + 1;
+        assert_eq!(line(BASE, gone).key, IntegrityLine::checking().key);
+        assert!(wants_check(BASE, gone));
     }
 
     /// D-14: a refresh that could not complete keeps the fresh admission
@@ -723,11 +724,13 @@ mod tests {
             Ok(admit_for(&target, Ok(A.to_owned()), &trusted, &[], at)),
             at,
         );
-        // The refresh starts: the line stays the admission's, Open stays on.
+        // The refresh starts: the line stays the admission's (no flicker); Open
+        // waits for the check, since a launch needs one minutes old (§38).
         let refresh = at + launch::REFRESH_AFTER_MS + 1;
         started(BASE, refresh);
         let said = line(BASE, refresh);
-        assert!(said.opens, "{said:?}");
+        assert_eq!(said.checked_at_ms, Some(at), "{said:?}");
+        assert!(!said.opens, "{said:?}");
         assert!(!wants_check(BASE, refresh), "one check at a time");
         // Offline: the admission before it stays, and the next attempt rests.
         let offline = admit_for(
@@ -738,8 +741,15 @@ mod tests {
             refresh,
         );
         record(BASE, Ok(offline), refresh);
-        assert!(checked_page(BASE, refresh).is_some());
-        assert!(line(BASE, refresh).opens);
+        assert!(
+            checked_page(BASE, refresh).is_none(),
+            "twelve hours old: Open checks first"
+        );
+        assert_eq!(
+            line(BASE, refresh).checked_at_ms,
+            Some(at),
+            "the good line is kept"
+        );
         assert!(
             !wants_check(BASE, refresh + 1),
             "resting after a failed attempt"

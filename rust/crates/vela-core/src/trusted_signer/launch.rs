@@ -312,7 +312,74 @@ fn page_url(base: &str, version: &str) -> String {
     }
 }
 
+/// The launch input a TEST build was started with (§38): the page version
+/// [`target`] picks instead of the index's choice and [`integrity::LAUNCH`].
+/// `None` in every release build — its shells never call
+/// [`set_test_launch`], and the core refuses one that says it is not a test
+/// build.
+static TEST_LAUNCH: std::sync::RwLock<Option<String>> = std::sync::RwLock::new(None);
+
+/// Why a test build's launch input was refused (§38).
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum TestLaunchRefused {
+    /// Only a test build ([`crate::service_defaults::BuildFacts::is_test_build`])
+    /// may name the page version; a release build opens what it ships.
+    #[error("only a test build may name the signing page's version")]
+    NotATestBuild,
+    /// The input is not one of [`integrity::BUILD_ALLOWED`] (or not a hash):
+    /// a test build opens a version this build accepts, or none.
+    #[error("{0} is not a page version this build accepts (integrity::BUILD_ALLOWED)")]
+    NotAccepted(String),
+}
+
+/// §38 (the R21 finding): a TEST build names the page version it opens —
+/// the shells' debug-only launch input `VELA_PAGE_LAUNCH` (iOS
+/// `DevLaunchInputs`, Android `vela.pageLaunch` in the debug source set, the
+/// desktop's `dev_env::var!`), compiled out of release builds and proved
+/// absent by each one's release-binary check.
+///
+/// Why it exists: [`integrity::LAUNCH`] is a constant, and the deployed index
+/// lists only what is deployed, so a phone could not be pointed at a page
+/// built in this tree before it shipped — and after R21 the core refuses
+/// what an older page signs (no validity window), so the page path was
+/// untestable locally.
+///
+/// What it cannot do: name a version this build does not accept (refused,
+/// [`TestLaunchRefused::NotAccepted`]); skip the check (the version is still
+/// fetched, hashed and ruled on by [`admit`]); act in a release build
+/// ([`TestLaunchRefused::NotATestBuild`]). `None` clears it.
+///
+/// # Errors
+///
+/// [`TestLaunchRefused`], and nothing is set.
+pub fn set_test_launch(version: Option<&str>, test_build: bool) -> Result<(), TestLaunchRefused> {
+    if !test_build {
+        return Err(TestLaunchRefused::NotATestBuild);
+    }
+    let chosen = match version.map(str::trim).filter(|v| !v.is_empty()) {
+        None => None,
+        Some(given) => Some(
+            integrity::normalize_hash(given)
+                .filter(|hash| integrity::BUILD_ALLOWED.contains(&hash.as_str()))
+                .ok_or_else(|| TestLaunchRefused::NotAccepted(given.to_owned()))?,
+        ),
+    };
+    if let Ok(mut slot) = TEST_LAUNCH.write() {
+        *slot = chosen;
+    }
+    Ok(())
+}
+
+/// The version a test build's launch input named ([`set_test_launch`]).
+#[must_use]
+pub fn test_launch() -> Option<String> {
+    TEST_LAUNCH.read().ok().and_then(|slot| slot.clone())
+}
+
 /// R6 — which version of the page at `base` to open, and therefore to check.
+///
+/// In a test build started with a page version ([`set_test_launch`]), that
+/// version, unless it is blocked on this device.
 ///
 /// `index` is what the deployment's `index.json` lists, or `None` when it
 /// could not be read. The index narrows and never chooses
@@ -349,6 +416,12 @@ pub fn target(
         .chain(trusted.iter().cloned())
         .filter_map(|hash| integrity::normalize_hash(&hash))
         .collect();
+    // §38: a test build's launch input names the version, whatever the index
+    // says — it is one this build accepts (checked when it was set), and it
+    // is still fetched, hashed and ruled on like any other.
+    if let Some(version) = test_launch().filter(|version| !contains(blocked, version)) {
+        return Ok(Target::new(&base, version, false));
+    }
     let Some(listed) = index else {
         let launch = integrity::normalize_hash(integrity::LAUNCH).filter(|_| official);
         return launch

@@ -35,6 +35,7 @@ fi
 for marker in \
   'Lapp/getvela/wallet/dev/ServiceLaunchInputs;' \
   'Lapp/getvela/wallet/dev/MultisigPollTrigger;' \
+  'vela.pageLaunch' \
   'Luniffi/vela_dev_fixtures/' \
   'Lapp/getvela/wallet/bench/' \
   'fixtureAssert'
