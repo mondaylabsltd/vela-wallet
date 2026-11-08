@@ -250,6 +250,23 @@ pub struct SigningStrings {
     /// CoW pre-signature) — the core's `terms_off_chain`.
     pub warn_order_terms: SharedString,
     pub warn_sim_unavailable: SharedString,
+    /// R22 (review 1-2): the sheet's simulation, said for who stood behind
+    /// it — one node's word nobody independent confirmed
+    /// (`sim_outcome::KEY_UNCONFIRMED`), two nodes that disagreed
+    /// (`KEY_DISAGREED`), the person's own node alone (`KEY_OWN_NODE`, the
+    /// quiet line under the balance changes) — and the hint under an
+    /// unconfirmed verdict that opens this network's RPC settings.
+    pub sim_unconfirmed: SharedString,
+    pub sim_disagreed: SharedString,
+    pub sim_own_node: SharedString,
+    pub own_node_hint: SharedString,
+    /// R22 (review 1-3): the held confirm's words — "Hold to confirm" beside
+    /// it (and its hint to a screen reader), "Press again to confirm" once
+    /// the accessible path armed it, and "Sign anyway" when the core says
+    /// the confirm is "… anyway" (`ConfirmState::anyway`).
+    pub hold_to_confirm: SharedString,
+    pub confirm_again: SharedString,
+    pub sign_anyway: SharedString,
     /// The two words the simulated balance block needs beyond its title: what
     /// an unverified inflow is called (never its amount — a site can emit any
     /// `Transfer` it likes), and what "it ran and nothing moved" reads as.
@@ -392,6 +409,15 @@ impl SigningStrings {
 
 impl SigningStrings {
     #[allow(clippy::too_many_lines, reason = "one line per corpus key")]
+    /// R22: the held confirm's two lines.
+    #[must_use]
+    pub fn hold_words(&self) -> crate::ui::HoldWords {
+        crate::ui::HoldWords {
+            hold: self.hold_to_confirm.clone(),
+            again: self.confirm_again.clone(),
+        }
+    }
+
     pub fn resolve(loc: &Loc) -> Self {
         let s = |key: &str| loc.t(&format!("componentsUi.signing.{key}"));
         let a = |key: &str| loc.t(&format!("componentsUi.signingApprove.{key}"));
@@ -571,6 +597,13 @@ impl SigningStrings {
                 .collect(),
             warn_order_terms: s("warnOrderTerms"),
             warn_sim_unavailable: s("simUnavailableWarning"),
+            sim_unconfirmed: loc.t(vela_core::app::sim_outcome::KEY_UNCONFIRMED),
+            sim_disagreed: loc.t(vela_core::app::sim_outcome::KEY_DISAGREED),
+            sim_own_node: loc.t(vela_core::app::sim_outcome::KEY_OWN_NODE),
+            own_node_hint: s("ownNodeHint"),
+            hold_to_confirm: loc.t(vela_core::app::sign_confirm::HOLD_KEY),
+            confirm_again: loc.t(vela_core::app::sign_confirm::CONFIRM_AGAIN_KEY),
+            sign_anyway: s("certain.signAnyway"),
             balance_unverified_token: s("balanceUnverifiedToken"),
             // The key is the core's (`sim_outcome::KEY_NO_CHANGE`), and so is
             // when it is said (`TrustSimView.no_change_key`).

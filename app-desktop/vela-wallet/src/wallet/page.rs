@@ -10147,6 +10147,7 @@ impl WalletPage {
                 self.settings.nav_localization.clone(),
                 Some(self.settings.number_subtitle.clone()),
             ),
+            SettingsPage::Security => (self.settings.nav_security.clone(), None),
             SettingsPage::Networks => (
                 self.settings.nav_networks.clone(),
                 Some(self.settings.networks_subtitle.clone()),
@@ -10271,6 +10272,7 @@ impl WalletPage {
             SettingsPage::Account => self.settings_account(theme, window, cx),
             SettingsPage::Appearance => self.settings_appearance(theme, cx),
             SettingsPage::Localization => self.settings_localization(theme, cx),
+            SettingsPage::Security => self.settings_security(theme, cx),
             SettingsPage::Networks => self.settings_networks(theme, window, cx),
             SettingsPage::Endpoints => self.settings_endpoints(theme, window, cx),
             SettingsPage::Agent => self.settings_agent(theme, window, cx),
@@ -13085,8 +13087,51 @@ impl WalletPage {
             .border_1()
             .border_color(theme.divider)
             .child(rpc)
-            .child(explorer)
+            // R22: "Only use my node" right under the network's own RPC
+            // field — the one place it is set — never under the explorer.
             .children(only_mine)
+            .child(explorer)
+    }
+
+    /// R22 (review 1-3): Settings → Security — "Refuse blind signing", off
+    /// until the person turns it on (the core's `prefs::refuse_blind_signing`).
+    /// On, every "… anyway" — the dApp sheet's confirm, a multisig review's
+    /// door — is refused instead of signed through the hold.
+    fn settings_security(&mut self, theme: &Theme, _cx: &mut Context<Self>) -> Div {
+        let on = crate::executor::preferences::refuse_blind_signing();
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(16.))
+            .child(crate::settings::components::toggle_row(
+                "settings-refuse-blind",
+                theme,
+                self.settings.refuse_blind_title.clone(),
+                self.settings.refuse_blind_subtitle.clone(),
+                on,
+                |_: &gpui::ClickEvent, window: &mut Window, _: &mut gpui::App| {
+                    crate::executor::preferences::set_refuse_blind_signing(
+                        !crate::executor::preferences::refuse_blind_signing(),
+                    );
+                    window.refresh();
+                },
+            ))
+    }
+
+    /// R22: the person's "Check again with a node you trust" — the
+    /// unconfirmed verdict's hint opens this network's RPC settings, where
+    /// "Only use my node" sits under its own RPC field.
+    pub(crate) fn open_network_rpc_settings(&mut self, chain_id: u32, cx: &mut Context<Self>) {
+        self.go_to_section(Section::Settings, cx);
+        self.settings_page = SettingsPage::Networks;
+        self.settings_dialog = None;
+        self.settings_probed_panel = None;
+        let rows = self.network_rows(cx);
+        self.settings_expanded_network = rows
+            .iter()
+            .find(|row| row.chain_id == u64::from(chain_id))
+            .map(|row| row.id.clone());
+        cx.notify();
     }
 
     /// "Only use my node" (owner decision 2026-10-28): offered only where the
@@ -13106,7 +13151,7 @@ impl WalletPage {
             return None;
         }
         let on = row.only_mine;
-        Some(crate::settings::components::toggle_row(
+        let toggle = crate::settings::components::toggle_row(
             ElementId::from(("settings-only-mine", chain_id as usize)),
             theme,
             self.loc.t("settingsModals.network.onlyMine"),
@@ -13119,7 +13164,18 @@ impl WalletPage {
                     ledger.dispatch(NetEvent::OnlyMineChanged { chain_id, on: !on }, cx);
                 });
             },
-        ))
+        );
+        // R22: what turning it on trusts — the person's node alone for the
+        // safety checks, said so; off, a check counts only when two
+        // independent nodes agree.
+        Some(
+            div().flex().flex_col().gap(px(6.)).child(toggle).child(
+                div()
+                    .text_size(theme::text_label())
+                    .text_color(theme.fg_muted)
+                    .child(crate::ui::prose(self.settings.only_mine_trust.clone())),
+            ),
+        )
     }
 
     /// DST6 — the four services the wallet leans on.
@@ -19584,10 +19640,24 @@ impl WalletPage {
         // network's — `Some(checking)` while offered.
         #[cfg_attr(target_os = "linux", allow(unused_mut))]
         let mut sim_recheck: Option<bool> = None;
+        // R22: the sheet's verdict is one node's word nobody independent
+        // confirmed — the hint that opens this network's RPC settings
+        // ("Only use my node"), and the network it names.
+        #[cfg_attr(target_os = "linux", allow(unused_mut))]
+        let mut own_node_hint: Option<u32> = None;
         #[cfg(not(target_os = "linux"))]
         if let Some(host) = self.signing_host.as_ref() {
             let host = host.read(cx);
             sim_recheck = host.sim_recheck_offer();
+            own_node_hint = host
+                .sim
+                .verdict
+                .as_ref()
+                .filter(|verdict| {
+                    host.sim.stage == signing_live::SimStage::Landed
+                        && verdict.kind == "unconfirmed"
+                })
+                .map(|_| host.chain_id);
             let fee = host.fee_view();
             // Where the executor will sign, from the same context it reads
             // (`SignContext::follow_venue`).
@@ -19651,13 +19721,22 @@ impl WalletPage {
                 // PR 3 fix C: when the confirm's wait for it has run out,
                 // the core names the sentence that stands there meanwhile
                 // (`sim_waited_out_key`) — in the same place.
-                model.blocks.extend(signing_live::verdict_block(
-                    host.sim.stage,
-                    &host.sim.judgments,
-                    host.sim.notice.as_ref(),
-                    host.sim.no_change.as_deref(),
-                    host.view.sim_waited_out_key.as_deref(),
-                    host.chain_id,
+                // R22: and who stood behind it — the person's own node
+                // alone is said under the balances.
+                model.blocks.extend(signing_live::with_source_line(
+                    signing_live::verdict_block(
+                        host.sim.stage,
+                        &host.sim.judgments,
+                        host.sim.notice.as_ref(),
+                        host.sim.no_change.as_deref(),
+                        host.view.sim_waited_out_key.as_deref(),
+                        host.chain_id,
+                        &self.signing,
+                    ),
+                    host.sim
+                        .verdict
+                        .as_ref()
+                        .and_then(|verdict| verdict.source_key.as_deref()),
                     &self.signing,
                 ));
                 // …and what the pipeline is doing, under it. Appended rather than
@@ -19758,21 +19837,20 @@ impl WalletPage {
                 // Spec 079: a measurement out on the speed control turns the
                 // row's refresh sign (the failure itself is the core's).
                 signing_live::fee_row_state(&mut fee_model, host.fee_measuring());
-                let state = signing_live::confirm_state(
-                    &host.view,
-                    &host.guard_view,
-                    &host.clear_view,
-                    fee,
-                    speed_tier,
-                );
+                // R22: the gate with its friction — the sheet's own
+                // simulation verdict and the person's "Refuse blind
+                // signing" read by the core (`sign_confirm::posture`).
+                let state = host.confirm_gate();
                 signing_live::ColumnConfirm {
                     fee: fee_model,
-                    label: signing_live::confirm_label(&host.clear_view, &self.signing),
+                    label: signing_live::gate_label(&state, &host.clear_view, &self.signing),
                     enabled: state.enabled,
                     note: state
                         .key
                         .as_deref()
                         .map(|key| gpui::SharedString::from(self.loc.t(key).to_string())),
+                    danger: state.anyway || state.danger,
+                    hold_ms: state.hold_ms,
                 }
             });
             // Nothing moves while a figure is measured — a refresh, a speed
@@ -19826,6 +19904,15 @@ impl WalletPage {
             model.confirm_label = confirm.label;
             model.confirm_enabled = confirm.enabled;
             model.confirm_note = confirm.note;
+            model.confirm_danger = confirm.danger;
+            model.confirm_hold_ms = confirm.hold_ms;
+            model.confirm_subject = gpui::SharedString::from(
+                host.view
+                    .request
+                    .as_ref()
+                    .map(|request| request.id.clone())
+                    .unwrap_or_default(),
+            );
             if kind == signing_live::ColumnKind::Request
                 && !signing_live::off_chain(&host.clear_view)
             {
@@ -20009,6 +20096,14 @@ impl WalletPage {
                     confirm_action,
                     on_recheck,
                     on_trust,
+                    // R22: Open is the confirm — the same gate's friction.
+                    &signing_trusted_signer::OpenFriction {
+                        subject: model.confirm_subject.clone(),
+                        danger: model.confirm_danger,
+                        hold_ms: model.confirm_hold_ms,
+                        words: self.signing.hold_words(),
+                    },
+                    cx,
                 ))
                 .children(note.map(|(note, said)| {
                     div()
@@ -20227,6 +20322,23 @@ impl WalletPage {
                                 let _ = (this, cx);
                             }))
                     }));
+                }
+                // R22: nobody independent confirmed it — a node the person
+                // trusts is one press away: this network's RPC settings,
+                // where "Only use my node" is.
+                if let Some(chain_id) = own_node_hint {
+                    column = column.child(
+                        div()
+                            .id("signing-own-node-hint")
+                            .a11y_button(self.signing.own_node_hint.clone())
+                            .cursor_pointer()
+                            .text_size(theme::text_row_sub())
+                            .text_color(theme.accent)
+                            .child(crate::ui::prose(self.signing.own_node_hint.clone()))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.open_network_rpc_settings(chain_id, cx);
+                            })),
+                    );
                 }
             } else if let (true, signing_fixtures::Block::Intent { text, tone }) =
                 (model.first_party, item)
@@ -20467,11 +20579,18 @@ impl WalletPage {
             } else {
                 // A tap (issue #461), never a drag: the send Confirm's own
                 // button, saying the action alone.
-                signing_components::confirm_button(
+                // R22: in the danger style for "… anyway" or a danger, and
+                // held when the core says so (`ConfirmState::hold_ms`).
+                signing_components::gated_confirm_button(
                     theme,
+                    model.confirm_subject.clone(),
                     model.confirm_label.clone(),
                     model.confirm_enabled,
+                    model.confirm_danger,
+                    model.confirm_hold_ms,
+                    &self.signing.hold_words(),
                     confirm_action,
+                    cx,
                 )
             }
         });
@@ -24486,18 +24605,21 @@ mod tests {
     /// learned one knows the other.
     #[test]
     fn settings_nav_covers_every_panel() {
-        // RPC Providers retired (round 3): eleven panels.
-        assert_eq!(SettingsPage::ALL.len(), 11);
+        // RPC Providers retired (round 3); Security added (R22): twelve.
+        assert_eq!(SettingsPage::ALL.len(), 12);
         assert_eq!(SettingsPage::ALL[0], SettingsPage::Account);
+        // R22: Security high in the column, above the networks, the
+        // services and the developer pages.
+        assert_eq!(SettingsPage::ALL[3], SettingsPage::Security);
         // The AI agent after the service endpoints (spec 103).
-        assert_eq!(SettingsPage::ALL[5], SettingsPage::Agent);
-        assert_eq!(SettingsPage::ALL[6], SettingsPage::FeeSpeed);
+        assert_eq!(SettingsPage::ALL[6], SettingsPage::Agent);
+        assert_eq!(SettingsPage::ALL[7], SettingsPage::FeeSpeed);
         // Signing pages beside the speed (spec 071, 102).
-        assert_eq!(SettingsPage::ALL[7], SettingsPage::Signing);
+        assert_eq!(SettingsPage::ALL[8], SettingsPage::Signing);
         // Community, About, then Send feedback — the phones' order
         // (2026-09-27); Community is drawn above About.
-        assert_eq!(SettingsPage::ALL[9], SettingsPage::About);
-        assert_eq!(SettingsPage::ALL[10], SettingsPage::Feedback);
+        assert_eq!(SettingsPage::ALL[10], SettingsPage::About);
+        assert_eq!(SettingsPage::ALL[11], SettingsPage::Feedback);
     }
 
     /// A latency under a second reads "45ms" in the ok tone; a slow one flips

@@ -391,6 +391,18 @@ pub fn handoff_facts(
         .child(panel)
 }
 
+/// R22: how hard the hand-off's Open is — the sheet's confirm state's
+/// `anyway || danger` (the danger fill) and `hold_ms`, with the held
+/// confirm's words.
+#[derive(Clone, Debug)]
+pub struct OpenFriction {
+    /// The request Open confirms: a hold never carries to another.
+    pub subject: SharedString,
+    pub danger: bool,
+    pub hold_ms: u32,
+    pub words: crate::ui::HoldWords,
+}
+
 /// The hand-off card (D4): the eye — this is where you LOOK — the title, the
 /// facts and Open. `on_open` is `None` while the request cannot be approved
 /// yet (a fee still measuring); the button is drawn either way, disabled
@@ -398,6 +410,10 @@ pub fn handoff_facts(
 ///
 /// D7: the sheet's own palette — the eye sits in a neutral well, not a
 /// tinted chip; the one accent is the pill Open (the web's `value`).
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the card, its three actions and Open's friction"
+)]
 pub fn handoff_card(
     theme: &Theme,
     icons: &mut IconCache,
@@ -405,20 +421,51 @@ pub fn handoff_card(
     on_open: Option<Click>,
     on_recheck: Option<Click>,
     on_trust: Option<Click>,
+    friction: &OpenFriction,
+    cx: &App,
 ) -> Div {
     let ready = model.opens && on_open.is_some();
-    let open = vela_button_state(
-        "handoff-open",
-        ButtonVariant::Value,
-        model.open_label.clone(),
-        ButtonState::from_enabled(ready),
-        theme,
-        move |event, window, cx| {
-            if let Some(on_open) = on_open.as_ref() {
-                on_open(event, window, cx);
-            }
-        },
-    );
+    // R22: Open IS the sheet's confirm (spec 102 D4) — it follows the same
+    // gate: the danger fill for "… anyway" or a danger, and held when the
+    // core says so.
+    let variant = if friction.danger {
+        ButtonVariant::Danger
+    } else {
+        ButtonVariant::Value
+    };
+    let held = ready && friction.hold_ms > 0;
+    let open = match on_open {
+        Some(on_open) if held => {
+            let on_open = std::rc::Rc::new(on_open);
+            let fire: crate::ui::hold_confirm::Fire = std::rc::Rc::new(move |window, cx| {
+                on_open(&gpui::ClickEvent::default(), window, cx);
+            });
+            crate::ui::held_confirm(
+                "handoff-open",
+                friction.subject.clone(),
+                theme,
+                crate::ui::button_face(variant, model.open_label.clone(), theme),
+                crate::ui::hold_fill(),
+                model.open_label.clone(),
+                friction.hold_ms,
+                &friction.words,
+                fire,
+                cx,
+            )
+        }
+        on_open => div().child(vela_button_state(
+            "handoff-open",
+            variant,
+            model.open_label.clone(),
+            ButtonState::from_enabled(ready),
+            theme,
+            move |event, window, cx| {
+                if let Some(on_open) = on_open.as_ref() {
+                    on_open(event, window, cx);
+                }
+            },
+        )),
+    };
     div()
         .flex()
         .flex_col()

@@ -135,6 +135,40 @@ pub fn vela_button_state(
     finish(base, variant, label_block, state, theme, on_click)
 }
 
+/// R22: [`vela_button_state`]'s enabled look alone — its shape, fill and
+/// words, with no id, role or click of its own — for a control that answers
+/// the person another way: the held confirm (`hold_confirm::held_confirm`),
+/// which names itself and takes the press.
+pub fn button_face(variant: ButtonVariant, label: SharedString, theme: &Theme) -> Div {
+    let height = match variant {
+        ButtonVariant::Primary | ButtonVariant::Value | ButtonVariant::Danger => BTN_H_PRIMARY,
+        ButtonVariant::Secondary | ButtonVariant::Row => BTN_H_SECONDARY,
+    };
+    let base = div()
+        .min_h(px(height))
+        .w_full()
+        .flex_none()
+        .rounded(px(theme::RADIUS_CTA))
+        .flex()
+        .items_center()
+        .justify_center()
+        .px(px(theme::BTN_PAD_X))
+        .py(px(theme::BTN_PAD_Y))
+        .text_size(theme::text_cta())
+        .font_weight(FontWeight::SEMIBOLD);
+    let styled = match variant {
+        ButtonVariant::Primary => base.bg(theme.fg_base).text_color(theme.fg_inverse),
+        ButtonVariant::Value => base.bg(theme.accent).text_color(theme.fg_inverse),
+        ButtonVariant::Danger => base.bg(theme.error_fill).text_color(white()),
+        ButtonVariant::Secondary => base
+            .text_color(theme.fg_base)
+            .border_1()
+            .border_color(theme.divider),
+        ButtonVariant::Row => base.bg(theme.bg_well).text_color(theme.fg_base),
+    };
+    styled.child(div().w_full().min_w(px(0.)).text_center().child(label))
+}
+
 /// The welcome pair: the same rectangle as every other button, except that it
 /// sits beside its sibling at ITS LABEL'S WIDTH rather than filling the
 /// column. A desktop dialog sizes a button to what it says; a full-width

@@ -53,6 +53,12 @@ pub enum ShellFailure {
         message: Option<String>,
     },
     NotSent,
+    /// r21-1 (§35, §36): the execution's validity window closed before the
+    /// EntryPoint saw it (the relay's `AA22 expired or not due`) — nothing
+    /// was sent, and Execute again signs anew. The core says it in the
+    /// Send's words (`multisig_failure::FailureKind::Expired`,
+    /// `componentsUi.signing.expired`).
+    Expired,
     CannotPay {
         need: String,
         have: String,
@@ -485,7 +491,9 @@ impl Live {
             &ctx.keys,
             signer,
             quoted,
-            None,
+            // The multisig review's door held this execution; the
+            // operation is the member's own.
+            user_op::Reviewed::Own,
             None,
             &user_op::quiet,
             &user_op::always_asked,
@@ -539,12 +547,20 @@ fn execute_failure(
         user_op::SubmitFailure::Other(_) if !asked_passkey && failing => {
             failed(ShellFailure::ChainUnreachable { chain_id })
         }
-        // §35: the execution's window closed before the EntryPoint saw it —
-        // nothing was sent, and Execute again signs anew with a window of
-        // its own. Said as the core's "nothing was sent", as a spent nonce is.
-        user_op::SubmitFailure::Expired => failed(ShellFailure::Unknown {
-            message: EXECUTION_EXPIRED.to_owned(),
-        }),
+        // §35, r21-1: the execution's window closed before the EntryPoint
+        // saw it — nothing was sent, and Execute again signs anew with a
+        // window of its own. Said in the Send's words (`expired`), whichever
+        // way the relay's AA22 reached the pipeline.
+        user_op::SubmitFailure::Expired => {
+            crate::diag::vlog!("multisig", "execute chain={chain_id}: {EXECUTION_EXPIRED}");
+            failed(ShellFailure::Expired)
+        }
+        user_op::SubmitFailure::Refused(message)
+            if vela_core::user_op::is_expired_rejection(&message) =>
+        {
+            crate::diag::vlog!("multisig", "execute chain={chain_id}: {EXECUTION_EXPIRED}");
+            failed(ShellFailure::Expired)
+        }
         failure => {
             crate::diag::vlog!("multisig", "execute failed chain={chain_id}: {failure:?}");
             failed(ShellFailure::Unknown {
@@ -769,6 +785,27 @@ impl Deps for Live {
         ))
     }
 
+    fn rpc_corroborated(
+        &self,
+        chain_id: u64,
+        method: &str,
+        params: &Value,
+        bound: Option<Duration>,
+        person: bool,
+    ) -> Value {
+        let Ok(chain) = u32::try_from(chain_id) else {
+            return json!({ "unreachable": true });
+        };
+        let params = if params.is_array() {
+            params.clone()
+        } else {
+            json!([params])
+        };
+        // R22: two independent nodes (or the person's own alone), in the
+        // core's one envelope — built by the core's helper in the pool.
+        pool::corroborated(chain, method, params, bound, person)
+    }
+
     fn load(&self, keys: &[String]) -> Result<BTreeMap<String, Option<String>>, String> {
         keys.iter()
             .map(|key| {
@@ -957,11 +994,18 @@ impl Deps for Live {
             "validation": false,
             "returnFullTransactions": false,
         });
+        // R22: always a corroborated read — the pool's envelope carries the
+        // second node's answer, or that the person's own node answered
+        // alone; the pool giving up is `{"unreachable": true}`.
         Some(
-            match pool::call(chain, "eth_simulateV1", json!([payload, "latest"])) {
-                Ok(envelope) => envelope.to_string(),
-                Err(_) => "{\"unreachable\":true}".to_owned(),
-            },
+            pool::corroborated(
+                chain,
+                "eth_simulateV1",
+                json!([payload, "latest"]),
+                None,
+                false,
+            )
+            .to_string(),
         )
     }
 
@@ -1087,28 +1131,44 @@ mod tests {
             ),
             Res::CallsCancelled
         ));
-        // §35: an execution that expired before it was submitted is "nothing
-        // was sent" — never sent, never maybe-sent, never the relay's AA22.
-        let expired = execute_failure(user_op::SubmitFailure::Expired, true, 5_042_002, true);
-        assert!(
-            matches!(
-                &expired,
-                Res::CallsFailed {
-                    detail,
-                    maybe_sent: false,
-                } if read_failure(detail)
-                    == Some(ShellFailure::Unknown {
-                        message: EXECUTION_EXPIRED.to_owned()
-                    })
+        // §35, r21-1: an execution that expired before it was submitted is
+        // said in the Send's words — "It expired before it was submitted —
+        // nothing was sent." — never sent, never maybe-sent, never the
+        // relay's AA22, never "Something went wrong"; and so is the relay's
+        // AA22 reaching the pipeline as a refusal.
+        for failure in [
+            user_op::SubmitFailure::Expired,
+            user_op::SubmitFailure::Refused(
+                "SUBMIT REFUSED by simulation: AA22 expired or not due".to_owned(),
             ),
-            "{expired:?}"
-        );
-        let line = said(expired);
-        assert!(line.contains("nothing was sent"), "{line}");
-        assert!(
-            !line.contains("AA22") && !line.contains("Expired"),
-            "{line}"
-        );
+        ] {
+            let expired = execute_failure(failure, true, 5_042_002, true);
+            assert!(
+                matches!(
+                    &expired,
+                    Res::CallsFailed {
+                        detail,
+                        maybe_sent: false,
+                    } if read_failure(detail) == Some(ShellFailure::Expired)
+                ),
+                "{expired:?}"
+            );
+            let Res::CallsFailed { detail, .. } = &expired else {
+                unreachable!()
+            };
+            let core = vela_core::app::multisig_failure::failure_said(detail);
+            assert_eq!(
+                core.kind,
+                vela_core::app::multisig_failure::FailureKind::Expired
+            );
+            let line = said(expired);
+            assert_eq!(line, loc.t("componentsUi.signing.expired").to_string());
+            assert!(line.contains("nothing was sent"), "{line}");
+            assert!(
+                !line.contains("AA22") && !line.contains("Something went wrong"),
+                "{line}"
+            );
+        }
         // The core's own diagnostics are never said as they are either —
         // and plain text is never read for what it says (round 16 leftover
         // 4): the core serves it as `{"kind":"unknown"}`.

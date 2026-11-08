@@ -44,6 +44,7 @@ use vela_core::app::sign_request::{
     Event, SignFundingNeeded, SignOperation, SignRecord, SignShellResult, SignSubmitOutcome,
 };
 use vela_core::app::{Account, Assertion, KeyMethod};
+use vela_core::signed_review::DappReview;
 use vela_core::signing_venue::{KeyLabel, KeyRoute, VenueBlock};
 use vela_core::user_op::{NOT_SENT_DAPP_DETAIL, WalletKey};
 
@@ -351,6 +352,27 @@ fn owner_answer(reply: Result<Value, crate::executor::pool::PoolError>) -> SafeO
     }
 }
 
+/// R22: a corroborated ownership read as the core is told it — the first
+/// node's answer, the witness's beside it (`None`: nobody independent
+/// answered), and whether the person's own node answered alone.
+fn owner_read(
+    id: String,
+    chain_id: u32,
+    safe: String,
+    routed: crate::executor::pool::Routed,
+) -> SignShellResult {
+    let witness = routed.witness.clone().map(|body| owner_answer(Ok(body)));
+    let own_node = routed.own_node.then_some(true);
+    SignShellResult::SafeOwnerRead {
+        id,
+        chain_id,
+        safe,
+        answer: owner_answer(routed.answer),
+        witness,
+        own_node,
+    }
+}
+
 pub fn perform(operation: &SignOperation, ctx: &SignContext) -> SignAnswer {
     match operation {
         // The transport is the host's: only it knows which surface raised
@@ -424,6 +446,11 @@ pub fn perform(operation: &SignOperation, ctx: &SignContext) -> SignAnswer {
         // core's read timeout, and the node's answer handed back as it came
         // — a result, its JSON-RPC error, or that no node answered. Nothing
         // is decided here: what the answer means is the core's.
+        //
+        // R22 (SEC-PARENT-3): a corroborated read — the first node's answer,
+        // and a second, independent node's in the same shape (`witness`), or
+        // the person's own node alone by their choice (`own_node`). A "not an
+        // owner" stands only when the two agree; the core compares them.
         SignOperation::ReadSafeOwner {
             id,
             chain_id,
@@ -433,18 +460,14 @@ pub fn perform(operation: &SignOperation, ctx: &SignContext) -> SignAnswer {
         } => {
             let (id, chain_id, safe, data) = (id.clone(), *chain_id, safe.clone(), data.clone());
             SignAnswer::Blocking(Box::new(move || {
-                let answer = owner_answer(crate::executor::pool::call_within(
+                let routed = crate::executor::pool::corroborated_routed(
                     chain_id,
                     "eth_call",
                     json!([{ "to": safe, "data": data }, "latest"]),
-                    OWNER_READ_BUDGET,
-                ));
-                SignShellResult::SafeOwnerRead {
-                    id,
-                    chain_id,
-                    safe,
-                    answer,
-                }
+                    Some(OWNER_READ_BUDGET),
+                    false,
+                );
+                owner_read(id, chain_id, safe, routed)
             }))
         }
 
@@ -526,10 +549,12 @@ pub fn perform(operation: &SignOperation, ctx: &SignContext) -> SignAnswer {
             address,
             gas_fee_token,
             quoted_fee,
+            review,
             ..
         } => {
             let (chain_id, address, method, id) =
                 (*chain_id, address.clone(), method.clone(), id.clone());
+            let review = review.clone();
             let params_json = params_json.clone();
             let gas_fee_token = gas_fee_token.clone();
             let quoted = quoted_fee.as_ref().and_then(|fee| {
@@ -551,6 +576,7 @@ pub fn perform(operation: &SignOperation, ctx: &SignContext) -> SignAnswer {
                     &params_json,
                     gas_fee_token.as_deref(),
                     quoted,
+                    review.as_deref(),
                     sink,
                 );
                 SignShellResult::Submit {
@@ -572,14 +598,22 @@ fn sign_and_submit(
     params_json: &str,
     gas_fee_token: Option<&str>,
     quoted: Option<user_op::QuotedFee>,
+    review: Option<&str>,
     sink: &crate::resident::Sink<Event>,
 ) -> SignSubmitOutcome {
     // RB2: the page left between the approval and this worker starting.
     if !ctx.still_asked() {
         return asker_gone(id);
     }
+    // R22 (review 1-5): what the person confirmed, frozen by the core at the
+    // confirm from the params the sheet showed. Without it nothing is signed
+    // — no prompt, no hash — and the page hears a failure, never a success.
+    let review = match reviewed(method, review) {
+        Ok(review) => review,
+        Err(refusal) => return refusal,
+    };
     if is_message(method) {
-        return sign_message(ctx, id, chain_id, address, method, params_json);
+        return sign_message(ctx, id, chain_id, address, method, params_json, &review);
     }
     let Some(calls) = calls_of(method, params_json) else {
         return SignSubmitOutcome::Failed {
@@ -619,9 +653,10 @@ fn sign_and_submit(
         &ctx.keys,
         signer,
         quoted,
-        // A site's request: reviewed on its own sheet, and its gas measured
-        // here — no quote of ours priced it.
-        None,
+        // A site's request, reviewed on its own sheet: signed only if the
+        // operation is exactly those calls (R22) — and its gas measured
+        // here, no quote of ours priced it.
+        user_op::Reviewed::Dapp(&review),
         None,
         &edges,
         &asked,
@@ -706,6 +741,7 @@ fn sign_message(
     address: &str,
     method: &str,
     params_json: &str,
+    review: &DappReview,
 ) -> SignSubmitOutcome {
     let Some(original) = message_hash(method, params_json) else {
         return SignSubmitOutcome::Failed {
@@ -713,6 +749,12 @@ fn sign_message(
             refused: false,
             signer: None,
         };
+    };
+    // R22 (review 1-5): the SafeMessage wraps only the digest the sheet read,
+    // for the account it named — anything else is refused before a prompt.
+    let original = match vela_core::signed_review::dapp_message_hash(&original, address, review) {
+        Ok(original) => original,
+        Err(error) => return not_the_reviewed_request(method, &error),
     };
     let mut sign = |challenge: &[u8]| {
         around_prompt(ctx, || {
@@ -735,6 +777,39 @@ fn sign_message(
         Ok(signature) => SignSubmitOutcome::Succeeded { result: signature },
         Err(user_op::SubmitFailure::AskerGone) => asker_gone(id),
         Err(failure) => submit_failure(chain_id, address, failure),
+    }
+}
+
+/// R22: the core's frozen review of a site's request, read — or the failed
+/// sign that says nothing was signed (no review, or one that does not read).
+#[allow(
+    clippy::result_large_err,
+    reason = "the refusal is the outcome the page hears, built once"
+)]
+fn reviewed(method: &str, review: Option<&str>) -> Result<DappReview, SignSubmitOutcome> {
+    let Some(review) = review else {
+        vlog!(
+            "dapp",
+            "{method}: no review of what was shown; nothing signed"
+        );
+        return Err(SignSubmitOutcome::Failed {
+            message: format!("{method}: not the reviewed request; nothing was signed"),
+            refused: false,
+            signer: None,
+        });
+    };
+    vela_core::signed_review::dapp_review_from_json(review)
+        .map_err(|error| not_the_reviewed_request(method, &error))
+}
+
+/// A site's request that is not what the sheet showed (R22): a failed sign,
+/// nothing signed, the operator's reason in the log.
+fn not_the_reviewed_request(method: &str, error: &vela_core::CoreError) -> SignSubmitOutcome {
+    vlog!("dapp", "{method}: {error}");
+    SignSubmitOutcome::Failed {
+        message: format!("{method}: not the reviewed request; nothing was signed"),
+        refused: false,
+        signer: None,
     }
 }
 
@@ -2042,6 +2117,7 @@ mod tests {
             ME,
             "eth_sendTransaction",
             r#"[{"to":"0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141","value":"0x38d7ea4c68000"}]"#,
+            None,
             None,
             None,
             &crate::resident::Sink::new(tx),
@@ -3864,7 +3940,7 @@ mod tests {
     /// timeout however the node behaves.
     #[test]
     fn read_safe_owner_is_one_eth_call_through_the_pool() {
-        use crate::executor::pool::tests::{http, scripted_node, seed_pool};
+        use crate::executor::pool::tests::{chain_node, http, seed_pool};
         use vela_core::app::rpc_pool::RpcSource;
         const OWNS: u32 = 424_311;
         const REVERTS: u32 = 424_312;
@@ -3874,23 +3950,23 @@ mod tests {
         storage::tests::with_temp_state("sign-read-safe-owner", || {
             // The node's body is checked too: the call it was asked is the
             // core's, to the Safe, at `latest`.
-            let (owns, owns_log) = scripted_node(
-                Duration::ZERO,
+            let (owns, owns_log) = chain_node(
+                OWNS,
                 Some(http(
                     "200 OK",
                     &format!(r#"{{"jsonrpc":"2.0","id":1,"result":"{word}"}}"#),
                 )),
             );
             seed_pool(OWNS, &[(&owns, RpcSource::User)]);
-            let (reverts, _) = scripted_node(
-                Duration::ZERO,
+            let (reverts, _) = chain_node(
+                REVERTS,
                 Some(http(
                     "200 OK",
                     r#"{"jsonrpc":"2.0","id":1,"error":{"code":3,"message":"execution reverted","data":"0x"}}"#,
                 )),
             );
             seed_pool(REVERTS, &[(&reverts, RpcSource::User)]);
-            let (silent, _) = scripted_node(Duration::ZERO, None);
+            let (silent, _) = chain_node(SILENT, None);
             seed_pool(SILENT, &[(&silent, RpcSource::User)]);
 
             let read = |chain_id: u32| {
@@ -3908,12 +3984,17 @@ mod tests {
                 let result = work();
                 (result, began.elapsed())
             };
+            // One node in each pool: nobody independent to witness it, and
+            // the core is told so (`witness: None`) — it believes no "not an
+            // owner" on that alone.
             let answered =
                 |chain_id: u32, answer: SafeOwnerAnswer| SignShellResult::SafeOwnerRead {
                     id: "rid-31".to_owned(),
                     chain_id,
                     safe: OWNER_SAFE.to_owned(),
                     answer,
+                    witness: None,
+                    own_node: None,
                 };
 
             let (result, _) = read(OWNS);
@@ -3953,6 +4034,7 @@ mod tests {
                         chain_id: SILENT,
                         safe,
                         answer: SafeOwnerAnswer::Unreachable { .. },
+                        ..
                     } if id == "rid-31" && safe == OWNER_SAFE
                 ),
                 "{result:?}"
@@ -3961,6 +4043,60 @@ mod tests {
                 waited <= OWNER_READ_BUDGET + Duration::from_secs(1),
                 "the read outlived the core's read timeout: {waited:?}"
             );
+        });
+    }
+
+    /// R22 (SEC-PARENT-3): the ownership read is corroborated — two
+    /// independent nodes (two loopback ports are two processes), each asked
+    /// which chain it serves first, and both answers handed to the core in
+    /// the same shape: `answer` the first's, `witness` the second's.
+    #[test]
+    fn read_safe_owner_hands_the_core_both_nodes_answers() {
+        use crate::executor::pool::tests::{chain_node, http, seed_pool};
+        use vela_core::app::rpc_pool::RpcSource;
+        const CHAIN: u32 = 424_315;
+        let yes = "0x0000000000000000000000000000000000000000000000000000000000000001";
+        let no = "0x0000000000000000000000000000000000000000000000000000000000000000";
+        storage::tests::with_temp_state("sign-read-safe-owner-witness", || {
+            let reply = |word: &str| {
+                Some(http(
+                    "200 OK",
+                    &format!(r#"{{"jsonrpc":"2.0","id":1,"result":"{word}"}}"#),
+                ))
+            };
+            let (first, _) = chain_node(CHAIN, reply(no));
+            let (second, _) = chain_node(CHAIN, reply(yes));
+            seed_pool(
+                CHAIN,
+                &[(&first, RpcSource::User), (&second, RpcSource::Public)],
+            );
+            let operation = SignOperation::ReadSafeOwner {
+                id: "rid-31".to_owned(),
+                chain_id: CHAIN,
+                safe: OWNER_SAFE.to_owned(),
+                account: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+                data: IS_OWNER_DATA.to_owned(),
+            };
+            let SignAnswer::Blocking(work) = perform(&operation, &context(None)) else {
+                panic!("an ownership read is a blocking read");
+            };
+            let SignShellResult::SafeOwnerRead {
+                answer,
+                witness,
+                own_node,
+                ..
+            } = work()
+            else {
+                panic!("an ownership answer");
+            };
+            let returned = |data: &str| SafeOwnerAnswer::Returned {
+                data: data.to_owned(),
+            };
+            // Which node is asked first is the pool's; the two answers are
+            // the two nodes', and they disagree — the core's to judge.
+            let both = [answer, witness.expect("a witness answered")];
+            assert!(both.contains(&returned(no)) && both.contains(&returned(yes)));
+            assert_eq!(own_node, None);
         });
     }
 
@@ -3993,10 +4129,16 @@ mod tests {
                 }
                 let mut body = vec![0u8; length];
                 let _ = reader.read_exact(&mut body);
-                let _ = told.send(String::from_utf8_lossy(&body).into_owned());
-                let reply = r#"{"jsonrpc":"2.0","id":1,"result":"0x"}"#;
+                let body = String::from_utf8_lossy(&body).into_owned();
+                // R22: a corroborated read asks the node's chain first.
+                let reply = if body.contains("eth_chainId") {
+                    format!(r#"{{"jsonrpc":"2.0","id":1,"result":"0x{CHAIN:x}"}}"#)
+                } else {
+                    let _ = told.send(body);
+                    r#"{"jsonrpc":"2.0","id":1,"result":"0x"}"#.to_owned()
+                };
                 let _ = (&stream)
-                    .write_all(crate::executor::pool::tests::http("200 OK", reply).as_bytes());
+                    .write_all(crate::executor::pool::tests::http("200 OK", &reply).as_bytes());
             }
         });
         storage::tests::with_temp_state("sign-read-safe-owner-wire", || {
@@ -4026,6 +4168,75 @@ mod tests {
             body["params"],
             json!([{ "to": OWNER_SAFE, "data": IS_OWNER_DATA }, "latest"])
         );
+    }
+
+    /// R22 (review 1-5): a site's request with no review of what the sheet
+    /// showed — or one that does not read — is a failed sign: nothing is
+    /// hashed, no ceremony edge is told, no prompt, never a silent success.
+    #[test]
+    fn a_request_without_its_review_signs_nothing() {
+        let ctx = context(Some("http://127.0.0.1:8137"));
+        let send = r#"[{"to":"0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141","value":"0x1"}]"#;
+        let message = r#"["0x68656c6c6f","0x88cca0eedbf2c4426110bbfc998f048689266894"]"#;
+        let unreadable = r#"{"kind":"nonsense"}"#;
+        for (method, params) in [("eth_sendTransaction", send), ("personal_sign", message)] {
+            for review in [None, Some(unreadable)] {
+                let (tx, mut rx) = futures::channel::mpsc::unbounded();
+                let outcome = sign_and_submit(
+                    &ctx,
+                    "rid-r22",
+                    100,
+                    ME,
+                    method,
+                    params,
+                    None,
+                    None,
+                    review,
+                    &crate::resident::Sink::new(tx),
+                );
+                assert!(
+                    matches!(
+                        &outcome,
+                        SignSubmitOutcome::Failed { message, refused: false, signer: None }
+                            if message.contains("not the reviewed request")
+                    ),
+                    "{method} {review:?}: {outcome:?}"
+                );
+                assert!(rx.try_recv().is_err(), "no ceremony edge: nothing signed");
+                assert!(
+                    !ctx.signing_started.load(Ordering::SeqCst),
+                    "no prompt was opened"
+                );
+            }
+        }
+    }
+
+    /// R22: a signature wraps only the digest the sheet read, for the
+    /// account it named — a message changed after the review is refused
+    /// before any prompt.
+    #[test]
+    fn a_message_other_than_the_reviewed_one_signs_nothing() {
+        let ctx = context(Some("http://127.0.0.1:8137"));
+        let shown = r#"["0x68656c6c6f","0x88cca0eedbf2c4426110bbfc998f048689266894"]"#;
+        let review =
+            vela_core::signed_review::dapp_review_json("personal_sign", shown, 100, ME, None)
+                .expect("a message's review");
+        let drifted = r#"["0x676f6f646279","0x88cca0eedbf2c4426110bbfc998f048689266894"]"#;
+        let outcome = sign_message(
+            &ctx,
+            "rid-r22",
+            100,
+            ME,
+            "personal_sign",
+            drifted,
+            &vela_core::signed_review::dapp_review_from_json(&review).expect("reads"),
+        );
+        assert!(
+            matches!(&outcome, SignSubmitOutcome::Failed { message, .. }
+                if message.contains("not the reviewed request")),
+            "{outcome:?}"
+        );
+        assert!(!ctx.signing_started.load(Ordering::SeqCst), "no prompt");
     }
 
     /// The core's own vector for the rule (§31), replayed through the door

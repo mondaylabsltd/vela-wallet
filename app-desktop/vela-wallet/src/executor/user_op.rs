@@ -46,7 +46,27 @@ use vela_core::app::send::SendSubmitFailure;
 use vela_core::app::sign_request::PageFailure;
 use vela_core::app::{Account, Assertion, FailureKind};
 use vela_core::primitives::{from_hex, to_hex};
-use vela_core::signed_review::{SignedReview, reviewed_safe_op_hash};
+use vela_core::signed_review::{
+    DappReview, SignedReview, dapp_safe_op_hash, reviewed_safe_op_hash,
+};
+
+/// What the person confirmed of the operation about to be signed — the only
+/// operation the passkey's hash is computed for.
+#[derive(Clone, Copy, Debug)]
+pub enum Reviewed<'a> {
+    /// The wallet's own send: the review the person confirmed
+    /// (`reviewed_safe_op_hash`).
+    Send(&'a SignedReview),
+    /// R22 (review 1-5): a site's request, frozen at the sheet's confirm
+    /// from the params it showed (`SignAndSubmit.review`): the operation is
+    /// hashed only if it is exactly those calls, then at most the quoted fee
+    /// leg (`signed_review::dapp_safe_op_hash`).
+    Dapp(&'a DappReview),
+    /// An operation the wallet builds from a review of its own elsewhere —
+    /// a multisig member's execution, which the multisig review's door
+    /// already held (`signable_safe_op_hash`).
+    Own,
+}
 use vela_core::signing_venue::{KeyRoute, VenueBlock};
 use vela_core::user_op::{
     CALL_GAS_LIMIT, EstimateFailure, GasEstimate, GasFloors, MultiSendCall, NOT_SENT_DAPP_DETAIL,
@@ -633,7 +653,7 @@ pub fn submit(
     keys: &[WalletKey],
     signer: Signer<'_>,
     quoted_fee: Option<QuotedFee>,
-    review: Option<&SignedReview>,
+    review: Reviewed<'_>,
     prepared: Option<&PreparedGas>,
     edges: Edges<'_>,
     asked: Asked<'_>,
@@ -724,10 +744,9 @@ fn submit_inner(
 /// that asked is still there (RB2), and the write-ahead (RJ1).
 struct Tail<'a> {
     head: Option<std::thread::JoinHandle<Option<u64>>>,
-    /// A send: the review the person confirmed. The passkey's hash is
-    /// computed only for the operation that is exactly it; `None` for a
-    /// site's request, reviewed on its sheet.
-    review: Option<&'a SignedReview>,
+    /// What the person confirmed ([`Reviewed`]): the passkey's hash is
+    /// computed only for the operation that is exactly it.
+    review: Reviewed<'a>,
     /// A send: the gas its confirmed quote measured, still fresh, for
     /// exactly these calls (the core's `SubmitUserOp.prepared`) — signed
     /// without simulating again when the account is as the quote read it.
@@ -1152,7 +1171,7 @@ fn signed_operation(
     inner: &[MultiSendCall],
     keys: &[WalletKey],
     signer: &mut Signer<'_>,
-    review: Option<&SignedReview>,
+    review: Reviewed<'_>,
     edges: Edges<'_>,
     asked: Asked<'_>,
     now_ms: f64,
@@ -1173,21 +1192,31 @@ fn signed_operation(
 }
 
 /// The hash the passkey is asked to sign: the reviewed transfer's
-/// (`reviewed_safe_op_hash`), else the core's signable hash — both refuse an
+/// (`reviewed_safe_op_hash`), a site's reviewed request's (R22,
+/// `dapp_safe_op_hash`), else the core's signable hash — all refuse an
 /// operation that never expires (§35), so a path that forgot the stamp asks
-/// for no signature at all.
+/// for no signature at all; and the first two refuse an operation that is
+/// not what the person confirmed, before any prompt.
 fn hash_to_sign(
     op: &UserOperation,
     chain_id: u32,
-    review: Option<&SignedReview>,
+    review: Reviewed<'_>,
 ) -> Result<Vec<u8>, SubmitFailure> {
+    let not_reviewed = |e: vela_core::CoreError| {
+        other(format!(
+            "the operation is not the one on the review; nothing was signed: {e}"
+        ))
+    };
     match review {
-        Some(review) => reviewed_safe_op_hash(op, u64::from(chain_id), review).map_err(|e| {
-            other(format!(
-                "the operation is not the one on the review; nothing was signed: {e}"
-            ))
-        }),
-        None => signable_safe_op_hash(op, u64::from(chain_id)).map_err(|e| other(e.to_string())),
+        Reviewed::Send(review) => {
+            reviewed_safe_op_hash(op, u64::from(chain_id), review).map_err(not_reviewed)
+        }
+        Reviewed::Dapp(review) => {
+            dapp_safe_op_hash(op, u64::from(chain_id), review).map_err(not_reviewed)
+        }
+        Reviewed::Own => {
+            signable_safe_op_hash(op, u64::from(chain_id)).map_err(|e| other(e.to_string()))
+        }
     }
 }
 
@@ -1773,7 +1802,7 @@ mod tests {
                 &[],
                 &keys,
                 &mut Signer::Passkey(&mut touch),
-                None,
+                Reviewed::Own,
                 &quiet,
                 &always_asked,
                 now_ms,
@@ -1798,6 +1827,83 @@ mod tests {
         assert_ne!(hash(&signed), hash(&again));
     }
 
+    /// R22 (review 1-5): a site's request is hashed only when the operation
+    /// is exactly the calls its sheet showed, then the quoted fee leg — a
+    /// call whose bytes changed after the review (a drifted op) is refused
+    /// before any prompt, and so is one that pays its fee elsewhere.
+    #[test]
+    fn a_dapp_operation_other_than_the_reviewed_one_is_never_hashed() {
+        use vela_core::signed_review::{DappReview, ReviewedCall, ReviewedFeeTo};
+        const TOKEN: &str = "0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0";
+        const COLLECTOR: &str = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141";
+        // transfer(0x…dEaD, 1)
+        let shown_data = format!(
+            "0xa9059cbb{:0>64}{:064x}",
+            "000000000000000000000000000000000000dead", 1
+        );
+        let review = DappReview::Calls {
+            chain_id: 100,
+            account: unsigned_op().sender,
+            calls: vec![ReviewedCall {
+                to: TOKEN.to_owned(),
+                value: "0".to_owned(),
+                data: shown_data.clone(),
+            }],
+            fee: Some(ReviewedFeeTo {
+                recipient: COLLECTOR.to_owned(),
+            }),
+        };
+        let op_with = |data: &str, fee_to: &str| {
+            let mut op = unsigned_op();
+            let call = MultiSendCall {
+                to: TOKEN.to_owned(),
+                value_hex: "0x0".to_owned(),
+                data: vela_core::primitives::from_hex(data).unwrap_or_default(),
+            };
+            let fee =
+                build_in_band_fee_leg(None, fee_to, 1_000).unwrap_or_else(|e| unreachable!("{e}"));
+            op.call_data = build_multi_send_execute_call_data(&[call, fee])
+                .unwrap_or_else(|e| unreachable!("{e}"));
+            stamp_validity(&mut op, NOW_MS);
+            op
+        };
+        // Exactly what was shown, and its fee to the quoted recipient.
+        assert!(
+            hash_to_sign(
+                &op_with(&shown_data, COLLECTOR),
+                100,
+                Reviewed::Dapp(&review)
+            )
+            .is_ok()
+        );
+        // The calldata drifted after the review: refused, nothing signed.
+        let drifted = shown_data.replace("dead", "beef");
+        let Err(SubmitFailure::Other(why)) =
+            hash_to_sign(&op_with(&drifted, COLLECTOR), 100, Reviewed::Dapp(&review))
+        else {
+            unreachable!("a drifted operation was hashed to sign");
+        };
+        assert!(why.contains("not the one on the review"), "{why}");
+        // The fee leg pays somebody the quote did not name: refused too.
+        assert!(
+            hash_to_sign(
+                &op_with(&shown_data, "0x000000000000000000000000000000000000bEEF"),
+                100,
+                Reviewed::Dapp(&review)
+            )
+            .is_err()
+        );
+        // On another chain than the one reviewed: refused.
+        assert!(
+            hash_to_sign(
+                &op_with(&shown_data, COLLECTOR),
+                10,
+                Reviewed::Dapp(&review)
+            )
+            .is_err()
+        );
+    }
+
     /// §35: an operation that never expires is never signed here — the hash
     /// is refused before any prompt, and the envelope is refused should one
     /// ever get that far.
@@ -1808,7 +1914,7 @@ mod tests {
         let credential = [0x11_u8, 0x22, 0x33];
         let keys = vec![wallet_key(&signing, &credential)];
         let unstamped = unsigned_op();
-        let Err(SubmitFailure::Other(why)) = hash_to_sign(&unstamped, 100, None) else {
+        let Err(SubmitFailure::Other(why)) = hash_to_sign(&unstamped, 100, Reviewed::Own) else {
             unreachable!("an operation that never expires was hashed to sign");
         };
         assert!(why.contains("never expires"), "{why}");
@@ -1822,7 +1928,7 @@ mod tests {
         // Stamped, both go.
         let mut stamped = unstamped;
         stamp_validity(&mut stamped, NOW_MS);
-        assert!(hash_to_sign(&stamped, 100, None).is_ok());
+        assert!(hash_to_sign(&stamped, 100, Reviewed::Own).is_ok());
         assert!(envelope(&stamped, &assertion, &keys).is_ok());
     }
 
@@ -2589,7 +2695,8 @@ mod tests {
             value_hex: "0x1".to_owned(),
             data: vec![],
         }];
-        let digest = hash_to_sign(&op, 100, None).unwrap_or_else(|e| unreachable!("{e:?}"));
+        let digest =
+            hash_to_sign(&op, 100, Reviewed::Own).unwrap_or_else(|e| unreachable!("{e:?}"));
         let (channel, _changed) = Channel::new();
         let ask = Ask::own(None);
         let signed_over = digest.clone();

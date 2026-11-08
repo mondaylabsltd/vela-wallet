@@ -733,6 +733,11 @@ const CALLS: &[(&str, Place)] = &[
         Machine("the store read again after an erase"),
     ),
     ("preferences::pinned_language", Machine("a read")),
+    ("preferences::refuse_blind_signing", Machine("a read")),
+    (
+        "preferences::set_refuse_blind_signing",
+        NotOne("the person's own safety switch (R22): no agent turns a protection off"),
+    ),
     (
         "preferences::set_debug_mode",
         NotOne("a developer's switch (spec 091), hidden in a release build"),

@@ -234,6 +234,14 @@ pub struct SigningModel {
     /// Why the confirm is shut, in the core's words (spec 099 R7) — under it,
     /// so a dead control is never without its reason.
     pub confirm_note: Option<SharedString>,
+    /// R22: the confirm in the danger style (the core's `anyway || danger`).
+    pub confirm_danger: bool,
+    /// R22: how long the confirm is held before it acts (`0`: a plain
+    /// press) — the core's `ConfirmState::hold_ms`.
+    pub confirm_hold_ms: u32,
+    /// R22: the request the confirm confirms (its id) — a hold on it never
+    /// carries over to the next request.
+    pub confirm_subject: SharedString,
     /// The third column's heading. The panel scaffold takes it from the page,
     /// which reads it from the same strings — kept here so a phone shell can
     /// use the model alone.
@@ -707,6 +715,9 @@ fn base(
         confirm_label: confirm_action.clone(),
         confirm_enabled: true,
         confirm_note: None,
+        confirm_danger: false,
+        confirm_hold_ms: 0,
+        confirm_subject: SharedString::default(),
         panel_title: s.panel_title.clone(),
     }
 }

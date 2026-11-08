@@ -215,9 +215,59 @@ pub(crate) fn review_door(
     raw: Option<&Value>,
 ) -> (Option<ReviewDraw>, SignDoor) {
     let draw = raw.filter(|r| !r.is_null()).and_then(ReviewDraw::of);
-    let door = crate::multisig::sheet::sign_door(state, raw, draw.is_some());
+    // R22: the person's "Refuse blind signing" — a review that signs only
+    // "… anyway" is refused at the door, said above the review.
+    let door = crate::multisig::sheet::sign_door(
+        state,
+        raw,
+        draw.is_some(),
+        crate::executor::preferences::refuse_blind_signing(),
+    );
     let draw = draw.filter(|_| door.shows == ReviewShows::Review);
     (draw, door)
+}
+
+/// R22 (review 1-3): a sign, propose, approve or execute press through the
+/// review's door — held (`ui::hold_confirm`: press and hold, or two
+/// activations from the keyboard or assistive technology) when the door
+/// says `hold_ms > 0` and it may be pressed; otherwise the plain button,
+/// exactly as before.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the press, its friction and its act"
+)]
+pub(crate) fn door_press(
+    id: &'static str,
+    subject: gpui::SharedString,
+    variant: crate::ui::ButtonVariant,
+    label: gpui::SharedString,
+    state: crate::ui::ButtonState,
+    hold_ms: u32,
+    hold_words: &crate::ui::HoldWords,
+    theme: &Theme,
+    on_press: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
+    cx: &App,
+) -> Div {
+    if hold_ms == 0 || state != crate::ui::ButtonState::Enabled {
+        return div().child(crate::ui::vela_button_state(
+            id, variant, label, state, theme, on_press,
+        ));
+    }
+    let fire: crate::ui::hold_confirm::Fire = std::rc::Rc::new(move |window, cx| {
+        on_press(&gpui::ClickEvent::default(), window, cx);
+    });
+    crate::ui::held_confirm(
+        id,
+        subject,
+        theme,
+        crate::ui::button_face(variant, label.clone(), theme),
+        crate::ui::hold_fill(),
+        label,
+        hold_ms,
+        hold_words,
+        fire,
+        cx,
+    )
 }
 
 /// `<chainId>:<safeTxHash>` — the views' key for one transaction.
@@ -2135,7 +2185,8 @@ impl WalletPage {
         let loc = self.ms_loc();
         let name = self.ms_member_name(actor, account, cx);
         let info = words::token_info(item.chain_id, None);
-        let coin = |raw: &str| words::amount_words(&loc, raw, &info);
+        // r21-2: a fee is the core's figure, never below what is charged.
+        let coin = |raw: &str| words::fee_words(&loc, raw, &info);
         let (text, tone, retry) = match look {
             None => (words::t(&loc, "proposal.feeChecking"), Tone::Neutral, false),
             Some(Look::Priced {
@@ -2170,7 +2221,15 @@ impl WalletPage {
                             ("name", &name),
                             ("symbol", &info.symbol),
                             ("fee", &coin(fee)),
-                            ("balance", &coin(balance.as_deref().unwrap_or("0"))),
+                            // What is THERE is never rounded up.
+                            (
+                                "balance",
+                                &words::amount_words(
+                                    &loc,
+                                    balance.as_deref().unwrap_or("0"),
+                                    &info,
+                                ),
+                            ),
                         ],
                     ),
                 },
@@ -2426,6 +2485,7 @@ impl WalletPage {
                     rule::approve_label(sign),
                     door.enabled && !executing,
                     approving,
+                    door.hold_ms,
                     cx,
                 ));
                 foot = foot.children(failures.take().unwrap_or_default());
@@ -2464,6 +2524,7 @@ impl WalletPage {
                                 rule::approve_label(sign),
                                 door.enabled && !executing,
                                 approving,
+                                door.hold_ms,
                                 cx,
                             ),
                         ));
@@ -2482,6 +2543,7 @@ impl WalletPage {
                                     rule::approve_label(sign),
                                     door.enabled && !executing,
                                     approving,
+                                    door.hold_ms,
                                     cx,
                                 )
                                 .min_h(px(crate::theme::BTN_H_PRIMARY)),
@@ -2501,41 +2563,44 @@ impl WalletPage {
                     let executor = actor.clone();
                     // r15: the press carries the fee drawn under it.
                     let shown_fee = look.as_ref().and_then(rule::Look::shown_fee);
-                    presses = presses.child(div().flex_1().min_w(px(0.)).child(
-                        crate::ui::vela_button_state(
-                            "ms-execute",
-                            value_variant(sign),
-                            words::t(&loc, rule::execute_label(*approve_first, sign)).into(),
-                            state,
-                            theme,
-                            cx.listener(move |this, _, _, cx| {
-                                let host = this.ms_host(cx);
-                                let (hash, executor) = (hash.clone(), executor.clone());
-                                let shown_fee = shown_fee.clone();
-                                // "Approve and execute" is the machine's one press,
-                                // both or nothing (§26 r16-4): stopped before its
-                                // signature, nothing is approved either and the
-                                // stop is said beside it (`execute:`). Approving
-                                // alone is the Approve press beside it.
-                                let event = if one_tap {
-                                    ms_proposals::Event::ApproveExecute {
-                                        chain_id,
-                                        safe_tx_hash: hash,
-                                        executor,
-                                        shown_fee,
-                                    }
-                                } else {
-                                    ms_proposals::Event::Execute {
-                                        chain_id,
-                                        safe_tx_hash: hash,
-                                        executor,
-                                        shown_fee,
-                                    }
-                                };
-                                host.update(cx, |host, cx| host.proposals(event, cx));
-                            }),
-                        ),
-                    ));
+                    let hold_words = self.signing.hold_words();
+                    presses = presses.child(div().flex_1().min_w(px(0.)).child(door_press(
+                        "ms-execute",
+                        hash.clone().into(),
+                        value_variant(sign),
+                        words::t(&loc, rule::execute_label(*approve_first, sign)).into(),
+                        state,
+                        door.hold_ms,
+                        &hold_words,
+                        theme,
+                        cx.listener(move |this, _, _, cx| {
+                            let host = this.ms_host(cx);
+                            let (hash, executor) = (hash.clone(), executor.clone());
+                            let shown_fee = shown_fee.clone();
+                            // "Approve and execute" is the machine's one press,
+                            // both or nothing (§26 r16-4): stopped before its
+                            // signature, nothing is approved either and the
+                            // stop is said beside it (`execute:`). Approving
+                            // alone is the Approve press beside it.
+                            let event = if one_tap {
+                                ms_proposals::Event::ApproveExecute {
+                                    chain_id,
+                                    safe_tx_hash: hash,
+                                    executor,
+                                    shown_fee,
+                                }
+                            } else {
+                                ms_proposals::Event::Execute {
+                                    chain_id,
+                                    safe_tx_hash: hash,
+                                    executor,
+                                    shown_fee,
+                                }
+                            };
+                            host.update(cx, |host, cx| host.proposals(event, cx));
+                        }),
+                        cx,
+                    )));
                 }
                 foot = foot.child(presses);
                 // r16-1: said beside the presses pressed.
@@ -2789,8 +2854,9 @@ impl WalletPage {
         label: &'static str,
         enabled: bool,
         busy: bool,
+        hold_ms: u32,
         cx: &mut Context<Self>,
-    ) -> gpui::Stateful<Div> {
+    ) -> Div {
         let loc = self.ms_loc();
         let state = if busy {
             crate::ui::ButtonState::Busy
@@ -2798,11 +2864,15 @@ impl WalletPage {
             crate::ui::ButtonState::from_enabled(enabled)
         };
         let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
-        crate::ui::vela_button_state(
+        let hold_words = self.signing.hold_words();
+        door_press(
             "ms-approve",
+            hash.clone().into(),
             variant,
             words::t(&loc, label).into(),
             state,
+            hold_ms,
+            &hold_words,
             theme,
             cx.listener(move |this, _, _, cx| {
                 let host = this.ms_host(cx);
@@ -2818,6 +2888,7 @@ impl WalletPage {
                     );
                 });
             }),
+            cx,
         )
     }
 
@@ -3193,8 +3264,10 @@ impl WalletPage {
                 // The verdict's place says it fails; nothing would change.
                 // r9-9: refused for another reason — said once, below.
                 StateVerdict::Reverts | StateVerdict::Withheld => None,
-                StateVerdict::Unavailable { .. } => Some((
-                    words::tv(&loc, "review.stateUnread", &[("network", &net)]),
+                // R22: nobody independent confirmed what running it changes,
+                // or two nodes disagreed — each said as that.
+                StateVerdict::Unavailable { reason } => Some((
+                    words::tv(&loc, state_unread_key(reason), &[("network", &net)]),
                     Tone::Caution,
                 )),
             };
@@ -3309,6 +3382,11 @@ impl WalletPage {
                         &words::t(&loc, "review.movesProbe"),
                         Tone::Neutral,
                     ));
+                }
+                // R22: who stood behind what moves — the person's own node
+                // alone ("Checked by your own node only"), a quiet line.
+                if let Some(key) = sim.source_key.as_deref() {
+                    col = col.child(ms_note(theme, &self.loc.t(key), Tone::Neutral));
                 }
             }
         }
@@ -4446,11 +4524,14 @@ impl WalletPage {
                     .w_auto()
                 })
                 .child(
-                    crate::ui::vela_button_state(
+                    door_press(
                         "ms-draft-propose",
+                        "draft".into(),
                         value_variant(sign),
                         label.into(),
                         state,
+                        door.hold_ms,
+                        &self.signing.hold_words(),
                         theme,
                         cx.listener(move |this, _, _, cx| {
                             let host = this.ms_host(cx);
@@ -4466,6 +4547,7 @@ impl WalletPage {
                                 }
                             });
                         }),
+                        cx,
                     )
                     .w_auto(),
                 ),
@@ -4699,6 +4781,18 @@ pub(crate) fn ms_moves_line(sim: &SimVerdict) -> Option<(&str, Tone)> {
         Tone::Neutral
     };
     Some((key, tone))
+}
+
+/// R22: the words for a state-change check that could not be read, by the
+/// core's reason (`corroborate::UNCORROBORATED`, `corroborate::DISAGREED`),
+/// as `words::tv` keys under `home.multisig`.
+pub(crate) fn state_unread_key(reason: &str) -> &'static str {
+    use vela_core::app::corroborate::{DISAGREED, UNCORROBORATED};
+    match reason {
+        UNCORROBORATED => "review.stateUnconfirmed",
+        DISAGREED => "review.stateDisagreed",
+        _ => "review.stateUnread",
+    }
 }
 
 /// The value press.s style (r9-19, the web.s `valueVariant`): the accent,
@@ -5117,7 +5211,7 @@ pub(crate) fn fee_moved_words(
                 loc,
                 "proposal.feeLine",
                 &[
-                    ("fee", &words::amount_words(loc, amount, &info)),
+                    ("fee", &words::fee_words(loc, amount, &info)),
                     ("name", name),
                 ],
             ),
@@ -5819,6 +5913,8 @@ mod tests {
             notice_key: None,
             no_change_key: None,
             recheck: false,
+            source: Some("corroborated".to_owned()),
+            source_key: None,
         };
         let one = one_line_per_balance(ARC, verdict);
         assert_eq!(

@@ -27,10 +27,42 @@
 //! the token auto-add work: admission comes from confirm-time receipt logs,
 //! never from a sign-time simulation.
 
-use serde_json::json;
+use serde_json::{Value, json};
 
 use vela_core::app::fee_policy::FeeCall;
-use vela_core::app::sim_outcome::{self, SimOutcome, SimReply};
+use vela_core::app::sim_outcome::{self, SimOutcome, SimVerdict};
+
+/// A simulation's answer, as the core reads its corroborated envelope (R22):
+/// what moves (`sim_outcome::classify_envelope` — one node's word that
+/// nobody independent confirmed is [`SimOutcome::Unconfirmed`]) and the
+/// sheet's verdict record for it (`sim_outcome::verdict_of_envelope`: its
+/// notice, `recheck`, and who stood behind it — `source`, `source_key`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Simulated {
+    pub outcome: SimOutcome,
+    pub verdict: SimVerdict,
+}
+
+impl Simulated {
+    /// The core's reading of `envelope` for `from` — both halves from it.
+    #[must_use]
+    pub fn of_envelope(envelope: &Value, from: &str) -> Self {
+        Self {
+            outcome: sim_outcome::classify_envelope(envelope, from).outcome,
+            verdict: sim_outcome::verdict_of_envelope(envelope, from),
+        }
+    }
+
+    /// An answer that needed no node (nothing to ask): the core's own
+    /// reading of it.
+    #[must_use]
+    pub fn of_outcome(outcome: SimOutcome) -> Self {
+        Self {
+            verdict: sim_outcome::verdict_of(outcome.clone()),
+            outcome,
+        }
+    }
+}
 
 /// Whether there is anything to ask the chain about `calls`: at least one
 /// call, and a first call that goes somewhere (a call with no `to` is a
@@ -46,19 +78,21 @@ pub fn askable(calls: &[FeeCall]) -> bool {
 }
 
 /// Simulate `calls` as `from`, and what the answer means (spec 082 RG6,
-/// L-D5): the pool's reply normalised into the core's [`SimReply`] and judged
-/// by `sim_outcome::classify` — the deltas when every call ran, a revert with
-/// its sanitised reason, "this node does not simulate", or "no node
-/// answered". The desktop's own log parser is gone; every client now reads a
-/// simulation by one rule.
+/// L-D5; R22): asked as a CORROBORATED read — two independent nodes, or the
+/// person's own node alone by their choice — and the pool's envelope judged
+/// by the core (`sim_outcome::classify_envelope`): the deltas when every
+/// call ran and a second node agreed, a revert with its sanitised reason,
+/// "this node does not simulate", "no node answered", or "nobody
+/// independent confirmed it" (`Unconfirmed`). The desktop's own log parser
+/// is gone; every client now reads a simulation by one rule.
 ///
 /// A request with nothing to simulate (no call, or a call with no `to` — a
 /// deployment) is a question that could not be asked: `NotOffered`, which
 /// draws "couldn't check", never "nothing moves".
 #[must_use]
-pub fn simulate(from: &str, calls: &[FeeCall], chain_id: u32) -> SimOutcome {
+pub fn simulate(from: &str, calls: &[FeeCall], chain_id: u32) -> Simulated {
     if !askable(calls) {
-        return SimOutcome::NotOffered;
+        return Simulated::of_outcome(SimOutcome::NotOffered);
     }
     let payload = json!({
         "blockStateCalls": [{
@@ -82,15 +116,18 @@ pub fn simulate(from: &str, calls: &[FeeCall], chain_id: u32) -> SimOutcome {
         "returnFullTransactions": false,
     });
 
-    // The pool hands back the WHOLE JSON-RPC envelope — an answer, or the
-    // node's error (an optional method's error is an answer, RG7) — and
-    // nothing at all when no endpoint answered.
-    let reply =
-        match crate::executor::pool::call(chain_id, "eth_simulateV1", json!([payload, "latest"])) {
-            Ok(envelope) => SimReply::from_envelope(&envelope),
-            Err(_) => SimReply::Unreachable,
-        };
-    sim_outcome::classify(reply, from)
+    // R22: the pool hands back the core's corroborated envelope — the first
+    // node's answer or its error (an optional method's error is an answer,
+    // RG7), the second node's beside it, or `unreachable` when no endpoint
+    // answered. Built by the core's helper, read by the core.
+    let envelope = crate::executor::pool::corroborated(
+        chain_id,
+        "eth_simulateV1",
+        json!([payload, "latest"]),
+        None,
+        false,
+    );
+    Simulated::of_envelope(&envelope, from)
 }
 
 /// `value` as the hex quantity `eth_simulateV1` wants. The wire carries wei as
@@ -109,18 +146,94 @@ fn hex_value(decimal: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::Value;
     use vela_core::app::clear_signing::ClearRisk;
     use vela_core::app::token_trust::TrustDeltaKind;
 
     const ME: &str = "0x88cca0eedbf2c4426110bbfc998f048689266894";
 
-    /// The reply as the pool hands it over, judged the way `simulate` does.
+    /// One node's body as the pool hands it over, with a second,
+    /// independent node that said the same — judged the way `simulate`
+    /// does (`None`: the pool gave up).
     fn judged(answer: Option<Value>) -> SimOutcome {
-        let reply = answer.map_or(SimReply::Unreachable, |envelope| {
-            SimReply::from_envelope(&envelope)
-        });
-        sim_outcome::classify(reply, ME)
+        let envelope = vela_core::app::corroborate::corroborated_envelope(
+            answer.as_ref(),
+            answer.as_ref(),
+            false,
+        );
+        Simulated::of_envelope(&envelope, ME).outcome
+    }
+
+    /// R22: the cross-shell vectors (`rules/signing-truth.json`, `sim`),
+    /// through the desktop's own reading — the envelope the pool builds, the
+    /// verdict the sheet draws: kind, source, notice, deltas, source line.
+    #[test]
+    fn the_signing_truth_sim_vectors_read_alike_here() {
+        let file: Value = serde_json::from_str(include_str!(
+            "../../../../rust/crates/vela-core/tests/vectors/rules/signing-truth.json"
+        ))
+        .unwrap_or_else(|e| unreachable!("the vectors: {e}"));
+        let cases = file["sim"]
+            .as_array()
+            .unwrap_or_else(|| unreachable!("sim cases"));
+        assert!(!cases.is_empty());
+        let user = file["user"].as_str().unwrap_or(ME);
+        for case in cases {
+            let name = case["name"].as_str().unwrap_or_default();
+            let read = Simulated::of_envelope(&case["envelope"], user);
+            let verdict =
+                serde_json::to_value(&read.verdict).unwrap_or_else(|e| unreachable!("{name}: {e}"));
+            let deltas: Vec<Value> = read
+                .verdict
+                .deltas
+                .iter()
+                .map(|d| Value::String(d.delta.clone()))
+                .collect();
+            for (field, want) in case["expect"]
+                .as_object()
+                .unwrap_or_else(|| unreachable!("{name}: expect"))
+            {
+                let got = if field == "deltas" {
+                    Value::Array(deltas.clone())
+                } else {
+                    verdict.get(field).cloned().unwrap_or(Value::Null)
+                };
+                assert_eq!(&got, want, "{name}: {field}");
+            }
+            // What moves is what the verdict says moves.
+            let moved: Vec<Value> = match &read.outcome {
+                SimOutcome::Deltas { deltas } => deltas
+                    .iter()
+                    .map(|d| Value::String(d.delta.clone()))
+                    .collect(),
+                _ => Vec::new(),
+            };
+            assert_eq!(moved, deltas, "{name}");
+        }
+    }
+
+    /// R22: one node's word alone is not believed — "unconfirmed", a
+    /// caution the sheet offers "Check again" under; the person's own node
+    /// alone is, and says so.
+    #[test]
+    fn one_nodes_word_is_unconfirmed_and_the_own_node_says_so() {
+        let ran = json!({"result": [{"calls": [{"status": "0x1", "logs": []}]}]});
+        let alone = vela_core::app::corroborate::corroborated_envelope(Some(&ran), None, false);
+        let read = Simulated::of_envelope(&alone, ME);
+        assert_eq!(read.outcome, SimOutcome::Unconfirmed { disagreed: false });
+        assert_eq!(read.verdict.kind, "unconfirmed");
+        assert!(read.verdict.recheck);
+        assert_eq!(
+            read.verdict.notice_key.as_deref(),
+            Some(sim_outcome::KEY_UNCONFIRMED)
+        );
+        let own = vela_core::app::corroborate::corroborated_envelope(Some(&ran), None, true);
+        let read = Simulated::of_envelope(&own, ME);
+        assert_eq!(read.verdict.kind, "deltas");
+        assert_eq!(read.verdict.source.as_deref(), Some("own_node"));
+        assert_eq!(
+            read.verdict.source_key.as_deref(),
+            Some(sim_outcome::KEY_OWN_NODE)
+        );
     }
 
     /// Spec 082 L-D5: Arbitrum's public node answers `eth_simulateV1` with
@@ -203,14 +316,14 @@ mod tests {
     #[test]
     fn nothing_to_simulate_could_not_be_checked() {
         assert!(!askable(&[]));
-        assert_eq!(simulate(ME, &[], 100), SimOutcome::NotOffered);
+        assert_eq!(simulate(ME, &[], 100).outcome, SimOutcome::NotOffered);
         let deploy = FeeCall {
             to: String::new(),
             value: "0".to_owned(),
             data: "0x60".to_owned(),
         };
         assert!(!askable(std::slice::from_ref(&deploy)));
-        assert_eq!(simulate(ME, &[deploy], 100), SimOutcome::NotOffered);
+        assert_eq!(simulate(ME, &[deploy], 100).outcome, SimOutcome::NotOffered);
         let send = FeeCall {
             to: "0x000000000000000000000000000000000000dEaD".to_owned(),
             value: "1".to_owned(),
@@ -247,7 +360,7 @@ mod tests {
                 value: "1000000000000000".to_owned(),
                 data: "0x".to_owned(),
             }];
-            match simulate(GOLDEN, &calls, 100) {
+            match simulate(GOLDEN, &calls, 100).outcome {
                 SimOutcome::Deltas { deltas } => {
                     println!("deltas: {deltas:?}");
                     let native = deltas

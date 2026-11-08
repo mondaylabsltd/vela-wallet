@@ -69,7 +69,51 @@ pub fn confirm_state(
     vela_core::app::sign_confirm::confirm_state_of(sign, guard, clear, Some(fee), speed_tier)
 }
 
+/// R22 (review 1-3): [`confirm_state`] with its friction — the core's
+/// composition (`sign_confirm::with_posture` over `sign_confirm::posture`):
+/// `anyway` ("Sign anyway", in the danger style) whenever something Vela
+/// checks could not be read — `sim` is the sheet's own simulation verdict
+/// (`None` before it lands: unread) — `danger`, `hold_ms` (held, or two
+/// presses through the accessible path), and with `refuse_blind` (the
+/// person's "Refuse blind signing") every "… anyway" refused
+/// (`ConfirmBlock::BlindRefused`). The one state the sheet's confirm and the
+/// hand-off's Open are drawn from.
+#[must_use]
+pub fn confirm_gate(
+    sign: &SignView,
+    guard: &GuardView,
+    clear: &ClearSigningView,
+    fee: &FeeView,
+    speed_tier: Option<FeeTier>,
+    sim: Option<&vela_core::app::sim_outcome::SimVerdict>,
+    refuse_blind: bool,
+) -> vela_core::app::sign_confirm::ConfirmState {
+    use vela_core::app::sign_confirm::{posture, with_posture};
+    with_posture(
+        confirm_state(sign, guard, clear, fee, speed_tier),
+        posture(sign, clear, sim),
+        refuse_blind,
+    )
+}
+
+/// The confirm's words, as the core's gate says them (R22): "Sign anyway"
+/// when it is "… anyway" (`ConfirmState::anyway` — the core's rule, never a
+/// shell's reading of `clear`), else the action ([`confirm_label`]).
+#[must_use]
+pub fn gate_label(
+    state: &vela_core::app::sign_confirm::ConfirmState,
+    clear: &ClearSigningView,
+    s: &SigningStrings,
+) -> SharedString {
+    if state.anyway {
+        s.sign_anyway.clone()
+    } else {
+        confirm_label(clear, s)
+    }
+}
+
 /// Whether the confirm may arm ([`confirm_state`]).
+#[cfg(test)]
 #[must_use]
 pub fn confirm_enabled(
     sign: &SignView,
@@ -140,6 +184,10 @@ pub struct ColumnConfirm {
     pub label: SharedString,
     pub enabled: bool,
     pub note: Option<SharedString>,
+    /// R22: drawn in the danger style (`anyway || danger`).
+    pub danger: bool,
+    /// R22: held this long before it acts (`0`: a plain press).
+    pub hold_ms: u32,
 }
 
 /// The column's confirm, by what the column is about. Only the request's
@@ -165,12 +213,16 @@ pub fn column_confirm(
             label: s.funding_check_now.clone(),
             enabled: true,
             note: None,
+            danger: false,
+            hold_ms: 0,
         },
         ColumnKind::Refused => ColumnConfirm {
             fee: FeeModel::Hidden,
             label: SharedString::default(),
             enabled: false,
             note: None,
+            danger: false,
+            hold_ms: 0,
         },
         ColumnKind::Request => request(),
     }
@@ -722,12 +774,17 @@ fn sim_notice_block(notice: &vela_core::app::sim_outcome::SimNotice, s: &Signing
         ClearRisk::Caution => Tone::Caution,
         ClearRisk::Safe | ClearRisk::Normal => Tone::Neutral,
     };
+    use vela_core::app::sim_outcome::{KEY_DISAGREED, KEY_UNCONFIRMED};
     let text = match (notice.key, notice.reason.as_deref()) {
         (KEY_WILL_FAIL_REASON, Some(reason)) => SharedString::from(crate::signing::fill(
             &s.warn_will_fail_reason,
             &[("reason", reason)],
         )),
         (KEY_WILL_FAIL | KEY_WILL_FAIL_REASON, _) => s.warn_will_fail.clone(),
+        // R22: nobody independent confirmed what moves — said as that, never
+        // as a node that could not check.
+        (KEY_UNCONFIRMED, _) => s.sim_unconfirmed.clone(),
+        (KEY_DISAGREED, _) => s.sim_disagreed.clone(),
         _ => s.warn_sim_unavailable.clone(),
     };
     Block::Warning { tone, text }
@@ -983,6 +1040,34 @@ pub fn verdict_block(
         // that says none came in time, which is why the confirm opened.
         landed: stage == SimStage::Landed || waited_out_key.is_some(),
     })
+}
+
+/// R22 (review 1-2): the verdict's place says who stood behind a checked
+/// answer — the person's own node alone ("Checked by your own node only",
+/// `SimVerdict::source_key`), a quiet line under the balance changes. Only
+/// a landed verdict says it.
+#[must_use]
+pub fn with_source_line(
+    block: Option<Block>,
+    source_key: Option<&str>,
+    s: &SigningStrings,
+) -> Option<Block> {
+    match block {
+        Some(Block::Verdict {
+            mut inner,
+            landed: true,
+        }) if source_key == Some(vela_core::app::sim_outcome::KEY_OWN_NODE) => {
+            inner.push(Block::Source {
+                text: s.sim_own_node.clone(),
+                tone: Tone::Neutral,
+            });
+            Some(Block::Verdict {
+                inner,
+                landed: true,
+            })
+        }
+        other => other,
+    }
 }
 
 /// What a verdict says, as one string: every word of every block in its
@@ -4767,6 +4852,8 @@ mod tests {
             label: "Confirm send".into(),
             enabled: gate.enabled,
             note: Some("request note".into()),
+            danger: false,
+            hold_ms: 0,
         });
         assert_eq!(
             drawn.label, s.funding_check_now,
@@ -4790,6 +4877,8 @@ mod tests {
             label: "Confirm send".into(),
             enabled: false,
             note: None,
+            danger: false,
+            hold_ms: 0,
         });
         assert_eq!(request.label, SharedString::from("Confirm send"));
         assert!(!request.enabled);
@@ -4798,6 +4887,37 @@ mod tests {
             unreachable!("a refusal never reads the request's confirm")
         });
         assert!(refused.label.is_empty() && !refused.enabled);
+    }
+
+    /// R22: the person's own node alone is said under the balances — on a
+    /// landed verdict only, and never for any other source.
+    #[test]
+    fn the_own_node_line_is_said_under_a_landed_verdict() {
+        use vela_core::app::sim_outcome::KEY_OWN_NODE;
+        let s = strings();
+        let judgments = [vela_core::app::token_trust::TrustSimJudgment::Native {
+            delta: "-1".to_owned(),
+        }];
+        let landed = || verdict_block(SimStage::Landed, &judgments, None, None, None, 1, &s);
+        let Some(Block::Verdict { inner, .. }) = with_source_line(landed(), Some(KEY_OWN_NODE), &s)
+        else {
+            unreachable!("a verdict");
+        };
+        assert!(matches!(
+            inner.last(),
+            Some(Block::Source { text, .. }) if *text == s.sim_own_node
+        ));
+        assert_ne!(s.sim_own_node.as_ref(), KEY_OWN_NODE, "worded");
+        let count = |block: Option<Block>| match block {
+            Some(Block::Verdict { inner, .. }) => inner.len(),
+            _ => 0,
+        };
+        assert_eq!(count(with_source_line(landed(), None, &s)), count(landed()));
+        let out = || verdict_block(SimStage::Out, &[], None, None, None, 1, &s);
+        assert_eq!(
+            count(with_source_line(out(), Some(KEY_OWN_NODE), &s)),
+            count(out())
+        );
     }
 
     /// The refusal that used to happen in silence.

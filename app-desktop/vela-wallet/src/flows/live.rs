@@ -1578,19 +1578,35 @@ pub(crate) fn fee_text(fee: Option<&FeeEstimateView>) -> String {
             decimals,
             symbol,
             ..
-        } => {
-            let units = amount.parse::<f64>().unwrap_or(0.0) / 10f64.powi(*decimals as i32);
-            format!("{} {}", trimmed(units), symbol.clone().unwrap_or_default())
-                .trim()
-                .to_owned()
-        }
-        FeeAssetView::Native => {
-            let coin = fee.total_wei.parse::<f64>().unwrap_or(0.0) / 1e18;
-            format!("{} {}", trimmed(coin), native_symbol(fee.chain_id))
-                .trim()
-                .to_owned()
-        }
+        } => format!(
+            "{} {}",
+            fee_figure_text(amount, *decimals, FEE_TOKEN_PLACES),
+            symbol.clone().unwrap_or_default()
+        )
+        .trim()
+        .to_owned(),
+        FeeAssetView::Native => format!(
+            "{} {}",
+            fee_figure_text(&fee.total_wei, 18, FEE_NATIVE_PLACES),
+            native_symbol(fee.chain_id)
+        )
+        .trim()
+        .to_owned(),
     }
+}
+
+/// r21-2 (§36): how many places a fee in the chain's own coin is shown at.
+pub(crate) const FEE_NATIVE_PLACES: u32 = 6;
+/// r21-2: how many places a fee in a token is shown at.
+pub(crate) const FEE_TOKEN_PLACES: u32 = 4;
+
+/// r21-2 (§36): a fee of `units` base units of a `decimals` coin as the
+/// screen shows it — the core's figure (`fee_policy::fee_figure`), rounded UP
+/// at `shown` places so it never reads below what is charged, with the
+/// person's decimal mark. `—` for a count that is not one.
+pub(crate) fn fee_figure_text(units: &str, decimals: u32, shown: u32) -> String {
+    vela_core::app::fee_policy::fee_figure_text(units, decimals, shown)
+        .map_or_else(|| "—".to_owned(), crate::wallet::live::with_decimal_mark)
 }
 
 /// Below this the coin amount is the honest primary and the fiat half is left
@@ -11094,7 +11110,9 @@ mod press_freeze_tests {
         drive.settle(Vec::new());
         assert!(drive.submit().is_none(), "nothing is signed");
         let view = drive.host.view();
-        assert_eq!(view.confirm_amount, "0.0058875");
+        // r21-2 (§36): Max sends exactly the figure it shows — the sendable
+        // amount cut DOWN to the field's places (`send::max_shown_exact`).
+        assert_eq!(view.confirm_amount, "0.005887");
         let shown = send_confirm(&inputs(&view, &fee_view, &s, &wallet));
         let notice = shown
             .notice
@@ -11103,21 +11121,22 @@ mod press_freeze_tests {
         assert_eq!(
             notice.body.as_ref(),
             fill(
-                &fill(&fill(&s.fee_moved_max, "to", "0.005888"), "from", "0.0675"),
+                &fill(&fill(&s.fee_moved_max, "to", "0.005887"), "from", "0.0675"),
                 "symbol",
                 "USDC"
             )
         );
         assert!(matches!(shown.cta_state, CtaState::Enabled));
 
-        // The next press signs exactly what is drawn: 0.0058875 + 0.2941125.
+        // The next press signs exactly what is drawn: 0.005887 (r21-2: the
+        // Max figure shown, cut down) + 0.2941125.
         drive.dispatch(SendEvent::SlideConfirm {
             review: view.review_digest.clone(),
         });
         let Some(SendOperation::SubmitUserOp { review, .. }) = drive.submit() else {
             unreachable!("the next press is signed")
         };
-        assert_eq!(review.transfers[0].amount, "5887500000000000");
+        assert_eq!(review.transfers[0].amount, "5887000000000000");
         assert_eq!(
             review.fee.as_ref().map(|f| f.amount.as_str()),
             Some("294112500000000000")

@@ -682,6 +682,7 @@ impl SigningHost {
         calls: Vec<FeeCall>,
         cx: &mut Context<Self>,
     ) {
+        use crate::executor::sim::Simulated;
         use vela_core::app::sim_outcome::SimOutcome;
         self.sim.ask = Some(SimAsk {
             chain_id,
@@ -691,7 +692,7 @@ impl SigningHost {
         cx.spawn(async move |host, cx| {
             let fee_calls = calls.clone();
             let sim_wallet = wallet.clone();
-            let outcome = cx
+            let Simulated { outcome, verdict } = cx
                 .background_executor()
                 .spawn(async move {
                     crate::panic_report::guarded(|| {
@@ -701,15 +702,16 @@ impl SigningHost {
                 .await
                 // No answer anybody could read: the core's "no node
                 // answered", which draws "couldn't check".
-                .unwrap_or(SimOutcome::Unreachable);
+                .unwrap_or_else(|| Simulated::of_outcome(SimOutcome::Unreachable));
             let notice = vela_core::app::sim_outcome::notice(&outcome);
             let SimOutcome::Deltas { deltas } = outcome else {
-                // A revert moves nothing, and a node that could not check says
-                // nothing about what moves. NOT "nothing moves" — the notice is
-                // the sentence for each; and the core says whether it is the
+                // A revert moves nothing, and a node that could not check —
+                // or one nobody independent confirmed (R22) — says nothing
+                // about what moves. NOT "nothing moves" — the notice is the
+                // sentence for each; and the core says whether it is the
                 // network's, to be asked again (`recheck`).
                 host.update(cx, |host, cx| {
-                    host.verdict_landed(SimVerdict::of_unchecked(outcome), cx);
+                    host.verdict_landed(SimVerdict::of_core(verdict, notice), cx);
                 })
                 .ok();
                 return;
@@ -745,7 +747,10 @@ impl SigningHost {
                         notice,
                         no_change: judged.no_change_key,
                         // A node that checked is never asked again.
-                        recheck: false,
+                        recheck: verdict.recheck,
+                        // R22: who stood behind it, and the record the
+                        // confirm's posture reads.
+                        core: Some(verdict),
                     },
                     cx,
                 );
@@ -889,18 +894,28 @@ impl SigningHost {
     /// stale into a failure), the form comes back instead, to say why.
     pub fn retry(&mut self, cx: &mut Context<Self>) {
         self.phone_stop = None;
-        let armed = crate::signing::live::confirm_enabled(
+        if self.confirm_gate().enabled {
+            self.approve(cx);
+        } else {
+            cx.notify();
+        }
+    }
+
+    /// R22: the sheet's confirm as the core's gate holds it now — the three
+    /// machines, the sheet's own simulation verdict and the person's
+    /// "Refuse blind signing" (`signing::live::confirm_gate`): whether it
+    /// may arm, why not, and its friction (`anyway`, `danger`, `hold_ms`).
+    #[must_use]
+    pub fn confirm_gate(&self) -> vela_core::app::sign_confirm::ConfirmState {
+        crate::signing::live::confirm_gate(
             &self.view,
             &self.guard_view,
             &self.clear_view,
             self.speed.fee_view(),
             Some(self.speed.view().tier),
-        );
-        if armed {
-            self.approve(cx);
-        } else {
-            cx.notify();
-        }
+            self.sim.verdict.as_ref(),
+            crate::executor::preferences::refuse_blind_signing(),
+        )
     }
 
     /// Where this request stands, as far as closing its column goes.
@@ -1589,10 +1604,32 @@ pub(crate) struct SimVerdict {
     /// node answered (`SimVerdict.recheck`, dapp-15) — so it may be asked
     /// again: the sheet offers "Check again".
     pub recheck: bool,
+    /// R22: the core's own verdict record (`sim_outcome::verdict_of_envelope`)
+    /// — its kind, who stood behind it (`source`, `source_key`) — what the
+    /// confirm's posture reads (`ConfirmInput::sim`) and the sheet's quiet
+    /// "Checked by your own node only" line.
+    pub core: Option<vela_core::app::sim_outcome::SimVerdict>,
 }
 
 impl SimVerdict {
+    /// The core's verdict record for an answer with no balances to judge
+    /// (a revert, a node that could not check, one nobody independent
+    /// confirmed): its notice, whether it may be asked again, and the
+    /// record itself.
+    pub(crate) fn of_core(
+        verdict: vela_core::app::sim_outcome::SimVerdict,
+        notice: Option<vela_core::app::sim_outcome::SimNotice>,
+    ) -> Self {
+        Self {
+            notice,
+            recheck: verdict.recheck,
+            core: Some(verdict),
+            ..Self::default()
+        }
+    }
+
     /// An answer with no balances to judge: its notice is the verdict.
+    #[cfg(test)]
     pub(crate) fn noticed(notice: Option<vela_core::app::sim_outcome::SimNotice>) -> Self {
         Self {
             notice,
@@ -1602,10 +1639,12 @@ impl SimVerdict {
 
     /// An answer with no balances to judge, as the core reads `outcome`:
     /// its notice, and whether it may be asked again (`recheck`).
+    #[cfg(test)]
     pub(crate) fn of_unchecked(outcome: vela_core::app::sim_outcome::SimOutcome) -> Self {
-        let recheck = vela_core::app::sim_outcome::verdict_of(outcome.clone()).recheck;
+        let verdict = vela_core::app::sim_outcome::verdict_of(outcome.clone());
         Self {
-            recheck,
+            recheck: verdict.recheck,
+            core: Some(verdict),
             ..Self::noticed(vela_core::app::sim_outcome::notice(&outcome))
         }
     }
@@ -1658,6 +1697,9 @@ pub struct Simulation {
     /// The verdict on the sheet is about the network, not the request (the
     /// core's `recheck`): it may be asked again.
     pub recheck: bool,
+    /// R22: the core's verdict record on the sheet (`None` until one lands,
+    /// and for a signature) — what the confirm's posture reads.
+    pub verdict: Option<vela_core::app::sim_outcome::SimVerdict>,
     /// Asked again and not back yet: the last verdict stays, marked as being
     /// checked again, until the new one lands.
     pub rechecking: bool,
@@ -1680,10 +1722,10 @@ impl Simulation {
             // A question that could not be asked is the core's "this node
             // does not simulate": its notice, on the sheet at once.
             SimPlan::Unaskable => {
+                use vela_core::app::sim_outcome::{SimOutcome, notice, verdict_of};
                 self.stage = SimStage::Landed;
-                self.notice = vela_core::app::sim_outcome::notice(
-                    &vela_core::app::sim_outcome::SimOutcome::NotOffered,
-                );
+                self.notice = notice(&SimOutcome::NotOffered);
+                self.verdict = Some(verdict_of(SimOutcome::NotOffered));
                 None
             }
             SimPlan::Unseen => {
@@ -1708,6 +1750,7 @@ impl Simulation {
         self.notice = verdict.notice;
         self.no_change = verdict.no_change;
         self.recheck = verdict.recheck;
+        self.verdict = verdict.core;
         self.rechecking = false;
         self.stage = crate::signing::live::SimStage::Landed;
         self.announced.then(|| SignEvent::SimSettled {
@@ -3863,6 +3906,21 @@ mod sim_wait_tests {
             )
         }
 
+        /// R22: the confirm with its friction, as the page draws it
+        /// (`SigningHost::confirm_gate`), the person's pref given.
+        fn gate(&self, refuse_blind: bool) -> vela_core::app::sign_confirm::ConfirmState {
+            let tier = self.fee.fee.as_ref().map(|estimate| estimate.tier);
+            crate::signing::live::confirm_gate(
+                &self.sign.view(),
+                &self.guard,
+                &self.clear,
+                &self.fee,
+                tier,
+                self.sim.verdict.as_ref(),
+                refuse_blind,
+            )
+        }
+
         fn block(&self) -> Option<ConfirmBlock> {
             let tier = self.fee.fee.as_ref().map(|estimate| estimate.tier);
             crate::signing::live::confirm_state(
@@ -3939,6 +3997,19 @@ mod sim_wait_tests {
             notice: None,
             no_change: None,
             recheck: false,
+            // Two independent nodes agreed (R22): a checked answer.
+            core: Some(vela_core::app::sim_outcome::SimVerdict {
+                source: Some("corroborated".to_owned()),
+                ..vela_core::app::sim_outcome::verdict_of(
+                    vela_core::app::sim_outcome::SimOutcome::Deltas {
+                        deltas: vec![vela_core::app::token_trust::TrustAssetDelta {
+                            kind: vela_core::app::token_trust::TrustDeltaKind::Native,
+                            token: None,
+                            delta: "-1000000000000000".to_owned(),
+                        }],
+                    },
+                )
+            }),
         }
     }
 
@@ -4016,6 +4087,56 @@ mod sim_wait_tests {
         let (place, _) = sheet.verdict().unwrap_or_else(|| unreachable!("a place"));
         assert!(matches!(place, Block::Balances { .. }));
         assert_eq!(sheet.timers_asked().len(), 1, "no second timer");
+    }
+
+    /// R22 (review 1-3): the sheet's own simulation decides how hard the
+    /// confirm is. Two independent nodes agreeing: a plain press. One node's
+    /// word nobody confirmed: "Sign anyway", in the danger style, held — and
+    /// with "Refuse blind signing" on, refused under its own line. Its words
+    /// are the core's `anyway`, never this shell's reading.
+    #[test]
+    fn the_confirm_is_held_and_anyway_when_nobody_confirmed_the_simulation() {
+        use vela_core::app::sign_confirm::{BLIND_REFUSED_KEY, HOLD_TO_CONFIRM_MS};
+        use vela_core::app::sim_outcome::verdict_of;
+        let s = SigningStrings::resolve(&crate::loc::Loc::for_language("en"));
+
+        let mut checked = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+        checked.lands(a_send());
+        let gate = checked.gate(false);
+        assert!(
+            gate.enabled && !gate.anyway && gate.hold_ms == 0,
+            "{gate:?}"
+        );
+        assert_ne!(
+            crate::signing::live::gate_label(&gate, &checked.clear, &s),
+            s.sign_anyway
+        );
+        // The pref changes nothing about a request that was read.
+        assert!(checked.gate(true).enabled);
+
+        let mut alone = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+        // Before any verdict lands, a transaction is unread too.
+        assert!(alone.gate(false).anyway);
+        alone.lands(SimVerdict::of_core(
+            verdict_of(SimOutcome::Unconfirmed { disagreed: false }),
+            vela_core::app::sim_outcome::notice(&SimOutcome::Unconfirmed { disagreed: false }),
+        ));
+        let gate = alone.gate(false);
+        assert!(gate.enabled && gate.anyway, "{gate:?}");
+        assert_eq!(gate.hold_ms, HOLD_TO_CONFIRM_MS);
+        assert_eq!(
+            crate::signing::live::gate_label(&gate, &alone.clear, &s),
+            s.sign_anyway
+        );
+        assert!(
+            alone.sim.recheck,
+            "an unconfirmed answer may be asked again"
+        );
+
+        let refused = alone.gate(true);
+        assert!(!refused.enabled);
+        assert_eq!(refused.block, Some(ConfirmBlock::BlindRefused));
+        assert_eq!(refused.key.as_deref(), Some(BLIND_REFUSED_KEY));
     }
 
     /// (b) The simulation never answers. Nothing of this column's opens the
@@ -4798,21 +4919,27 @@ pub(crate) mod parent_safe_tests {
     /// confirm is shut, and "an owner" refuses.
     #[test]
     fn an_unknown_safe_is_read_and_an_owner_is_refused() {
-        use crate::executor::pool::tests::{http, scripted_node, seed_pool};
+        use crate::executor::pool::tests::{chain_node, http, seed_pool};
         use vela_core::app::rpc_pool::RpcSource;
         const CHAIN: u32 = 424_332;
         let v = vector();
         let case = case("unknown Safe, isOwner true: refused");
         let unknown = v["unknown"].as_str().unwrap_or_default();
         crate::executor::storage::tests::with_temp_state("sign-parent-owner", || {
-            let (owner, owner_log) = scripted_node(
-                std::time::Duration::ZERO,
+            // R22: an honest network — two independent nodes of this
+            // chain say the same (a corroborated read).
+            let reply = || {
                 Some(http(
                     "200 OK",
                     r#"{"jsonrpc":"2.0","id":1,"result":"0x0000000000000000000000000000000000000000000000000000000000000001"}"#,
-                )),
+                ))
+            };
+            let (owner, owner_log) = chain_node(CHAIN, reply());
+            let (witness, witness_log) = chain_node(CHAIN, reply());
+            seed_pool(
+                CHAIN,
+                &[(&owner, RpcSource::User), (&witness, RpcSource::Public)],
             );
-            seed_pool(CHAIN, &[(&owner, RpcSource::User)]);
             let mut column = Column::open(
                 &request_of(&case, CHAIN),
                 case["input"]["signer"].as_str().unwrap_or_default(),
@@ -4820,7 +4947,9 @@ pub(crate) mod parent_safe_tests {
                 vec![CHAIN],
             );
             assert_eq!(column.reads(), vec![(CHAIN, unknown.to_owned())]);
+            // One `isOwner` asked of each node.
             assert_eq!(owner_log.lock().map(|log| log.len()).unwrap_or(0), 1);
+            assert_eq!(witness_log.lock().map(|log| log.len()).unwrap_or(0), 1);
             column.assert_refused(unknown, ParentReason::Owner);
         });
     }
@@ -4853,19 +4982,25 @@ pub(crate) mod parent_safe_tests {
     /// to decide, as any other (the guard decides nothing more).
     #[test]
     fn an_unknown_safe_this_account_does_not_own_goes_on() {
-        use crate::executor::pool::tests::{http, scripted_node, seed_pool};
+        use crate::executor::pool::tests::{chain_node, http, seed_pool};
         use vela_core::app::rpc_pool::RpcSource;
         const CHAIN: u32 = 424_334;
         let case = case("unknown Safe, isOwner false: clear");
         crate::executor::storage::tests::with_temp_state("sign-parent-not-owner", || {
-            let (node, _) = scripted_node(
-                std::time::Duration::ZERO,
+            // R22: "not an owner" stands only when two independent nodes
+            // say it — an honest network.
+            let reply = || {
                 Some(http(
                     "200 OK",
                     r#"{"jsonrpc":"2.0","id":1,"result":"0x0000000000000000000000000000000000000000000000000000000000000000"}"#,
-                )),
+                ))
+            };
+            let (node, _) = chain_node(CHAIN, reply());
+            let (witness, _) = chain_node(CHAIN, reply());
+            seed_pool(
+                CHAIN,
+                &[(&node, RpcSource::User), (&witness, RpcSource::Public)],
             );
-            seed_pool(CHAIN, &[(&node, RpcSource::User)]);
             let column = Column::open(
                 &request_of(&case, CHAIN),
                 case["input"]["signer"].as_str().unwrap_or_default(),
@@ -4881,6 +5016,36 @@ pub(crate) mod parent_safe_tests {
                 "the read is answered"
             );
             assert!(column.answers.is_empty());
+        });
+    }
+
+    /// R22 (SEC-PARENT-3): ONE node saying "not an owner" is not believed —
+    /// nobody independent confirmed it, so the request is refused "couldn't
+    /// check", never signed through as somebody else's Safe.
+    #[test]
+    fn one_node_saying_not_an_owner_is_refused_unchecked() {
+        use crate::executor::pool::tests::{chain_node, http, seed_pool};
+        use vela_core::app::rpc_pool::RpcSource;
+        const CHAIN: u32 = 424_335;
+        let case = case("unknown Safe, isOwner false: clear");
+        let unknown = vector()["unknown"].as_str().unwrap_or_default().to_owned();
+        crate::executor::storage::tests::with_temp_state("sign-parent-one-node", || {
+            let (node, _) = chain_node(
+                CHAIN,
+                Some(http(
+                    "200 OK",
+                    r#"{"jsonrpc":"2.0","id":1,"result":"0x0000000000000000000000000000000000000000000000000000000000000000"}"#,
+                )),
+            );
+            seed_pool(CHAIN, &[(&node, RpcSource::User)]);
+            let mut column = Column::open(
+                &request_of(&case, CHAIN),
+                case["input"]["signer"].as_str().unwrap_or_default(),
+                Vec::new(),
+                vec![CHAIN],
+            );
+            assert_eq!(column.reads().len(), 1);
+            column.assert_refused(&unknown, ParentReason::Unchecked);
         });
     }
 

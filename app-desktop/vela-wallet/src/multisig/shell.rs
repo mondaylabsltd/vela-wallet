@@ -116,6 +116,20 @@ pub trait Deps: Send + Sync + 'static {
         bound: Option<Duration>,
         person: bool,
     ) -> Result<RpcReply, String>;
+    /// R22: the same call as a CORROBORATED read through the pool (two
+    /// independent nodes, or the person's own node alone by their choice —
+    /// `MultisigOperation::Rpc::corroborate`), answered as the core's one
+    /// envelope (`corroborate::corroborated_envelope`: `{result | error |
+    /// unreachable, witness?, ownNode?}`). Never fails: nobody answering is
+    /// `{"unreachable": true}`.
+    fn rpc_corroborated(
+        &self,
+        chain_id: u64,
+        method: &str,
+        params: &Value,
+        bound: Option<Duration>,
+        person: bool,
+    ) -> Value;
     /// The store keys, as they are (`None`: absent). `Err`: no store.
     fn load(&self, keys: &[String]) -> Result<BTreeMap<String, Option<String>>, String>;
     /// One key written (`None` removes it). `Err`: not written.
@@ -140,6 +154,9 @@ pub trait Deps: Send + Sync + 'static {
     /// The fee pipeline's quote: `quoted` or `quote_failed`.
     fn quote_calls(&self, chain_id: u64, from: &str, calls: &[SentCall]) -> Res;
     /// The signing sheet's simulation envelope, or `None` (the pool gave up).
+    /// R22: always a corroborated read — the envelope carries the second,
+    /// independent node's answer (`witness`) or says the person's own node
+    /// answered alone (`ownNode`).
     fn simulate(&self, chain_id: u64, from: &str, calls: &[SimCall]) -> Option<String>;
     fn recipient_facts(&self, chain_id: u64, address: &str) -> RecipientFacts;
     /// The relay's word on a user operation (status, tx hash), or `None`.
@@ -335,16 +352,25 @@ pub fn perform(op: &Op, deps: &Arc<dyn Deps>, rooms: &Arc<dyn Rooms>) -> Perform
             params,
             bound_ms,
             person,
+            corroborate,
         } => {
-            let (deps, method, params, chain_id, person) = (
+            let (deps, method, params, chain_id, person, corroborate) = (
                 deps.clone(),
                 method.clone(),
                 params.clone(),
                 *chain_id,
                 *person,
+                *corroborate,
             );
             let bound = bound_ms.map(|ms| Duration::from_millis(u64::from(ms)));
             Perform::Blocking(Box::new(move || {
+                // R22: a guard's read — both nodes' answers in one envelope,
+                // compared by the core.
+                if corroborate {
+                    return Res::RpcCorroborated {
+                        envelope: deps.rpc_corroborated(chain_id, &method, &params, bound, person),
+                    };
+                }
                 match deps.rpc(chain_id, &method, &params, bound, person) {
                     Ok(RpcReply::Result(result)) => Res::RpcResult { result },
                     // r8-4: the node's data reaches the core (the state probe reads it there).
@@ -537,6 +563,7 @@ mod tests {
         pub sim: Option<String>,
         pub facts: RecipientFacts,
         pub status: Option<(Option<String>, Option<String>)>,
+        pub envelope: Mutex<Option<Value>>,
         pub log: Mutex<Vec<String>>,
         pub rooms: Mutex<Vec<String>>,
         pub arrival: Mutex<Option<Arrival>>,
@@ -576,6 +603,24 @@ mod tests {
                 if person { " person" } else { "" }
             ));
             self.rpc.lock().unwrap().take().unwrap()
+        }
+        fn rpc_corroborated(
+            &self,
+            chain_id: u64,
+            method: &str,
+            params: &Value,
+            bound: Option<Duration>,
+            person: bool,
+        ) -> Value {
+            self.note(format!(
+                "corroborated {chain_id} {method} {params} {bound:?}{}",
+                if person { " person" } else { "" }
+            ));
+            self.envelope
+                .lock()
+                .unwrap()
+                .take()
+                .unwrap_or_else(|| json!({"unreachable": true}))
         }
         fn load(&self, keys: &[String]) -> Result<BTreeMap<String, Option<String>>, String> {
             if self.store_down {
@@ -798,6 +843,7 @@ mod tests {
             params: json!(["0x01", "latest"]),
             bound_ms: Some(4000),
             person: false,
+            corroborate: false,
         };
         let fake = Fake::default();
         *fake.rpc.lock().unwrap() = Some(Ok(RpcReply::Result(json!("0x6080"))));
@@ -838,6 +884,50 @@ mod tests {
         );
     }
 
+    /// R22 (review 1-2): a guard's read (`corroborate: true`) is the pool's
+    /// corroborated read, answered `rpc_corroborated` with both nodes'
+    /// answers in one envelope, as a JSON object — and nobody answering is
+    /// `{"unreachable": true}`, never a node's word.
+    #[test]
+    fn a_corroborated_rpc_answers_both_nodes_in_one_envelope() {
+        let op = Op::Rpc {
+            chain_id: 100,
+            method: "eth_getCode".to_owned(),
+            params: json!(["0x01", "latest"]),
+            bound_ms: Some(4000),
+            person: true,
+            corroborate: true,
+        };
+        let envelope = json!({"result": "0x6080", "witness": {"result": "0x6080"}});
+        let fake = Fake::default();
+        *fake.envelope.lock().unwrap() = Some(envelope.clone());
+        let (res, fake) = run(fake, &op);
+        assert_eq!(
+            res,
+            Res::RpcCorroborated {
+                envelope: envelope.clone()
+            }
+        );
+        assert_eq!(
+            serde_json::to_value(&res).unwrap(),
+            json!({"type": "rpc_corroborated", "envelope": envelope})
+        );
+        let log = fake.log.lock().unwrap();
+        assert!(
+            log[0].starts_with("corroborated 100 eth_getCode"),
+            "{log:?}"
+        );
+        assert!(log[0].ends_with("Some(4s) person"), "{log:?}");
+        drop(log);
+        let (res, _) = run(Fake::default(), &op);
+        assert_eq!(
+            res,
+            Res::RpcCorroborated {
+                envelope: json!({"unreachable": true})
+            }
+        );
+    }
+
     /// r17-1 / r17-10: a read the core asks on the person's own word (their
     /// Try again, their press) reaches the pool as theirs; any other read
     /// does not.
@@ -850,6 +940,7 @@ mod tests {
                 params: json!([]),
                 bound_ms: None,
                 person,
+                corroborate: false,
             };
             let fake = Fake::default();
             *fake.rpc.lock().unwrap() = Some(Ok(RpcReply::Result(json!("0x"))));
@@ -1322,6 +1413,7 @@ mod tests {
                     params: json!([]),
                     bound_ms: None,
                     person: false,
+                    corroborate: false,
                 },
                 "rpc_unanswered",
             ),

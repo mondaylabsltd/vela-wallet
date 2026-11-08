@@ -4201,7 +4201,7 @@ mod tests {
     /// refused "couldn't check".
     #[test]
     fn a_sites_request_for_an_unknown_safe_is_read_then_refused() {
-        use crate::executor::pool::tests::{http, scripted_node, seed_pool};
+        use crate::executor::pool::tests::{chain_node, http, scripted_node, seed_pool};
         use crate::wallet::signing_host::parent_safe_tests::vector;
         use vela_core::app::parent_safe_guard::ParentReason;
         use vela_core::app::rpc_pool::RpcSource;
@@ -4211,14 +4211,20 @@ mod tests {
         let unknown = v["unknown"].as_str().unwrap_or_default().to_owned();
         let parent = v["parent"].as_str().unwrap_or_default().to_owned();
         storage::tests::with_temp_state("dbr-host-parent-read", || {
-            let (owner, _) = scripted_node(
-                std::time::Duration::ZERO,
+            // R22: an honest network — two independent nodes of this
+            // chain say the same (a corroborated read).
+            let reply = || {
                 Some(http(
                     "200 OK",
                     r#"{"jsonrpc":"2.0","id":1,"result":"0x0000000000000000000000000000000000000000000000000000000000000001"}"#,
-                )),
+                ))
+            };
+            let (owner, _) = chain_node(OWNS, reply());
+            let (witness, _) = chain_node(OWNS, reply());
+            seed_pool(
+                OWNS,
+                &[(&owner, RpcSource::User), (&witness, RpcSource::Public)],
             );
-            seed_pool(OWNS, &[(&owner, RpcSource::User)]);
             let (dead, _) = scripted_node(std::time::Duration::ZERO, None);
             seed_pool(DEAD, &[(&dead, RpcSource::User)]);
 

@@ -896,7 +896,7 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
                     quoted,
                     // The review the person confirmed: the operation is
                     // signed only if it is exactly this.
-                    Some(&review),
+                    user_op::Reviewed::Send(&review),
                     prepared.as_ref(),
                     // The send column reads its own flags for the prompt
                     // (`signing_started`, the Trusted Signer's channel).
@@ -1030,9 +1030,9 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
             }
             let (chain_id, account, calls) = (*chain_id, account.clone(), calls.clone());
             SendAnswer::Blocking(Box::new(move || SendShellResult::SimResolved {
-                sim_json: stored_asset_sim(&crate::executor::sim::simulate(
-                    &account, &calls, chain_id,
-                )),
+                sim_json: stored_asset_sim(
+                    &crate::executor::sim::simulate(&account, &calls, chain_id).outcome,
+                ),
             }))
         }
 
@@ -1093,7 +1093,11 @@ fn stored_asset_sim(outcome: &vela_core::app::sim_outcome::SimOutcome) -> Option
             }
             stored
         }
-        SimOutcome::NotOffered | SimOutcome::Unreachable => return None,
+        // R22: nobody independent confirmed what moves — nothing learned
+        // that may be kept beside the record.
+        SimOutcome::NotOffered | SimOutcome::Unreachable | SimOutcome::Unconfirmed { .. } => {
+            return None;
+        }
     };
     Some(stored.to_string())
 }

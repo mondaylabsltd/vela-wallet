@@ -336,9 +336,18 @@ pub fn review_of<'a>(
 /// state and the review. `drawable`: this sheet could draw that review — one
 /// it cannot draw is not one the person read, so it is passed as no review
 /// at all (a `ready` without a review is shut and said unreadable).
+///
+/// R22: `refuse_blind` is the person's "Refuse blind signing" — a review
+/// that signs only "… anyway" is then refused (`door_with`), and every open
+/// door says how long its press is held (`hold_ms`).
 #[must_use]
-pub fn sign_door(state: Option<&ReviewState>, review: Option<&Value>, drawable: bool) -> SignDoor {
-    review_state::door(state, review.filter(|_| drawable))
+pub fn sign_door(
+    state: Option<&ReviewState>,
+    review: Option<&Value>,
+    drawable: bool,
+    refuse_blind: bool,
+) -> SignDoor {
+    review_state::door_with(state, review.filter(|_| drawable), refuse_blind)
 }
 
 /// The press's words and fill, as the door says them: "… anyway" only
@@ -745,7 +754,7 @@ mod tests {
             false
         ));
         // No review yet.
-        let unread = sign_door(None, None, true);
+        let unread = sign_door(None, None, true, false);
         assert!(!execute_enabled(
             &unread,
             Some(&Look::Unchecked),
@@ -755,13 +764,15 @@ mod tests {
     }
 
     fn ready_door(review: Value) -> SignDoor {
-        sign_door(Some(&ReviewState::Ready), Some(&review), true)
+        sign_door(Some(&ReviewState::Ready), Some(&review), true, false)
     }
 
     /// D1 (real-device pass 2): a review neither of whose safety checks was
     /// read is drawn under the danger line with Try again, and every press —
     /// Approve, Approve and execute (the one press), Execute — says
-    /// "… anyway". One check unread alone stays plain.
+    /// "… anyway". One check unread alone follows the review's own sign rule
+    /// (R22: the core's rule now asks "… anyway" for it — the shared
+    /// vectors below carry that case).
     #[test]
     fn a_review_nothing_checked_is_drawn_in_danger_and_every_press_is_anyway() {
         let door = ready_door(json!({
@@ -790,6 +801,41 @@ mod tests {
         );
     }
 
+    /// R22 (review 1-3): a review that signs only "… anyway" is held
+    /// (`hold_ms`) — and with "Refuse blind signing" on it is refused at the
+    /// door, its line in the reason place above the review; a plain review
+    /// is a plain press either way.
+    #[test]
+    fn an_anyway_review_is_held_and_refused_when_blind_signing_is() {
+        use vela_core::app::sign_confirm::HOLD_TO_CONFIRM_MS;
+        let anyway = json!({"sign": {"allowed": true, "anyway": true}});
+        let door = ready_door(anyway.clone());
+        assert!(door.enabled && door.anyway);
+        assert_eq!(door.hold_ms, HOLD_TO_CONFIRM_MS);
+        let refused = sign_door(Some(&ReviewState::Ready), Some(&anyway), true, true);
+        assert!(!refused.enabled && !refused.anyway);
+        assert_eq!(
+            refused.reason_key.as_deref(),
+            Some(review_state::BLIND_REFUSED_KEY)
+        );
+        assert!(unchecked(&refused), "said in the reason place");
+        assert_eq!(refused.hold_ms, 0);
+        assert!(!execute_enabled(
+            &refused,
+            Some(&Look::Unchecked),
+            false,
+            false
+        ));
+        let plain = json!({"sign": {"allowed": true, "anyway": false}});
+        for refuse_blind in [false, true] {
+            let door = sign_door(Some(&ReviewState::Ready), Some(&plain), true, refuse_blind);
+            assert!(door.enabled && !door.anyway && door.hold_ms == 0);
+        }
+        // A danger review is held too, though it is not "… anyway".
+        let danger = json!({"sign": {"allowed": true, "anyway": false}, "tone": "danger"});
+        assert_eq!(ready_door(danger).hold_ms, HOLD_TO_CONFIRM_MS);
+    }
+
     /// §12: the shared door vectors (`tests/vectors/multisig/review-state.json`)
     /// through the door this sheet's presses follow — the core's one rule —
     /// and through the core's link door (`review.door`).
@@ -809,7 +855,9 @@ mod tests {
                 .filter(|s| !s.is_null())
                 .map(|s| serde_json::from_value(s.clone()).expect("a state"));
             let review = args.get("review").filter(|r| !r.is_null());
-            let door = sign_door(state.as_ref(), review, true);
+            // R22: the vectors' `refuseBlind` (the person's preference).
+            let refuse_blind = args.get("refuseBlind").and_then(Value::as_bool) == Some(true);
+            let door = sign_door(state.as_ref(), review, true, refuse_blind);
             assert_eq!(
                 serde_json::to_value(&door).expect("a door"),
                 case["expect"],
@@ -844,7 +892,7 @@ mod tests {
             ReviewState::Loading,
             ReviewState::failed(review_state::REASON_UNREADABLE),
         ] {
-            let door = sign_door(Some(&state), Some(&kept), true);
+            let door = sign_door(Some(&state), Some(&kept), true, false);
             assert!(!door.enabled, "{state:?}");
             assert!(!door.anyway, "{state:?}");
             let sign = press_rule(&door);
@@ -862,9 +910,9 @@ mod tests {
             }
         }
         // Not asked yet (no state): shut too.
-        assert!(!sign_door(None, Some(&kept), true).enabled);
+        assert!(!sign_door(None, Some(&kept), true, false).enabled);
         // Read: the rule decides — here, "… anyway".
-        let ready = sign_door(Some(&ReviewState::Ready), Some(&kept), true);
+        let ready = sign_door(Some(&ReviewState::Ready), Some(&kept), true, false);
         assert!(ready.enabled && ready.anyway);
     }
 
@@ -873,13 +921,13 @@ mod tests {
     #[test]
     fn a_review_the_sheet_cannot_draw_opens_nothing() {
         let review = json!({"sign": {"allowed": true, "anyway": false}});
-        let door = sign_door(Some(&ReviewState::Ready), Some(&review), false);
+        let door = sign_door(Some(&ReviewState::Ready), Some(&review), false, false);
         assert!(!door.enabled && door.retry);
         assert_eq!(
             door.reason_key.as_deref(),
             Some(review_state::REASON_UNREADABLE)
         );
-        assert!(sign_door(Some(&ReviewState::Ready), Some(&review), true).enabled);
+        assert!(sign_door(Some(&ReviewState::Ready), Some(&review), true, false).enabled);
     }
 
     /// Loading: shut. Failed: shut, with "Try again" — the machine's
@@ -889,10 +937,10 @@ mod tests {
     #[test]
     fn loading_and_failed_are_shut_and_try_again_reads_it_again() {
         let review = json!({"sign": {"allowed": true, "anyway": false}});
-        let loading = sign_door(Some(&ReviewState::Loading), Some(&review), true);
+        let loading = sign_door(Some(&ReviewState::Loading), Some(&review), true, false);
         assert!(!loading.enabled && !loading.retry);
         let failed = ReviewState::failed(review_state::REASON_TIMED_OUT);
-        let shut = sign_door(Some(&failed), Some(&review), true);
+        let shut = sign_door(Some(&failed), Some(&review), true, false);
         assert!(!shut.enabled && shut.retry);
         assert!(!asks_review_again(Some(&failed)));
         assert!(!asks_review_again(Some(&ReviewState::Loading)));
@@ -912,7 +960,7 @@ mod tests {
                 safe_tx_hash: None
             }
         ));
-        assert!(sign_door(Some(&ReviewState::Ready), Some(&review), true).enabled);
+        assert!(sign_door(Some(&ReviewState::Ready), Some(&review), true, false).enabled);
         // The machine's keys, whatever the hash's case.
         let mut states = BTreeMap::new();
         states.insert(format!("100:{}", HASH.to_ascii_lowercase()), failed.clone());
