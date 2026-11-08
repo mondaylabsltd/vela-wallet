@@ -7,7 +7,10 @@ description: "Every contract Vela depends on, who audited which version, whether
 the reports, the commits and the deployed addresses — and lists what is **not**
 audited, which matters just as much.
 
-Last reviewed: 22 September 2026. If you find an error, tell us and we will fix it.
+Last verified on 8 November 2026, against commit `eebc246f4` (the development branch, which
+includes the unreleased multisig feature) and release v0.9.8. Each audit date and finding below
+was checked against the cited report. If you find an error, tell us and we will fix it. To
+report a vulnerability, see the [security policy](https://github.com/mondaylabsltd/vela-wallet/blob/main/SECURITY.md).
 
 ## The funds path
 
@@ -49,13 +52,20 @@ and also set as your Safe's fallback handler. Reviewed three times —
 
 - **Ackee Blockchain**, final report March 2024: one warning (use of the
   compiler optimizer) acknowledged, nothing above it open.
-- **Certora**, August 2026: one **medium** finding, acknowledged and **not fixed**
-  in v0.3.0 — *authorization changes do not invalidate later UserOperations
-  already validated in the same bundle*. See "Known issues" below.
-- **Nethermind**, August 2026: no findings.
+- **Certora**, review 6–11 August 2026 of the v0.3.0 release commit (`5931a27`,
+  fix review `f877239`), scoped to Safe v1.4.1 and later with EntryPoint v0.7: one
+  **medium** finding, acknowledged and **not fixed** in v0.3.0. It is
+  _authorization changes do not invalidate subsequent UserOperations already
+  validated in the same bundle_; see "Known issues" below. There are also three
+  informational findings, one of them fixed: a README example that swaps
+  `validAfter` and `validUntil`.
+- **Nethermind**, report dated 7 August 2026, of the same commit: no findings. The
+  report says it covered the module's use with Safe **v1.3.0**. Vela runs it on
+  Safe v1.4.1, which is the configuration the Certora review covers.
 
-SafeModuleSetup v0.3.0 (`0x2dd6…5b47`), which enables the module when a wallet
-is deployed, was covered by the Certora and Nethermind reviews.
+These two reviews are recent, but the code is not new: they review the March 2024
+v0.3.0 release, unchanged. SafeModuleSetup v0.3.0 (`0x2dd6…5b47`), which enables
+the module when a wallet is deployed, was in the scope of both.
 
 The module's history has one disclosed issue: v0.1.0 did not sign `initCode` and
 `paymasterAndData`, a gas-griefing vector
@@ -83,7 +93,9 @@ The reviews that cover these contracts at v0.2.1
 - **Certora**'s review of the release commit: no new findings. (The earlier
   v0.2.0 audit notes the shared signer had not been audited yet — it was added
   after that audit.)
-- **Nethermind**, August 2026: no findings.
+- **Nethermind**, report dated 7 August 2026: no findings. Unlike the Certora
+  review, its scope includes SafeWebAuthnSharedSigner. Like its 4337 report, it
+  says it covered use with Safe v1.3.0.
 
 No contract-level vulnerability has been disclosed since release, and the
 passkey contracts are in scope of the Safe Foundation bounty.
@@ -106,6 +118,37 @@ is in scope of the Ethereum Foundation's
 [ERC-4337 bug bounty](https://docs.erc4337.io/community/bug-bounty) (up to
 $250,000).
 
+### Multisig: the contracts a Vela multisig uses (not released yet)
+
+The multisig feature is on the development branch and is not in a release yet.
+A Vela multisig is a standard Safe owned by Vela accounts and, optionally, other
+addresses. It uses the same SafeL2 v1.4.1 singleton and SafeProxyFactory v1.4.1 as
+the account above, but without the 4337 module. These contracts are added:
+
+| Contract                                                                             | Role in a multisig                                                                                                                                                    | Audit status                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **CompatibilityFallbackHandler v1.4.1** `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` | The fallback handler of every multisig Vela creates; it gives the multisig's EIP-1271 answers                                                                         | In scope of [Ackee's Safe v1.4.0 audit](https://github.com/safe-global/safe-smart-account/blob/main/docs/audit_1_4_0.md) (above)                                                                                                                                                                                                  |
+| **MultiSendCallOnly v1.4.1** `0x9641d764fc13c8B624c04430C7356C1C7C8102e2`            | The only `delegatecall` target Vela will sign in a multisig transaction, used for batches                                                                             | In scope of Ackee's Safe v1.4.0 audit                                                                                                                                                                                                                                                                                             |
+| **SafeToL2Setup v1.4.1** `0xBD89A1CE4DDe368FFAB0eC35506eEcE0b1fFdc54`                | Never used when Vela creates a multisig. It is accepted in a Safe **imported** from `Safe{Wallet}`, whose setup hook calls `setupToL2` to switch to the L2 singleton. | [Certora, Migration and Setup contracts](https://github.com/safe-global/safe-smart-account/blob/main/docs/Safe_Library_Contracts_Audit_Report_1_4_1.pdf) (review 18–23 August 2024, final report v3): no critical, high or medium findings; one low (the Solidity 0.7.6 compiler's known issues), acknowledged; six informational |
+| **SafeGenesisRegistry v4** `0xF412388bF908E510066d3Be5c704bd9A327f945d`              | Vela's own contract: a public, write-once record of each multisig's creation parameters, so another device can rebuild the multisig from its address alone            | **Not audited**, see below                                                                                                                                                                                                                                                                                                        |
+
+An imported Safe may also be v1.3.0 or v1.5.0. The wallet accepts the canonical
+factories, singletons, fallback handlers and SafeToL2Setup of those releases, and
+checks each one's runtime code hash. Safe's audits of those versions, including
+G0 Group, Certora and Nethermind for v1.3.0 and Certora and Ackee for v1.5.0, are
+in [safe-smart-account/docs](https://github.com/safe-global/safe-smart-account/tree/main/docs).
+
+**The registry is not part of the funds path, and the wallet does not trust it.**
+A record holds the factory, singleton, initializer and salt the Safe was created
+with. The wallet re-derives the Safe's address from them and refuses a record
+that does not make that address. On a chain where the multisig is not deployed
+yet, the wallet treats its owners as known only if every contract the genesis
+depends on (factory, singleton, fallback handler, setup hook) holds Safe's
+canonical code on that chain. The registry has no owner and no upgrade path.
+Anyone may write a record. A record's parameters never change, and only the Safe
+itself can rename its record. The worst a faulty registry can do is make a
+multisig hard to find or add on a new device. It cannot change who controls one.
+
 ## Known issues we are watching
 
 ### Changes of authorization within one bundle (Safe4337Module, Certora M-01)
@@ -115,10 +158,12 @@ them. So if one operation removes an owner, an operation signed by that owner an
 placed later in the same bundle still passes validation and runs. Safe
 acknowledged this and did not change v0.3.0.
 
-Vela's apps never build owner changes, and a dApp that asks for one is refused
-outright, so Vela itself never triggers this. It still matters for anyone
-removing a compromised key through other Safe tooling: they could not rely on
-that key being cut off within the same bundle.
+Vela's apps never build owner changes for a Vela account, and a dApp that asks for
+one is refused outright, so Vela itself never triggers this. A multisig's member
+changes do not go through the 4337 module: they run as `execTransaction`, and a
+multisig Vela creates has no module, so this finding does not apply to them. It
+still matters for anyone removing a compromised key through other Safe tooling:
+they could not rely on that key being cut off within the same bundle.
 
 ### Interception of a signed operation (EntryPoint before v0.9)
 
@@ -171,6 +216,14 @@ trade-off:
   a discovery layer, not an authorization layer. Spending power comes only from
   the keys configured in your Safe. The worst realistic failure is that a wallet
   becomes harder to find on a new device, not that money moves.
+- **The Safe Genesis Registry**, Vela's own contract for multisig records:
+  [source](https://github.com/mondaylabsltd/safe-genesis-registry), v4 at
+  `0xF412388bF908E510066d3Be5c704bd9A327f945d` on Gnosis and Ethereum (the same
+  address on every chain). No third party has audited it. Its own repository
+  records an internal adversarial review (October 2026), which is not an audit.
+  Like the public-key registry, it holds no funds, has no owner and cannot be
+  upgraded. The multisig service and mailbox that serve its records are Vela
+  backend services, covered by "Vela itself" below.
 - **Multicall3.** Its README
   [says](https://github.com/mds1/multicall3) "This contract is unaudited." Vela uses
   it only for batched reads — balances, token details, price quotes — never with
@@ -190,6 +243,23 @@ trade-off:
   this page. The details are in [Vela is in alpha](/blog/vela-is-in-alpha). Start
   with small amounts, and read the code.
 
+## Past security issues
+
+Vulnerabilities that affected, or could have affected, Vela users. Each advisory
+gives the affected versions, the fix commit, a timeline and workarounds. Full
+text: [docs/security/advisories](https://github.com/mondaylabsltd/vela-wallet/tree/main/docs/security/advisories).
+Once published, they also appear under the repository's
+[security advisories](https://github.com/mondaylabsltd/vela-wallet/security/advisories).
+
+| ID            | Issue                                                                                                                                                         | Severity | Status                                                                                                                                                                                                                      |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| VELA-2026-001 | A typed-data request could preview one EIP-712 message and sign another. Reported externally on 29 September 2026.                                            | High     | Fixed in v0.9.6 (3 October 2026)                                                                                                                                                                                            |
+| VELA-2026-002 | A site connected to a Vela account could make it approve or execute for a Safe that account owns (a "parent" Safe). Reported externally on 29 September 2026. | High     | Fixed before release: the multisig feature never shipped with it. Released versions up to v0.9.8 are exposed only if your Vela account is an owner of a Safe created elsewhere; the fix reaches them with the next release. |
+| VELA-2026-003 | getvela.app's app-association files let development and demo Android and iOS apps request getvela.app passkeys. Found by an internal review.                  | Medium   | Fixed and deployed on 7 November 2026; no known exploitation                                                                                                                                                                |
+
+Internal incidents that put no user's keys or funds at risk are recorded in
+[docs/security/incidents.md](https://github.com/mondaylabsltd/vela-wallet/blob/main/docs/security/incidents.md).
+
 ## Check it yourself
 
 Every address below is a canonical public deployment. Verify them against
@@ -197,20 +267,23 @@ Every address below is a canonical public deployment. Verify them against
 [safe-modules-deployments](https://github.com/safe-global/safe-modules-deployments)
 and the [EntryPoint release](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0):
 
-| Contract                                  | Address                                      |
-| ----------------------------------------- | -------------------------------------------- |
-| SafeL2 singleton v1.4.1                   | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
-| SafeProxyFactory v1.4.1                   | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
-| MultiSend v1.4.1                          | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
-| CompatibilityFallbackHandler v1.4.1 ¹     | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
-| SafeModuleSetup v0.3.0                    | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
-| Safe4337Module v0.3.0                     | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
-| SafeWebAuthnSharedSigner v0.2.1           | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
-| SafeWebAuthnSignerFactory v0.2.1          | `0x1d31F259eE307358a26dFb23EB365939E8641195` |
-| SafeWebAuthnSigner singleton v0.2.1       | `0x4E27b51350e6c2083EE19011120F50DAfEc5CA50` |
-| EntryPoint v0.7                           | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
-| Multicall3                                | `0xcA11bde05977b3631167028862bE2a173976CA11` |
-| Public-key registry (Vela, unaudited)     | `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` |
+| Contract                                   | Address                                      |
+| ------------------------------------------ | -------------------------------------------- |
+| SafeL2 singleton v1.4.1                    | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
+| SafeProxyFactory v1.4.1                    | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
+| MultiSend v1.4.1                           | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
+| CompatibilityFallbackHandler v1.4.1 ¹      | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
+| SafeModuleSetup v0.3.0                     | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
+| Safe4337Module v0.3.0                      | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
+| SafeWebAuthnSharedSigner v0.2.1            | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
+| SafeWebAuthnSignerFactory v0.2.1           | `0x1d31F259eE307358a26dFb23EB365939E8641195` |
+| SafeWebAuthnSigner singleton v0.2.1        | `0x4E27b51350e6c2083EE19011120F50DAfEc5CA50` |
+| EntryPoint v0.7                            | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
+| Multicall3                                 | `0xcA11bde05977b3631167028862bE2a173976CA11` |
+| Public-key registry (Vela, unaudited)      | `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` |
+| MultiSendCallOnly v1.4.1 (multisig)        | `0x9641d764fc13c8B624c04430C7356C1C7C8102e2` |
+| SafeToL2Setup v1.4.1 (imported multisigs)  | `0xBD89A1CE4DDe368FFAB0eC35506eEcE0b1fFdc54` |
+| Safe Genesis Registry v4 (Vela, unaudited) | `0xF412388bF908E510066d3Be5c704bd9A327f945d` |
 
-¹ Checked when a network is added; your Safe uses the 4337 module as its fallback
-handler instead.
+¹ Checked when a network is added. A Vela account uses the 4337 module as its
+fallback handler instead; a multisig uses this handler.
