@@ -201,6 +201,10 @@ jobs:
         run: |
           node scripts/ci/check-scenarios.mjs --self-test
           node scripts/ci/check-scenarios.mjs --summary "$GITHUB_STEP_SUMMARY"
+      # §38: the vendored PeerConnect client is the bytes VENDOR.json records
+      # (the rebuild from its commit is `supply-chain`'s).
+      - name: The vendored PeerConnect client is what VENDOR.json records
+        run: node scripts/check-peerconnect-vendor.mjs
 
   # The web wallet: app-web/vela-wallet (SvelteKit → Cloudflare Workers).
   #
@@ -291,9 +295,124 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
       - run: bun install --frozen-lockfile
       - name: Svelte check
         run: bun run check
+
+  # ---------------------------------------------------------------------------
+  # §38 (Round 22, review 1-10 and 1-9): the supply chain and the two things
+  # this repository ships as built bytes — the signing page and the web core.
+  # Every step here runs the same on a laptop (docs/security/verify.md).
+  # NOTE (founder action): add `supply-chain`, `signing-page` and
+  # `web-core-reproducible` to the branch-protection required checks, or a
+  # red one merges.
+  # ---------------------------------------------------------------------------
+
+  # Dependency hygiene. cargo-deny over both Rust graphs (advisories,
+  # licences, sources, bans — reasons for every exception in deny.toml), the
+  # JS audits of what ships, and the vendored PeerConnect client rebuilt from
+  # its recorded commit and compared byte for byte.
+  supply-chain:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+          targets: wasm32-unknown-unknown
+      # An exact version, its download checked against the release's own
+      # sha256 by the action; no container.
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+        with:
+          tool: cargo-deny@0.20.2,wasm-bindgen@0.2.129
+      - name: cargo deny — the core and its bindings (rust/)
+        run: cargo deny --manifest-path rust/Cargo.toml --config deny.toml check
+      - name: cargo deny — the desktop app (gpui, its own lockfile)
+        run: cargo deny --manifest-path app-desktop/vela-wallet/Cargo.toml --config deny.toml check
+      - name: cargo deny — the Windows passkey crate
+        run: cargo deny --manifest-path app-desktop/vela-passkey-win/Cargo.toml --config deny.toml check
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: app-web/vela-wallet/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.3
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      # `--prod` is what a browser runs that is a runtime dependency; SvelteKit
+      # bundles its devDependencies into the shipped pages too, so the whole
+      # tree is also held to `critical`. A finding with no fix is allowlisted
+      # in the app's own config with its reason — none today.
+      - name: pnpm audit — the web wallet (prod high, all critical)
+        working-directory: app-web/vela-wallet
+        run: |
+          pnpm audit --prod --audit-level high
+          pnpm audit --audit-level critical
+      - name: bun audit — getvela.app (prod high)
+        working-directory: app-web/getvela.app
+        run: bun audit --prod --audit-level=high
+      - name: npm audit — the tooling package (high)
+        run: npm audit --prefix scripts --audit-level=high
+      - name: The vendored PeerConnect client rebuilds from its recorded commit
+        run: node scripts/check-peerconnect-vendor.mjs --rebuild
+
+  # The signing page is published as built bytes (`dist/b/<sha256>/sign.html`),
+  # and every wallet trusts a page only by those hashes. `--check` fails when
+  # these sources build a page that is not committed, when a published path
+  # does not hash to its name, when the index or `_headers` or `sw.js` drifted,
+  # and when two builds of the same sources disagree — under Bun (the page's
+  # runtime) and Node alike, because a hash only one runtime reproduces
+  # verifies nothing. Blocking on every PR (review 1-9).
+  signing-page:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: app-web/trusted-signer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.3
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: build-single --check (Bun)
+        run: bun samples/build-single.mjs --check
+      - name: build-single --check (Node)
+        run: node samples/build-single.mjs --check
+
+  # The web core (`assets/wasm/vela_core_bg.*.wasm` + `rust/pkg-web`) is a
+  # committed build. This rebuilds it from a clean export of the commit in the
+  # pinned container (rust/scripts/web-build.Dockerfile: rustc 1.97.1,
+  # wasm-pack 0.15.0, wasm-bindgen 0.2.126, binaryen 117, node 22.22.3) and
+  # compares the bytes: the committed module IS what this commit builds, or
+  # this fails. On main the CI-built module is also attested (GitHub build
+  # provenance), so anyone can check that wallet.getvela.app serves bytes this
+  # repository built (docs/security/verify.md).
+  web-core-reproducible:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write      # the short-lived identity that signs the attestation
+      attestations: write  # record it against this repository
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebuild in the pinned container and compare byte for byte
+        env:
+          VELA_KEEP: '1'
+          VELA_REPRO_OUT: ${{ runner.temp }}/repro
+        run: rust/scripts/reproduce-web.sh "$GITHUB_SHA"
+      - name: Attest the CI-built web core
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            ${{ runner.temp }}/repro/tree/assets/wasm/vela_core_bg.*.wasm
+            ${{ runner.temp }}/repro/tree/rust/pkg-web/vela_core.js
 
   # vela-core shared Rust library (specs/001-rust-core-bindings).
   # NOTE (founder action): add BOTH `rust` and `rust-macos` to branch-protection
