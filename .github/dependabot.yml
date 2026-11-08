@@ -1,0 +1,245 @@
+# Dependabot (Round 22, supply chain): weekly version updates for every
+# lockfile this repository ships from, minor + patch grouped into one PR per
+# ecosystem and directory, majors one PR each so they are read on their own.
+#
+# SECURITY UPDATES are not switched on by this file: they are the repository
+# setting Settings -> Code security -> "Dependabot security updates" (with
+# "Dependabot alerts" on). Once on, they use the directories and the
+# `security` groups below, and they skip the cooldown.
+#
+# Cooldown: a version must have been public for a few days before Dependabot
+# proposes it. Most malicious releases are found and yanked within that
+# window; a fix we need sooner arrives as a security update, which has no
+# cooldown.
+#
+# ---------------------------------------------------------------------------
+# THE CORE'S LOCKFILE FINGERPRINTS COMMITTED BUILD OUTPUT.
+# rust/Cargo.lock (with vela-core's and vela-core-wasm's sources and the
+# workspace manifest) is hashed into the committed web wasm's stamp
+# (assets/wasm, rust/pkg-web; rust/scripts/build-web.mjs). A Dependabot PR
+# that touches rust/Cargo.lock therefore FAILS CI's freshness check until the
+# wasm is rebuilt IN THE SAME PR:
+#
+#   npm --prefix scripts run build:wasm      # then commit the regenerated files
+#
+# Dependabot cannot run that. Check the PR out, run it, push to the PR branch.
+# The same PR must keep deny.toml green (cargo deny ... check) — delete the
+# ignore entries the bump makes unused.
+#
+# app-desktop/vela-wallet/Cargo.lock has no such coupling.
+# ---------------------------------------------------------------------------
+
+version: 2
+
+updates:
+  # ---- Rust ---------------------------------------------------------------
+  - package-ecosystem: cargo
+    directory: /rust
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+    labels: [dependencies, rust, needs-wasm-rebuild]
+    commit-message:
+      prefix: "build(deps/rust)"
+    groups:
+      rust-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+        # uniffi is excluded below: it must never move alone.
+      rust-security:
+        applies-to: security-updates
+        patterns: ["*"]
+    ignore:
+      # rust/Cargo.toml: "NEVER bump uniffi alone: Kotlin/Swift/wasm bindings
+      # must regenerate together (checksum coupling)". A uniffi bump is a
+      # hand-made PR that regenerates the Kotlin and Swift bindings.
+      - dependency-name: "uniffi"
+      - dependency-name: "uniffi_*"
+
+  - package-ecosystem: cargo
+    # The desktop app, and the Windows passkey crate's own lockfile (used by
+    # its cross-check; the app itself builds it from the desktop lock).
+    directories:
+      - /app-desktop/vela-wallet
+      - /app-desktop/vela-passkey-win
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+    labels: [dependencies, rust, desktop]
+    commit-message:
+      prefix: "build(deps/desktop)"
+    groups:
+      desktop-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      desktop-security:
+        applies-to: security-updates
+        patterns: ["*"]
+    ignore:
+      # Git dependencies pinned to a commit (deny.toml: required-git-spec =
+      # "rev"). Moving gpui means refreshing app-desktop/vendor/gpui_macos
+      # from the new commit and re-running the private-API check
+      # (scripts/check-macos-private-api.sh) — a person's PR, not a bot's.
+      - dependency-name: "gpui"
+      - dependency-name: "gpui_platform"
+      - dependency-name: "dotlottie-rs"
+      # Pinned to the exact versions wry resolves (Cargo.toml: "Bump the
+      # three together"); they move with a wry update, not on their own.
+      - dependency-name: "webview2-com"
+      - dependency-name: "windows-core"
+      # Pinned to the objc2 generation gpui uses so no second copy enters
+      # the tree; they move with the gpui pin.
+      - dependency-name: "objc2"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "objc2-*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "block2"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+
+  # ---- JavaScript ---------------------------------------------------------
+  # The web wallet and extension. pnpm is the npm ecosystem to Dependabot;
+  # it reads pnpm-lock.yaml and the packageManager field.
+  - package-ecosystem: npm
+    directory: /app-web/vela-wallet
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+    versioning-strategy: increase-if-necessary
+    labels: [dependencies, web]
+    commit-message:
+      prefix: "build(deps/web)"
+    groups:
+      # Everything SvelteKit bundles into the shipped pages, together, so a
+      # runtime change is one PR that runs the e2e suite.
+      web-runtime:
+        applies-to: version-updates
+        update-types: [minor, patch]
+        patterns:
+          - "svelte"
+          - "@sveltejs/*"
+          - "@noble/*"
+          - "lottie-web"
+          - "qrcode"
+          - "jsqr"
+          - "@undecaf/zbar-wasm"
+          - "@fontsource/*"
+      web-tooling:
+        applies-to: version-updates
+        update-types: [minor, patch]
+        patterns: ["*"]
+      web-security:
+        applies-to: security-updates
+        patterns: ["*"]
+    ignore:
+      # The @noble pins are exact on purpose (signing-path code is audited at
+      # a version); they move by hand.
+      - dependency-name: "@noble/*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+
+  # Repository tooling (generators and gates; never shipped).
+  - package-ecosystem: npm
+    directory: /scripts
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
+    labels: [dependencies, tooling]
+    commit-message:
+      prefix: "build(deps/scripts)"
+    groups:
+      scripts-all:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      scripts-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  # The marketing site: its own bun project (bun.lock, text format).
+  # Dependabot's bun support is version updates only — it raises no security
+  # updates for bun.lock; CI's `bun audit --prod` is the gate there.
+  - package-ecosystem: bun
+    directory: /app-web/getvela.app
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+    labels: [dependencies, site]
+    commit-message:
+      prefix: "build(deps/site)"
+    groups:
+      site-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+
+  # ---- Android ------------------------------------------------------------
+  # gradle/libs.versions.toml and the build scripts. Security updates for
+  # Gradle need the dependency graph submitted (a workflow step), so only
+  # version updates are reliable here.
+  - package-ecosystem: gradle
+    directory: /app-android/vela-wallet
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+    labels: [dependencies, android]
+    commit-message:
+      prefix: "build(deps/android)"
+    groups:
+      android-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+
+  # ---- iOS ----------------------------------------------------------------
+  # One remote SwiftPM package, lottie-ios, pinned `exactVersion` in
+  # VelaWallet.xcodeproj (Package.resolved in its project.xcworkspace).
+  # Dependabot reads Xcode-managed packages since 2026-03; app-ios/VelaCoreKit
+  # is a local package with no remote dependencies.
+  - package-ecosystem: swift
+    directory: /app-ios/VelaWallet
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+    labels: [dependencies, ios]
+    commit-message:
+      prefix: "build(deps/ios)"
+
+  # ---- CI -----------------------------------------------------------------
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    labels: [dependencies, ci]
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      actions:
+        applies-to: version-updates
+        patterns: ["*"]
