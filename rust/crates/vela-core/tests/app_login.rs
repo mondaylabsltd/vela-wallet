@@ -611,6 +611,7 @@ fn a_failed_sign_in_with_the_platform_facts_names_its_sentence() {
         domain: "androidx.credentials.exceptions.GetCredentialUnknownException".to_owned(),
         code: None,
         message: "[50152] RP ID cannot be validated.".to_owned(),
+        test_build: None,
     }));
     assert_eq!(
         said,

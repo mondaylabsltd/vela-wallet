@@ -918,7 +918,8 @@
     "noNetwork": "A passkey precisa de conexão de rede. Verifique sua conexão e tente de novo.",
     "alreadyRegistered": "Este autenticador já guarda uma das chaves desta carteira. Use outro.",
     "timedOut": "O tempo da janela da passkey esgotou. Tente de novo.",
-    "other": "Não foi possível usar a passkey. Tente de novo."
+    "other": "Não foi possível usar a passkey. Tente de novo.",
+    "testDomainNotAssociated": "O domínio de passkey desta build de teste não está configurado neste dispositivo (TEST_RP_DOMAIN, ou localhost em simulador ou emulador), então o sistema não deixa usar uma passkey. Builds de lançamento não são afetadas."
    }
   },
   "create": {

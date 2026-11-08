@@ -286,7 +286,11 @@ pub struct Account {
     /// group only the key index vouched for (no receive address, no deposit,
     /// [`receive_standing`]), `refuted` once a chain proved it another
     /// wallet. Absent on the wire reads `confirmed`, and `confirmed` is not
-    /// written.
+    /// written — so the bindings say it may be absent.
+    #[cfg_attr(
+        feature = "bindings",
+        ts(as = "Option<crate::registry_resolve::Identity>", optional)
+    )]
     pub identity: crate::registry_resolve::Identity,
 }
 

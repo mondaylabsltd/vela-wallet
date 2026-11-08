@@ -2852,6 +2852,25 @@ pub fn passkey_error_words(
     .unwrap_or_default()
 }
 
+/// [`passkey_error_words`] for the build it runs in (R21-3, §37): a test
+/// build's association failure names its passkey domain.
+#[wasm_bindgen(js_name = passkeyErrorWordsOn)]
+#[must_use]
+pub fn passkey_error_words_on(
+    platform: &str,
+    domain: &str,
+    code: Option<f64>,
+    message: &str,
+    test_build: bool,
+) -> String {
+    #[allow(clippy::cast_possible_truncation)]
+    let code = code.filter(|c| c.is_finite()).map(|c| c as i32);
+    serde_json::to_string(&vela_core::app::passkey_error::passkey_error_words_on(
+        platform, domain, code, message, test_build,
+    ))
+    .unwrap_or_default()
+}
+
 /// The signing prompt's deadline, ms (`passkey_end::SIGN_TIMEOUT_MS`).
 #[wasm_bindgen(js_name = passkeySignTimeoutMs)]
 #[must_use]

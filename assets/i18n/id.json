@@ -915,7 +915,8 @@
     "noNetwork": "Passkey memerlukan koneksi jaringan. Periksa koneksi Anda lalu coba lagi.",
     "alreadyRegistered": "Autentikator ini sudah menyimpan salah satu kunci dompet ini. Gunakan yang lain.",
     "timedOut": "Waktu jendela passkey habis. Coba lagi.",
-    "other": "Passkey tidak dapat digunakan. Coba lagi."
+    "other": "Passkey tidak dapat digunakan. Coba lagi.",
+    "testDomainNotAssociated": "Domain passkey build uji ini belum disiapkan di perangkat ini (TEST_RP_DOMAIN, atau localhost di simulator atau emulator), jadi sistem tidak mengizinkannya memakai passkey. Build rilis tidak terpengaruh."
    }
   },
   "create": {

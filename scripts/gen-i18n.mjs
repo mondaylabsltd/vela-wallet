@@ -1438,10 +1438,12 @@ for (let i = 1; i < PATHS.length; i++) {
 //   approval a hundredfold the balance, `FAR_ABOVE_BALANCE_KEY`) and
 //   `componentsUi.signing.signIn.{refusedTitle,wrongDomain,wrongUri,
 //   wrongChain,incomplete,noOrigin}` (a sign-in that does not bind,
-//   `SignInMismatch`). 2301 + 13 leaves + 3 branches = 2317 paths, 2194
-//   leaves, 123 branches.
-if (PATHS.length !== 2317) fail(`expected 2317 paths (2194 leaf + 123 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2194) fail(`expected 2194 leaf paths, got ${leafSet.size}`);
+//   `SignInMismatch`), and `onboarding.common.passkeyError.
+//   testDomainNotAssociated` (R21-3: a test build's passkey domain not set
+//   up, `passkey_error_words_on`). 2301 + 14 leaves + 3 branches = 2318
+//   paths, 2195 leaves, 123 branches.
+if (PATHS.length !== 2318) fail(`expected 2318 paths (2195 leaf + 123 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2195) fail(`expected 2195 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 123) fail(`expected 123 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.

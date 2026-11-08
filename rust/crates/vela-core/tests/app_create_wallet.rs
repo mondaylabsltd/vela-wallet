@@ -288,6 +288,7 @@ fn a_registration_the_deadline_ended_is_said_not_taken_for_a_cancel() {
             domain: "TYPE_TIMEOUT_ERROR".to_owned(),
             code: None,
             message: "the passkey prompt timed out".to_owned(),
+            test_build: None,
         }),
     });
     assert!(
@@ -1992,6 +1993,7 @@ fn a_failed_phone_ceremony_is_a_dropped_link_not_a_biometrics_problem() {
             domain: "ASAuthorizationErrorDomain".to_owned(),
             code: Some(1006),
             message: "The operation couldn't be completed.".to_owned(),
+            test_build: None,
         }),
     }));
     assert!(

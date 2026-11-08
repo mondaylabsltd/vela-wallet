@@ -61,6 +61,14 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // §37 (review 1-12): the unlimited line is the wallet's one line, 2^128
+    // for every amount (uint256 and Permit2's uint160 alike — it was 2^200 /
+    // 2^152), and Permit2's `PermitWitnessTransferFrom` (UniswapX, intent
+    // protocols) reads as the transfer it is — spender, token, amount,
+    // deadline — where it read as blind typed data. Not LAUNCH: until
+    // LAUNCH moves here (after dist/ is deployed), the older page draws the
+    // old line; the core's own guard is the line either way.
+    "e7ee3925440c7f68d818cfb2bb77a04e8d7999b18a40341250ab3d50d0b2e2ab",
     // §35 (review 1-6): every SafeOp expires. The page hashes the operation's
     // own validAfter / validUntil (the core's `calculate_safe_op_hash`, read
     // from the request's decimal strings) instead of a zero window, refuses an

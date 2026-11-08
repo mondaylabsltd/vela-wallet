@@ -918,7 +918,8 @@
     "noNetwork": "La passkey necesita conexión a internet. Revisa tu conexión e inténtalo de nuevo.",
     "alreadyRegistered": "Este autenticador ya guarda una de las llaves de esta wallet. Usa otro.",
     "timedOut": "Se agotó el tiempo de la ventana de la passkey. Inténtalo de nuevo.",
-    "other": "No se pudo usar la passkey. Inténtalo de nuevo."
+    "other": "No se pudo usar la passkey. Inténtalo de nuevo.",
+    "testDomainNotAssociated": "El dominio de llaves de acceso de esta compilación de prueba no está configurado en este dispositivo (TEST_RP_DOMAIN, o localhost en un simulador o emulador), así que el sistema no le deja usar una llave de acceso. Las versiones de lanzamiento no se ven afectadas."
    }
   },
   "create": {

@@ -146,7 +146,8 @@
         "noNetwork": "使用通行密鑰需要連網。請檢查網絡後再試一次。",
         "alreadyRegistered": "這個驗證器裡已經有這個錢包的一把密鑰。請改用另一個。",
         "timedOut": "通行密鑰視窗已逾時。請再試一次。",
-        "other": "無法使用通行密鑰。請再試一次。"
+        "other": "無法使用通行密鑰。請再試一次。",
+        "testDomainNotAssociated": "此測試版的通行密鑰網域未在本裝置上設定（TEST_RP_DOMAIN，模擬器上為 localhost），系統因此不允許它使用通行密鑰。正式版不受影響。"
       }
     },
     "create": {

@@ -915,7 +915,8 @@
     "noNetwork": "Passkey için ağ bağlantısı gerekiyor. Bağlantınızı kontrol edip tekrar deneyin.",
     "alreadyRegistered": "Bu doğrulayıcı zaten bu cüzdanın anahtarlarından birini taşıyor. Başka birini kullanın.",
     "timedOut": "Passkey penceresinin süresi doldu. Tekrar deneyin.",
-    "other": "Passkey kullanılamadı. Tekrar deneyin."
+    "other": "Passkey kullanılamadı. Tekrar deneyin.",
+    "testDomainNotAssociated": "Bu test derlemesinin geçiş anahtarı alan adı bu cihazda ayarlı değil (TEST_RP_DOMAIN ya da simülatör veya emülatörde localhost), bu yüzden sistem geçiş anahtarı kullanmasına izin vermiyor. Sürüm derlemeleri etkilenmez."
    }
   },
   "create": {

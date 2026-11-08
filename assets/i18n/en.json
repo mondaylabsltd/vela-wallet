@@ -915,7 +915,8 @@
     "noNetwork": "The passkey needs a network connection. Check your connection and try again.",
     "alreadyRegistered": "This authenticator already holds one of this wallet's keys. Use a different one.",
     "timedOut": "The passkey prompt timed out. Try again.",
-    "other": "The passkey couldn't be used. Try again."
+    "other": "The passkey couldn't be used. Try again.",
+    "testDomainNotAssociated": "This test build's passkey domain isn't set up on this device (TEST_RP_DOMAIN, or localhost on a simulator or emulator), so the system won't let it use a passkey. Release builds aren't affected."
    }
   },
   "create": {

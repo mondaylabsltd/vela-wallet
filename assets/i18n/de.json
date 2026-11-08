@@ -915,7 +915,8 @@
     "noNetwork": "Der Passkey braucht eine Netzwerkverbindung. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
     "alreadyRegistered": "Dieser Authenticator enthält bereits einen der Schlüssel dieser Wallet. Verwenden Sie einen anderen.",
     "timedOut": "Die Passkey-Abfrage ist abgelaufen. Versuchen Sie es erneut.",
-    "other": "Der Passkey konnte nicht verwendet werden. Versuchen Sie es erneut."
+    "other": "Der Passkey konnte nicht verwendet werden. Versuchen Sie es erneut.",
+    "testDomainNotAssociated": "Die Passkey-Domain dieses Test-Builds ist auf diesem Gerät nicht eingerichtet (TEST_RP_DOMAIN bzw. localhost im Simulator oder Emulator), daher erlaubt das System keinen Passkey. Release-Builds sind nicht betroffen."
    }
   },
   "create": {

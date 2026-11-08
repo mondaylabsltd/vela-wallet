@@ -918,7 +918,8 @@
     "noNetwork": "La passkey a besoin d'une connexion réseau. Vérifiez votre connexion et réessayez.",
     "alreadyRegistered": "Cet authentificateur contient déjà l'une des clés de ce portefeuille. Utilisez-en un autre.",
     "timedOut": "La fenêtre de la passkey a expiré. Réessayez.",
-    "other": "La passkey n'a pas pu être utilisée. Réessayez."
+    "other": "La passkey n'a pas pu être utilisée. Réessayez.",
+    "testDomainNotAssociated": "Le domaine de clés d'accès de cette version de test n'est pas configuré sur cet appareil (TEST_RP_DOMAIN, ou localhost sur un simulateur ou un émulateur) : le système ne la laisse pas utiliser de clé d'accès. Les versions publiées ne sont pas concernées."
    }
   },
   "create": {
