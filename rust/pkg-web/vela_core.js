@@ -6435,6 +6435,35 @@ export function passkeyErrorWords(platform, domain, code, message) {
 }
 
 /**
+ * [`passkey_error_words`] for the build it runs in (R21-3, §37): a test
+ * build's association failure names its passkey domain.
+ * @param {string} platform
+ * @param {string} domain
+ * @param {number | null | undefined} code
+ * @param {string} message
+ * @param {boolean} test_build
+ * @returns {string}
+ */
+export function passkeyErrorWordsOn(platform, domain, code, message, test_build) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(platform, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(domain, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(message, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.passkeyErrorWordsOn(ptr0, len0, ptr1, len1, !isLikeNone(code), isLikeNone(code) ? 0 : code, ptr2, len2, test_build);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
  * **The security-key fallback mark**, as an `image/svg+xml` data URI, for a
  * key whose AAGUID the catalog cannot name. `undefined` when the row deserves
  * no mark of this kind — a platform authenticator, which the client already

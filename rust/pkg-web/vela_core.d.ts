@@ -1714,6 +1714,12 @@ export function passkeyDirectoryUrl(aaguid: string, origin?: string | null): str
 export function passkeyErrorWords(platform: string, domain: string, code: number | null | undefined, message: string): string;
 
 /**
+ * [`passkey_error_words`] for the build it runs in (R21-3, §37): a test
+ * build's association failure names its passkey domain.
+ */
+export function passkeyErrorWordsOn(platform: string, domain: string, code: number | null | undefined, message: string, test_build: boolean): string;
+
+/**
  * **The security-key fallback mark**, as an `image/svg+xml` data URI, for a
  * key whose AAGUID the catalog cannot name. `undefined` when the row deserves
  * no mark of this kind — a platform authenticator, which the client already
@@ -2826,6 +2832,7 @@ export interface InitOutput {
     readonly passkeyDirectoryEntry: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
     readonly passkeyDirectoryUrl: (a: number, b: number, c: number, d: number) => [number, number];
     readonly passkeyErrorWords: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+    readonly passkeyErrorWordsOn: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly passkeyFallbackIconDataUri: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
     readonly passkeyProviderIconDataUri: (a: number, b: number, c: number) => [number, number];
     readonly passkeyProviderName: (a: number, b: number) => [number, number];
