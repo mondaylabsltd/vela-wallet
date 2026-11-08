@@ -4739,7 +4739,10 @@ fn on_submit_outcome(
             // it can never land, so the sheet says so calmly and offers Try
             // again (a new signature, with its own window); the page hears
             // the core's own sentence for it.
-            let expired = message == crate::user_op::EXPIRED_DETAIL;
+            // r21-1: and whatever words carried it — the core's sentence, or
+            // the relay's own `AA22 expired or not due`.
+            let expired = message == crate::user_op::EXPIRED_DETAIL
+                || crate::user_op::is_expired_rejection(&message);
             let detail = if expired {
                 crate::user_op::EXPIRED_DETAIL.to_owned()
             } else if refused {

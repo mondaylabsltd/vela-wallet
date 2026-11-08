@@ -340,6 +340,26 @@
       "name": "the signing venue blocks it: worded from its block",
       "args": { "detail": "{\"kind\":\"venue_blocked\",\"block\":{}}" },
       "expect": { "kind": "venue_blocked", "key": null }
+    },
+    {
+      "name": "r21-1: an expired execution (AA22) is said as expired, the Send's own words — never generic",
+      "args": { "detail": "{\"kind\":\"expired\"}" },
+      "expect": { "kind": "expired", "key": "componentsUi.signing.expired" }
+    },
+    {
+      "name": "r21-1: the relay's AA22 carried in a not_sent detail: expired",
+      "args": { "detail": "{\"kind\":\"not_sent\",\"message\":\"SUBMIT REFUSED by simulation: AA22 expired or not due\"}" },
+      "expect": { "kind": "expired", "key": "componentsUi.signing.expired" }
+    },
+    {
+      "name": "r21-1: the relay's AA22 carried in an unknown detail: expired",
+      "args": { "detail": "{\"kind\":\"unknown\",\"message\":\"AA22 expired or not due\"}" },
+      "expect": { "kind": "expired", "key": "componentsUi.signing.expired" }
+    },
+    {
+      "name": "r21-1: not sent for another reason stays not sent",
+      "args": { "detail": "{\"kind\":\"not_sent\"}" },
+      "expect": { "kind": "not_sent", "key": "home.multisig.proposal.notSent" }
     }
   ],
   "recheck": [

@@ -1072,6 +1072,16 @@ pub fn refuse_blind_signing(raw: Option<String>) -> bool {
     vela_core::prefs::refuse_blind_signing(raw.as_deref())
 }
 
+/// r21-2 (§36): a fee as the screen shows it — `units` (a decimal string) of
+/// a `decimals` coin at most `shown` places, rounded UP, so the figure is
+/// never below the charge; plain digits with a `.` mark (localise it as any
+/// figure). `undefined` when `units` is not a count or `decimals` > 36.
+#[wasm_bindgen(js_name = feeFigure)]
+#[must_use]
+pub fn fee_figure(units: &str, decimals: u32, shown: u32) -> Option<String> {
+    vela_core::app::fee_policy::fee_figure_text(units, decimals, shown)
+}
+
 /// R22: the store key of "Refuse blind signing".
 #[wasm_bindgen(js_name = refuseBlindSigningKey)]
 #[must_use]

@@ -231,10 +231,10 @@
         "stopped": {
           "fee_moved_key": "send.feeMovedMax",
           "max_from": "0.0675",
-          "max_to": "0.005888",
-          "after": { "amount": "0.0058875", "fee_wei": "294112500000000000" }
+          "max_to": "0.005887",
+          "after": { "amount": "0.005887", "fee_wei": "294112500000000000" }
         },
-        "signed": { "amount": "5887500000000000", "fee": "294112500000000000" }
+        "signed": { "amount": "5887000000000000", "fee": "294112500000000000" }
       },
       {
         "name": "a Max whose quote lands unchanged under the press signs the figures pressed",
@@ -287,9 +287,9 @@
           "fee_moved_key": "send.feeMoved",
           "max_from": null,
           "max_to": null,
-          "after": { "amount": "0.0058875", "fee_wei": "294112500000000000" }
+          "after": { "amount": "0.005887", "fee_wei": "294112500000000000" }
         },
-        "signed": { "amount": "5887500000000000", "fee": "294112500000000000" }
+        "signed": { "amount": "5887000000000000", "fee": "294112500000000000" }
       }
     ]
   },

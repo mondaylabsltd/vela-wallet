@@ -2004,12 +2004,14 @@ fn max_native_is_string_exact_against_the_reserve() {
     // ⑨: to_base_units(result) + reserve == balance, exactly — for the amount
     // every gate and the signed call read…
     let filled = to_base_units(&view.token_amount, 18).expect("max parses");
-    assert_eq!(
-        filled + reserve,
-        to_base_units("1.234567891234567891", 18).expect("balance parses")
-    );
-    // …while the field shows it on the balance line's ladder (4 places ≥ 1).
-    assert_eq!(view.amount, "1.2246");
+    let balance = to_base_units("1.234567891234567891", 18).expect("balance parses");
+    // r21-2 (§36): the amount sent IS the figure shown — balance − reserve
+    // cut DOWN to the field's places (4 from 1): never more than the
+    // account holds, a remainder under the last place left in it.
+    assert!(filled + reserve <= balance);
+    assert!(balance - (filled + reserve) < 10u128.pow(14));
+    assert_eq!(view.amount, "1.2245");
+    assert_eq!(view.token_amount, "1.2245", "sent exactly as shown");
     assert_eq!(view.amount_fiat_code, None, "Max always fills token units");
     assert_eq!(
         view.amount_warning, None,
@@ -7429,7 +7431,8 @@ fn a_typed_figure_ends_the_max() {
         estimate: native_fee(1, 10_000_000_000_000_001),
     });
     sut.dispatch(Event::TapMax);
-    assert_eq!(sut.view().token_amount, "1.989999999999999999");
+    // r21-2: Max sends what it shows.
+    assert_eq!(sut.view().token_amount, "1.9899");
     sut.dispatch(Event::SetAmount {
         amount: "1".to_owned(),
     });
@@ -7452,12 +7455,15 @@ fn the_swap_keeps_a_max_exact() {
     sut.dispatch(Event::ToggleFiatInput);
     let view = sut.view();
     assert_eq!(view.amount_fiat_code.as_deref(), Some("USD"));
-    assert_eq!(view.amount, "3980.00");
-    assert_eq!(view.token_amount, "1.989999999999999999", "still the Max");
+    assert_eq!(view.amount, "3979.80");
+    assert_eq!(
+        view.token_amount, "1.9899",
+        "still the Max (r21-2: as shown)"
+    );
     sut.dispatch(Event::ToggleFiatInput);
     let view = sut.view();
-    assert_eq!(view.amount, "1.99");
-    assert_eq!(view.token_amount, "1.989999999999999999");
+    assert_eq!(view.amount, "1.9899");
+    assert_eq!(view.token_amount, "1.9899");
 }
 
 /// The asset list refreshed while the form is open: the balance beside the

@@ -5795,6 +5795,42 @@ pub fn coin_amount_text(
 }
 
 fn coin_digits(units: u128, places: usize, up: bool, preset: NumberPreset) -> String {
+    coin_digits_at(units, places, STATED_PLACES, up, preset)
+}
+
+/// r21-2 (§36): a fee as the screen shows it — `units` of a `decimals` coin,
+/// at most `shown` decimal places (a fee row's own budget: 6 for a native
+/// coin, 4 for a token), **rounded UP** — never down, never to nearest — so
+/// the figure on screen is never less than what is charged. A non-zero fee
+/// under the last place keeps two significant digits, rounded up too. Plain
+/// digits (`.` mark, no grouping): the shell localises them as it does every
+/// figure. Exact: cut as text, never through a float. `None` past
+/// [`MAX_TOKEN_DECIMALS`].
+#[must_use]
+pub fn fee_figure(units: u128, decimals: u32, shown: usize) -> Option<String> {
+    if decimals > MAX_TOKEN_DECIMALS {
+        return None;
+    }
+    let places = usize::try_from(decimals).ok()?;
+    // CommaDot, its group commas dropped: plain digits and a `.` mark.
+    Some(coin_digits_at(units, places, shown, true, NumberPreset::CommaDot).replace(',', ""))
+}
+
+/// [`fee_figure`] of a decimal-string unit count (UniFFI, wasm); `None` when
+/// it is not one.
+#[must_use]
+pub fn fee_figure_text(units: &str, decimals: u32, shown: u32) -> Option<String> {
+    let units = units.trim().parse::<u128>().ok()?;
+    fee_figure(units, decimals, usize::try_from(shown).ok()?)
+}
+
+fn coin_digits_at(
+    units: u128,
+    places: usize,
+    stated_places: usize,
+    up: bool,
+    preset: NumberPreset,
+) -> String {
     if units == 0 {
         return "0".to_owned();
     }
@@ -5802,13 +5838,13 @@ fn coin_digits(units: u128, places: usize, up: bool, preset: NumberPreset) -> St
     let padded = format!("{raw:0>width$}", width = places + 1);
     let (whole, fraction) = padded.split_at(padded.len() - places);
     // Under the last kept place: two significant digits, wherever they sit.
-    let keep = if whole == "0" && fraction.bytes().take(STATED_PLACES).all(|b| b == b'0') {
+    let keep = if whole == "0" && fraction.bytes().take(stated_places).all(|b| b == b'0') {
         fraction
             .bytes()
             .position(|b| b != b'0')
             .map_or(fraction.len(), |first| first + 2)
     } else {
-        STATED_PLACES
+        stated_places
     }
     .min(fraction.len());
     let (kept, dropped) = fraction.split_at(keep);

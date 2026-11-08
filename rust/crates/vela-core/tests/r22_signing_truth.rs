@@ -903,3 +903,69 @@ mod attest {
         assert!(dapp_message_hash(&digest, SAFE, &review_of_tx("0x")).is_err());
     }
 }
+
+// ---------------------------------------------------------------------------
+// r21-2: a fee is never shown below what is charged; Max sends what it shows
+// ---------------------------------------------------------------------------
+
+/// The Round 21 pairs (shown → charged, at 18 decimals): each fee now reads
+/// UP at the row's six places.
+#[test]
+fn a_fee_reads_up_never_below_the_charge() {
+    use vela_core::app::fee_policy::{fee_figure, fee_figure_text};
+    let e18 = |s: &str| {
+        let (i, f) = s.split_once('.').expect("a decimal");
+        format!("{i}{f:0<18}")
+            .trim_start_matches('0')
+            .parse::<u128>()
+            .expect("units")
+    };
+    for (charged, shown) in [
+        ("0.1925565", "0.192557"),
+        ("0.10236552", "0.102366"),
+        ("0.018078621", "0.018079"),
+        ("0.018078", "0.018078"),
+    ] {
+        assert_eq!(
+            fee_figure(e18(charged), 18, 6).as_deref(),
+            Some(shown),
+            "{charged}"
+        );
+    }
+    // A token fee at 4 places, a dust fee's two significant digits, up.
+    assert_eq!(fee_figure(123_456, 6, 4).as_deref(), Some("0.1235"));
+    assert_eq!(
+        fee_figure(1_234, 18, 6).as_deref(),
+        Some("0.0000000000000013")
+    );
+    assert_eq!(fee_figure(0, 18, 6).as_deref(), Some("0"));
+    assert_eq!(
+        fee_figure_text("1234567000000000000000", 18, 6).as_deref(),
+        Some("1234.567")
+    );
+    assert_eq!(fee_figure_text("x", 18, 6), None);
+}
+
+/// Max: the figure shown is the amount sent — the sendable amount cut DOWN
+/// to the field's places (r21-2: "Max 0.116999" charged 0.116999359).
+#[test]
+fn max_sends_exactly_what_it_shows() {
+    use vela_core::app::send::{max_figure, max_shown_exact};
+    for (exact, sent) in [
+        ("0.116999359", "0.116999"),
+        ("0.1169995", "0.116999"),
+        ("1.23456789", "1.2345"),
+        ("1234.5678", "1234.56"),
+        ("0.000000123456", "0.00000012"),
+        ("5", "5"),
+        ("0.10", "0.1"),
+    ] {
+        let got = max_shown_exact(exact);
+        assert_eq!(got, sent, "{exact}");
+        assert_eq!(
+            max_figure(&got),
+            got,
+            "the field shows exactly what is sent: {exact}"
+        );
+    }
+}
