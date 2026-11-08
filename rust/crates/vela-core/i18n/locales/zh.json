@@ -31,7 +31,8 @@
       "advanced": "高级",
       "community": "社区",
       "privacy": "隐私",
-      "developer": "开发者"
+      "developer": "开发者",
+      "security": "安全"
     },
     "account": {
       "switch": "切换账户",
@@ -319,6 +320,10 @@
       "title": "服务暂时不可用",
       "subtitle": "通行密钥索引服务无法访问，创建和登录都需要它。",
       "editEndpoint": "修改索引服务地址"
+    },
+    "refuseBlind": {
+      "title": "拒绝盲签",
+      "subtitle": "拒绝 Vela 无法完整读取或检查的任何请求，而不是提供“仍然…”。"
     }
   },
   "time": {

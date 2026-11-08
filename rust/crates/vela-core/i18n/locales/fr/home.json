@@ -808,7 +808,10 @@
           "tryAgain": "Réessayer",
           "unchecked": "Vela n'a pas pu vérifier ce que cette transaction modifie.",
           "chainUnread": "Impossible de joindre {{network}} pour lire cette transaction."
-        }
+        },
+        "stateUnconfirmed": "Un seul nœud a répondu sur {{network}} : Vela n’a pas pu confirmer ce que l’exécution change dans le multisig. Seule la lecture de la transaction par Vela tient.",
+        "stateDisagreed": "Deux nœuds indépendants sur {{network}} ne s’accordent pas sur ce que l’exécution change dans le multisig. Seule la lecture de la transaction par Vela tient.",
+        "blindRefused": "Vela ne signera pas ici : « Refuser la signature à l’aveugle » est activé et une partie de cette transaction n’a pas pu être vérifiée. Vous pouvez le modifier dans les Réglages."
       },
       "notify": {
         "title": "Notifications",

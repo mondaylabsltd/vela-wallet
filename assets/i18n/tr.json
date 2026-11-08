@@ -31,7 +31,8 @@
    "advanced": "Gelişmiş",
    "community": "Topluluk",
    "privacy": "Gizlilik",
-   "developer": "Geliştirici"
+   "developer": "Geliştirici",
+   "security": "Güvenlik"
   },
   "account": {
    "switch": "Hesap değiştir",
@@ -319,6 +320,10 @@
    "title": "Servis geçici olarak kullanılamıyor",
    "subtitle": "Passkey dizinine ulaşılamıyor; hem cüzdan oluşturmak hem de giriş yapmak buna ihtiyaç duyar.",
    "editEndpoint": "Dizin servisi adresini değiştir"
+  },
+  "refuseBlind": {
+   "title": "Kör imzalamayı reddet",
+   "subtitle": "Vela’nın tam olarak okuyamadığı veya kontrol edemediği her isteği “… yine de” sunmak yerine reddet."
   }
  },
  "time": {
@@ -1611,7 +1616,8 @@
     "feeWouldFail": "Bu haliyle gönderilirse başarısız olur.",
     "previousPending": "Bu ağdaki önceki işlemin bitmesi bekleniyor…",
     "simChecking": "Bu işlemin ne yapacağı denetleniyor…",
-    "messageUnread": "Mesaj devam ediyor — tamamını okumak için kaydırın"
+    "messageUnread": "Mesaj devam ediyor — tamamını okumak için kaydırın",
+    "blindRefused": "Reddedildi: “Kör imzalamayı reddet” açık ve Vela bu isteği tam olarak kontrol edemedi. Ayarlar’dan değiştirebilirsiniz."
    },
    "labelAddsToAllowance": "İzne eklenir",
    "certain": {
@@ -1673,7 +1679,12 @@
    "intentChangeThreshold": "Gereken onayı değiştir",
    "labelMember": "Üye",
    "labelNewMember": "Yeni üye",
-   "labelApprovalsRequired": "Gereken onay"
+   "labelApprovalsRequired": "Gereken onay",
+   "simUnconfirmed": "Yalnızca bir düğüm yanıt verdi, bu yüzden Vela bu işlemin ne yaptığını doğrulayamadı. İmzalamadan önce kontrol edin.",
+   "simDisagreed": "İki bağımsız düğüm bu işlemin ne yaptığı konusunda farklı yanıtlar verdi. İmzalamadan önce kontrol edin.",
+   "simOwnNode": "Yalnızca kendi düğümünüzle kontrol edildi",
+   "ownNodeHint": "Güvendiğiniz bir düğümle kontrol etmek için bu ağa kendi düğümünüzü ekleyin ve “Yalnızca kendi düğümümü kullan”ı açın.",
+   "confirmAgain": "Onaylamak için tekrar basın"
   },
   "signingApprove": {
    "resultingTotal": "Yeni toplam izin",
@@ -2027,7 +2038,8 @@
    "onlyMine": "Yalnızca kendi düğümümü kullan",
    "onlyMineHint": "Hesabınızla ilgili hiçbir şey herkese açık düğümlere gitmez. Düğümünüz yanıt vermeyi bırakırsa bu ağ, düğüm geri gelene kadar okunamaz.",
    "hideBody": "Ağ listenizden çıkar. Ayarları korunur ve Ağ Ekle ile istediğiniz zaman geri getirebilirsiniz.",
-   "moreNetworks": "Desteklenen ama listenizde olmayanlar: {{names}}. Ağ Ekle'den ekleyebilirsiniz."
+   "moreNetworks": "Desteklenen ama listenizde olmayanlar: {{names}}. Ağ Ekle'den ekleyebilirsiniz.",
+   "onlyMineTrust": "Açıkken Vela güvenlik kontrollerinde yalnızca sizin düğümünüze güvenir ve bunu belirtir. Kapalıyken bir kontrol, yalnızca iki bağımsız düğüm aynı yanıtı verirse geçerli sayılır."
   },
   "account": {
    "modalTitle": "Hesaplar",

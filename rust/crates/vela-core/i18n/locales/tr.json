@@ -31,7 +31,8 @@
       "advanced": "Gelişmiş",
       "community": "Topluluk",
       "privacy": "Gizlilik",
-      "developer": "Geliştirici"
+      "developer": "Geliştirici",
+      "security": "Güvenlik"
     },
     "account": {
       "switch": "Hesap değiştir",
@@ -319,6 +320,10 @@
       "title": "Servis geçici olarak kullanılamıyor",
       "subtitle": "Passkey dizinine ulaşılamıyor; hem cüzdan oluşturmak hem de giriş yapmak buna ihtiyaç duyar.",
       "editEndpoint": "Dizin servisi adresini değiştir"
+    },
+    "refuseBlind": {
+      "title": "Kör imzalamayı reddet",
+      "subtitle": "Vela’nın tam olarak okuyamadığı veya kontrol edemediği her isteği “… yine de” sunmak yerine reddet."
     }
   },
   "time": {

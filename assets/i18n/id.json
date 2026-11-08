@@ -31,7 +31,8 @@
    "advanced": "Lanjutan",
    "community": "Komunitas",
    "privacy": "Privasi",
-   "developer": "Developer"
+   "developer": "Developer",
+   "security": "Keamanan"
   },
   "account": {
    "switch": "Ganti akun",
@@ -319,6 +320,10 @@
    "title": "Layanan sementara tidak tersedia",
    "subtitle": "Indeks passkey tidak dapat dihubungi, padahal membuat dan masuk sama-sama membutuhkannya.",
    "editEndpoint": "Ubah alamat layanan indeks"
+  },
+  "refuseBlind": {
+   "title": "Tolak penandatanganan buta",
+   "subtitle": "Tolak setiap permintaan yang tidak bisa dibaca atau diperiksa Vela sepenuhnya, alih-alih menawarkan “… tetap”."
   }
  },
  "time": {
@@ -1611,7 +1616,8 @@
     "feeWouldFail": "Transaksi ini akan gagal jika dikirim seperti ini.",
     "previousPending": "Menunggu transaksi sebelumnya di jaringan ini selesai…",
     "simChecking": "Memeriksa hasil transaksi ini…",
-    "messageUnread": "Pesan berlanjut — gulir untuk membaca semuanya"
+    "messageUnread": "Pesan berlanjut — gulir untuk membaca semuanya",
+    "blindRefused": "Ditolak: “Tolak penandatanganan buta” aktif, dan Vela tidak bisa memeriksa permintaan ini sepenuhnya. Anda bisa mengubahnya di Pengaturan."
    },
    "labelAddsToAllowance": "Menambah batas izin",
    "certain": {
@@ -1673,7 +1679,12 @@
    "intentChangeThreshold": "Ubah persetujuan yang dibutuhkan",
    "labelMember": "Anggota",
    "labelNewMember": "Anggota baru",
-   "labelApprovalsRequired": "Persetujuan yang dibutuhkan"
+   "labelApprovalsRequired": "Persetujuan yang dibutuhkan",
+   "simUnconfirmed": "Hanya satu node yang menjawab, jadi Vela tidak bisa memastikan apa yang dilakukan transaksi ini. Periksa sebelum menandatangani.",
+   "simDisagreed": "Dua node independen memberi jawaban berbeda tentang apa yang dilakukan transaksi ini. Periksa sebelum menandatangani.",
+   "simOwnNode": "Diperiksa hanya oleh node Anda sendiri",
+   "ownNodeHint": "Untuk memeriksa dengan node yang Anda percaya, tambahkan node Anda sendiri dan aktifkan “Hanya gunakan node saya” untuk jaringan ini.",
+   "confirmAgain": "Tekan sekali lagi untuk mengonfirmasi"
   },
   "signingApprove": {
    "resultingTotal": "Total izin belanja baru",
@@ -2027,7 +2038,8 @@
    "onlyMine": "Hanya pakai node saya",
    "onlyMineHint": "Tidak ada informasi akun Anda yang dikirim ke node publik. Jika node Anda berhenti merespons, jaringan ini tidak bisa dibaca sampai node itu kembali.",
    "hideBody": "Jaringan ini keluar dari daftar Anda. Pengaturannya tetap disimpan, dan Tambah Jaringan bisa mengembalikannya kapan saja.",
-   "moreNetworks": "Juga didukung, tidak ada di daftar Anda: {{names}}. Tambahkan dari Tambah Jaringan."
+   "moreNetworks": "Juga didukung, tidak ada di daftar Anda: {{names}}. Tambahkan dari Tambah Jaringan.",
+   "onlyMineTrust": "Jika aktif, Vela hanya memercayai node Anda untuk pemeriksaan keamanan, dan menyebutkannya. Jika nonaktif, pemeriksaan hanya dihitung bila dua node independen sepakat."
   },
   "account": {
    "modalTitle": "Akun",

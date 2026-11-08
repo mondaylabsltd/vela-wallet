@@ -731,7 +731,10 @@
      "tryAgain": "Riprova",
      "unchecked": "Vela non è riuscita a verificare cosa cambia questa transazione.",
      "chainUnread": "Impossibile raggiungere {{network}} per leggere questa transazione."
-    }
+    },
+    "stateUnconfirmed": "Su {{network}} ha risposto un solo nodo, quindi Vela non ha potuto confermare cosa cambia nel multisig eseguendola. Resta solo la lettura della transazione da parte di Vela.",
+    "stateDisagreed": "Due nodi indipendenti su {{network}} non concordano su cosa cambia nel multisig eseguendola. Resta solo la lettura della transazione da parte di Vela.",
+    "blindRefused": "Vela non firmerà qui: “Rifiuta la firma alla cieca” è attivo e una parte di questa transazione non è stata verificata. Puoi cambiarlo nelle Impostazioni."
    },
    "notify": {
     "title": "Notifiche",

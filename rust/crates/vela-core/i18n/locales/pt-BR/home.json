@@ -808,7 +808,10 @@
           "tryAgain": "Tentar novamente",
           "unchecked": "A Vela não conseguiu verificar o que esta transação muda.",
           "chainUnread": "Não foi possível acessar {{network}} para ler esta transação."
-        }
+        },
+        "stateUnconfirmed": "Só um nó respondeu em {{network}}, então a Vela não conseguiu confirmar o que muda no multisig ao executá-la. Vale só a leitura da Vela sobre a transação.",
+        "stateDisagreed": "Dois nós independentes em {{network}} discordam sobre o que muda no multisig ao executá-la. Vale só a leitura da Vela sobre a transação.",
+        "blindRefused": "A Vela não vai assinar isto aqui: “Recusar assinatura às cegas” está ativado e parte desta transação não pôde ser verificada. Você pode mudar isso em Ajustes."
       },
       "notify": {
         "title": "Notificações",

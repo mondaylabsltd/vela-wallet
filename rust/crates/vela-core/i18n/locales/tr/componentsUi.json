@@ -263,7 +263,8 @@
         "feeWouldFail": "Bu haliyle gönderilirse başarısız olur.",
         "previousPending": "Bu ağdaki önceki işlemin bitmesi bekleniyor…",
         "simChecking": "Bu işlemin ne yapacağı denetleniyor…",
-        "messageUnread": "Mesaj devam ediyor — tamamını okumak için kaydırın"
+        "messageUnread": "Mesaj devam ediyor — tamamını okumak için kaydırın",
+        "blindRefused": "Reddedildi: “Kör imzalamayı reddet” açık ve Vela bu isteği tam olarak kontrol edemedi. Ayarlar’dan değiştirebilirsiniz."
       },
       "labelAddsToAllowance": "İzne eklenir",
       "certain": {
@@ -325,7 +326,12 @@
       "intentChangeThreshold": "Gereken onayı değiştir",
       "labelMember": "Üye",
       "labelNewMember": "Yeni üye",
-      "labelApprovalsRequired": "Gereken onay"
+      "labelApprovalsRequired": "Gereken onay",
+      "simUnconfirmed": "Yalnızca bir düğüm yanıt verdi, bu yüzden Vela bu işlemin ne yaptığını doğrulayamadı. İmzalamadan önce kontrol edin.",
+      "simDisagreed": "İki bağımsız düğüm bu işlemin ne yaptığı konusunda farklı yanıtlar verdi. İmzalamadan önce kontrol edin.",
+      "simOwnNode": "Yalnızca kendi düğümünüzle kontrol edildi",
+      "ownNodeHint": "Güvendiğiniz bir düğümle kontrol etmek için bu ağa kendi düğümünüzü ekleyin ve “Yalnızca kendi düğümümü kullan”ı açın.",
+      "confirmAgain": "Onaylamak için tekrar basın"
     },
     "signingApprove": {
       "resultingTotal": "Yeni toplam izin",

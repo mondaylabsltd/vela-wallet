@@ -31,7 +31,8 @@
    "advanced": "Avanzado",
    "community": "Comunidad",
    "privacy": "Privacidad",
-   "developer": "Desarrollador"
+   "developer": "Desarrollador",
+   "security": "Seguridad"
   },
   "account": {
    "switch": "Cambiar de cuenta",
@@ -319,6 +320,10 @@
    "title": "Servicio no disponible temporalmente",
    "subtitle": "No se puede acceder al índice de claves de acceso, y tanto crear como iniciar sesión lo necesitan.",
    "editEndpoint": "Cambiar la dirección del servicio de índice"
+  },
+  "refuseBlind": {
+   "title": "Rechazar firma a ciegas",
+   "subtitle": "Rechaza cualquier solicitud que Vela no pueda leer o revisar por completo, en vez de ofrecer “… de todos modos”."
   }
  },
  "time": {
@@ -1616,7 +1621,8 @@
     "feeWouldFail": "Fallaría si se envía así.",
     "previousPending": "Esperando a que termine tu transacción anterior en esta red…",
     "simChecking": "Comprobando qué hace esta transacción…",
-    "messageUnread": "El mensaje continúa; desplázate para leerlo completo"
+    "messageUnread": "El mensaje continúa; desplázate para leerlo completo",
+    "blindRefused": "Rechazado: “Rechazar firma a ciegas” está activado y Vela no pudo revisar esta solicitud por completo. Puedes cambiarlo en Configuración."
    },
    "labelAddsToAllowance": "Se suma a la autorización",
    "certain": {
@@ -1678,7 +1684,12 @@
    "intentChangeThreshold": "Cambiar las aprobaciones necesarias",
    "labelMember": "Miembro",
    "labelNewMember": "Nuevo miembro",
-   "labelApprovalsRequired": "Aprobaciones necesarias"
+   "labelApprovalsRequired": "Aprobaciones necesarias",
+   "simUnconfirmed": "Solo respondió un nodo, así que Vela no pudo confirmar qué hace esta transacción. Revísala antes de firmar.",
+   "simDisagreed": "Dos nodos independientes dieron respuestas distintas sobre qué hace esta transacción. Revísala antes de firmar.",
+   "simOwnNode": "Verificado solo por tu propio nodo",
+   "ownNodeHint": "Para verificar con un nodo de confianza, agrega el tuyo y activa “Usar solo mi nodo” en esta red.",
+   "confirmAgain": "Presiona de nuevo para confirmar"
   },
   "signingApprove": {
    "resultingTotal": "Nuevo límite total",
@@ -2032,7 +2043,8 @@
    "onlyMine": "Usar solo mi nodo",
    "onlyMineHint": "Nada sobre tu cuenta va a nodos públicos. Si tu nodo deja de responder, no se podrá leer esta red hasta que vuelva.",
    "hideBody": "Sale de tu lista de redes. Su configuración se conserva y puedes volver a agregarla cuando quieras desde Agregar red.",
-   "moreNetworks": "También compatibles, fuera de tu lista: {{names}}. Agrégalas desde Agregar red."
+   "moreNetworks": "También compatibles, fuera de tu lista: {{names}}. Agrégalas desde Agregar red.",
+   "onlyMineTrust": "Activado, Vela confía solo en tu nodo para sus revisiones de seguridad, y lo dice. Desactivado, una revisión cuenta solo si dos nodos independientes coinciden."
   },
   "account": {
    "modalTitle": "Cuentas",

@@ -801,7 +801,10 @@
           "tryAgain": "Coba lagi",
           "unchecked": "Vela tidak bisa memeriksa apa yang diubah transaksi ini.",
           "chainUnread": "Tidak dapat menjangkau {{network}} untuk membaca transaksi ini."
-        }
+        },
+        "stateUnconfirmed": "Hanya satu node di {{network}} yang menjawab, jadi Vela tidak bisa memastikan apa yang diubah di multisig saat dijalankan. Hanya pembacaan Vela atas transaksi yang berlaku.",
+        "stateDisagreed": "Dua node independen di {{network}} tidak sepakat tentang apa yang diubah di multisig saat dijalankan. Hanya pembacaan Vela atas transaksi yang berlaku.",
+        "blindRefused": "Vela tidak akan menandatangani ini: “Tolak penandatanganan buta” aktif, dan sebagian transaksi ini tidak bisa diperiksa. Anda bisa mengubahnya di Pengaturan."
       },
       "notify": {
         "title": "Notifikasi",

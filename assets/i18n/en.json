@@ -31,7 +31,8 @@
    "advanced": "Advanced",
    "community": "Community",
    "privacy": "Privacy",
-   "developer": "Developer"
+   "developer": "Developer",
+   "security": "Security"
   },
   "account": {
    "switch": "Switch account",
@@ -319,6 +320,10 @@
    "title": "Service temporarily unavailable",
    "subtitle": "The passkey index can’t be reached, and both creating and signing in need it.",
    "editEndpoint": "Change index service address"
+  },
+  "refuseBlind": {
+   "title": "Refuse blind signing",
+   "subtitle": "Refuse any request Vela can’t read or check in full, instead of offering “… anyway”."
   }
  },
  "time": {
@@ -1663,7 +1668,8 @@
     "feeWouldFail": "This would fail if sent as it is.",
     "previousPending": "Waiting for your last transaction on this network…",
     "simChecking": "Checking what this transaction does…",
-    "messageUnread": "The message continues — scroll to read all of it"
+    "messageUnread": "The message continues — scroll to read all of it",
+    "blindRefused": "Refused: “Refuse blind signing” is on, and Vela couldn’t check this request in full. You can change it in Settings."
    },
    "labelAddsToAllowance": "Adds to allowance",
    "certain": {
@@ -1725,7 +1731,12 @@
    "intentChangeThreshold": "Change approvals required",
    "labelMember": "Member",
    "labelNewMember": "New member",
-   "labelApprovalsRequired": "Approvals required"
+   "labelApprovalsRequired": "Approvals required",
+   "simUnconfirmed": "Only one node answered, so Vela couldn’t confirm what this transaction does. Review it before you sign.",
+   "simDisagreed": "Two independent nodes gave different answers about what this transaction does. Review it before you sign.",
+   "simOwnNode": "Checked by your own node only",
+   "ownNodeHint": "To check with a node you trust, add your own and turn on “Only use my node” for this network.",
+   "confirmAgain": "Press again to confirm"
   },
   "currency": {
    "title": "Display currency",
@@ -2027,7 +2038,8 @@
    "onlyMine": "Only use my node",
    "onlyMineHint": "Nothing about your account goes to public nodes. If your node stops answering, this network can't be read until it's back.",
    "hideBody": "It leaves your network list. Its settings are kept, and Add Network brings it back anytime.",
-   "moreNetworks": "Also supported, not in your list: {{names}}. Add one from Add Network."
+   "moreNetworks": "Also supported, not in your list: {{names}}. Add one from Add Network.",
+   "onlyMineTrust": "With it on, Vela trusts your node alone for its safety checks, and says so. With it off, a check counts only when two independent nodes agree."
   },
   "account": {
    "modalTitle": "Accounts",

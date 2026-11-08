@@ -31,7 +31,8 @@
    "advanced": "進階",
    "community": "社群",
    "privacy": "隱私",
-   "developer": "開發者"
+   "developer": "開發者",
+   "security": "安全"
   },
   "account": {
    "switch": "切換帳戶",
@@ -319,6 +320,10 @@
    "title": "服務暫時無法使用",
    "subtitle": "無法連線到通行密鑰索引服務，建立與登入都需要它。",
    "editEndpoint": "變更索引服務網址"
+  },
+  "refuseBlind": {
+   "title": "拒絕盲簽",
+   "subtitle": "拒絕 Vela 無法完整讀取或檢查的任何請求，而不是提供「仍然…」。"
   }
  },
  "time": {
@@ -1611,7 +1616,8 @@
     "feeWouldFail": "照現在的方式送出會失敗。",
     "previousPending": "正在等待這個網路上的上一筆交易完成…",
     "simChecking": "正在檢查這筆交易的結果…",
-    "messageUnread": "訊息尚未結束 — 請捲動閱讀全文"
+    "messageUnread": "訊息尚未結束 — 請捲動閱讀全文",
+    "blindRefused": "已拒絕：你開啟了「拒絕盲簽」，而 Vela 無法完整檢查此請求。可在設定中變更。"
    },
    "labelAddsToAllowance": "增加授權額度",
    "certain": {
@@ -1673,7 +1679,12 @@
    "intentChangeThreshold": "修改需要的核准數",
    "labelMember": "成員",
    "labelNewMember": "新成員",
-   "labelApprovalsRequired": "需要的核准數"
+   "labelApprovalsRequired": "需要的核准數",
+   "simUnconfirmed": "只有一個節點給出了結果，Vela 無法確認這筆交易的效果，請核對後再簽署。",
+   "simDisagreed": "兩個獨立節點對這筆交易的效果給出了不同的結果，請核對後再簽署。",
+   "simOwnNode": "僅由你自己的節點檢查",
+   "ownNodeHint": "如需用你信任的節點檢查，請為此網路新增你自己的節點並開啟「僅使用我的節點」。",
+   "confirmAgain": "再按一次以確認"
   },
   "currency": {
    "title": "顯示貨幣",
@@ -2027,7 +2038,8 @@
    "onlyMine": "只使用我的節點",
    "onlyMineHint": "關於你帳戶的任何資訊都不會傳給公共節點。如果你的節點停止回應，這個網路會讀取不到，直到它恢復。",
    "hideBody": "它會從你的網路清單中移除。它的設定會保留，隨時可透過「新增網路」加回來。",
-   "moreNetworks": "同樣支援、但不在你清單中的網路：{{names}}。可在「新增網路」中新增。"
+   "moreNetworks": "同樣支援、但不在你清單中的網路：{{names}}。可在「新增網路」中新增。",
+   "onlyMineTrust": "開啟後，Vela 的安全檢查只信任你的節點，並會註明這一點。關閉時，只有兩個獨立節點結果一致，檢查才算數。"
   },
   "account": {
    "modalTitle": "帳戶",

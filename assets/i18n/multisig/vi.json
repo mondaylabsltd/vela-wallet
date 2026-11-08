@@ -725,7 +725,10 @@
      "tryAgain": "Thử lại",
      "unchecked": "Vela không kiểm tra được giao dịch này thay đổi những gì.",
      "chainUnread": "Không kết nối được {{network}} để đọc giao dịch này."
-    }
+    },
+    "stateUnconfirmed": "Chỉ một nút trên {{network}} trả lời nên Vela không thể xác nhận việc chạy giao dịch thay đổi gì trong ví đa chữ ký. Chỉ còn cách Vela đọc giao dịch.",
+    "stateDisagreed": "Hai nút độc lập trên {{network}} trả lời khác nhau về việc chạy giao dịch thay đổi gì trong ví đa chữ ký. Chỉ còn cách Vela đọc giao dịch.",
+    "blindRefused": "Vela sẽ không ký ở đây: “Từ chối ký mù” đang bật và một phần giao dịch này không thể kiểm tra. Bạn có thể đổi trong Cài đặt."
    },
    "notify": {
     "title": "Thông báo",

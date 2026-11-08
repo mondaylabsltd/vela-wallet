@@ -16,7 +16,8 @@
       "onlyMine": "Usa solo il mio nodo",
       "onlyMineHint": "Nessun dato del tuo account va ai nodi pubblici. Se il tuo nodo smette di rispondere, questa rete non potrà essere letta finché non torna.",
       "hideBody": "Esce dal tuo elenco di reti. Le sue impostazioni restano salvate e Aggiungi rete la riporta quando vuoi.",
-      "moreNetworks": "Supportate anche, non nel tuo elenco: {{names}}. Aggiungile da Aggiungi rete."
+      "moreNetworks": "Supportate anche, non nel tuo elenco: {{names}}. Aggiungile da Aggiungi rete.",
+      "onlyMineTrust": "Se attivo, Vela si fida solo del tuo nodo per i controlli di sicurezza, e lo dice. Se disattivo, un controllo vale solo quando due nodi indipendenti concordano."
     },
     "account": {
       "modalTitle": "Account",

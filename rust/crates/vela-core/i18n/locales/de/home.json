@@ -801,7 +801,10 @@
           "tryAgain": "Erneut versuchen",
           "unchecked": "Vela konnte nicht prüfen, was diese Transaktion ändert.",
           "chainUnread": "{{network}} war nicht erreichbar, daher konnte diese Transaktion nicht gelesen werden."
-        }
+        },
+        "stateUnconfirmed": "Auf {{network}} hat nur ein Knoten geantwortet, daher konnte Vela nicht bestätigen, was die Ausführung am Multisig ändert. Es gilt nur Velas Lesart der Transaktion.",
+        "stateDisagreed": "Zwei unabhängige Knoten auf {{network}} sind uneins, was die Ausführung am Multisig ändert. Es gilt nur Velas Lesart der Transaktion.",
+        "blindRefused": "Vela signiert das hier nicht: „Blindes Signieren ablehnen“ ist an, und ein Teil dieser Transaktion ließ sich nicht prüfen. Du kannst das in den Einstellungen ändern."
       },
       "notify": {
         "title": "Mitteilungen",

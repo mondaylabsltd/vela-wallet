@@ -263,7 +263,8 @@
         "feeWouldFail": "Nếu gửi như hiện tại, giao dịch sẽ thất bại.",
         "previousPending": "Đang chờ giao dịch trước trên mạng này hoàn tất…",
         "simChecking": "Đang kiểm tra giao dịch này sẽ làm gì…",
-        "messageUnread": "Tin nhắn vẫn còn tiếp — hãy cuộn để đọc hết"
+        "messageUnread": "Tin nhắn vẫn còn tiếp — hãy cuộn để đọc hết",
+        "blindRefused": "Đã từ chối: “Từ chối ký mù” đang bật và Vela không thể kiểm tra đầy đủ yêu cầu này. Bạn có thể đổi trong Cài đặt."
       },
       "labelAddsToAllowance": "Cộng thêm vào hạn mức",
       "certain": {
@@ -325,7 +326,12 @@
       "intentChangeThreshold": "Đổi số lượt duyệt cần thiết",
       "labelMember": "Thành viên",
       "labelNewMember": "Thành viên mới",
-      "labelApprovalsRequired": "Số lượt duyệt cần thiết"
+      "labelApprovalsRequired": "Số lượt duyệt cần thiết",
+      "simUnconfirmed": "Chỉ một nút trả lời nên Vela không thể xác nhận giao dịch này làm gì. Hãy kiểm tra trước khi ký.",
+      "simDisagreed": "Hai nút độc lập trả lời khác nhau về việc giao dịch này làm gì. Hãy kiểm tra trước khi ký.",
+      "simOwnNode": "Chỉ được kiểm tra bởi nút của riêng bạn",
+      "ownNodeHint": "Để kiểm tra bằng một nút bạn tin, hãy thêm nút của bạn và bật “Chỉ dùng nút của tôi” cho mạng này.",
+      "confirmAgain": "Nhấn lần nữa để xác nhận"
     },
     "signingApprove": {
       "resultingTotal": "Tổng hạn mức mới",

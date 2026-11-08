@@ -263,7 +263,8 @@
         "feeWouldFail": "Elle échouerait si elle était envoyée telle quelle.",
         "previousPending": "En attente de votre transaction précédente sur ce réseau…",
         "simChecking": "Vérification de ce que fait cette transaction…",
-        "messageUnread": "Le message continue — faites défiler pour le lire en entier"
+        "messageUnread": "Le message continue — faites défiler pour le lire en entier",
+        "blindRefused": "Refusé : « Refuser la signature à l’aveugle » est activé et Vela n’a pas pu vérifier entièrement cette demande. Vous pouvez le modifier dans les Réglages."
       },
       "labelAddsToAllowance": "S'ajoute à l'autorisation",
       "certain": {
@@ -325,7 +326,12 @@
       "intentChangeThreshold": "Modifier les approbations requises",
       "labelMember": "Membre",
       "labelNewMember": "Nouveau membre",
-      "labelApprovalsRequired": "Approbations requises"
+      "labelApprovalsRequired": "Approbations requises",
+      "simUnconfirmed": "Un seul nœud a répondu : Vela n’a pas pu confirmer ce que fait cette transaction. Vérifiez-la avant de signer.",
+      "simDisagreed": "Deux nœuds indépendants donnent des réponses différentes sur ce que fait cette transaction. Vérifiez-la avant de signer.",
+      "simOwnNode": "Vérifié uniquement par votre propre nœud",
+      "ownNodeHint": "Pour vérifier avec un nœud de confiance, ajoutez le vôtre et activez « Utiliser uniquement mon nœud » pour ce réseau.",
+      "confirmAgain": "Appuyez à nouveau pour confirmer"
     },
     "signingApprove": {
       "resultingTotal": "Nouvelle autorisation totale",

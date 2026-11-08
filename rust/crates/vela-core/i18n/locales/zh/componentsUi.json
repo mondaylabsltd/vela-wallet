@@ -263,7 +263,8 @@
         "feeWouldFail": "按现在的方式发送会失败。",
         "previousPending": "正在等待这个网络上的上一笔交易完成…",
         "simChecking": "正在检查这笔交易的结果…",
-        "messageUnread": "消息尚未结束 — 请滚动读完全文"
+        "messageUnread": "消息尚未结束 — 请滚动读完全文",
+        "blindRefused": "已拒绝：你开启了“拒绝盲签”，而 Vela 无法完整检查此请求。可在设置中更改。"
       },
       "labelAddsToAllowance": "增加授权额度",
       "certain": {
@@ -325,7 +326,12 @@
       "intentChangeThreshold": "修改需要的批准数",
       "labelMember": "成员",
       "labelNewMember": "新成员",
-      "labelApprovalsRequired": "需要的批准数"
+      "labelApprovalsRequired": "需要的批准数",
+      "simUnconfirmed": "只有一个节点给出了结果，Vela 无法确认这笔交易的效果，请核对后再签名。",
+      "simDisagreed": "两个独立节点对这笔交易的效果给出了不同的结果，请核对后再签名。",
+      "simOwnNode": "仅由你自己的节点检查",
+      "ownNodeHint": "如需用你信任的节点检查，请为此网络添加你自己的节点并开启“仅使用我的节点”。",
+      "confirmAgain": "再按一次以确认"
     },
     "currency": {
       "title": "显示货币",

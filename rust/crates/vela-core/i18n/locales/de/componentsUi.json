@@ -263,7 +263,8 @@
         "feeWouldFail": "So gesendet würde sie fehlschlagen.",
         "previousPending": "Warte auf deine vorige Transaktion in diesem Netzwerk…",
         "simChecking": "Es wird geprüft, was diese Transaktion bewirkt…",
-        "messageUnread": "Die Nachricht geht weiter — scrollen Sie, um sie ganz zu lesen"
+        "messageUnread": "Die Nachricht geht weiter — scrollen Sie, um sie ganz zu lesen",
+        "blindRefused": "Abgelehnt: „Blindes Signieren ablehnen“ ist an, und Vela konnte diese Anfrage nicht vollständig prüfen. Du kannst das in den Einstellungen ändern."
       },
       "labelAddsToAllowance": "Erhöht die Freigabe um",
       "certain": {
@@ -325,7 +326,12 @@
       "intentChangeThreshold": "Erforderliche Genehmigungen ändern",
       "labelMember": "Mitglied",
       "labelNewMember": "Neues Mitglied",
-      "labelApprovalsRequired": "Erforderliche Genehmigungen"
+      "labelApprovalsRequired": "Erforderliche Genehmigungen",
+      "simUnconfirmed": "Nur ein Knoten hat geantwortet, daher konnte Vela nicht bestätigen, was diese Transaktion bewirkt – bitte vor dem Signieren kontrollieren.",
+      "simDisagreed": "Zwei unabhängige Knoten haben unterschiedlich beantwortet, was diese Transaktion bewirkt – bitte vor dem Signieren kontrollieren.",
+      "simOwnNode": "Nur von deinem eigenen Knoten geprüft",
+      "ownNodeHint": "Um mit einem Knoten zu prüfen, dem du vertraust, füge deinen eigenen hinzu und schalte „Nur meinen Knoten verwenden“ für dieses Netzwerk ein.",
+      "confirmAgain": "Zum Bestätigen erneut drücken"
     },
     "signingApprove": {
       "resultingTotal": "Neue Gesamtfreigabe",

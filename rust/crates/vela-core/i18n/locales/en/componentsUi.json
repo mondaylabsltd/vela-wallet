@@ -315,7 +315,8 @@
         "feeWouldFail": "This would fail if sent as it is.",
         "previousPending": "Waiting for your last transaction on this network…",
         "simChecking": "Checking what this transaction does…",
-        "messageUnread": "The message continues — scroll to read all of it"
+        "messageUnread": "The message continues — scroll to read all of it",
+        "blindRefused": "Refused: “Refuse blind signing” is on, and Vela couldn’t check this request in full. You can change it in Settings."
       },
       "labelAddsToAllowance": "Adds to allowance",
       "certain": {
@@ -377,7 +378,12 @@
       "intentChangeThreshold": "Change approvals required",
       "labelMember": "Member",
       "labelNewMember": "New member",
-      "labelApprovalsRequired": "Approvals required"
+      "labelApprovalsRequired": "Approvals required",
+      "simUnconfirmed": "Only one node answered, so Vela couldn’t confirm what this transaction does. Review it before you sign.",
+      "simDisagreed": "Two independent nodes gave different answers about what this transaction does. Review it before you sign.",
+      "simOwnNode": "Checked by your own node only",
+      "ownNodeHint": "To check with a node you trust, add your own and turn on “Only use my node” for this network.",
+      "confirmAgain": "Press again to confirm"
     },
     "currency": {
       "title": "Display currency",

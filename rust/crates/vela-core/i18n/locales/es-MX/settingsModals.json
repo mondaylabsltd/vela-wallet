@@ -16,7 +16,8 @@
       "onlyMine": "Usar solo mi nodo",
       "onlyMineHint": "Nada sobre tu cuenta va a nodos públicos. Si tu nodo deja de responder, no se podrá leer esta red hasta que vuelva.",
       "hideBody": "Sale de tu lista de redes. Su configuración se conserva y puedes volver a agregarla cuando quieras desde Agregar red.",
-      "moreNetworks": "También compatibles, fuera de tu lista: {{names}}. Agrégalas desde Agregar red."
+      "moreNetworks": "También compatibles, fuera de tu lista: {{names}}. Agrégalas desde Agregar red.",
+      "onlyMineTrust": "Activado, Vela confía solo en tu nodo para sus revisiones de seguridad, y lo dice. Desactivado, una revisión cuenta solo si dos nodos independientes coinciden."
     },
     "account": {
       "modalTitle": "Cuentas",

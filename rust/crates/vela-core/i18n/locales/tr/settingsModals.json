@@ -16,7 +16,8 @@
       "onlyMine": "Yalnızca kendi düğümümü kullan",
       "onlyMineHint": "Hesabınızla ilgili hiçbir şey herkese açık düğümlere gitmez. Düğümünüz yanıt vermeyi bırakırsa bu ağ, düğüm geri gelene kadar okunamaz.",
       "hideBody": "Ağ listenizden çıkar. Ayarları korunur ve Ağ Ekle ile istediğiniz zaman geri getirebilirsiniz.",
-      "moreNetworks": "Desteklenen ama listenizde olmayanlar: {{names}}. Ağ Ekle'den ekleyebilirsiniz."
+      "moreNetworks": "Desteklenen ama listenizde olmayanlar: {{names}}. Ağ Ekle'den ekleyebilirsiniz.",
+      "onlyMineTrust": "Açıkken Vela güvenlik kontrollerinde yalnızca sizin düğümünüze güvenir ve bunu belirtir. Kapalıyken bir kontrol, yalnızca iki bağımsız düğüm aynı yanıtı verirse geçerli sayılır."
     },
     "account": {
       "modalTitle": "Hesaplar",

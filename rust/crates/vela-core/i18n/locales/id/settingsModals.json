@@ -16,7 +16,8 @@
       "onlyMine": "Hanya pakai node saya",
       "onlyMineHint": "Tidak ada informasi akun Anda yang dikirim ke node publik. Jika node Anda berhenti merespons, jaringan ini tidak bisa dibaca sampai node itu kembali.",
       "hideBody": "Jaringan ini keluar dari daftar Anda. Pengaturannya tetap disimpan, dan Tambah Jaringan bisa mengembalikannya kapan saja.",
-      "moreNetworks": "Juga didukung, tidak ada di daftar Anda: {{names}}. Tambahkan dari Tambah Jaringan."
+      "moreNetworks": "Juga didukung, tidak ada di daftar Anda: {{names}}. Tambahkan dari Tambah Jaringan.",
+      "onlyMineTrust": "Jika aktif, Vela hanya memercayai node Anda untuk pemeriksaan keamanan, dan menyebutkannya. Jika nonaktif, pemeriksaan hanya dihitung bila dua node independen sepakat."
     },
     "account": {
       "modalTitle": "Akun",

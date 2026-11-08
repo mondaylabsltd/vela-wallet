@@ -31,7 +31,8 @@
       "advanced": "Avançado",
       "community": "Comunidade",
       "privacy": "Privacidade",
-      "developer": "Desenvolvedor"
+      "developer": "Desenvolvedor",
+      "security": "Segurança"
     },
     "account": {
       "switch": "Trocar de conta",
@@ -319,6 +320,10 @@
       "title": "Serviço temporariamente indisponível",
       "subtitle": "Não foi possível acessar o índice de passkeys, e tanto criar quanto entrar dependem dele.",
       "editEndpoint": "Alterar o endereço do serviço de índice"
+    },
+    "refuseBlind": {
+      "title": "Recusar assinatura às cegas",
+      "subtitle": "Recusa qualquer pedido que a Vela não consiga ler ou verificar por completo, em vez de oferecer “… mesmo assim”."
     }
   },
   "time": {

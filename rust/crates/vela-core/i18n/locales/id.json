@@ -31,7 +31,8 @@
       "advanced": "Lanjutan",
       "community": "Komunitas",
       "privacy": "Privasi",
-      "developer": "Developer"
+      "developer": "Developer",
+      "security": "Keamanan"
     },
     "account": {
       "switch": "Ganti akun",
@@ -319,6 +320,10 @@
       "title": "Layanan sementara tidak tersedia",
       "subtitle": "Indeks passkey tidak dapat dihubungi, padahal membuat dan masuk sama-sama membutuhkannya.",
       "editEndpoint": "Ubah alamat layanan indeks"
+    },
+    "refuseBlind": {
+      "title": "Tolak penandatanganan buta",
+      "subtitle": "Tolak setiap permintaan yang tidak bisa dibaca atau diperiksa Vela sepenuhnya, alih-alih menawarkan “… tetap”."
     }
   },
   "time": {
