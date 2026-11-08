@@ -1,0 +1,167 @@
+{
+  "about": "\u00a735 (SEC-PARENT-2): a site connected to a multisig may never make the multisig call ITSELF with a Safe-admin selector (self_call_guard's list held to the multisig's own address). Each case is a site's wallet_sendCalls to the multisig: `calls[].to` 'SELF' is the multisig's address (SELF_UPPER: in upper case; the multiSend payload's SELFADDR: its 20 bytes, lower-case hex, no 0x). `refused` is the function the refusal names (data.function, reason 'self_call', key componentsUi.signing.multisigSelfCallBlocked), refused at arrival with nothing drafted and again at the proposal step; null: the request is drafted as any other. `leg`: the 1-based leg the refusal names (a site's single eth_sendTransaction is leg 1); null when clear.",
+  "key": "componentsUi.signing.multisigSelfCallBlocked",
+  "cases": [
+    {
+      "name": "addOwnerWithThreshold on the multisig itself",
+      "calls": [
+        {
+          "to": "SELF",
+          "value": "0x0",
+          "data": "0x0d582f130000000000000000000000005c3d966577b66a12b815119f1af452ed7adf260c0000000000000000000000000000000000000000000000000000000000000001"
+        }
+      ],
+      "refused": "addOwnerWithThreshold",
+      "leg": 1
+    },
+    {
+      "name": "changeThreshold on itself",
+      "calls": [
+        {
+          "to": "SELF",
+          "value": "0x0",
+          "data": "0x694e80c30000000000000000000000000000000000000000000000000000000000000001"
+        }
+      ],
+      "refused": "changeThreshold",
+      "leg": 1
+    },
+    {
+      "name": "enableModule on itself",
+      "calls": [
+        {
+          "to": "SELF",
+          "value": "0x0",
+          "data": "0x610b59250000000000000000000000005c3d966577b66a12b815119f1af452ed7adf260c"
+        }
+      ],
+      "refused": "enableModule",
+      "leg": 1
+    },
+    {
+      "name": "setGuard on itself",
+      "calls": [
+        {
+          "to": "SELF",
+          "value": "0x0",
+          "data": "0xe19a9dd90000000000000000000000005c3d966577b66a12b815119f1af452ed7adf260c"
+        }
+      ],
+      "refused": "setGuard",
+      "leg": 1
+    },
+    {
+      "name": "setFallbackHandler on itself",
+      "calls": [
+        {
+          "to": "SELF",
+          "value": "0x0",
+          "data": "0xf08a03230000000000000000000000005c3d966577b66a12b815119f1af452ed7adf260c"
+        }
+      ],
+      "refused": "setFallbackHandler",
+      "leg": 1
+    },
+    {
+      "name": "swapOwner on itself",
+      "calls": [
+        {
+          "to": "SELF",
+          "value": "0x0",
+          "data": "0xe318b52b0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000dead0000000000000000000000005c3d966577b66a12b815119f1af452ed7adf260c"
+        }
+      ],
+      "refused": "swapOwner",
+      "leg": 1
+    },
+    {
+      "name": "removeOwner on itself",
+      "calls": [
+        {
+          "to": "SELF",
+          "value": "0x0",
+          "data": "0xf8dc5dd90000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000dead0000000000000000000000000000000000000000000000000000000000000001"
+        }
+      ],
+      "refused": "removeOwner",
+      "leg": 1
+    },
+    {
+      "name": "execTransaction on itself",
+      "calls": [
+        {
+          "to": "SELF",
+          "value": "0x0",
+          "data": "0x6a761202000000000000000000000000000000000000000000000000000000000000dead00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000140000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000016000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "refused": "execTransaction",
+      "leg": 1
+    },
+    {
+      "name": "the second leg of a batch changes the threshold",
+      "calls": [
+        {
+          "to": "0x000000000000000000000000000000000000dEaD",
+          "value": "0x0",
+          "data": "0x"
+        },
+        {
+          "to": "SELF",
+          "value": "0x0",
+          "data": "0x694e80c30000000000000000000000000000000000000000000000000000000000000001"
+        }
+      ],
+      "refused": "changeThreshold",
+      "leg": 2
+    },
+    {
+      "name": "an owner change one multiSend down",
+      "calls": [
+        {
+          "to": "0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
+          "value": "0x0",
+          "data": "0x8d80ff0a0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000009900SELFADDR000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000440d582f130000000000000000000000005c3d966577b66a12b815119f1af452ed7adf260c000000000000000000000000000000000000000000000000000000000000000100000000000000"
+        }
+      ],
+      "refused": "addOwnerWithThreshold",
+      "leg": 1
+    },
+    {
+      "name": "the multisig's address in upper case",
+      "calls": [
+        {
+          "to": "SELF_UPPER",
+          "value": "0x0",
+          "data": "0x0d582f130000000000000000000000005c3d966577b66a12b815119f1af452ed7adf260c0000000000000000000000000000000000000000000000000000000000000001"
+        }
+      ],
+      "refused": "addOwnerWithThreshold",
+      "leg": 1
+    },
+    {
+      "name": "clear: a plain transfer to the multisig itself (no calldata)",
+      "calls": [
+        {
+          "to": "SELF",
+          "value": "0x0",
+          "data": "0x"
+        }
+      ],
+      "refused": null,
+      "leg": null
+    },
+    {
+      "name": "clear: a token transfer elsewhere",
+      "calls": [
+        {
+          "to": "0x000000000000000000000000000000000000dEaD",
+          "value": "0x0",
+          "data": "0xa9059cbb000000000000000000000000000000000000000000000000000000000000dead00000000000000000000000000000000000000000000000000000000000003e8"
+        }
+      ],
+      "refused": null,
+      "leg": null
+    }
+  ]
+}

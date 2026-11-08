@@ -733,3 +733,162 @@ fn an_owner_read_nobody_could_make_refuses() {
     assert_eq!(data["why"], "unchecked");
     assert_eq!(data["key"], "componentsUi.signing.parentSafeUnchecked");
 }
+
+// ---------------------------------------------------------------------------
+// §35 (SEC-PARENT-2) — a site may never make a multisig call itself to change
+// who controls it
+// ---------------------------------------------------------------------------
+
+const SELF_CALL: &str = include_str!("vectors/rules/multisig-self-call.json");
+
+/// The vector's calls with `SELF` as `multisig`'s address.
+fn self_calls(case: &Value, multisig: &str) -> Value {
+    let bare = multisig.trim_start_matches("0x").to_ascii_lowercase();
+    let calls: Vec<Value> = case["calls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|call| {
+            let to = match call["to"].as_str().unwrap() {
+                "SELF" => multisig.to_owned(),
+                "SELF_UPPER" => format!("0x{}", bare.to_ascii_uppercase()),
+                other => other.to_owned(),
+            };
+            json!({
+                "to": to,
+                "value": call["value"],
+                "data": call["data"].as_str().unwrap().replace("SELFADDR", &bare),
+            })
+        })
+        .collect();
+    Value::Array(calls)
+}
+
+#[test]
+fn the_multisig_self_call_vector_is_refused_at_arrival_and_nothing_is_drafted() {
+    let vector: Value = serde_json::from_str(SELF_CALL).unwrap();
+    for case in vector["cases"].as_array().unwrap() {
+        let name = case["name"].as_str().unwrap();
+        let (mut world, mut sut, account) = setup(&[0, 1]);
+        let calls = self_calls(case, &account.address);
+        run(
+            &mut sut,
+            &mut world,
+            ask(
+                &account,
+                "r1",
+                "wallet_sendCalls",
+                json!([{ "version": "2.0.0", "chainId": "0x64", "from": account.address,
+                         "calls": calls }]),
+            ),
+        );
+        let held = sut.view().dapp["r1"].clone();
+        match case["refused"].as_str() {
+            Some(function) => {
+                assert_eq!(held.stage, HeldStage::Refused, "{name}: {held:?}");
+                let refusal = held.refusal.clone().unwrap();
+                assert_eq!(refusal.code, -32603, "{name}");
+                let data = refusal.data.unwrap();
+                assert_eq!(data["reason"], "self_call", "{name}");
+                assert_eq!(data["function"], function, "{name}");
+                assert_eq!(data["key"], vector["key"], "{name}");
+                assert_eq!(data["safe"], json!(account.address), "{name}");
+                assert_eq!(data["leg"], case["leg"], "{name}");
+                assert!(sut.view().draft.is_none(), "{name}: nothing drafted");
+                assert!(world.passkeys.is_empty(), "{name}: nothing signed");
+                // Read, then answered with the refusal — never 4001.
+                run(&mut sut, &mut world, Event::DappLeave { id: "r1".into() });
+                let answer = answer(&sut, "r1").unwrap();
+                assert_eq!(answer.error.unwrap().code, -32603, "{name}");
+            }
+            None => {
+                assert_eq!(held.stage, HeldStage::Reviewing, "{name}: {held:?}");
+                assert!(sut.view().draft.is_some(), "{name}: drafted");
+            }
+        }
+    }
+}
+
+/// The proposal step checks again, on the transaction about to be signed: a
+/// site's calls that reached a draft without the arrival check (the
+/// `Draft` event carries a site's `Calls` too) are never proposed — the
+/// held request, if any, refused in the arrival's words.
+#[test]
+fn a_site_draft_that_would_change_the_multisig_is_never_proposed() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    run(
+        &mut sut,
+        &mut world,
+        Event::Follow {
+            account: Some(account.clone()),
+        },
+    );
+    let add_owner = format!(
+        "0x0d582f13{:0>64}{:0>64}",
+        DEAD.trim_start_matches("0x").to_ascii_lowercase(),
+        "1"
+    );
+    run(
+        &mut sut,
+        &mut world,
+        Event::Draft {
+            chain_id: 100,
+            proposal: vela_core::app::multisig_proposals::ProposalKind::Calls {
+                calls: vec![multisig::CallArg {
+                    to: account.address.clone(),
+                    value: "0x0".into(),
+                    data: add_owner,
+                }],
+                origin: Some("https://app.example".into()),
+            },
+        },
+    );
+    assert!(sut.view().draft.is_some(), "a draft, by the other door");
+    run_short(
+        &mut sut,
+        &mut world,
+        Event::ConfirmDraft { as_member: None },
+    );
+    assert_eq!(
+        sut.view().actions.get("propose"),
+        Some(&ActionState::SigningBlocked)
+    );
+    assert!(world.passkeys.is_empty(), "nothing signed");
+    assert!(world.mailbox.is_empty(), "nothing proposed");
+}
+
+/// The members' own change of members is not a site's request: proposed.
+#[test]
+fn the_members_own_change_of_members_is_still_proposed() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    run(
+        &mut sut,
+        &mut world,
+        Event::Follow {
+            account: Some(account.clone()),
+        },
+    );
+    run(
+        &mut sut,
+        &mut world,
+        Event::Draft {
+            chain_id: 100,
+            proposal: vela_core::app::multisig_proposals::ProposalKind::MemberChange {
+                change: multisig::MemberChange::Threshold { threshold: 1 },
+            },
+        },
+    );
+    run_short(
+        &mut sut,
+        &mut world,
+        Event::ConfirmDraft { as_member: None },
+    );
+    assert!(
+        matches!(
+            sut.view().actions.get("propose"),
+            Some(ActionState::Done { .. })
+        ),
+        "{:?}",
+        sut.view().actions.get("propose")
+    );
+}
