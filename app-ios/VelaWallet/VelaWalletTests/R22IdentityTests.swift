@@ -752,3 +752,48 @@ struct R22MailboxWordsTests {
         #expect(line.contains(address))
     }
 }
+
+// MARK: - R21-3 (§37): a test build's passkey domain, said as that
+
+@MainActor
+struct R213TestBuildPasskeyWordsTests {
+    private let loc = Loc(overrideTag: "en", preferredLanguages: [])
+    private static let domain = "com.apple.AuthenticationServices.AuthorizationError"
+    private static let notAssociated =
+        "Application with identifier ABCDE12345.app.getvela.wallet is not associated with domain localhost"
+
+    /// The simulator's test build (RP = localhost) failing 1004 "not
+    /// associated" is the test domain not set up — never the release
+    /// build's "check your connection… update Vela". A release build's words
+    /// are unchanged.
+    @Test func aTestBuildsNotAssociatedFailureIsTheTestDomainsSentence() {
+        let test = PasskeyErrorFacts(domain: Self.domain, code: 1004, message: Self.notAssociated, testBuild: true)
+        #expect(test.words.key == "onboarding.common.passkeyError.testDomainNotAssociated")
+        #expect(loc.t(test.words.key) != test.words.key, "the sentence is in the catalog")
+
+        let release = PasskeyErrorFacts(domain: Self.domain, code: 1004, message: Self.notAssociated, testBuild: false)
+        #expect(release.words.key == "onboarding.common.passkeyError.appNotAssociated")
+        // The same failure either way: only the words differ.
+        #expect(test.words.failure == release.words.failure)
+    }
+
+    /// The flag is the one this build hands `relying_party_id`, and it rides
+    /// on every facts object the shell sends the core (`passkey_failed.error`).
+    @Test func theFactsCarryThisBuildsTestFlag() {
+        let facts = PasskeyErrorFacts.of(NSError(domain: Self.domain, code: 1004))
+        #expect(facts.testBuild == PasskeyRelyingParty.testBuild)
+        #expect(PasskeyRelyingParty.testBuild, "the unit tests run a Debug build — a test build")
+        #expect(facts.wire["test_build"] as? Bool == PasskeyRelyingParty.testBuild)
+        #expect(PasskeyErrorFacts(domain: "", code: nil, message: "x", testBuild: false).wire["test_build"] as? Bool == false)
+
+        // Through the executor's door: the facts it classifies, and the
+        // `passkey_failed` the core is answered, say it.
+        let error = NSError(domain: Self.domain, code: 1004, userInfo: [NSLocalizedDescriptionKey: Self.notAssociated])
+        let classified = PasskeyExecutor.classify(error)
+        #expect(classified.facts?.testBuild == true)
+        #expect(classified.facts?.words.key == "onboarding.common.passkeyError.testDomainNotAssociated")
+        let failed = OnboardingExecutor.failure(for: ["type": "register_passkey"], error: error)
+        #expect(failed["type"] as? String == "passkey_failed")
+        #expect((failed["error"] as? [String: Any])?["test_build"] as? Bool == true)
+    }
+}

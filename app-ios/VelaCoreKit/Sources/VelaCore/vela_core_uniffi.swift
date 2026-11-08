@@ -22901,6 +22901,25 @@ public func passkeyErrorWords(platform: String, domain: String, code: Int32?, me
 })
 }
 /**
+ * [`passkey_error_words`] for the build it runs in (R21-3, §37):
+ * `test_build` — the flag handed to `relying_party_id` — says an association
+ * failure as the test build's own passkey domain not being set up
+ * (`onboarding.common.passkeyError.testDomainNotAssociated`); a release
+ * build's words are unchanged.
+ */
+public func passkeyErrorWordsOn(platform: String, domain: String, code: Int32?, message: String, testBuild: Bool) -> PasskeyErrorWords  {
+    return try!  FfiConverterTypePasskeyErrorWords_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_passkey_error_words_on(
+        FfiConverterString.lower(platform),
+        FfiConverterString.lower(domain),
+        FfiConverterOptionInt32.lower(code),
+        FfiConverterString.lower(message),
+        FfiConverterBool.lower(testBuild),uniffiCallStatus
+    )
+})
+}
+/**
  * The signing prompt's deadline, ms — what a shell asks its platform's
  * prompt for, so [`passkey_ceremony_end`] reads the same clock
  * (`passkey_end::SIGN_TIMEOUT_MS`).
@@ -24312,6 +24331,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_passkey_error_words() != 4040) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_passkey_error_words_on() != 39567) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_passkey_sign_timeout_ms() != 55664) {
