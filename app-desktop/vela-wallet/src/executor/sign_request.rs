@@ -39,6 +39,7 @@ use std::time::Duration;
 use serde_json::{Value, json};
 
 use vela_core::app::fee_policy::FeeCall;
+use vela_core::app::parent_safe_guard::SafeOwnerAnswer;
 use vela_core::app::sign_request::{
     Event, SignFundingNeeded, SignOperation, SignRecord, SignShellResult, SignSubmitOutcome,
 };
@@ -306,6 +307,47 @@ impl SignContext {
 const LANDING_CAP: Duration =
     Duration::from_millis(vela_core::app::sign_request::PAGE_WAIT_CAP_MS as u64);
 
+/// How long a Safe's ownership read may take (VELA-2026-002): the core's read
+/// timeout ([`vela_core::app::rpc_pool::RPC_READ_TIMEOUT_MS`]) — the bound
+/// every read of this app's pool keeps for one node. The confirm stays shut
+/// while it is out, so a chain whose nodes hang ends in "couldn't check",
+/// never in a sheet that waits forever.
+const OWNER_READ_BUDGET: Duration =
+    Duration::from_millis(vela_core::app::rpc_pool::RPC_READ_TIMEOUT_MS as u64);
+
+/// The pool's reply to an ownership read, as the core is told it
+/// (VELA-2026-002): the node's `result`, verbatim; the JSON-RPC `error` it
+/// answered; or that no node answered — every endpoint failed, the budget
+/// ran out, or the reply carried neither. Never a judgment.
+fn owner_answer(reply: Result<Value, crate::executor::pool::PoolError>) -> SafeOwnerAnswer {
+    let envelope = match reply {
+        Ok(envelope) => envelope,
+        Err(error) => {
+            return SafeOwnerAnswer::Unreachable {
+                detail: format!("{error:?}"),
+            };
+        }
+    };
+    if let Some(error) = envelope.get("error").filter(|e| !e.is_null()) {
+        return SafeOwnerAnswer::RpcError {
+            code: error.get("code").and_then(Value::as_i64),
+            message: error
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+        };
+    }
+    match envelope.get("result").and_then(Value::as_str) {
+        Some(data) => SafeOwnerAnswer::Returned {
+            data: data.to_owned(),
+        },
+        None => SafeOwnerAnswer::Unreachable {
+            detail: "the node's reply carried no result".to_owned(),
+        },
+    }
+}
+
 pub fn perform(operation: &SignOperation, ctx: &SignContext) -> SignAnswer {
     match operation {
         // The transport is the host's: only it knows which surface raised
@@ -373,6 +415,35 @@ pub fn perform(operation: &SignOperation, ctx: &SignContext) -> SignAnswer {
                 round: *round,
             },
         ),
+
+        // VELA-2026-002: does the signer own this Safe? One `eth_call` of the
+        // core's own calldata (`isOwner(account)`) through the pool, bounded
+        // by the core's read timeout, and the node's answer handed back as it
+        // came — a result, its JSON-RPC error, or that no node answered.
+        // Nothing is decided here: what the answer means is the core's.
+        SignOperation::ReadSafeOwner {
+            id,
+            chain_id,
+            safe,
+            data,
+            ..
+        } => {
+            let (id, chain_id, safe, data) = (id.clone(), *chain_id, safe.clone(), data.clone());
+            SignAnswer::Blocking(Box::new(move || {
+                let answer = owner_answer(crate::executor::pool::call_within(
+                    chain_id,
+                    "eth_call",
+                    json!([{ "to": safe, "data": data }, "latest"]),
+                    OWNER_READ_BUDGET,
+                ));
+                SignShellResult::SafeOwnerRead {
+                    id,
+                    chain_id,
+                    safe,
+                    answer,
+                }
+            }))
+        }
 
         SignOperation::SwitchActiveAccount { index } => {
             let index = *index;
@@ -3558,5 +3629,260 @@ mod tests {
             "stopped at {:?}, not at the next 3 s poll",
             started.elapsed()
         );
+    }
+
+    // -- VELA-2026-002: the parent-Safe guard's ownership read ---------------
+
+    /// `isOwner(0xaaaa…)` — the calldata the core builds for the read.
+    const IS_OWNER_DATA: &str =
+        "0x2f54bf6e000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const OWNER_SAFE: &str = "0x7777777777777777777777777777777777777777";
+
+    /// The pool's three kinds of reply, each handed to the core as it came:
+    /// the node's `result` verbatim, its JSON-RPC error (code and message),
+    /// and no node at all — or a reply that carried neither, which is no
+    /// answer either. Nothing here reads what any of them means.
+    #[test]
+    fn an_owner_reply_is_handed_back_as_the_node_gave_it() {
+        use crate::executor::pool::PoolError;
+        let word = "0x0000000000000000000000000000000000000000000000000000000000000001";
+        assert_eq!(
+            owner_answer(Ok(json!({ "jsonrpc": "2.0", "id": 1, "result": word }))),
+            SafeOwnerAnswer::Returned {
+                data: word.to_owned()
+            }
+        );
+        // Verbatim: an empty answer (no code there) is the node's, not "false".
+        assert_eq!(
+            owner_answer(Ok(json!({ "jsonrpc": "2.0", "id": 1, "result": "0x" }))),
+            SafeOwnerAnswer::Returned {
+                data: "0x".to_owned()
+            }
+        );
+        assert_eq!(
+            owner_answer(Ok(json!({ "jsonrpc": "2.0", "id": 1,
+                "error": { "code": 3, "message": "execution reverted", "data": "0x" } }))),
+            SafeOwnerAnswer::RpcError {
+                code: Some(3),
+                message: "execution reverted".to_owned()
+            }
+        );
+        assert_eq!(
+            owner_answer(Ok(json!({ "jsonrpc": "2.0", "id": 1,
+                "error": { "message": "rate limited" } }))),
+            SafeOwnerAnswer::RpcError {
+                code: None,
+                message: "rate limited".to_owned()
+            }
+        );
+        for unanswered in [
+            Err(PoolError::Failed {
+                rate_limited: false,
+            }),
+            Err(PoolError::Failed { rate_limited: true }),
+            Err(PoolError::Unavailable),
+            Ok(json!({ "jsonrpc": "2.0", "id": 1 })),
+            Ok(json!({ "jsonrpc": "2.0", "id": 1, "result": null })),
+        ] {
+            assert!(
+                matches!(
+                    owner_answer(unanswered.clone()),
+                    SafeOwnerAnswer::Unreachable { .. }
+                ),
+                "{unanswered:?}"
+            );
+        }
+    }
+
+    /// The executor's `ReadSafeOwner`, end to end through this app's own
+    /// pool against a loopback node: ONE `eth_call` of the core's calldata
+    /// to the Safe at `latest` — a result, a JSON-RPC error and a node that
+    /// hangs up are each the core's answer, with the request's id, chain and
+    /// Safe echoed exactly — and the read ends within the core's read
+    /// timeout however the node behaves.
+    #[test]
+    fn read_safe_owner_is_one_eth_call_through_the_pool() {
+        use crate::executor::pool::tests::{http, scripted_node, seed_pool};
+        use vela_core::app::rpc_pool::RpcSource;
+        const OWNS: u32 = 424_311;
+        const REVERTS: u32 = 424_312;
+        const SILENT: u32 = 424_313;
+        let word = "0x0000000000000000000000000000000000000000000000000000000000000001";
+
+        storage::tests::with_temp_state("sign-read-safe-owner", || {
+            // The node's body is checked too: the call it was asked is the
+            // core's, to the Safe, at `latest`.
+            let (owns, owns_log) = scripted_node(
+                Duration::ZERO,
+                Some(http(
+                    "200 OK",
+                    &format!(r#"{{"jsonrpc":"2.0","id":1,"result":"{word}"}}"#),
+                )),
+            );
+            seed_pool(OWNS, &[(&owns, RpcSource::User)]);
+            let (reverts, _) = scripted_node(
+                Duration::ZERO,
+                Some(http(
+                    "200 OK",
+                    r#"{"jsonrpc":"2.0","id":1,"error":{"code":3,"message":"execution reverted","data":"0x"}}"#,
+                )),
+            );
+            seed_pool(REVERTS, &[(&reverts, RpcSource::User)]);
+            let (silent, _) = scripted_node(Duration::ZERO, None);
+            seed_pool(SILENT, &[(&silent, RpcSource::User)]);
+
+            let read = |chain_id: u32| {
+                let operation = SignOperation::ReadSafeOwner {
+                    id: "rid-31".to_owned(),
+                    chain_id,
+                    safe: OWNER_SAFE.to_owned(),
+                    account: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+                    data: IS_OWNER_DATA.to_owned(),
+                };
+                let SignAnswer::Blocking(work) = perform(&operation, &context(None)) else {
+                    panic!("an ownership read is a blocking read");
+                };
+                let began = std::time::Instant::now();
+                let result = work();
+                (result, began.elapsed())
+            };
+            let answered =
+                |chain_id: u32, answer: SafeOwnerAnswer| SignShellResult::SafeOwnerRead {
+                    id: "rid-31".to_owned(),
+                    chain_id,
+                    safe: OWNER_SAFE.to_owned(),
+                    answer,
+                };
+
+            let (result, _) = read(OWNS);
+            assert_eq!(
+                result,
+                answered(
+                    OWNS,
+                    SafeOwnerAnswer::Returned {
+                        data: word.to_owned()
+                    }
+                )
+            );
+            assert_eq!(
+                owns_log.lock().map(|log| log.len()).unwrap_or(0),
+                1,
+                "one call"
+            );
+
+            let (result, _) = read(REVERTS);
+            assert_eq!(
+                result,
+                answered(
+                    REVERTS,
+                    SafeOwnerAnswer::RpcError {
+                        code: Some(3),
+                        message: "execution reverted".to_owned()
+                    }
+                )
+            );
+
+            let (result, waited) = read(SILENT);
+            assert!(
+                matches!(
+                    &result,
+                    SignShellResult::SafeOwnerRead {
+                        id,
+                        chain_id: SILENT,
+                        safe,
+                        answer: SafeOwnerAnswer::Unreachable { .. },
+                    } if id == "rid-31" && safe == OWNER_SAFE
+                ),
+                "{result:?}"
+            );
+            assert!(
+                waited <= OWNER_READ_BUDGET + Duration::from_secs(1),
+                "the read outlived the core's read timeout: {waited:?}"
+            );
+        });
+    }
+
+    /// The call the node was asked — read straight off the wire.
+    #[test]
+    fn the_owner_read_asks_the_cores_calldata_of_the_safe_at_latest() {
+        use std::io::{BufRead as _, Read as _, Write as _};
+        use vela_core::app::rpc_pool::RpcSource;
+        const CHAIN: u32 = 424_314;
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap_or_else(|error| unreachable!("no loopback port: {error}"));
+        let port = listener
+            .local_addr()
+            .map(|addr| addr.port())
+            .unwrap_or_else(|error| unreachable!("no port: {error}"));
+        let (told, heard) = std::sync::mpsc::channel::<String>();
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let mut reader = std::io::BufReader::new(&stream);
+                let (mut length, mut line) = (0usize, String::new());
+                while reader.read_line(&mut line).unwrap_or(0) > 0 {
+                    if line == "\r\n" {
+                        break;
+                    }
+                    if let Some(value) = line.to_lowercase().strip_prefix("content-length:") {
+                        length = value.trim().parse().unwrap_or(0);
+                    }
+                    line.clear();
+                }
+                let mut body = vec![0u8; length];
+                let _ = reader.read_exact(&mut body);
+                let _ = told.send(String::from_utf8_lossy(&body).into_owned());
+                let reply = r#"{"jsonrpc":"2.0","id":1,"result":"0x"}"#;
+                let _ = (&stream)
+                    .write_all(crate::executor::pool::tests::http("200 OK", reply).as_bytes());
+            }
+        });
+        storage::tests::with_temp_state("sign-read-safe-owner-wire", || {
+            crate::executor::pool::tests::seed_pool(
+                CHAIN,
+                &[(&format!("http://127.0.0.1:{port}"), RpcSource::User)],
+            );
+            let operation = SignOperation::ReadSafeOwner {
+                id: "rid-31".to_owned(),
+                chain_id: CHAIN,
+                safe: OWNER_SAFE.to_owned(),
+                account: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+                data: IS_OWNER_DATA.to_owned(),
+            };
+            let SignAnswer::Blocking(work) = perform(&operation, &context(None)) else {
+                panic!("an ownership read is a blocking read");
+            };
+            let _ = work();
+        });
+        let body: Value = heard
+            .recv_timeout(Duration::from_secs(5))
+            .ok()
+            .and_then(|body| serde_json::from_str(&body).ok())
+            .unwrap_or_else(|| panic!("the node was never asked"));
+        assert_eq!(body["method"], "eth_call");
+        assert_eq!(
+            body["params"],
+            json!([{ "to": OWNER_SAFE, "data": IS_OWNER_DATA }, "latest"])
+        );
+    }
+
+    /// The core's own vector for the rule (VELA-2026-002), replayed through the door
+    /// this shell's core exposes for it — every case's verdict exactly as
+    /// the vector says.
+    #[test]
+    fn the_parent_safe_vector_answers_as_the_core_says() {
+        let v: Value = serde_json::from_str(include_str!(
+            "../../../../rust/crates/vela-core/tests/vectors/rules/parent-safe-guard.json"
+        ))
+        .expect("vector");
+        let cases = v["cases"].as_array().expect("cases");
+        assert!(cases.len() >= 70, "the whole vector: {}", cases.len());
+        for case in cases {
+            let input = case["input"].to_string();
+            let output = vela_core::app::parent_safe_guard::check_json(&input)
+                .unwrap_or_else(|error| panic!("{}: {error}", case["name"]));
+            let got: Value = serde_json::from_str(&output).expect("the door answers JSON");
+            assert_eq!(got, case["expect"], "{}", case["name"]);
+        }
     }
 }

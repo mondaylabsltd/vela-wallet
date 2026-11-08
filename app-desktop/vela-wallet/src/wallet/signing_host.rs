@@ -4067,3 +4067,404 @@ mod sim_wait_tests {
         );
     }
 }
+
+/// VELA-2026-002 on this column's wiring: a site's request that would make
+/// the signing account act for a Safe it owns is read on chain (`isOwner`
+/// through this shell's executor and pool — the chain is a loopback node),
+/// refused by the core's guard, worded in that Safe's sentence, never
+/// signed, and answered -32603 `parent_safe_blocked` when the person closes
+/// it.
+///
+/// [`Column`] is the column as `SigningHost` runs it, without a window: the
+/// request is told exactly what `begin` tells it ([`opening_events`]), every
+/// operation the machine asks for goes to this shell's executor, and the
+/// close is the column's own (`close_plan`, then `SwipeDismissed`).
+#[cfg(test)]
+mod parent_safe_tests {
+    use super::*;
+    use crate::executor::pool::tests::{http, scripted_node, seed_pool};
+    use crate::signing::SigningStrings;
+    use crate::signing::fixtures::Block;
+    use serde_json::Value;
+    use vela_core::app::parent_safe_guard::ParentReason;
+    use vela_core::app::rpc_pool::RpcSource;
+    use vela_core::app::sign_request::{SignApproveOpts, SignErrorKind, SignResponsePayload};
+
+    const TRUE: &str = r#"{"jsonrpc":"2.0","id":1,"result":"0x0000000000000000000000000000000000000000000000000000000000000001"}"#;
+    const FALSE: &str = r#"{"jsonrpc":"2.0","id":1,"result":"0x0000000000000000000000000000000000000000000000000000000000000000"}"#;
+
+    /// The core's vector for the rule.
+    fn vector() -> Value {
+        serde_json::from_str(include_str!(
+            "../../../../rust/crates/vela-core/tests/vectors/rules/parent-safe-guard.json"
+        ))
+        .unwrap_or_else(|error| unreachable!("the vector: {error}"))
+    }
+
+    /// The vector's case `name`, whole.
+    fn case(name: &str) -> Value {
+        vector()["cases"]
+            .as_array()
+            .and_then(|cases| cases.iter().find(|case| case["name"] == name).cloned())
+            .unwrap_or_else(|| unreachable!("no case {name:?}"))
+    }
+
+    fn account_of(address: &str) -> Account {
+        Account {
+            id: "cred0".to_owned(),
+            name: "savings".to_owned(),
+            address: address.to_owned(),
+            public_key_hex: "04aa".to_owned(),
+            created_at_iso: String::new(),
+            keys: vec![vela_core::app::AccountKey {
+                credential_id: "cred0".to_owned(),
+                public_key_hex: "04aa".to_owned(),
+                name: String::new(),
+                transports: "internal".to_owned(),
+                signer_origin: None,
+            }],
+            sign_in_key: None,
+            signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
+            signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+        }
+    }
+
+    /// The signing column for one request, as `SigningHost` runs it.
+    struct Column {
+        sign: CoreHost<SignRequest>,
+        ctx: SignContext,
+        /// Every operation the machine asked this shell for, in order.
+        asked: Vec<SignOperation>,
+        /// Every answer the site was sent, in order.
+        answers: Vec<SignResponsePayload>,
+    }
+
+    impl Column {
+        /// `SigningHost::begin`'s opening, for `request` signed by `wallet`.
+        fn open(request: &IncomingRequest, wallet: &str, chain_ids: Vec<u32>) -> Self {
+            let calls = sign_executor::calls_of(&request.method, &request.params_json);
+            let plan = sim_plan(calls.as_deref(), false);
+            let mut sim = Simulation::default();
+            let opening = opening_events(
+                request,
+                wallet,
+                "cred0".to_owned(),
+                chain_ids,
+                1_000.0,
+                plan,
+                &mut sim,
+            );
+            let mut column = Self {
+                sign: CoreHost::<SignRequest>::new(),
+                ctx: SignContext::new(&account_of(wallet), CeremonyChannel::new().ceremony(0)),
+                asked: Vec::new(),
+                answers: Vec::new(),
+            };
+            for event in opening {
+                column.dispatch(event);
+            }
+            column
+        }
+
+        fn dispatch(&mut self, event: SignEvent) {
+            let pending = self.sign.dispatch(event);
+            self.pump(pending);
+        }
+
+        /// `SigningHost::pump_sign`, inline: the executor answers what it
+        /// answers (a blocking read is run here, on this thread), the
+        /// transport's answers are kept, a timer is left unanswered (the
+        /// clock is stopped), and nothing that would sign may be asked.
+        fn pump(&mut self, pending: Vec<Pending<SignOperation>>) {
+            for effect in pending {
+                self.asked.push(effect.operation.clone());
+                match sign_executor::perform(&effect.operation, &self.ctx) {
+                    SignAnswer::Now(result) => {
+                        let next = self.sign.resolve(effect.id, result);
+                        self.pump(next);
+                    }
+                    SignAnswer::Blocking(work) => {
+                        assert!(
+                            matches!(effect.operation, SignOperation::ReadSafeOwner { .. }),
+                            "only a read may run here: {:?}",
+                            effect.operation
+                        );
+                        let next = self.sign.resolve(effect.id, work());
+                        self.pump(next);
+                    }
+                    SignAnswer::After(..) => {}
+                    SignAnswer::Screen => {
+                        if let SignOperation::SendResponse { payload, .. } = &effect.operation {
+                            self.answers.push(payload.clone());
+                        }
+                        let next = self.sign.resolve(effect.id, SignShellResult::Responded);
+                        self.pump(next);
+                    }
+                    SignAnswer::Streaming(_) => {
+                        panic!("a refused request was submitted: {:?}", effect.operation)
+                    }
+                }
+            }
+        }
+
+        /// The column's ✕ (`SigningHost::close`): a refused sheet closes at
+        /// once, and the machine hears the dismissal.
+        fn close(&mut self) {
+            let view = self.sign.view();
+            let facts = close_facts_of(&view, crate::signing::status::Signature::NotYet, false);
+            assert_eq!(
+                crate::signing::status::close_plan(&facts),
+                crate::signing::status::ClosePlan::Now,
+                "a refused sheet closes at once"
+            );
+            self.dispatch(SignEvent::SwipeDismissed);
+        }
+
+        /// Nothing was signed or sent: no submit, no funding check, no
+        /// sponsorship, no record was ever asked for.
+        fn nothing_signed(&self) -> bool {
+            !self.asked.iter().any(|op| {
+                matches!(
+                    op,
+                    SignOperation::SignAndSubmit { .. }
+                        | SignOperation::CheckBundlerFunding { .. }
+                        | SignOperation::AttemptSponsorship { .. }
+                        | SignOperation::PersistRecord { .. }
+                )
+            })
+        }
+
+        /// The ownership reads asked, `(chain, safe)`.
+        fn reads(&self) -> Vec<(u32, String)> {
+            self.asked
+                .iter()
+                .filter_map(|op| match op {
+                    SignOperation::ReadSafeOwner { chain_id, safe, .. } => {
+                        Some((*chain_id, safe.clone()))
+                    }
+                    _ => None,
+                })
+                .collect()
+        }
+
+        /// The refused sheet, as the page draws it (`status_blocks`), in
+        /// English: its title and its sentence.
+        fn said(&self) -> Vec<String> {
+            let s = SigningStrings::resolve(&crate::loc::Loc::for_language("en"));
+            crate::signing::live::status_blocks(&self.sign.view(), &s)
+                .into_iter()
+                .filter_map(|block| match block {
+                    Block::Intent { text, .. } | Block::Warning { text, .. } => {
+                        Some(text.to_string())
+                    }
+                    _ => None,
+                })
+                .collect()
+        }
+
+        /// Refused for `parent` (`reason`), said in its sentence, unsignable
+        /// however the confirm is pressed, nothing signed — and its close
+        /// answers the site -32603 `parent_safe_blocked`, once.
+        fn assert_refused(&mut self, parent: &str, reason: ParentReason) {
+            let view = self.sign.view();
+            let blocked = view
+                .blocked
+                .clone()
+                .unwrap_or_else(|| panic!("not refused: {:?}", view.error));
+            assert_eq!(blocked.parent.as_deref(), Some(parent));
+            assert_eq!(blocked.reason, Some(reason));
+            assert_eq!(
+                crate::signing::live::ColumnKind::of(&view),
+                crate::signing::live::ColumnKind::Refused,
+                "the refused column"
+            );
+            assert_eq!(
+                view.error.as_ref().map(|error| error.kind),
+                Some(SignErrorKind::ParentSafeBlocked)
+            );
+
+            // Its words: the Safe's sentence, under "Vela can't sign this" —
+            // never the self-call one ("your wallet").
+            let en = crate::loc::Loc::for_language("en");
+            let key = if reason == ParentReason::Unchecked {
+                "componentsUi.signing.parentSafeUnchecked"
+            } else {
+                "componentsUi.signing.parentSafeBlocked"
+            };
+            let short = crate::wallet::live::shorten_address(parent);
+            let sentence = en
+                .t_texts(key, &[("function", &blocked.function), ("safe", &short)])
+                .to_string();
+            assert_eq!(
+                self.said(),
+                vec![
+                    en.t("componentsUi.signing.selfCallBlockedTitle")
+                        .to_string(),
+                    sentence.clone()
+                ]
+            );
+            assert!(
+                sentence.contains(&blocked.function) && sentence.contains(&short),
+                "{sentence}"
+            );
+
+            // Pressing the confirm anyway does nothing.
+            self.dispatch(SignEvent::ApproveTapped {
+                opts: SignApproveOpts::default(),
+            });
+            assert!(self.nothing_signed(), "{:?}", self.asked);
+            assert!(self.answers.is_empty(), "answered before it was read");
+
+            // Closed: the site hears the wallet's refusal, never the
+            // person's 4001.
+            self.close();
+            let [answer] = self.answers.as_slice() else {
+                panic!("one answer: {:?}", self.answers);
+            };
+            assert!(
+                matches!(
+                    answer,
+                    SignResponsePayload::Err {
+                        code: -32603,
+                        kind: SignErrorKind::ParentSafeBlocked,
+                        ..
+                    }
+                ),
+                "{answer:?}"
+            );
+            assert!(self.nothing_signed(), "{:?}", self.asked);
+        }
+    }
+
+    /// The vector's request as the browser hands it to the column (the
+    /// page's `open_dapp_signing`).
+    fn request_of(case: &Value, chain_id: u32) -> IncomingRequest {
+        let input = &case["input"];
+        IncomingRequest {
+            id: "rid-31".to_owned(),
+            method: input["method"].as_str().unwrap_or_default().to_owned(),
+            params_json: input["params"].to_string(),
+            origin: "https://evil.example".to_owned(),
+            transport_id: BROWSER_TRANSPORT.to_owned(),
+            chain_id,
+            granted_address: Some(input["signer"].as_str().unwrap_or_default().to_owned()),
+        }
+    }
+
+    /// A chain whose one node answers every call with `reply`.
+    fn chain_answering(chain_id: u32, reply: Option<&str>) {
+        let (node, _) = scripted_node(
+            std::time::Duration::ZERO,
+            reply.map(|body| http("200 OK", body)),
+        );
+        seed_pool(chain_id, &[(&node, RpcSource::User)]);
+    }
+
+    /// The takeover (`execTransaction(swapOwner)`, v = 1) of a Safe the chain
+    /// says this account owns: read, then refused — nothing signed — and
+    /// answered -32603. Every named hotfix shape, the same.
+    #[test]
+    fn the_takeover_of_an_owned_safe_is_read_then_refused() {
+        const CHAIN: u32 = 424_331;
+        let v = vector();
+        crate::executor::storage::tests::with_temp_state("sign-parent-takeover", || {
+            chain_answering(CHAIN, Some(TRUE));
+            let parent = v["parent"].as_str().unwrap_or_default();
+            let takeover = case("a: execTransaction(swapOwner) on a Safe this account owns, v=1");
+            let mut column = Column::open(
+                &request_of(&takeover, CHAIN),
+                takeover["input"]["signer"].as_str().unwrap_or_default(),
+                vec![CHAIN],
+            );
+            assert_eq!(column.reads(), vec![(CHAIN, parent.to_owned())]);
+            column.assert_refused(parent, ParentReason::Owner);
+
+            let unknown = v["unknown"].as_str().unwrap_or_default();
+            for short in [
+                "exec-swap",
+                "exec-add",
+                "exec-thr",
+                "approveHash",
+                "MultiSend-nested",
+            ] {
+                let shape = case(&format!("hotfix {short}: isOwner true, refused"));
+                let mut column = Column::open(
+                    &request_of(&shape, CHAIN),
+                    shape["input"]["signer"].as_str().unwrap_or_default(),
+                    vec![CHAIN],
+                );
+                assert_eq!(column.reads(), vec![(CHAIN, unknown.to_owned())], "{short}");
+                column.assert_refused(unknown, ParentReason::Owner);
+            }
+        });
+    }
+
+    /// The read nobody could make — the node hangs up — refuses: "couldn't
+    /// check", never signed.
+    #[test]
+    fn a_safe_nobody_could_read_is_refused_unchecked() {
+        const CHAIN: u32 = 424_333;
+        let v = vector();
+        let case = case("isOwner unreadable (no node answered): refused, couldn't check");
+        let unknown = v["unknown"].as_str().unwrap_or_default();
+        crate::executor::storage::tests::with_temp_state("sign-parent-unreachable", || {
+            chain_answering(CHAIN, None);
+            let mut column = Column::open(
+                &request_of(&case, CHAIN),
+                case["input"]["signer"].as_str().unwrap_or_default(),
+                vec![CHAIN],
+            );
+            assert_eq!(column.reads(), vec![(CHAIN, unknown.to_owned())]);
+            column.assert_refused(unknown, ParentReason::Unchecked);
+        });
+    }
+
+    /// The same read answered "not an owner": the request is the person's
+    /// to decide, as any other (the guard decides nothing more).
+    #[test]
+    fn a_safe_this_account_does_not_own_goes_on() {
+        const CHAIN: u32 = 424_334;
+        let case = case("hotfix exec-swap: unknown Safe, not owner, allowed");
+        crate::executor::storage::tests::with_temp_state("sign-parent-not-owner", || {
+            chain_answering(CHAIN, Some(FALSE));
+            let column = Column::open(
+                &request_of(&case, CHAIN),
+                case["input"]["signer"].as_str().unwrap_or_default(),
+                vec![CHAIN],
+            );
+            assert_eq!(column.reads().len(), 1);
+            let view = column.sign.view();
+            assert!(view.blocked.is_none(), "{:?}", view.blocked);
+            assert_ne!(
+                view.confirm_block,
+                Some(vela_core::app::sign_confirm::ConfirmBlock::Reading),
+                "the read is answered"
+            );
+            assert!(column.answers.is_empty());
+        });
+    }
+
+    /// The wording the sheet draws for each reason, in every language the
+    /// app ships: the Safe's sentence with the call and the Safe — the
+    /// catalog's own, never its key.
+    #[test]
+    fn the_parent_sentence_names_the_call_and_the_safe_in_every_language() {
+        for lang in crate::loc::LANGUAGES {
+            let loc = crate::loc::Loc::for_language(lang);
+            let s = SigningStrings::resolve(&loc);
+            for unchecked in [false, true] {
+                let text = crate::signing::live::parent_refusal_text(
+                    &s,
+                    "execTransaction",
+                    "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+                    unchecked,
+                );
+                assert!(!text.contains("parentSafe"), "{lang}: {text}");
+                assert!(!text.contains("{{"), "{lang}: {text}");
+                assert!(text.contains("execTransaction"), "{lang}: {text}");
+                assert!(text.contains("0x5afe…5afe"), "{lang}: {text}");
+            }
+            assert_ne!(s.parent_blocked, s.parent_unchecked, "{lang}");
+        }
+    }
+}
