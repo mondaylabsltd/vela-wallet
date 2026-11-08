@@ -704,6 +704,12 @@ mod posture {
         assert!(!ok.anyway && !ok.danger && ok.hold_ms == 0, "{ok:?}");
         let reverts = p(Some(verdict_of(SimOutcome::Reverts { reason: None })));
         assert!(reverts.anyway && reverts.danger && reverts.hold_ms == HOLD_TO_CONFIRM_MS);
+        // Still checking: nothing judged yet — not "… anyway" (the gate
+        // holds the confirm shut "Checking…" meanwhile).
+        let mut checking = base.sign.clone();
+        checking.sim_checking = true;
+        let waiting = posture(&checking, &base.clear, None);
+        assert!(!waiting.anyway && waiting.hold_ms == 0, "{waiting:?}");
         for unread in [
             Some(verdict_of(SimOutcome::Unconfirmed { disagreed: false })),
             Some(verdict_of(SimOutcome::Unconfirmed { disagreed: true })),

@@ -141,15 +141,15 @@ fn gate(sign: SignView) -> ConfirmState {
     })
 }
 
-/// R22: the reading here is blind, so every state is "… anyway", held.
+/// R22: while the verdict is out nothing is judged yet — shut, not "… anyway".
 fn held() -> ConfirmState {
     ConfirmState {
         enabled: false,
         block: Some(ConfirmBlock::SimChecking),
         key: Some(SIM_CHECKING_KEY.to_owned()),
-        anyway: true,
+        anyway: false,
         danger: false,
-        hold_ms: vela_core::app::sign_confirm::HOLD_TO_CONFIRM_MS,
+        hold_ms: 0,
     }
 }
 

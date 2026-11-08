@@ -240,7 +240,11 @@ pub fn posture(sign: &SignView, clear: &ClearSigningView, sim: Option<&SimVerdic
     // A transaction's own simulation: anything but a checked answer (the
     // verdict's `deltas`) — not yet back past its wait, not offered, nobody
     // independent confirmed it, it fails — is a check Vela could not read.
+    // While its verdict is still out (`sim_checking`, the confirm is shut
+    // "Checking…") nothing is judged yet: the confirm does not read
+    // "… anyway" over a check that may come back plain.
     let sim_unread = transaction
+        && !sign.sim_checking
         && (sign.sim_waited_out_key.is_some()
             || sim.is_none_or(|verdict| verdict.kind != "deltas"));
     let reverts = transaction && sim.is_some_and(|verdict| verdict.kind == "reverts");
