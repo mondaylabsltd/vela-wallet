@@ -1784,6 +1784,8 @@ fn consented_unlimited_batch_leg_submits_the_bundle_untouched() {
     sut.dispatch(Arrive::global("req-19b", "wallet_sendCalls", &asked).event());
     sut.dispatch(approve(SignApproveOpts {
         unlimited_approved: true,
+        // §37: the consent names its leg.
+        unlimited_approved_legs: vec![0],
         ..SignApproveOpts::default()
     }));
     let ops = sut.resolve(Res::PreCheck { funding: None });
@@ -5663,4 +5665,125 @@ fn a_moved_sites_request_carries_the_space_line() {
     plain.dispatch(Arrive::extension("ext-2", "personal_sign", r#"["0x00"]"#, 137).event());
     let wire = serde_json::to_value(plain.view()).unwrap();
     assert!(wire["request"].get("space_note").is_none());
+}
+
+// ---------------------------------------------------------------------------
+// §37 (review 1-11): a sign-in (EIP-4361) is refused — never only warned
+// about — unless it binds to the site asking and its network
+// ---------------------------------------------------------------------------
+
+fn sign_in_message(domain: &str, uri: Option<&str>, chain: Option<u32>) -> String {
+    let mut text = format!(
+        "{domain} wants you to sign in with your Ethereum account:\n{ACCT0}\n\nSign in to the app.\n\n"
+    );
+    if let Some(uri) = uri {
+        text += &format!("URI: {uri}\n");
+    }
+    text += "Version: 1\n";
+    if let Some(chain) = chain {
+        text += &format!("Chain ID: {chain}\n");
+    }
+    text += "Nonce: 32891756\nIssued At: 2021-09-30T16:25:24Z";
+    text
+}
+
+fn sign_in_arrives(message: &str) -> Sut {
+    let mut sut = boot();
+    let params = serde_json::json!([message, ACCT0]).to_string();
+    sut.dispatch(Arrive::global("si-1", "personal_sign", &params).event());
+    sut
+}
+
+#[test]
+fn a_sign_in_for_the_site_asking_on_its_network_is_signable() {
+    let sut = sign_in_arrives(&sign_in_message(
+        "dapp.example",
+        Some("https://dapp.example/login"),
+        Some(1),
+    ));
+    assert!(sut.view().blocked.is_none());
+}
+
+#[test]
+fn a_sign_in_that_does_not_bind_is_refused_and_says_why() {
+    use vela_core::app::clear_signing::SignInMismatch;
+    for (message, reason) in [
+        (
+            sign_in_message("evil.example", Some("https://evil.example"), Some(1)),
+            SignInMismatch::Domain,
+        ),
+        // A port the domain names must be the origin's.
+        (
+            sign_in_message("dapp.example:8443", Some("https://dapp.example"), Some(1)),
+            SignInMismatch::Domain,
+        ),
+        (
+            sign_in_message("dapp.example", Some("https://evil.example/login"), Some(1)),
+            SignInMismatch::Uri,
+        ),
+        (
+            sign_in_message("dapp.example", Some("https://dapp.example"), Some(137)),
+            SignInMismatch::Chain,
+        ),
+        (
+            sign_in_message("dapp.example", None, Some(1)),
+            SignInMismatch::Incomplete,
+        ),
+        (
+            sign_in_message("dapp.example", Some("https://dapp.example"), None),
+            SignInMismatch::Incomplete,
+        ),
+    ] {
+        let mut sut = sign_in_arrives(&message);
+        let view = sut.view();
+        let blocked = view.blocked.clone().expect("refused at arrival");
+        let refusal = blocked.sign_in.expect("a sign-in refusal");
+        assert_eq!(refusal.reason, reason, "{message}");
+        assert_eq!(refusal.key, reason.key());
+        assert_eq!(
+            view.confirm_block,
+            Some(vela_core::app::sign_confirm::ConfirmBlock::Refused)
+        );
+        // Closing it tells the site the wallet refused — never 4001.
+        let ops = sut.dispatch(Event::RejectTapped);
+        let (code, kind, _) = ops.iter().find_map(response_error).expect("an answer");
+        assert_eq!((code, kind), (CODE_INTERNAL, SignErrorKind::SignInRefused));
+    }
+}
+
+#[test]
+fn a_plain_message_is_no_sign_in() {
+    let sut = sign_in_arrives("Hello from dapp.example");
+    assert!(sut.view().blocked.is_none());
+}
+
+/// §37 (review 1-12): the batch waiver is per leg — consent for one leg lets
+/// that leg's approval through and no other leg's; the request-wide flag
+/// alone waives no leg at all.
+#[test]
+fn a_batch_waiver_covers_only_the_leg_it_was_given_for() {
+    let calls = format!(
+        r#"[{{"to":"{TOKEN}","data":"{}","value":"0x0"}},{{"to":"{SPENDER}","data":"{}","value":"0x0"}}]"#,
+        approve_calldata(&"f".repeat(64)),
+        approve_calldata(&"f".repeat(64))
+    );
+    let asked = batch_params(&calls, None);
+    for (legs, signs) in [(vec![0, 1], true), (vec![0], false), (vec![], false)] {
+        let mut sut = boot();
+        sut.dispatch(Arrive::global("req-37", "wallet_sendCalls", &asked).event());
+        sut.dispatch(approve(SignApproveOpts {
+            unlimited_approved: true,
+            unlimited_approved_legs: legs.clone(),
+            ..SignApproveOpts::default()
+        }));
+        let ops = sut.resolve(Res::PreCheck { funding: None });
+        let submitted = matches!(ops.as_slice(), [Op::SignAndSubmit { .. }]);
+        assert_eq!(submitted, signs, "legs {legs:?}: {ops:?}");
+        if !signs {
+            assert_eq!(
+                sut.view().error.map(|e| e.kind),
+                Some(SignErrorKind::UnlimitedApproval)
+            );
+        }
+    }
 }

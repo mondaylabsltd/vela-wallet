@@ -30,7 +30,10 @@
     "invite": "Üye davet et",
     "lastKnown": "{{time}} itibarıyla bilinen son liste — değişiklikler kontrol ediliyor.",
     "checking": "Onay bekleyen işlemler kontrol ediliyor…",
-    "historyUnreadable": "Bu çoklu imzanın {{network}} üzerindeki geçmişi okunamadı: başka yerde yürütülen işlemler burada eksik olabilir."
+    "historyUnreadable": "Bu çoklu imzanın {{network}} üzerindeki geçmişi okunamadı: başka yerde yürütülen işlemler burada eksik olabilir.",
+    "nonMembersShow": "Üye olmayanların tekliflerini göster ({{total}})",
+    "nonMembersHide": "Üye olmayanların tekliflerini gizle",
+    "nonMembersWarning": "Bu çoklu imzanın hiçbir üyesi bunu onaylamadı. Posta kutusuna herkes yazabilir — tanımadığınız bir şeyi onaylamayın."
    },
    "status": {
     "ready": "Yürütülmeye hazır",
@@ -357,7 +360,8 @@
     "signRiskBody": "{{network}} üzerinde bu çoklu imza adına yalnızca üyeleri işlem yapamıyor. Bunu kontrol eden, ne imzalarsan imzala fonlarını taşıyabilir ya da onu engelleyebilir. Yalnızca nedenini tam olarak biliyorsan imzala.",
     "signRiskConfirm": "Riski anladım, imzala",
     "signRiskCancel": "İmzalama",
-    "signUnchecked": "Vela, {{network}} üzerinde bu çoklu imza adına kimin işlem yapabileceğini kontrol edemedi, bu yüzden orada henüz imza atmayacak. Birazdan tekrar dene."
+    "signUnchecked": "Vela, {{network}} üzerinde bu çoklu imza adına kimin işlem yapabileceğini kontrol edemedi, bu yüzden orada henüz imza atmayacak. Birazdan tekrar dene.",
+    "ownerNotBound": "{{network}} ağında üye {{address}}, oradaki kendi oluşturulmasına hiçbir şeyle bağlı olmayan bir sözleşme — o adrese dağıtım yapabilen kişi onun oyunu elinde tutar."
    },
    "external": {
     "pageTitle": "Vela için onayla",

@@ -79,6 +79,16 @@
     "shareCardNetworkNote": "Solo pagamenti su {{network}}",
     "tokenContract": "Contratto del token",
     "includeNetwork": "Includi la rete",
-    "includeNetworkHint": "Alcuni wallet non leggono questo codice. Se l'altra persona non ci riesce, disattivalo."
+    "includeNetworkHint": "Alcuni wallet non leggono questo codice. Se l'altra persona non ci riesce, disattivalo.",
+    "unconfirmed": {
+      "title": "Non ancora confermato on-chain",
+      "body": "Le chiavi di questo wallet provengono dall'indice delle chiavi e il registro on-chain non le conferma ancora. Finché non lo fa, Vela non mostra alcun indirizzo di ricezione: ricontrolla ogni volta che apri questa schermata.",
+      "checkAgain": "Ricontrolla",
+      "checking": "Verifica on-chain…"
+    },
+    "refuted": {
+      "title": "Questo non è il tuo wallet registrato",
+      "body": "Il registro on-chain contiene per la tua passkey chiavi diverse da quelle fornite dall'indice. Non ricevere nulla qui: rimuovi questo wallet e accedi di nuovo."
+    }
   }
 }

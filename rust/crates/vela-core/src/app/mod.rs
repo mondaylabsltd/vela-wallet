@@ -281,6 +281,72 @@ pub struct Account {
     /// previewed and signed on THIS device. Always one that can reach the
     /// account's keys (R1) — the reader replaces one that cannot.
     pub signing_venue: crate::signing_venue::SigningVenue,
+    /// §37 (review 1-7): what the chain has said about the group this
+    /// account's address was derived from — `unconfirmed` for a multi-key
+    /// group only the key index vouched for (no receive address, no deposit,
+    /// [`receive_standing`]), `refuted` once a chain proved it another
+    /// wallet. Absent on the wire reads `confirmed`, and `confirmed` is not
+    /// written.
+    pub identity: crate::registry_resolve::Identity,
+}
+
+/// §37 (review 1-7): whether an account may be received at, and what the
+/// Receive screen says when it may not — the one rule every shell draws.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct ReceiveStanding {
+    /// Show the address, its QR code and the payment request.
+    pub receivable: bool,
+    pub identity: crate::registry_resolve::Identity,
+    /// What the screen says instead (`receive.unconfirmed.*` /
+    /// `receive.refuted.*`), with Check again on an unconfirmed one.
+    #[cfg_attr(feature = "bindings", ts(optional = nullable))]
+    pub title_key: Option<String>,
+    #[cfg_attr(feature = "bindings", ts(optional = nullable))]
+    pub body_key: Option<String>,
+    /// Check the chain again ([`crate::registry_resolve::confirm_step`])
+    /// before the screen shows anything — and offer Check again.
+    pub check_first: bool,
+}
+
+/// §37: [`ReceiveStanding`] for `account`.
+#[must_use]
+pub fn receive_standing(account: &Account) -> ReceiveStanding {
+    use crate::registry_resolve::Identity;
+    let (title, body) = match account.identity {
+        Identity::Confirmed => (None, None),
+        Identity::Unconfirmed => (
+            Some("receive.unconfirmed.title"),
+            Some("receive.unconfirmed.body"),
+        ),
+        Identity::Refuted => (Some("receive.refuted.title"), Some("receive.refuted.body")),
+    };
+    ReceiveStanding {
+        receivable: account.identity.is_confirmed(),
+        identity: account.identity,
+        title_key: title.map(str::to_owned),
+        body_key: body.map(str::to_owned),
+        check_first: account.identity == Identity::Unconfirmed,
+    }
+}
+
+/// [`receive_standing`] for a stored account's JSON — `None` for a record
+/// this build cannot read (the shell then shows no address either).
+#[must_use]
+pub fn receive_standing_json(account_json: &str) -> Option<String> {
+    let account: Account = serde_json::from_str(account_json).ok()?;
+    serde_json::to_string(&receive_standing(&account)).ok()
+}
+
+/// §37: the stored account with what [`crate::registry_resolve::confirm_step`]
+/// found — `identity` replaced, nothing else touched; `None` for a record
+/// this build cannot read.
+#[must_use]
+pub fn account_with_identity_json(account_json: &str, identity: &str) -> Option<String> {
+    let mut account: Account = serde_json::from_str(account_json).ok()?;
+    account.identity =
+        serde_json::from_value(serde_json::Value::String(identity.to_owned())).ok()?;
+    serde_json::to_string(&account).ok()
 }
 
 /// The JSON door to [`Account::signing_plan`] for the shells that hold the
@@ -738,8 +804,17 @@ impl<'de> Deserialize<'de> for Account {
             signing_domain: Option<String>,
             #[serde(default)]
             signing_venue: Option<serde_json::Value>,
+            /// §37. Read loosely: an identity this build cannot read is the
+            /// strictest one it can — never `confirmed`.
+            #[serde(default)]
+            identity: Option<serde_json::Value>,
         }
         let w = Wire::deserialize(d)?;
+        let identity = match w.identity {
+            None | Some(serde_json::Value::Null) => crate::registry_resolve::Identity::Confirmed,
+            Some(raw) => serde_json::from_value(raw)
+                .unwrap_or(crate::registry_resolve::Identity::Unconfirmed),
+        };
         let legacy = w
             .signed_in_with
             .and_then(|raw| serde_json::from_value::<LegacySignIn>(raw).ok());
@@ -756,6 +831,7 @@ impl<'de> Deserialize<'de> for Account {
             sign_in_key: None,
             signing_domain: String::new(),
             signing_venue: crate::signing_venue::SigningVenue::InVela,
+            identity,
         };
         let stored = w
             .signing_venue
@@ -989,6 +1065,8 @@ impl Serialize for Account {
             signing_venue: &'a crate::signing_venue::SigningVenue,
             #[serde(skip_serializing_if = "Option::is_none")]
             signed_in_with: Option<OlderBuildsCopy<'a>>,
+            #[serde(skip_serializing_if = "crate::registry_resolve::Identity::is_confirmed")]
+            identity: crate::registry_resolve::Identity,
         }
         let copy = self
             .sign_in_key
@@ -1010,6 +1088,7 @@ impl Serialize for Account {
             signing_domain: &self.signing_domain,
             signing_venue: &self.signing_venue,
             signed_in_with: copy,
+            identity: self.identity,
         }
         .serialize(s)
     }
@@ -1616,6 +1695,7 @@ mod tests {
             sign_in_key,
             signing_domain: crate::signing_venue::APP_DOMAIN.to_owned(),
             signing_venue: crate::signing_venue::SigningVenue::InVela,
+            identity: Default::default(),
         }
     }
 

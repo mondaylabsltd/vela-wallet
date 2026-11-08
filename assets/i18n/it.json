@@ -644,7 +644,17 @@
   "shareCardNetworkNote": "Solo pagamenti su {{network}}",
   "tokenContract": "Contratto del token",
   "includeNetwork": "Includi la rete",
-  "includeNetworkHint": "Alcuni wallet non leggono questo codice. Se l'altra persona non ci riesce, disattivalo."
+  "includeNetworkHint": "Alcuni wallet non leggono questo codice. Se l'altra persona non ci riesce, disattivalo.",
+  "unconfirmed": {
+   "title": "Non ancora confermato on-chain",
+   "body": "Le chiavi di questo wallet provengono dall'indice delle chiavi e il registro on-chain non le conferma ancora. Finché non lo fa, Vela non mostra alcun indirizzo di ricezione: ricontrolla ogni volta che apri questa schermata.",
+   "checkAgain": "Ricontrolla",
+   "checking": "Verifica on-chain…"
+  },
+  "refuted": {
+   "title": "Questo non è il tuo wallet registrato",
+   "body": "Il registro on-chain contiene per la tua passkey chiavi diverse da quelle fornite dall'indice. Non ricevere nulla qui: rimuovi questo wallet e accedi di nuovo."
+  }
  },
  "assets": {
   "sectionTitle": "Asset",
@@ -1678,7 +1688,16 @@
    "intentChangeThreshold": "Cambia le approvazioni richieste",
    "labelMember": "Membro",
    "labelNewMember": "Nuovo membro",
-   "labelApprovalsRequired": "Approvazioni richieste"
+   "labelApprovalsRequired": "Approvazioni richieste",
+   "farAboveBalanceWarning": "Oltre 100 volte il tuo saldo: questo contratto potrebbe spendere tutto ciò che hai, e altro ancora man mano che arriva",
+   "signIn": {
+    "refusedTitle": "Vela non firmerà questo accesso",
+    "wrongDomain": "Questo accesso è per {{domain}}, ma lo chiede {{origin}}. Un sito che ti chiede di accedere a un altro sito sta cercando di prendere il controllo del tuo account lì.",
+    "wrongUri": "Questo accesso indica {{uri}}, che non è {{origin}}, il sito che lo chiede.",
+    "wrongChain": "Questo accesso è per la chain {{chain}}, ma questo sito è connesso sulla chain {{connected}}. Cambia rete e richiedi di nuovo.",
+    "incomplete": "A questo accesso manca il campo {{field}}, quindi Vela non può verificare a cosa ti fa accedere.",
+    "noOrigin": "Vela non riesce a capire quale sito lo chiede, quindi non firmerà questo accesso."
+   }
   },
   "signingApprove": {
    "resultingTotal": "Nuovo limite totale",

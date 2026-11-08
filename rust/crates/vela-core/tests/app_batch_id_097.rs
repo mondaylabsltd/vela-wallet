@@ -163,7 +163,8 @@ fn batch_approved(id: &str, params_json: &str, opts: SignApproveOpts) -> Signer 
     let ops = signer.resolve(Res::PreCheck { funding: None });
     assert!(
         matches!(ops.as_slice(), [Op::SignAndSubmit { .. }]),
-        "the batch goes to submit: {ops:?}"
+        "the batch goes to submit: {ops:?} {:?}",
+        signer.view().error
     );
     signer
 }
@@ -567,6 +568,9 @@ fn uniswap_params() -> Value {
 fn kept_as_asked() -> SignApproveOpts {
     SignApproveOpts {
         unlimited_approved: true,
+        // §37: consent is per leg — the USDT approve to Permit2 and
+        // Permit2's own approve, each kept on Requested.
+        unlimited_approved_legs: vec![0, 1],
         ..SignApproveOpts::default()
     }
 }

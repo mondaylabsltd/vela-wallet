@@ -114,7 +114,7 @@ use crux_core::{App, Command};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use super::approval_guard::enforce_no_unlimited;
+use super::approval_guard::enforce_within_consent;
 use super::fee_policy::{is_tempo_chain, tempo_quote_is_stale, FeeTier, TEMPO_FEE_TOKEN_DECIMALS};
 use super::parent_safe_guard::{
     self as parent_guard, OwnerFact, ParentReason, ParentTarget, ParentVerdict, SafeOwnerAnswer,
@@ -318,6 +318,13 @@ pub struct SignApproveOpts {
     /// approval surface) still refuses an unbounded amount.
     #[serde(default)]
     pub unlimited_approved: bool,
+    /// §37 (review 1-12): `GuardView::unlimited_consented_legs`, copied
+    /// verbatim — for a `wallet_sendCalls`, the legs (0-based) whose one
+    /// unbounded approval the sheet showed and the person kept. Each waives
+    /// the submit guard for that leg alone; [`Self::unlimited_approved`]
+    /// waives no batch leg. Absent: none.
+    #[serde(default)]
+    pub unlimited_approved_legs: Vec<u32>,
     /// What the wallet's OWN simulation said this operation moves, exactly as
     /// the sheet drew it under "Balance changes" when the confirm fired
     /// (083 F1): `token_trust`'s judgments, in the sheet's order — an
@@ -391,6 +398,10 @@ pub enum SignErrorKind {
     /// `SafeTx` / `SafeMessage` signature under that Safe's domain — or
     /// whether it owns the Safe could not be read. Never 4001, never "anyway".
     ParentSafeBlocked,
+    /// -32603 — a sign-in (EIP-4361) whose domain, URI or chain does not
+    /// bind to the site asking and its network (§37, review 1-11). Never
+    /// 4001, never "anyway": the wallet refused it.
+    SignInRefused,
     /// -32603 — 'Gas account funding cancelled'.
     FundingCancelled,
     /// -32603 — submission failed; `detail` echoes the shell's own message.
@@ -1647,6 +1658,8 @@ struct Inflight {
     params_json: String,
     /// `SignApproveOpts::unlimited_approved`, captured at approve time.
     unlimited_approved: bool,
+    /// `SignApproveOpts::unlimited_approved_legs`, captured at approve time.
+    unlimited_approved_legs: Vec<u32>,
     chain_id: u32,
     address: String,
     credential_id: String,
@@ -2025,6 +2038,14 @@ pub struct SignBlockedView {
     /// §31: why — `member`, `owner` or `unchecked`; `None` with `parent`.
     #[serde(default)]
     pub reason: Option<ParentReason>,
+    /// §37 (review 1-11): a sign-in (EIP-4361) refused for not binding to
+    /// the site asking or its network — `function` is `signIn`. The sheet
+    /// says `sign_in.key` with its params under
+    /// `componentsUi.signing.signIn.refusedTitle`; the site hears -32603
+    /// `sign_in_refused`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub sign_in: Option<super::clear_signing::SignInRefusal>,
 }
 
 /// What the signing sheet is doing, in the words a person reads (spec 082
@@ -2567,7 +2588,37 @@ fn blocked_view(block: &SelfCallBlock) -> SignBlockedView {
         nested: block.nested,
         parent: None,
         reason: None,
+        sign_in: None,
     }
+}
+
+/// §37: the sheet's refusal of a sign-in that does not bind.
+fn sign_in_blocked_view(refusal: super::clear_signing::SignInRefusal) -> SignBlockedView {
+    SignBlockedView {
+        function: "signIn".to_owned(),
+        selector: String::new(),
+        leg_index: None,
+        nested: false,
+        parent: None,
+        reason: None,
+        sign_in: Some(refusal),
+    }
+}
+
+/// §37 (review 1-11): a `personal_sign` that is a sign-in not bound to the
+/// site asking and its network.
+fn sign_in_block(
+    method: &str,
+    params: Option<&Value>,
+    origin: &str,
+    chain_id: u32,
+) -> Option<SignBlockedView> {
+    if method != "personal_sign" {
+        return None;
+    }
+    let payload = params?.as_array()?.first()?.as_str()?;
+    let origin = (!origin.is_empty()).then_some(origin);
+    super::clear_signing::sign_in_refusal(payload, origin, chain_id).map(sign_in_blocked_view)
 }
 
 /// §31: the sheet's refusal of a request that would act for a Safe this
@@ -2580,12 +2631,15 @@ fn parent_blocked_view(target: &ParentTarget, reason: ParentReason) -> SignBlock
         nested: target.nested,
         parent: Some(target.safe.clone()),
         reason: Some(reason),
+        sign_in: None,
     }
 }
 
 /// The kind a blocked request is answered with.
 fn blocked_kind(blocked: &SignBlockedView) -> SignErrorKind {
-    if blocked.parent.is_some() {
+    if blocked.sign_in.is_some() {
+        SignErrorKind::SignInRefused
+    } else if blocked.parent.is_some() {
         SignErrorKind::ParentSafeBlocked
     } else {
         SignErrorKind::SelfCallBlocked
@@ -2595,6 +2649,9 @@ fn blocked_kind(blocked: &SignBlockedView) -> SignErrorKind {
 /// The detail a blocked request is answered with: the function, and for a
 /// parent Safe which one and why.
 fn blocked_detail(blocked: &SignBlockedView) -> String {
+    if let Some(sign_in) = &blocked.sign_in {
+        return format!("sign-in {}", sign_in.reason.as_str());
+    }
     match (&blocked.parent, blocked.reason) {
         (Some(safe), Some(ParentReason::Unchecked)) => {
             format!(
@@ -2881,7 +2938,16 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
     let self_block = parsed_params
         .as_ref()
         .and_then(|params| detect_self_call(&arrival.method, Some(params), &signer))
-        .map(|block| blocked_view(&block));
+        .map(|block| blocked_view(&block))
+        // §37: a sign-in that does not bind to the site and its network.
+        .or_else(|| {
+            sign_in_block(
+                &arrival.method,
+                parsed_params.as_ref(),
+                &arrival.origin,
+                chain_id,
+            )
+        });
     let (refusal, deferred_block) = match &parent_verdict {
         ParentVerdict::Refuse { target, reason } => {
             (Some(parent_blocked_view(target, *reason)), None)
@@ -3383,6 +3449,7 @@ fn approve_with(
         method: pending.method.clone(),
         params_json: final_params,
         unlimited_approved: opts.unlimited_approved,
+        unlimited_approved_legs: opts.unlimited_approved_legs.clone(),
         chain_id,
         address: signer.address.clone(),
         credential_id: signer.credential_id,
@@ -3491,9 +3558,9 @@ fn proceed_submit(model: &mut Model) -> Command<SignEffect, Event> {
         );
     }
 
-    if fl.unlimited_approved {
-        // Seen and kept — the site's bytes go out as asked.
-    } else if let Err(refusal) = enforce_no_unlimited(&fl.method, Some(&parsed)) {
+    // §37 (review 1-12): the consent waives one approval — the one the
+    // sheet showed — for the call it was given on, and nothing else.
+    if let Err(refusal) = enforce_within_consent(&fl.method, Some(&parsed), fl.unlimited_approved) {
         return fail_inflight(
             model,
             CODE_INTERNAL,
@@ -3501,22 +3568,25 @@ fn proceed_submit(model: &mut Model) -> Command<SignEffect, Event> {
             Some(refusal.amount_raw),
         );
     }
-    if fl.method == "wallet_sendCalls" && !fl.unlimited_approved {
+    if fl.method == "wallet_sendCalls" {
         // A batch must not smuggle an unbounded approval past the per-tx
-        // guard — check every leg as a standalone transaction.
+        // guard — every leg is checked as a standalone transaction, waived
+        // only for the legs the person kept as asked, one approval each.
         let calls = parsed
             .get(0)
             .and_then(|p| p.get("calls"))
             .and_then(Value::as_array)
             .cloned()
             .unwrap_or_default();
-        for call in &calls {
+        for (index, call) in calls.iter().enumerate() {
             let leg = json!([{
                 "to": call.get("to").cloned().unwrap_or(Value::Null),
                 "data": call.get("data").cloned().unwrap_or(Value::Null),
                 "value": call.get("value").cloned().unwrap_or(Value::Null),
             }]);
-            if let Err(refusal) = enforce_no_unlimited("eth_sendTransaction", Some(&leg)) {
+            let kept =
+                u32::try_from(index).is_ok_and(|index| fl.unlimited_approved_legs.contains(&index));
+            if let Err(refusal) = enforce_within_consent("eth_sendTransaction", Some(&leg), kept) {
                 return fail_inflight(
                     model,
                     CODE_INTERNAL,

@@ -79,6 +79,16 @@
     "shareCardNetworkNote": "Nur Zahlungen über {{network}}",
     "tokenContract": "Token-Vertrag",
     "includeNetwork": "Netzwerk mitsenden",
-    "includeNetworkHint": "Manche Wallets können diesen Code nicht lesen. Klappt es beim Gegenüber nicht, schalten Sie es aus."
+    "includeNetworkHint": "Manche Wallets können diesen Code nicht lesen. Klappt es beim Gegenüber nicht, schalten Sie es aus.",
+    "unconfirmed": {
+      "title": "Noch nicht onchain bestätigt",
+      "body": "Die Schlüssel dieser Wallet stammen aus dem Schlüsselindex, und das Register onchain bestätigt sie noch nicht. Bis dahin zeigt Vela keine Empfangsadresse – jedes Mal, wenn du dies öffnest, wird erneut geprüft.",
+      "checkAgain": "Erneut prüfen",
+      "checking": "Onchain wird geprüft …"
+    },
+    "refuted": {
+      "title": "Das ist nicht deine registrierte Wallet",
+      "body": "Das Register onchain enthält für deinen Passkey andere Schlüssel, als der Schlüsselindex geliefert hat. Empfange hier nichts – entferne diese Wallet und melde dich erneut an."
+    }
   }
 }

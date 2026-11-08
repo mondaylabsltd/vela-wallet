@@ -325,7 +325,16 @@
       "intentChangeThreshold": "必要な承認数を変更",
       "labelMember": "メンバー",
       "labelNewMember": "新しいメンバー",
-      "labelApprovalsRequired": "必要な承認数"
+      "labelApprovalsRequired": "必要な承認数",
+      "farAboveBalanceWarning": "残高の 100 倍以上 — このコントラクトは保有分すべてと、今後入金される分も使えます",
+      "signIn": {
+        "refusedTitle": "Vela はこのサインインに署名しません",
+        "wrongDomain": "このサインインは {{domain}} 用ですが、要求しているのは {{origin}} です。別のサイトへのサインインを求めるサイトは、そこでのアカウントを乗っ取ろうとしています。",
+        "wrongUri": "このサインインは {{uri}} を指定していますが、要求しているサイト {{origin}} ではありません。",
+        "wrongChain": "このサインインはチェーン {{chain}} 用ですが、このサイトはチェーン {{connected}} で接続されています。ネットワークを切り替えてからもう一度要求してください。",
+        "incomplete": "このサインインには {{field}} がないため、何にサインインするのか Vela は確認できません。",
+        "noOrigin": "どのサイトが要求しているのか Vela には分からないため、このサインインには署名しません。"
+      }
     },
     "signingApprove": {
       "resultingTotal": "新しい承認上限",

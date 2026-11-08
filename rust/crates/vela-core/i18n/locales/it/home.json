@@ -107,7 +107,10 @@
         "invite": "Invita membri",
         "lastKnown": "Ultimo elenco noto, delle {{time}}: verifica delle modifiche in corso.",
         "checking": "Ricerca delle transazioni in attesa di approvazione…",
-        "historyUnreadable": "Impossibile leggere la cronologia di questo multisig su {{network}}: le transazioni eseguite altrove potrebbero mancare qui."
+        "historyUnreadable": "Impossibile leggere la cronologia di questo multisig su {{network}}: le transazioni eseguite altrove potrebbero mancare qui.",
+        "nonMembersShow": "Mostra le proposte di non membri ({{total}})",
+        "nonMembersHide": "Nascondi le proposte di non membri",
+        "nonMembersWarning": "Nessun membro di questo multisig l'ha approvato. Chiunque può pubblicare nella casella: non approvare qualcosa che non riconosci."
       },
       "status": {
         "ready": "Pronta da eseguire",
@@ -440,7 +443,8 @@
         "signRiskBody": "Su {{network}}, non solo i suoi membri possono agire per questo multisig. Chi lo controlla può spostarne i fondi o bloccarlo, qualunque cosa tu firmi. Firma solo se sai esattamente perché ce l’ha.",
         "signRiskConfirm": "Ho capito il rischio, firma",
         "signRiskCancel": "Non firmare",
-        "signUnchecked": "Vela non è riuscita a verificare chi può agire per questo multisig su {{network}}, quindi non firmerà ancora lì. Riprova tra un momento."
+        "signUnchecked": "Vela non è riuscita a verificare chi può agire per questo multisig su {{network}}, quindi non firmerà ancora lì. Riprova tra un momento.",
+        "ownerNotBound": "Su {{network}}, il membro {{address}} è un contratto che nulla lega alla propria creazione lì: chi può distribuire a quell'indirizzo ne avrebbe il voto."
       },
       "external": {
         "pageTitle": "Approva per Vela",

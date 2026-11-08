@@ -79,6 +79,16 @@
     "shareCardNetworkNote": "僅支援 {{network}} 網路付款",
     "tokenContract": "代幣合約",
     "includeNetwork": "附帶網路資訊",
-    "includeNetworkHint": "部分錢包無法辨識。對方掃不出來時請關閉。"
+    "includeNetworkHint": "部分錢包無法辨識。對方掃不出來時請關閉。",
+    "unconfirmed": {
+      "title": "尚未在鏈上確認",
+      "body": "此錢包的金鑰來自金鑰索引，鏈上登錄冊尚未確認。確認之前 Vela 不會顯示收款地址——每次開啟時都會重新檢查。",
+      "checkAgain": "重新檢查",
+      "checking": "正在鏈上檢查…"
+    },
+    "refuted": {
+      "title": "這不是你登錄的錢包",
+      "body": "鏈上登錄冊為你的通行金鑰記錄的金鑰與金鑰索引給出的不同。請勿在此收款——請移除此錢包並重新登入。"
+    }
   }
 }

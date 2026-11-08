@@ -641,7 +641,17 @@
   "shareCardNetworkNote": "僅支援 {{network}} 網路付款",
   "tokenContract": "代幣合約",
   "includeNetwork": "附帶網路資訊",
-  "includeNetworkHint": "部分錢包無法辨識。對方掃不出來時請關閉。"
+  "includeNetworkHint": "部分錢包無法辨識。對方掃不出來時請關閉。",
+  "unconfirmed": {
+   "title": "尚未在鏈上確認",
+   "body": "此錢包的金鑰來自金鑰索引，鏈上登錄冊尚未確認。確認之前 Vela 不會顯示收款地址——每次開啟時都會重新檢查。",
+   "checkAgain": "重新檢查",
+   "checking": "正在鏈上檢查…"
+  },
+  "refuted": {
+   "title": "這不是你登錄的錢包",
+   "body": "鏈上登錄冊為你的通行金鑰記錄的金鑰與金鑰索引給出的不同。請勿在此收款——請移除此錢包並重新登入。"
+  }
  },
  "assets": {
   "sectionTitle": "資產",
@@ -1673,7 +1683,16 @@
    "intentChangeThreshold": "修改需要的核准數",
    "labelMember": "成員",
    "labelNewMember": "新成員",
-   "labelApprovalsRequired": "需要的核准數"
+   "labelApprovalsRequired": "需要的核准數",
+   "farAboveBalanceWarning": "超過你餘額的 100 倍——此合約可花掉你持有的全部，以及之後入帳的更多",
+   "signIn": {
+    "refusedTitle": "Vela 不會簽署此登入",
+    "wrongDomain": "此登入是給 {{domain}} 的，但發出請求的是 {{origin}}。要求你登入其他網站的網站，是想接管你在那裡的帳戶。",
+    "wrongUri": "此登入指定的是 {{uri}}，而不是發出請求的網站 {{origin}}。",
+    "wrongChain": "此登入針對鏈 {{chain}}，但此網站連線在鏈 {{connected}} 上。請切換網路後重新請求。",
+    "incomplete": "此登入缺少 {{field}}，Vela 無法核對它讓你登入到哪裡。",
+    "noOrigin": "Vela 無法判斷是哪個網站在請求，因此不會簽署此登入。"
+   }
   },
   "currency": {
    "title": "顯示貨幣",

@@ -2929,7 +2929,13 @@ async fn vet_authority(
         return Vetted::Ok(findings);
     }
     for chain_id in used {
-        match shell::counterfactual_on(io, *chain_id, address, genesis).await {
+        // §37: a member that is a contract on one of the multisig's other
+        // networks must be bound to its own genesis on this one.
+        let binding = shell::Binding {
+            geneses: Vec::new(),
+            elsewhere: used.iter().copied().filter(|id| id != chain_id).collect(),
+        };
+        match shell::counterfactual_on(io, *chain_id, address, genesis, &binding).await {
             Some(multisig::Authority::Refused { reasons }) => {
                 return Vetted::No(AddOutcome::Refused {
                     findings: reasons

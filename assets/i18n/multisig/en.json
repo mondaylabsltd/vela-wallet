@@ -30,7 +30,10 @@
     "invite": "Invite members",
     "lastKnown": "Last known list, from {{time}} — checking for changes.",
     "checking": "Checking for transactions waiting for approval…",
-    "historyUnreadable": "Couldn't read this multisig's history on {{network}}: transactions executed elsewhere may be missing here."
+    "historyUnreadable": "Couldn't read this multisig's history on {{network}}: transactions executed elsewhere may be missing here.",
+    "nonMembersShow": "Show proposals from non-members ({{total}})",
+    "nonMembersHide": "Hide proposals from non-members",
+    "nonMembersWarning": "No member of this multisig has approved this. Anyone can post to the mailbox — don't approve something you don't recognise."
    },
    "status": {
     "ready": "Ready to execute",
@@ -357,7 +360,8 @@
     "signRiskBody": "On {{network}}, something besides its members can act for this multisig. Whoever controls it can move its funds or block it, whatever you sign. Sign only if you know exactly why it has it.",
     "signRiskConfirm": "I understand the risk — sign",
     "signRiskCancel": "Don't sign",
-    "signUnchecked": "Vela couldn't check who can act for this multisig on {{network}}, so it won't sign there yet. Try again in a moment."
+    "signUnchecked": "Vela couldn't check who can act for this multisig on {{network}}, so it won't sign there yet. Try again in a moment.",
+    "ownerNotBound": "On {{network}}, member {{address}} is a contract nothing ties to its own creation there — whoever can deploy at that address would hold its vote."
    },
    "external": {
     "pageTitle": "Approve with your wallet for Vela",

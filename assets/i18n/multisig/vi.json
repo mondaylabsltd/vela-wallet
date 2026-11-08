@@ -30,7 +30,10 @@
     "invite": "Mời thành viên",
     "lastKnown": "Danh sách gần nhất, lúc {{time}} — đang kiểm tra thay đổi.",
     "checking": "Đang kiểm tra các giao dịch chờ phê duyệt…",
-    "historyUnreadable": "Không đọc được lịch sử của đa chữ ký này trên {{network}}: các giao dịch thực thi ở nơi khác có thể không hiện ở đây."
+    "historyUnreadable": "Không đọc được lịch sử của đa chữ ký này trên {{network}}: các giao dịch thực thi ở nơi khác có thể không hiện ở đây.",
+    "nonMembersShow": "Hiện đề xuất từ người không phải thành viên ({{total}})",
+    "nonMembersHide": "Ẩn đề xuất từ người không phải thành viên",
+    "nonMembersWarning": "Chưa thành viên nào của multisig này phê duyệt mục này. Ai cũng có thể gửi vào hộp thư — đừng phê duyệt thứ bạn không nhận ra."
    },
    "status": {
     "ready": "Sẵn sàng thực thi",
@@ -357,7 +360,8 @@
     "signRiskBody": "Trên {{network}}, không chỉ các thành viên mới hành động được cho đa chữ ký này. Ai kiểm soát nó có thể chuyển tiền hoặc chặn nó, dù bạn ký gì. Chỉ ký nếu bạn biết chính xác vì sao nó có thứ đó.",
     "signRiskConfirm": "Tôi hiểu rủi ro, ký",
     "signRiskCancel": "Không ký",
-    "signUnchecked": "Vela không kiểm tra được ai có thể hành động cho đa chữ ký này trên {{network}}, nên chưa ký ở đó. Hãy thử lại sau giây lát."
+    "signUnchecked": "Vela không kiểm tra được ai có thể hành động cho đa chữ ký này trên {{network}}, nên chưa ký ở đó. Hãy thử lại sau giây lát.",
+    "ownerNotBound": "Trên {{network}}, thành viên {{address}} là một hợp đồng không gắn với lần tạo của chính nó ở đó — ai triển khai được tại địa chỉ đó sẽ nắm phiếu của nó."
    },
    "external": {
     "pageTitle": "Duyệt cho Vela",

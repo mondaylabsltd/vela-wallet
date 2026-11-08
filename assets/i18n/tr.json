@@ -641,7 +641,17 @@
   "shareCardNetworkNote": "Yalnızca {{network}} ödemeleri",
   "tokenContract": "Token sözleşmesi",
   "includeNetwork": "Ağ bilgisini ekle",
-  "includeNetworkHint": "Bazı cüzdanlar bu kodu okuyamaz. Karşı taraf okutamazsa kapatın."
+  "includeNetworkHint": "Bazı cüzdanlar bu kodu okuyamaz. Karşı taraf okutamazsa kapatın.",
+  "unconfirmed": {
+   "title": "Henüz zincirde doğrulanmadı",
+   "body": "Bu cüzdanın anahtarları anahtar dizininden geldi ve zincirdeki kayıt bunları henüz doğrulamıyor. Doğrulanana kadar Vela alma adresi göstermez — bunu her açtığınızda yeniden kontrol eder.",
+   "checkAgain": "Tekrar kontrol et",
+   "checking": "Zincirde kontrol ediliyor…"
+  },
+  "refuted": {
+   "title": "Bu kayıtlı cüzdanınız değil",
+   "body": "Zincirdeki kayıt, geçiş anahtarınız için anahtar dizininin verdiğinden farklı anahtarlar tutuyor. Buraya hiçbir şey almayın — bu cüzdanı kaldırıp yeniden giriş yapın."
+  }
  },
  "assets": {
   "sectionTitle": "Varlıklar",
@@ -1673,7 +1683,16 @@
    "intentChangeThreshold": "Gereken onayı değiştir",
    "labelMember": "Üye",
    "labelNewMember": "Yeni üye",
-   "labelApprovalsRequired": "Gereken onay"
+   "labelApprovalsRequired": "Gereken onay",
+   "farAboveBalanceWarning": "Bakiyenizin 100 katından fazla — bu sözleşme elinizdekinin tamamını ve geldikçe fazlasını harcayabilir",
+   "signIn": {
+    "refusedTitle": "Vela bu girişi imzalamayacak",
+    "wrongDomain": "Bu giriş {{domain}} için, ama isteyen {{origin}}. Başka bir siteye giriş yapmanızı isteyen bir site, oradaki hesabınızı ele geçirmeye çalışıyordur.",
+    "wrongUri": "Bu giriş {{uri}} adresini belirtiyor; bu, isteyen site olan {{origin}} değil.",
+    "wrongChain": "Bu giriş {{chain}} zinciri için, ama bu site {{connected}} zincirinde bağlı. Ağı değiştirip yeniden isteyin.",
+    "incomplete": "Bu girişte {{field}} eksik, bu yüzden Vela sizi nereye giriş yaptırdığını kontrol edemiyor.",
+    "noOrigin": "Vela hangi sitenin istediğini anlayamıyor, bu yüzden bu girişi imzalamayacak."
+   }
   },
   "signingApprove": {
    "resultingTotal": "Yeni toplam izin",

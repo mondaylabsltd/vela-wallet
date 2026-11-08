@@ -123,7 +123,7 @@ pub struct MultiSendCall {
 }
 
 /// One founding key of a wallet, as the signer-address rule needs it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WalletKey {
     pub credential_id: String,
     /// Uncompressed P-256 point, `04‖x‖y` hex.
@@ -2146,6 +2146,102 @@ pub fn eip1271_envelope_signature(
     let fields = extract_client_data_fields(client_data_json);
     let signer = signer_address_for(keys, Some(credential_id))?;
     build_eip1271_signature(authenticator_data, &fields, &raw[..32], &raw[32..], &signer)
+}
+
+// ---------------------------------------------------------------------------
+// ERC-6492 (§37, review 1-11): a message signature from an account that is
+// not deployed yet
+// ---------------------------------------------------------------------------
+
+/// ERC-6492's magic suffix: `0x6492` × 16. A verifier that sees it deploys
+/// the account in its simulation (`factory.call(factoryCalldata)`), then
+/// asks it `isValidSignature` with the signature inside.
+pub const ERC6492_MAGIC: [u8; 32] = [
+    0x64, 0x92, 0x64, 0x92, 0x64, 0x92, 0x64, 0x92, 0x64, 0x92, 0x64, 0x92, 0x64, 0x92, 0x64, 0x92,
+    0x64, 0x92, 0x64, 0x92, 0x64, 0x92, 0x64, 0x92, 0x64, 0x92, 0x64, 0x92, 0x64, 0x92, 0x64, 0x92,
+];
+
+/// `signature` (an EIP-1271 signature of the account `account` holds) in
+/// ERC-6492's envelope: `abi.encode(factory, factoryCalldata, signature) ‖
+/// magic`, the factory call being the account's own deployment —
+/// `createProxyWithNonce` with the setup its keys make, exactly the
+/// `initCode` its first operation carries. Refused when `keys` do not make
+/// `account`: a wrapper never deploys anything but the account that signed.
+pub fn erc6492_wrap(
+    signature: &[u8],
+    keys: &[WalletKey],
+    account: &str,
+) -> Result<Vec<u8>, CoreError> {
+    let hexes: Vec<String> = keys.iter().map(|k| k.public_key_hex.clone()).collect();
+    let derived = match hexes.as_slice() {
+        [] => {
+            return Err(CoreError::InvalidPublicKey(
+                "a wallet has at least one founding key".to_owned(),
+            ))
+        }
+        [only] => {
+            let key = parse_public_key(only)?;
+            compute_safe_address(&key.x, &key.y)?.address
+        }
+        many => {
+            let parsed = many
+                .iter()
+                .map(|hex| parse_public_key(hex))
+                .collect::<Result<Vec<_>, _>>()?;
+            compute_safe_address_multi(&parsed)?.address
+        }
+    };
+    if !derived.eq_ignore_ascii_case(account.trim()) {
+        return Err(CoreError::InvalidAddress(
+            "these keys do not make this account".to_owned(),
+        ));
+    }
+    let init_code = build_init_code_for_keys(&hexes)?;
+    let (factory, calldata) = init_code.split_at(20);
+    let tail = |len: usize| 32 + len + pad_to_word(len).len();
+    let mut out = Vec::with_capacity(96 + tail(calldata.len()) + tail(signature.len()) + 32);
+    let mut factory_word = vec![0u8; 12];
+    factory_word.extend_from_slice(factory);
+    out.extend(factory_word);
+    out.extend(word_usize(96));
+    out.extend(word_usize(96 + tail(calldata.len())));
+    out.extend(word_usize(calldata.len()));
+    out.extend_from_slice(calldata);
+    out.extend(pad_to_word(calldata.len()));
+    out.extend(word_usize(signature.len()));
+    out.extend_from_slice(signature);
+    out.extend(pad_to_word(signature.len()));
+    out.extend_from_slice(&ERC6492_MAGIC);
+    Ok(out)
+}
+
+/// The account holds contract code: an `eth_getCode` answer that is not
+/// empty, not zeros.
+fn is_deployed_code(code: &str) -> bool {
+    let body = code.trim().strip_prefix("0x").unwrap_or(code.trim());
+    !body.trim_start_matches('0').is_empty()
+}
+
+/// §37 (review 1-11): the signature a site is answered with for
+/// `personal_sign`, typed data and sign-in (SIWE) alike — the plain EIP-1271
+/// signature where the account is deployed on the request's chain (`code`:
+/// its `eth_getCode` there), else its ERC-6492 envelope
+/// ([`erc6492_wrap`]). A counterfactual account has no code for
+/// `isValidSignature` to run; the envelope is how a verifier (viem's
+/// `verifyMessage`, the UniversalSigValidator) deploys it in simulation
+/// first. `code` unread (`None`) wraps too: ERC-6492 verifiers accept the
+/// envelope from a deployed account as well, while a bare signature from an
+/// undeployed one verifies nowhere.
+pub fn message_signature(
+    signature: &[u8],
+    keys: &[WalletKey],
+    account: &str,
+    code: Option<&str>,
+) -> Result<Vec<u8>, CoreError> {
+    if code.is_some_and(is_deployed_code) {
+        return Ok(signature.to_vec());
+    }
+    erc6492_wrap(signature, keys, account)
 }
 
 #[must_use]

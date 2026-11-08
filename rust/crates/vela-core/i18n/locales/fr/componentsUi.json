@@ -325,7 +325,16 @@
       "intentChangeThreshold": "Modifier les approbations requises",
       "labelMember": "Membre",
       "labelNewMember": "Nouveau membre",
-      "labelApprovalsRequired": "Approbations requises"
+      "labelApprovalsRequired": "Approbations requises",
+      "farAboveBalanceWarning": "Plus de 100 fois votre solde — ce contrat pourrait dépenser tout ce que vous détenez, et davantage à mesure que cela arrive",
+      "signIn": {
+        "refusedTitle": "Vela ne signera pas cette connexion",
+        "wrongDomain": "Cette connexion est pour {{domain}}, mais c'est {{origin}} qui la demande. Un site qui vous demande de vous connecter à un autre site cherche à prendre le contrôle de votre compte là-bas.",
+        "wrongUri": "Cette connexion indique {{uri}}, qui n'est pas {{origin}}, le site qui la demande.",
+        "wrongChain": "Cette connexion est pour la chaîne {{chain}}, mais ce site est connecté sur la chaîne {{connected}}. Changez de réseau et redemandez.",
+        "incomplete": "Il manque le champ {{field}} à cette connexion : Vela ne peut pas vérifier à quoi elle vous connecte.",
+        "noOrigin": "Vela ne peut pas savoir quel site demande, il ne signera donc pas cette connexion."
+      }
     },
     "signingApprove": {
       "resultingTotal": "Nouvelle autorisation totale",
