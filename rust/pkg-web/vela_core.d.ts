@@ -2255,14 +2255,25 @@ export function trustedSignerCeremonyVerify(operation_json: string, answer_json:
 
 /**
  * R6's ruling for the web on the bytes `trustedSignerPageTarget`'s URL
- * served (`launch::admit`): `{line, launch, versionToTrust}` — the integrity
- * line (`IntegrityLine`), the address to open with the request handed over
- * by `postMessage` (`CheckedPage::post_launch`; `null` unless the page was
- * admitted and the check is fresh), and the version a self-hosted page asks
- * to be trusted. `observed` is the sha256 of the body (`null` when it could
- * not be fetched); `now_ms` the shell's clock.
+ * served (`launch::admit`): `{line, launch, fromBytes, versionToTrust}` —
+ * the integrity line (`IntegrityLine`), the address to open with the
+ * request handed over by `postMessage` (`CheckedPage::post_launch`; `null`
+ * unless the page was admitted and the check is fresh), the fragment to
+ * open THE BYTES THAT WERE HASHED with instead (`CheckedPage::bytes_launch`,
+ * §38: `null` unless `openerOrigin` — the wallet's own origin — may open
+ * this version that way), and the version a self-hosted page asks to be
+ * trusted. `observed` is the sha256 of the body (`null` when it could not
+ * be fetched); `now_ms` the shell's clock.
+ * The published page versions the web wallet may open from the bytes its
+ * check hashed (`integrity::FROM_BYTES`, §38), as a JSON array of sha256
+ * hex. The wallet's build reads it: a page opened from bytes is a `blob:`
+ * document under the WALLET's Content-Security-Policy, so each of these
+ * pages' own script hash must be in that policy (`vite.config.ts`) or the
+ * page would open and run nothing.
  */
-export function trustedSignerPageAdmit(base: string, index_json: string | null | undefined, trusted_json: string, observed: string | null | undefined, now_ms: number, lang: string): string;
+export function trustedSignerFromBytes(): string;
+
+export function trustedSignerPageAdmit(base: string, index_json: string | null | undefined, trusted_json: string, observed: string | null | undefined, now_ms: number, lang: string, opener_origin?: string | null): string;
 
 /**
  * R6 for the web: which version of the page at `base` to check and open
@@ -2911,7 +2922,8 @@ export interface InitOutput {
     readonly trustedSignerCeremonyRequest: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number];
     readonly trustedSignerCeremonyTitleKey: (a: number, b: number) => [number, number];
     readonly trustedSignerCeremonyVerify: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
-    readonly trustedSignerPageAdmit: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
+    readonly trustedSignerFromBytes: () => [number, number];
+    readonly trustedSignerPageAdmit: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number];
     readonly trustedSignerPageTarget: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly trustedSignerRegistryRpId: (a: number, b: number) => [number, number];
     readonly trustedSignerSignatureAccept: (a: number, b: number) => [number, number, number, number];

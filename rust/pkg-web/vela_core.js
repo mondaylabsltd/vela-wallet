@@ -8057,23 +8057,49 @@ export function trustedSignerCeremonyVerify(operation_json, answer_json, signer_
 
 /**
  * R6's ruling for the web on the bytes `trustedSignerPageTarget`'s URL
- * served (`launch::admit`): `{line, launch, versionToTrust}` — the integrity
- * line (`IntegrityLine`), the address to open with the request handed over
- * by `postMessage` (`CheckedPage::post_launch`; `null` unless the page was
- * admitted and the check is fresh), and the version a self-hosted page asks
- * to be trusted. `observed` is the sha256 of the body (`null` when it could
- * not be fetched); `now_ms` the shell's clock.
+ * served (`launch::admit`): `{line, launch, fromBytes, versionToTrust}` —
+ * the integrity line (`IntegrityLine`), the address to open with the
+ * request handed over by `postMessage` (`CheckedPage::post_launch`; `null`
+ * unless the page was admitted and the check is fresh), the fragment to
+ * open THE BYTES THAT WERE HASHED with instead (`CheckedPage::bytes_launch`,
+ * §38: `null` unless `openerOrigin` — the wallet's own origin — may open
+ * this version that way), and the version a self-hosted page asks to be
+ * trusted. `observed` is the sha256 of the body (`null` when it could not
+ * be fetched); `now_ms` the shell's clock.
+ * The published page versions the web wallet may open from the bytes its
+ * check hashed (`integrity::FROM_BYTES`, §38), as a JSON array of sha256
+ * hex. The wallet's build reads it: a page opened from bytes is a `blob:`
+ * document under the WALLET's Content-Security-Policy, so each of these
+ * pages' own script hash must be in that policy (`vite.config.ts`) or the
+ * page would open and run nothing.
+ * @returns {string}
+ */
+export function trustedSignerFromBytes() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.trustedSignerFromBytes();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
  * @param {string} base
  * @param {string | null | undefined} index_json
  * @param {string} trusted_json
  * @param {string | null | undefined} observed
  * @param {number} now_ms
  * @param {string} lang
+ * @param {string | null} [opener_origin]
  * @returns {string}
  */
-export function trustedSignerPageAdmit(base, index_json, trusted_json, observed, now_ms, lang) {
-    let deferred6_0;
-    let deferred6_1;
+export function trustedSignerPageAdmit(base, index_json, trusted_json, observed, now_ms, lang, opener_origin) {
+    let deferred7_0;
+    let deferred7_1;
     try {
         const ptr0 = passStringToWasm0(base, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
@@ -8085,12 +8111,14 @@ export function trustedSignerPageAdmit(base, index_json, trusted_json, observed,
         var len3 = WASM_VECTOR_LEN;
         const ptr4 = passStringToWasm0(lang, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len4 = WASM_VECTOR_LEN;
-        const ret = wasm.trustedSignerPageAdmit(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, now_ms, ptr4, len4);
-        deferred6_0 = ret[0];
-        deferred6_1 = ret[1];
+        var ptr5 = isLikeNone(opener_origin) ? 0 : passStringToWasm0(opener_origin, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len5 = WASM_VECTOR_LEN;
+        const ret = wasm.trustedSignerPageAdmit(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, now_ms, ptr4, len4, ptr5, len5);
+        deferred7_0 = ret[0];
+        deferred7_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
+        wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
     }
 }
 
