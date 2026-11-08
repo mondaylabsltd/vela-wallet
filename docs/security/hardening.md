@@ -327,3 +327,374 @@ the domain. The release-binary checks assert it:
    add `webcredentials:<domain>` to the test builds' entitlements.
 5. **vela-relay** (G5): name `expired` as the `rejection_reason` when the EntryPoint answers
    AA22, so the tracker says "expired" rather than "refused".
+
+---
+---
+
+# Round 22: supply chain and the signing page's integrity
+
+Round 22 makes three defences of the 2026-11-07 review true: dependency hygiene (review 1-10),
+reproducible builds (1-9), and the signing page's check-then-open race (0-5, with the honest
+account of what the page guarantees from 0-4). `docs/multisig-machines.md` §38 is the summary.
+How a reader checks all of it is [`verify.md`](verify.md).
+
+## R22-1. Dependency gates (review 1-10)
+
+**Before.** CI ran no dependency audit (`npm ci --no-audit`), there was no Dependabot or
+Renovate, the desktop's `gpui` was a git dependency with no revision, and the vendored
+PeerConnect client was a built `dist/` with a source commit that turned out to be wrong.
+
+**Decision.**
+
+- **cargo-deny over both Rust graphs** (`deny.toml`, one file, run once per lockfile:
+  `rust/Cargo.lock` and `app-desktop/vela-wallet/Cargo.lock`, plus the Windows passkey crate).
+  It covers four areas:
+  - *advisories*: vulnerabilities, unmaintained, unsound and yanked crates all fail;
+  - *licences*: an explicit allow-list;
+  - *sources*: crates.io only, plus four named git repositories, each pinned to a commit
+    (`required-git-spec = "rev"`; unknown git is denied);
+  - *bans*: openssl and native-tls are banned outside the one place they already are.
+
+  The graph is limited to the targets that ship (wasm32, macOS, Linux, Windows, Android, iOS).
+  It uses default features, because the extra features are test seams that no release carries.
+  Every exception says why it is safe today and what removes it. "Upstream has no fix" is
+  accepted only together with "unreachable" or "our own input".
+  - *Installed in CI* with `taiki-e/install-action` at a commit, `cargo-deny@0.20.2`. The action
+    checks the release's own sha256 and needs no container.
+- **JS audits of what ships.**
+  - `app-web/vela-wallet`: `pnpm audit --prod --audit-level high`, and the whole tree at
+    `critical`. SvelteKit bundles its devDependencies (kit, svelte, devalue) into the shipped
+    pages, so `--prod` alone would miss them.
+  - `app-web/getvela.app`: `bun audit --prod --audit-level=high`. It is a bun project, so its
+    own package manager audits it.
+  - `scripts/` (tooling): `npm audit --audit-level=high`.
+- **Dependabot** (`.github/dependabot.yml`): cargo (`/rust`, the desktop, the Windows crate),
+  npm (the web wallet, `/scripts`), bun (getvela.app), gradle (Android), swift (iOS, for the
+  remote lottie-ios package) and GitHub Actions.
+  - Weekly; minor and patch grouped, majors one PR each.
+  - A 7-day cooldown (30 days for majors), so a malicious release has time to be found and
+    yanked first.
+  - uniffi and the commit-pinned git dependencies are ignored, because they must move by hand.
+  - The header says that a `rust/Cargo.lock` bump must rebuild the web wasm in the same PR.
+- **gpui pinned** to the commit the lockfile already resolved,
+  `c97b7c0ea41acf56e9726964eca10c2078e921b0`. This applies to `gpui`, `gpui_platform` and
+  `vendor/gpui_macos`'s four zed dependencies (otherwise Cargo sees two sources and a second
+  gpui). `dotlottie-rs` moved from a tag to the tag's commit. Nothing that is built changed:
+  the same 21 packages at the same commit, and `cargo check --locked` passes both ways.
+- **PeerConnect, rebuilt from source.** `VENDOR.json` records the repository, commit,
+  toolchain (rustc 1.97.1), wasm-bindgen (0.2.129), the recipe, the local patch and every
+  file's sha256. `scripts/check-peerconnect-vendor.mjs` checks it in two ways:
+  - the hashes, always (CI `app`);
+  - `--rebuild`, which clones the commit, builds it with the paths mapped out, applies
+    `vela-local.patch` and compares byte for byte (CI `supply-chain`).
+
+**What the gates found today, and what was done.**
+
+| Finding | Where | Decision |
+| --- | --- | --- |
+| RUSTSEC-2026-0387 crypto-bigint 0.7.5, secret-dependent timing | core (k256/p256 0.14): the CTAP2 PIN/UV ECDH and the caBLE keys on Android/iOS | **fixed**, 0.7.10 in `rust/Cargo.lock` (shipped with this round's wasm) |
+| RUSTSEC-2026-0385 ctutils 0.4.2, non-constant-time masks | core: caBLE AES-GCM, CTAP ECDH | **fixed**, 0.4.8 |
+| RUSTSEC-2026-0220 ruint 1.19.0, wrong shift overflow flags | core (alloy-primitives) | **fixed**, 1.20.1. It was not exploitable: the core's one `checked_shl` was checked for every exponent it can hit |
+| RUSTSEC-2026-0384 tokio 1.54.0 (and yanked) | core (vela-agent; current-thread runtime, no `Interval`) | **fixed**, 1.54.1 |
+| wnaf 0.14.0 yanked | core | **fixed**, 0.14.1 |
+| rustls 0285/0346/0348/0349, rustls-webpki 0382, webpki-roots 0381, pulldown-cmark 0414/0433, tokio 1.53.1 (unsound 0386), calamine 0436, zip 8.6 (0367/0368/0369/0429), crypto-bigint 0.7.5, ctutils, chacha20/wnaf/async-executor yanked | desktop | **fixed** by `--precise` bumps in the desktop lockfile, calamine 0.36 → 0.38 |
+| RUSTSEC-2026-0387 crypto-bigint 0.5.5 | desktop: p256 0.13, used only to **verify** the updater's signature (public inputs) | allowlisted. Exit: the desktop moves to p256 0.14 |
+| zip 2.4.2 (0367/0368/0369/0429) | desktop: dotlottie-rs reads the bundled `.lottie` from memory; `extract()` is only in a build script for an unbuilt target | allowlisted. Exit: dotlottie-rs moves zip |
+| lru 0.12.5 unsound (0002/0253) | rqrr 0.9 never calls `iter_mut` | allowlisted. Exit: rqrr 0.11 |
+| glib 0.18.5 unsound (0429) | in no shipped build (`cargo tree --target` is empty for every target); cargo-deny joins cfg edges across targets | allowlisted |
+| unmaintained: paste, proc-macro-error(2), basic-toml (compile time only); bincode 1.3.3 (crux_core, our bytes only); rustls-pemfile (OS cert files); rustybuzz/ttf-parser (system fonts); zvariant/zbus (session bus) | both | allowlisted, each with its exit in `deny.toml` |
+| **GPL-3.0-or-later `zlog`, `ztracing`, `ztracing_macro`** | desktop: linked by gpui at the pinned commit (gpui → sum_tree → ztracing → zlog) | **open, a release blocker for the desktop (owner, below).** A version-pinned exception keeps the gate green only because the fix is known: Zed relicensed all three to Apache-2.0 in zed#63573 (`ac5af8b9`, 2026-09-01). Exit: move the gpui pin to `ac5af8b9` or later |
+| MPL-2.0 (uniffi ×8, cbindgen, cssparser, selectors, dtoa-short, dwrote, option-ext) | both | allowed per crate. File-level copyleft, and these files are not modified |
+| npm: @sveltejs/kit 2.70.1, devalue 5.8.2 (bundled into the wallet's pages) | web wallet | **fixed**, kit 2.70.4, devalue 5.9.4 |
+| npm: undici 7.28 and sharp 0.35 (7 + 2 high), vite 8.1.5 (high), vitest, minimatch, cookie (dev only) | web wallet dev tree: wrangler's local simulator, the dev server, tests | reported; Dependabot. None ships, and none is critical, so the whole-tree gate at `critical` passes |
+| bun: @vitest/browser 4.1.1 (3 critical, test runner); the site's Worker runs kit 2.55 / svelte ≤5.55.6 / devalue ≤5.9.2 (high/moderate) | getvela.app | the prod audit (13 runtime packages) is clean. **The Worker's kit/svelte/devalue bump is open** (in range, separate PR) |
+| npm: yaml 2.8.1 moderate | `scripts/` (parses repository-owned YAML) | reported |
+| PeerConnect's README said `f3148cb` | vendored client | **corrected**. `index.js` is `977ec1e` + `vela-local.patch`. The module had been built from an uncommitted tree between the two commits (one panic line number differed), so it matched no commit. It was rebuilt from `977ec1e` with the recipe; the only change is that line and the builder's paths, now mapped out |
+
+## R22-2. Reproducible builds (review 1-9)
+
+**The signing page** was already reproducible: `build-single` concatenates with no minifier,
+timestamp or environment, and Bun and Node produce the same bytes. What was missing is that
+nothing enforced it. Its `--check` is now the blocking `signing-page` CI job on every PR, under
+Bun and under Node. It also checks `dist/sw.js` (R22-3).
+
+**The web core.** The repository used to say the wasm bytes were "not reproducible across
+machines", and `build-web.mjs --check` compared a source fingerprint and the ABI only. Two
+causes were found and fixed:
+
+- **The builder's paths.** The 0.9.8 module embedded `/Users/<developer>/.rustup/toolchains/
+  1.97.1-aarch64-apple-darwin/lib/rustlib/src/rust/library/…` in 27 panic-location strings.
+  With the `rust-src` component installed, rustc maps std's virtual `/rustc/<commit>/` paths
+  back to local ones. The build now maps the sysroot's `rust-src` back to `/rustc/<commit>`,
+  `$CARGO_HOME` to `/cargo` and the checkout to `/vela`. No path of the build machine remains
+  (0 strings, measured).
+- **The `producers` section** records the tools in their own words. wasm-bindgen's entry
+  differs between a CLI built from source (`0.2.126`) and a downloaded one
+  (`0.2.126 (21ac804a9)`). Nothing reads it at run time, so it is dropped; the toolchain is
+  pinned in the repository instead.
+
+**The pinned builder.** `rust/scripts/web-build.Dockerfile` contains:
+- `rust:1.97.1-bookworm` by its index digest;
+- wasm-pack 0.15.0 and wasm-bindgen-cli 0.2.126, built `--locked` from crates.io;
+- binaryen `version_117` and node 22.22.3, each tarball checked against its pinned sha256.
+
+`rust/scripts/reproduce-web.sh [<commit>]` builds the module from a `git archive` of the commit
+inside that image and compares every output byte for byte.
+
+**Measured.**
+- Two clean builds on macOS arm64, each from an export of the tree in a fresh target
+  directory: **byte-identical**, module and glue (`43e1933b…` for that tree). The module
+  carries 0 paths of the build machine; it used to carry 27.
+- **Not measured locally: Linux.** The Docker VM here (2 CPUs, 3.8 GB) killed rustc on
+  `vela-core` under amd64 emulation (out of memory), and OrbStack had no network.
+- The repository's earlier note measured macOS and Linux differing in 92% of their bytes,
+  with different function counts. Paths of different lengths (`/Users/…/.rustup/…` against
+  `/rustc/<commit>/…`) shift every later offset in the data section, which fits most of that.
+  The remap removes them. This is a likely explanation, not a proven one.
+- **Decision.** The local builds were reproducible twice from clean, so the CI compare is
+  byte-exact and blocking. If the first CI run shows that the Linux container's bytes differ
+  from a macOS build's, the job fails and uploads what it built (`web-core-container-build`).
+  The fix is then to commit the container's output (`rust/scripts/reproduce-web.sh`'s tree),
+  so the shipped module is the CI-built, attested one, and to make `build:wasm` run in the
+  container. That is an owner item for the first CI run.
+
+**CI.** `web-core-reproducible` runs `reproduce-web.sh` on every PR, and fails when the
+committed module is not what the commit builds. On `main` it also attests the CI-built module
+and glue (`actions/attest-build-provenance`), so `gh attestation verify` can bind
+wallet.getvela.app's bytes to a workflow run and a commit.
+
+## R22-3. The signing page: check-then-open (review 0-5)
+
+**Before.** Every wallet fetched `b/<h>/sign`, hashed it, ruled on it (`integrity.rs`), and
+then had a browser open the same URL (`page-handoff.svelte.ts` `checkPage` → `window.open`;
+the apps' system browser). A host that answers the check with the published page and the
+navigation with another one was caught by nothing. A check vouched for 24 hours, and the
+check's request differed from a navigation in everything but `Accept`.
+
+**Decision: open the bytes that were hashed, wherever the platform allows.**
+
+| Surface | How the page is opened now | Why |
+| --- | --- | --- |
+| **Web wallet, official page** | **from the checked bytes**: `URL.createObjectURL(new Blob([bytes]))` + `#ch=post&lang=…&b=<h>` | a blob document has the wallet's origin; `wallet.getvela.app` may use `getvela.app` passkeys, so WebAuthn works and the host is never asked again |
+| Web wallet, a self-hosted page | the checked address + the Service Worker pin | its keys are its own domain's; the wallet's origin cannot use them, so a blob could not sign |
+| Chrome and Safari extensions | the checked address + the pin | an extension origin cannot use `getvela.app` passkeys, and MV3 extension pages allow no inline script |
+| iOS, Android, desktop | the checked address in the system browser + the pin + a 10-minute check | see "the natives" below |
+
+**The core decides** (one rule, every shell):
+- `integrity::FROM_BYTES` lists the versions that can be opened from bytes. It starts with
+  `674b7333`, the first page that reads its place from its origin and fragment. Older pages
+  would ask the passkey for an empty relying party.
+- `launch::CheckedPage::opens_from_bytes(opener_origin)` says yes when the version is in that
+  list and the opener's origin is `https` (or loopback `http`) on the page's signing domain or a
+  subdomain of it. That is WebAuthn's own RP ID rule.
+- `bytes_launch` writes the fragment.
+- The wasm hands it to the web as `trustedSignerPageAdmit(…, openerOrigin).fromBytes`.
+
+`page-handoff` keeps the bytes the check read and opens a fresh object URL from them at the tap.
+It is released when the hand-off ends, and a reload re-runs the same bytes. Messages are then
+expected from the wallet's own origin.
+
+**The page's integrity is kept, not loosened.**
+- The page's own `default-src 'none'` CSP is inside the bytes and still governs a blob document.
+- A blob document is also held to the wallet's CSP, so its one inline script must be allowed
+  there. `vite.config.ts` reads the versions from the shipped core (`trustedSignerFromBytes`),
+  re-hashes each committed page (a mismatch fails the build), and adds exactly that page's
+  `script-src` hash to the wallet's policy.
+- Measured in Chromium, Firefox and WebKit: without the hash the page loads and runs nothing.
+  With it, the page runs under its own CSP (its `fetch` is refused).
+
+**WebAuthn and the channels from a blob origin** (measured; `e2e/page-from-bytes.e2e.ts`):
+- The blob's origin is the opener's.
+- `navigator.credentials` is present, and `isSecureContext` is true.
+- Chromium creates and gets credentials for the origin's RP ID.
+- `clientDataJSON.origin` is the wallet's origin (`https://wallet.getvela.app`). The core does
+  not bind the page's origin, and neither does Safe's WebAuthn verifier on chain: the origin is
+  inside `clientDataFields`.
+- `window.opener` and `postMessage` work as before. The page answers only the wallet origins
+  the browser reports for its opener.
+- The e2e signs a message end to end from a blob: one request for the page's bytes, the
+  check's, and none from the window. A host that serves other bytes afterwards changes nothing
+  that opens.
+- WebKit's and Firefox's WebAuthn could not be driven here, because they have no virtual
+  authenticator. Their blob documents report the same origin and a secure context.
+
+**What opening from bytes costs.** The page then runs in the wallet's origin, not on
+`sign.getvela.app`, so it is no more separated from the wallet's script than the wallet is from
+its own passkeys. For a `getvela.app` account this was already so: the wallet can ask the
+passkey directly (`signing_venue.rs`, "What this does NOT claim"). Before this change, a
+compromised wallet could also open any page it liked, because on the web the check is the
+wallet's own code. What the change gains is that the bytes that run are the bytes that were
+hashed, so the host is out of the trust base for the web.
+
+**Where bytes cannot be opened: the Service Worker pin** (spec 076 FR-008, built now).
+- The page registers `<deployment>/sw.js` with scope `b/`. Its CSP gains `worker-src 'self'`
+  and nothing else; the page still fetches nothing.
+- The worker answers every navigation to `b/<h>/sign` from its cache, or fetches, hashes and
+  serves the bytes only if they hash to `h`. Anything else gets a 409 page that runs nothing
+  and names both hashes.
+- It pins the version that registered it, re-fetched and verified, so the next visit is
+  answered locally.
+- Measured (`samples/sw-pin-test.mjs`, 10/10 checks): after the host swaps the bytes, the
+  published page still opens, the host is not even asked, and the response still carries
+  `frame-ancestors 'none'`. A version served wrong from the start is refused.
+- **Limits, said plainly:**
+  - The first visit is trust on first use.
+  - The browser updates the worker from the host, so a host serving a hostile `sw.js` defeats
+    the pin from the following visit.
+  - A browser that keeps no worker (private window, cleared storage) is unpinned.
+
+**The 24-hour vouch window is now 10 minutes for opening.**
+- `MAX_CHECK_AGE_MS` = 10 minutes. Every shell re-checks at the tap when the check is older:
+  iOS `openable`, Android `admitted`, the desktop's `launchable`, and the web at every
+  hand-off. So the check a page opens on is minutes old.
+- The line a person reads ("matches · checked 14:32") still stands for a day (`LINE_MAX_AGE_MS`,
+  with its time). The background refresh stays at 12 hours, so a phone does not fetch the
+  1 MB page every few minutes.
+- This narrows the window for a whole-build swap. It does not close check-then-open; only the
+  two measures above do.
+
+**Check requests look like navigations, as far as headers go.**
+- `launch::CHECK_HEADERS`, which every app's check sends, now carries the whole of a top-level
+  navigation's request headers a host can key on: `Accept`, `Upgrade-Insecure-Requests: 1`, and
+  `Sec-Fetch-Dest: document`, `-Mode: navigate`, `-Site: none`, `-User: ?1`.
+- **What still differs:** the TLS and HTTP/2 fingerprint of URLSession, OkHttp and ureq; the
+  `User-Agent` and `Accept-Language`; and the timing (a check, then a navigation). A browser's
+  `fetch` may not send `Sec-*`, so the web wallet's fallback check sends `Accept` only. A host
+  set on telling them apart can, which is why the web opens the bytes and the page pins itself.
+
+**The natives: an in-app WebView loaded from the verified bytes was considered and not built.**
+1. The apps open the page for two kinds of account.
+   - A **custom-domain account**: its keys can be used only by pages on its domain. An in-app
+     WebView can use a passkey only for an RP the app is associated with (Android's WebView
+     WebAuthn checks the app's asset links, and WKWebView needs `webcredentials`). The app is not
+     associated with someone else's domain, so a WebView there could not sign.
+   - A **`getvela.app` account** that chose the page as its venue. The app can already call that
+     passkey natively, so a WebView adds no authority boundary.
+2. An in-app WebView is the app's: the app can inject script into it, read it and rewrite it.
+   The system browser (SFSafariViewController, Custom Tabs, the desktop's default browser) is
+   the one place the app cannot reach. It is also what the page-scoped RP ID below needs: an app
+   associated with the page's RP could use those keys itself.
+
+So the natives keep the system browser, now with the pin and the 10-minute check.
+
+### A test build names the page version it opens (R21 finding)
+
+**Before.** `integrity::LAUNCH` is a compile-time constant (`6d7172b4`), and the deployed
+`index.json` lists only what is deployed, so a test build always opened a page that was
+already published. After R21 the core refuses what an older page signs: `6d7172b4` hashes a
+zero validity window, which the core rejects as `WrongChallenge`. So the phones' page path
+could not be exercised locally against `7ec6e9a3`, or against this round's page.
+
+**Decision.** There is one core rule, `launch::set_test_launch(version, test_build)`
+(uniffi `signer_page_set_test_launch`). In a test build it names the version that `target()`
+picks, whatever the index lists.
+- It is refused unless `test_build` is true.
+- It is refused unless the version is in `BUILD_ALLOWED`. A test build opens a page this build
+  accepts, or none.
+- The version is still fetched, hashed and ruled on (`admit`), and a version blocked on the
+  device stays blocked.
+
+Each shell reads it only in code that a release build does not contain:
+
+| Shell | Input | How it is kept out of release, and the check that proves it |
+| --- | --- | --- |
+| iOS | env `VELA_PAGE_LAUNCH` (`Dev/DevLaunchInputs.swift`) | `Dev/*.swift` is in Release's `EXCLUDED_SOURCE_FILE_NAMES`; `check-ios-store-binary.sh` refuses any `VELA_*` name from `Dev/` in the binary |
+| Android | `adb shell am start … --es vela.pageLaunch <hash>` (debug `ServiceLaunchInputs`) | debug source set only; `check-release-apk.sh` refuses the class and now the `vela.pageLaunch` string |
+| Desktop | env `VELA_PAGE_LAUNCH` (`dev_env::var!`) | expands to `None` outside a developer build; `check-store-binary.sh` refuses every `dev_env` name in a release binary |
+
+Measured:
+- Core `tests/test_launch_input.rs`: a release build is refused, and so is a version not in
+  `BUILD_ALLOWED`. In a test build, `target()` picks the named version with no index, against
+  an index that lists only what is deployed, and on a local page; other bytes are still
+  refused, and a blocked version still falls back.
+- Android `SignerPageChecksTest`: the same rule through the Kotlin bindings.
+- iOS `WireParityI1Tests`: the refusals through `DevLaunchInputs`.
+- **Release binaries:**
+  - iOS Release (simulator) passes `check-ios-store-binary.sh` ("none of 13 developer
+    inputs"), with 0 occurrences of `VELA_PAGE_LAUNCH`.
+  - Android `assembleRelease -PvelaUnsignedRelease` passes `check-release-apk.sh`.
+  - The desktop's release binary was not built this round, for lack of disk. Its gate is
+    unchanged: `dev_env::var!` expands to `None`, and `check-store-binary.sh` reads every
+    `dev_env` name.
+
+**Not done: an end-to-end page signature on a phone.** The ask was a page-signed send and a
+multisig approval through the page, on an emulator or simulator, with the local page on the
+newest build. That needs a harness that does not exist yet:
+- a passkey on the page's relying party, in the system browser;
+- a local chain, relay and genesis service, as the multisig fork suite has for the web;
+- an account whose keys were made on that page.
+
+The Android emulator's Chrome holds no WebAuthn credential without a Google account. The iOS
+simulator can hold one for `localhost`, but driving SFSafariViewController's Face ID sheet from
+XCUITest was not built.
+
+What stands in for it today:
+- the page's own suites on `674b7333`, all 23 green. `desktop-demo` drives the URL channel the
+  phones use (app → browser page → `velawallet`-style callback → the answer the core
+  accepts); `multisig-test` covers the member approval; `answer-test` covers every signature;
+- the web wallet's `e2e/page-from-bytes.e2e.ts`, which signs end to end from the checked bytes;
+- the phones' own `SignerPageChecks` suites, which cover the check, the 10-minute window and
+  the override.
+
+The phone harness is an open item for the R21 tester. With this input it can be built: start
+the debug app with `VELA_PAGE_LAUNCH=674b7333…` (Android `--es vela.pageLaunch`) and a
+loopback page serving `app-web/trusted-signer/dist`.
+
+### What the page guarantees, per account type (review 0-4 / 0-5)
+
+| Account | The page guarantees | It does not guarantee |
+| --- | --- | --- |
+| **`getvela.app`** (made in the apps or on the official page) | **display assurance**: it decodes the request with its own code, from bytes that match a published version (from the checked bytes on the web; pinned elsewhere after the first visit), and signs only the digest it computed itself. A tampered or wrong wallet interface cannot make it show one thing and sign another | **authority**: the web wallet's origin, the extensions and the apps can all call the same passkey directly (`signing_venue.rs`). A fully compromised wallet, extension or app does not need the page. On the web the wallet's own code runs the check, so a compromised wallet can also open a page of its choosing |
+| **Its own domain** (made on a self-hosted page) | display assurance as above, **and authority**: only pages on that domain can use its keys, so the wallet cannot sign without the page | an honest page host on the first visit (trust on first use), and until the pin is in place; the page's host chooses what `sw.js` it serves |
+
+The Settings copy already says the getvela.app limit in each language
+(`settings.venue.pageLimit`: "It can't protect you if this wallet itself is compromised…").
+
+### Owner decision: a page-scoped RP ID (the real fix, not built this round)
+
+A `getvela.app` account's page is display assurance, not authority, because the keys live
+under an RP ID that the wallet origins and the app associations can also use. The fix is an
+account whose keys live under an RP ID that **only the page** can use: either a separate
+registrable domain (for example `getvela-sign.app`), or `sign.getvela.app` itself as the RP ID
+with no other origin on it and no app association for it. The wallet and the apps then cannot
+call the passkey at all. They can only hand a request to the page, which becomes the one thing
+able to sign, the boundary the review asks for.
+
+Trade-offs:
+- **Every signature goes through the page.** That means a browser window on every surface,
+  every time; no native passkey sheet; and the page must be reachable (or cached by its worker).
+- **Recovery and new devices** need the page, and key ceremonies (create, add a key, sign in)
+  move to it, as a custom-domain account's already do (spec 102 R3).
+- **The domain becomes the root of trust for those accounts.** Its registrar, DNSSEC, CAA and
+  HSTS preload all matter more, and the domain can never be given up.
+- **Existing accounts cannot move.** A key's RP ID is fixed. It would be a new kind of account
+  ("page-only"), offered beside `getvela.app`, with a migration by sending funds.
+- **Multisig members** would sign on the page every time. That is the Bybit lesson's ideal, at
+  a cost in convenience.
+- **The opener question.** The page must still not answer a phishing opener (it answers the
+  wallet origins only, PROTOCOL.md §12.3). The wallet still assembles the operation, and the
+  page re-derives what it signs.
+
+Recommended: offer it as an opt-in "page-only signing" account type for high-value and multisig
+use, on a dedicated registrable domain, after the domain-security work (review 1-1's
+DNSSEC/CAA/registry lock) is done. The owner decides; nothing here depends on it.
+
+## Round 22 go-live (the owner)
+
+1. **Deploy the signing page** `app-web/trusted-signer/dist/`, including the new `dist/sw.js`,
+   with page `674b7333` first in `BUILD_ALLOWED`.
+   - Check that `curl -s https://sign.getvela.app/b/674b7333…/sign | shasum -a 256` prints
+     `674b7333…`, and that `/sw.js` is served as JavaScript.
+   - Until it is deployed, the web wallet opens the newest version the deployed `index.json`
+     lists. That version is not in `FROM_BYTES`, so it opens at its address, as before. Nothing
+     breaks; the bytes-opening starts once `674b7333` is live.
+   - `LAUNCH` is unchanged. Move it with R21's page, once both are deployed.
+2. **Branch protection:** add `supply-chain`, `signing-page` and `web-core-reproducible` to the
+   required checks.
+3. **Turn on Dependabot alerts and security updates** (Settings → Code security). The file
+   alone only schedules version updates.
+4. **Desktop release blocker:** move the gpui pin to zed `ac5af8b9` or later (the GPL-3.0
+   crates relicensed to Apache-2.0), refresh `vendor/gpui_macos`, and delete the three
+   exceptions in `deny.toml`. Or explicitly accept the licence risk for one release.
+5. **getvela.app's Worker**: bump kit, svelte and devalue (bun audit, in range).
+6. **Decide on the page-scoped RP ID** (above).
