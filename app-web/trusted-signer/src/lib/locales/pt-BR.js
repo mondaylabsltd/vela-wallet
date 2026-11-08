@@ -159,6 +159,8 @@ window.VelaCS.i18n.register('pt-BR', {
   'refuse.selfCall': 'Isto pede que sua conta chame {fn} em si mesma, o que mudaria quem a controla. A Vela nunca precisa disso. Nada será assinado.',
   'refuse.delegateCall': 'Isto executa o código de outro contrato como se fosse a sua conta (um delegatecall), a técnica usada para esvaziar a Bybit. Nada será assinado.',
   'refuse.safeTx': 'Isto pede que sua chave assine uma transação Safe (SafeTx), uma instrução que um Safe pode executar depois. Nenhum site precisa disso da Vela. Nada será assinado.',
+  'refuse.parentSafe': 'Este site pede que sua conta execute {fn} para outro Safe — talvez um do qual você é dono. A Vela nunca deixa um site alterar ou aprovar nada de um Safe; use o app desse Safe. Não vou assinar.',
+  'refuse.parentSafeMessage': 'Isto pede que sua chave assine uma mensagem Safe (SafeMessage) para outro Safe — talvez um do qual você é dono — que esse Safe contaria como sua aprovação. A Vela nunca deixa um site fazer isso; use o app desse Safe. Não vou assinar.',
   'warn.nonCanonicalModule': 'Esta operação indica um EntryPoint ou módulo 4337 que não é da Vela — assiná-la endossa outro conjunto de contratos.',
   'ui.digest': 'Resumo assinado · {kind}',
   'ui.digestUnwrapped': 'não envolvido em SafeMessage — uma assinatura no estilo EOA que um Safe não aceita',

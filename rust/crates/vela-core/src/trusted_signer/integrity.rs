@@ -61,6 +61,16 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // VELA-2026-002 (the 0.9.9 hotfix; disclosure 2026-09-29, APPENDIX-PARENT):
+    // a site's request that would act for a Safe other than the account —
+    // `execTransaction`, `approveHash`, an owner / threshold / module / guard
+    // / fallback / setup call, straight or one `multiSend` / `execTransaction`
+    // down — or a `SafeMessage` under another contract's domain is refused
+    // (`refuse.parentSafe`, `refuse.parentSafeMessage`, fifteen locales). The
+    // page cannot read the chain, so it refuses the shapes on any Safe but the
+    // account; the core refuses them for the Safes the account owns
+    // (`parent_safe_guard`). Not LAUNCH.
+    "2494b941e2eb421d4a044fb817a88cd37f2f6e51d674a681809d8e525d3400c8",
     // 245c9ea1's page and behaviour, with two wordings from the owner's
     // review (2026-10-09). The tag beside the fee and beside a chain the page
     // does not know says WHOSE word it is — 「App 标注」 / "per the app" for

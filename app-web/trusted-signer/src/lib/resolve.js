@@ -1479,6 +1479,71 @@ window.VelaCS = window.VelaCS || {};
       : { tone: 'danger', key: 'refuse.selfCall', params: { fn: fn } });
   }
 
+  // --- a Safe this account owns (VELA-2026-002, the parent-Safe guard) ------
+  //
+  // A Vela account can be an owner of other Safes — a Safe made outside Vela
+  // that lists the account's address among its owners. A site can make the
+  // account act for one of those without ever pointing at the account itself:
+  // `execTransaction` with the "approved by msg.sender" signature (a 1-of-N
+  // takeover), `approveHash` (one counting approval), an owner, threshold,
+  // module, guard or fallback change, the same hidden in a `multiSend` /
+  // `execTransaction` payload, or a `SafeMessage` signature under that Safe's
+  // domain (a nested EIP-1271 approval). The core refuses these for every
+  // Safe whose `isOwner(account)` reads true (`parent_safe_guard.rs`). This
+  // page cannot read the chain (its CSP has no `connect-src`) and does not
+  // trust the app's word for which Safes those are, so it refuses the shapes
+  // whatever their target, the account aside.
+
+  var PARENT_CALL = Object.assign({ '0xd4d9bdcd': 'approveHash' }, SELF_CALL);
+
+  /** The Safe function a call would run for a Safe other than the account, or null. */
+  function parentSafeCall(call, account, depth) {
+    var data = call.data || '0x';
+    var selector = abi.selectorOf(data);
+    if (!selector) return null;
+    var to = String(call.to || '').toLowerCase();
+    if (to && to !== String(account || '').toLowerCase() && PARENT_CALL[selector]) {
+      return PARENT_CALL[selector];
+    }
+    if (depth >= MAX_NESTING) return null;
+    var inner = [];
+    if (selector === MULTI_SEND_SELECTOR) {
+      var packed = abi.decode('multiSend(bytes)', data);
+      if (packed) inner = decodeMultiSend(packed[0]);
+    } else if (selector === EXEC_TRANSACTION_SELECTOR) {
+      var exec = abi.decode(EXEC_TRANSACTION, data);
+      if (exec) inner = [{ to: exec[0], data: exec[2], operation: Number(exec[3]) }];
+    }
+    for (var i = 0; i < inner.length; i++) {
+      var found = parentSafeCall(inner[i], account, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  /** Every typed-data document of the request, parsed (a string or an object). */
+  function typedDocuments(intent) {
+    var params = intent.params || [];
+    var docs = [];
+    for (var i = 0; i < params.length; i++) {
+      var entry = params[i];
+      if (typeof entry === 'string') {
+        try { entry = JSON.parse(entry); } catch (e) { continue; }
+      }
+      if (entry && typeof entry === 'object' && !Array.isArray(entry)) docs.push(entry);
+    }
+    return docs;
+  }
+
+  /** A `SafeMessage` under another contract's domain: an approval for that Safe. */
+  function isParentSafeMessage(intent, account) {
+    return typedDocuments(intent).some(function (doc) {
+      var contract = String((doc.domain && doc.domain.verifyingContract) || '').toLowerCase();
+      return doc.primaryType === 'SafeMessage' && contract !== '' &&
+        contract !== String(account || '').toLowerCase();
+    });
+  }
+
   /** A `SafeTx` is an instruction to a Safe, executable by anyone later. */
   function isSafeTx(intent) {
     var params = intent.params || [];
@@ -1609,6 +1674,22 @@ window.VelaCS = window.VelaCS || {};
       view.refuse = true;
       view.risk = 'danger';
       view.warnings.push({ tone: 'danger', key: 'refuse.safeTx' });
+    }
+    // VELA-2026-002: nothing a site asks may act for another Safe — in every
+    // call of the operation.
+    for (var p = 0; p < calls.length; p++) {
+      var parentFn = parentSafeCall(calls[p], account, 0);
+      if (parentFn) {
+        view.refuse = true;
+        view.risk = 'danger';
+        view.warnings.push({ tone: 'danger', key: 'refuse.parentSafe', params: { fn: parentFn } });
+        break;
+      }
+    }
+    if (intent.method && intent.method.indexOf('signTypedData') >= 0 && isParentSafeMessage(intent, account)) {
+      view.refuse = true;
+      view.risk = 'danger';
+      view.warnings.push({ tone: 'danger', key: 'refuse.parentSafeMessage' });
     }
 
     if (!view.dapp.originVerified && view.dapp.origin) {

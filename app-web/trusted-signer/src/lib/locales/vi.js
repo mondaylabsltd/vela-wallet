@@ -159,6 +159,8 @@ window.VelaCS.i18n.register('vi', {
   'refuse.selfCall': 'Yêu cầu này muốn tài khoản của bạn tự gọi {fn} lên chính nó, việc này sẽ thay đổi ai là người kiểm soát tài khoản. Vela không bao giờ cần điều đó. Không ký.',
   'refuse.delegateCall': 'Yêu cầu này chạy mã của một hợp đồng khác dưới danh nghĩa tài khoản của bạn (delegatecall) — đúng kỹ thuật đã được dùng để rút sạch Bybit. Không ký.',
   'refuse.safeTx': 'Yêu cầu này muốn khóa của bạn ký một giao dịch Safe (SafeTx) — một chỉ thị mà Safe có thể thực hiện về sau. Không trang web nào cần Vela ký điều đó. Không ký.',
+  'refuse.parentSafe': 'Trang này yêu cầu tài khoản của bạn chạy {fn} cho một Safe khác — có thể là Safe mà bạn là chủ sở hữu. Vela không bao giờ cho trang web thay đổi hay phê duyệt gì cho một Safe; hãy dùng ứng dụng của chính Safe đó. Không ký.',
+  'refuse.parentSafeMessage': 'Yêu cầu này muốn khóa của bạn ký một thông điệp Safe (SafeMessage) cho một Safe khác — có thể là Safe mà bạn là chủ sở hữu — và Safe đó sẽ tính nó là phê duyệt của bạn. Vela không bao giờ cho trang web làm vậy; hãy dùng ứng dụng của chính Safe đó. Không ký.',
   'warn.nonCanonicalModule': 'Thao tác này chỉ định một EntryPoint hoặc module 4337 không phải của Vela — ký nó tức là bảo chứng cho một bộ hợp đồng khác.',
   'ui.digest': 'Mã băm được ký · {kind}',
   'ui.digestUnwrapped': 'không được bọc trong SafeMessage — đây là chữ ký kiểu EOA mà Safe sẽ không chấp nhận',

@@ -159,6 +159,8 @@ window.VelaCS.i18n.register('de', {
   'refuse.selfCall': 'Diese Anfrage will, dass dein Konto {fn} auf sich selbst aufruft — das würde ändern, wer es kontrolliert. Vela braucht das nie. Wird nicht signiert.',
   'refuse.delegateCall': 'Hier würde der Code eines anderen Contracts als dein Konto ausgeführt (ein delegatecall) — die Technik, mit der Bybit leergeräumt wurde. Wird nicht signiert.',
   'refuse.safeTx': 'Diese Anfrage will, dass dein Schlüssel eine Safe-Transaktion (SafeTx) signiert — eine Anweisung, die ein Safe später ausführen kann. Keine Seite braucht das von Vela. Wird nicht signiert.',
+  'refuse.parentSafe': 'Diese Website will, dass dein Konto {fn} für einen anderen Safe ausführt – vielleicht einen, dessen Eigentümer du bist. Vela lässt keine Website für einen Safe etwas ändern oder freigeben; nutze die eigene App dieses Safes. Wird nicht signiert.',
+  'refuse.parentSafeMessage': 'Diese Anfrage will, dass dein Schlüssel eine Safe-Nachricht (SafeMessage) für einen anderen Safe signiert – vielleicht einen, dessen Eigentümer du bist –, die dieser Safe als deine Freigabe zählen würde. Vela lässt das keine Website tun; nutze die eigene App dieses Safes. Wird nicht signiert.',
   'warn.nonCanonicalModule': 'Diese Operation nennt einen EntryPoint oder ein 4337-Modul, das nicht zu Vela gehört — wer sie signiert, bürgt für einen anderen Satz von Contracts.',
   'ui.digest': 'Signierter Digest · {kind}',
   'ui.digestUnwrapped': 'nicht in SafeMessage verpackt — eine EOA-artige Signatur, die ein Safe nicht akzeptiert',
