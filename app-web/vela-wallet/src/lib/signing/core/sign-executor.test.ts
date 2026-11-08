@@ -44,7 +44,11 @@ vi.mock('$lib/services/records', async (importOriginal) => ({
 	updateTransaction: store.updateTransaction
 }));
 
-import { userOpNotSentDetail, userOpWriteAheadWaitMs } from '$lib/core/kernels';
+import {
+	userOpExpiredDetail,
+	userOpNotSentDetail,
+	userOpWriteAheadWaitMs
+} from '$lib/core/kernels';
 import {
 	DAppReceiptPendingError,
 	DAppRevertedError,
@@ -536,6 +540,20 @@ describe('a submit that was not sent (spec 082 RA1)', () => {
 			type: 'submit',
 			outcome: { type: 'failed', message: 'relay unreachable; nothing was sent' }
 		});
+	});
+
+	it('§35: an operation that expired before it was submitted answers the core’s own sentence', async () => {
+		submit.impl = () =>
+			Promise.reject(
+				new UserOpNotSentError('expired', 'The transaction expired before it was submitted.')
+			);
+		const result = await createSignExecutor(makePorts()).execute(signAndSubmit);
+		// The core reads this detail: the sheet says "expired — nothing was
+		// sent" calmly and offers Try again; the page hears the same sentence.
+		expect(result).toMatchObject({
+			outcome: { type: 'failed', message: userOpExpiredDetail(), refused: true }
+		});
+		expect(userOpExpiredDetail()).toMatch(/expired before it was submitted/);
 	});
 
 	it('a relay refusal keeps the relay’s own sentence', async () => {

@@ -668,6 +668,28 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 	 * account (another tab's) landed first, and the relay answers AA25. Nothing
 	 * was sent: told as that, never "couldn't be submitted".
 	 */
+	/**
+	 * §35: the operation's window closed before the EntryPoint saw it (the
+	 * relay's AA22, read by the core as `RelayRejection::Expired`). Nothing
+	 * was sent, and it can never land: told as that, and Try again signs anew.
+	 */
+	it('an operation that expired before it was submitted fails as expired', async () => {
+		const { UserOpNotSentError } = await import('$lib/services/safe-transaction');
+		const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
+			dispatch: () => {}
+		});
+		vi.mocked(sendBatchCalls).mockRejectedValueOnce(
+			new UserOpNotSentError(
+				'expired',
+				'The transaction expired before it was submitted. Nothing was sent.'
+			)
+		);
+		await expect(executor.execute(submit)).resolves.toEqual({
+			type: 'submit_failed',
+			failure: { type: 'expired' }
+		});
+	});
+
 	it('a spent nonce fails as nonce_used', async () => {
 		const { UserOpNotSentError } = await import('$lib/services/safe-transaction');
 		const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {

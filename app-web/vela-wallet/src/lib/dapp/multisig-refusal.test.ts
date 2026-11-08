@@ -56,6 +56,28 @@ describe('a multisig’s refusal, in its own words', () => {
 			);
 		});
 
+		it(`${locale}: §35 a request that would make the multisig call itself is said as that`, () => {
+			const words = multisigRefusalWords(
+				{
+					data: {
+						reason: 'self_call',
+						safe: SAFE,
+						function: 'addOwnerWithThreshold',
+						leg: 1,
+						key: 'componentsUi.signing.multisigSelfCallBlocked'
+					}
+				},
+				'app.example',
+				m
+			);
+			expect(words.title).toBe(sheet.selfCallBlockedTitle);
+			expect(words.body).toBe(
+				m.multisigSelfCallBlocked.replace('{{function}}', 'addOwnerWithThreshold')
+			);
+			expect(words.body).not.toContain('{{');
+			expect(words.body).not.toBe(m.multisigNoMessagesBody.replace('{{host}}', 'app.example'));
+		});
+
 		it(`${locale}: every other refusal is dapp-7’s message words`, () => {
 			const words = multisigRefusalWords({ data: undefined }, 'app.example', m);
 			expect(words).toEqual({

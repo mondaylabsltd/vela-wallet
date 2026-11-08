@@ -975,6 +975,9 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 			// sent, said as that, never "couldn't be submitted". The relay's
 			// AA25, as the core reads it (`RelayRejection::NonceUsed`).
 			if (error.rejection === 'nonce_used') return { type: 'nonce_used' };
+			// §35: it expired before it was submitted (the EntryPoint's AA22, as
+			// the core reads it): nothing was sent; Try again signs anew.
+			if (error.rejection === 'expired') return { type: 'expired' };
 			// Another operation of this account still holds the nonce (the
 			// relay's `nonce_in_flight`, or an older relay's `[existingHash:…]`
 			// marker — both read by the core as `NonceHeld`): not a failure of

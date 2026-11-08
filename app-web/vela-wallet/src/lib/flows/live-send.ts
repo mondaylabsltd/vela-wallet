@@ -1520,6 +1520,18 @@ function confirmHolds(
 						calm: true
 					}
 				};
+			case 'expired':
+				// §35: its window closed before it was submitted. Nothing was
+				// sent and it can never land: "Not sent", calmly, and Review
+				// again — a fresh quote, window and signature.
+				return {
+					error: {
+						title: m['componentsTx.receipt.statusNotSent'],
+						text: m['componentsUi.signing.expired'],
+						retry: m['send.txReviewAgain'],
+						calm: true
+					}
+				};
 			case 'generic':
 			case 'proposal_mailbox_down':
 			case 'proposal_offline':

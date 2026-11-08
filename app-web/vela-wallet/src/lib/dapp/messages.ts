@@ -48,6 +48,11 @@ export interface RequestMessages {
 	parentSafeBlocked: string;
 	parentSafeUnchecked: string;
 	/**
+	 * §35 (SEC-PARENT-2): `componentsUi.signing.multisigSelfCallBlocked` — the
+	 * site asked this multisig to change who controls it (`{{function}}`).
+	 */
+	multisigSelfCallBlocked: string;
+	/**
 	 * r10 follow-up (template — '{{network}}'): a network-space switch moved
 	 * the site since its last request; the consent says so once.
 	 */

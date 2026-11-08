@@ -3684,6 +3684,17 @@ describe('the send flow’s round-2 findings', () => {
 		});
 	});
 
+	it('§35: an operation that expired before it was submitted is "Not sent", calmly, with Review again', () => {
+		const model = confirm({ tx_status: 'error', tx_error: 'expired' });
+		expect(model.error).toEqual({
+			title: m['componentsTx.receipt.statusNotSent'],
+			text: m['componentsUi.signing.expired'],
+			retry: m['send.txReviewAgain'],
+			calm: true
+		});
+		expect(m['componentsUi.signing.expired']).toMatch(/nothing was sent/i);
+	});
+
 	it('round 3 (send-15): a submit waiting for another tab says this one goes next', () => {
 		expect(confirm({ queued_behind_tab: true, sending: true }).held).toBe(
 			m['send.queuedBehindTab']

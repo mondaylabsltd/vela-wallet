@@ -6,4 +6,4 @@
  * never every one as "network fees stayed above the amount you approved",
  * which was true of one reason in eleven.
  */
-export type RefusalReason = "fee_below_market" | "fee_below_minimum" | "fee_payment_invalid" | "nonce_used" | "simulation_failed" | "invalid_operation" | "unsupported_fee_token" | "relay_gave_up" | "reverted_onchain" | "bundle_failed" | "unknown";
+export type RefusalReason = "fee_below_market" | "fee_below_minimum" | "fee_payment_invalid" | "nonce_used" | "expired" | "simulation_failed" | "invalid_operation" | "unsupported_fee_token" | "relay_gave_up" | "reverted_onchain" | "bundle_failed" | "unknown";

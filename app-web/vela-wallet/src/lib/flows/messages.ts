@@ -41,7 +41,11 @@ export const FEE_REASON_KEYS = [
 	'componentsUi.gas.reasonFeeTokenStopped',
 	'componentsUi.gas.reasonSimulationStopped',
 	'componentsUi.gas.reasonQuoteHighStopped',
-	'componentsUi.gas.reasonChainDownStopped'
+	'componentsUi.gas.reasonChainDownStopped',
+	// §35: the relay billed more gas than the operation can use — a quote Vela
+	// won't accept (`FeeFailure::SettlementGasTooHigh`, and Continue's alert body).
+	'componentsUi.gas.reasonSettlementHigh',
+	'componentsUi.gas.reasonSettlementHighStopped'
 ] as const;
 
 /** Every corpus key the wallet-flow screens consume. Tests iterate this. */
@@ -303,6 +307,9 @@ export const WALLET_FLOW_KEYS = [
 	// for a spent nonce, else the plain refusal (listed with the dApp rows).
 	'send.txRejectedFees',
 	'componentsUi.signing.wentFirst',
+	// §35: an operation that expired before it was submitted — on Send
+	// (`tx_error` `expired`) and as a refusal's reason.
+	'componentsUi.signing.expired',
 	// send-5 / send-6: what was proven never sent is "Not sent" — the
 	// receipt's title over its sentence, with Try again — never "Failed".
 	'componentsTx.receipt.statusNotSent',

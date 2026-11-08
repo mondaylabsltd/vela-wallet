@@ -635,6 +635,33 @@ export interface AttestOp {
 	maxFeePerGas: bigint;
 	maxPriorityFeePerGas: bigint;
 	paymasterAndData: Uint8Array;
+	/** §35: the validity window, Unix seconds. Absent is 0 — which nothing signs. */
+	validAfter?: bigint;
+	validUntil?: bigint;
+}
+
+/**
+ * §35: the window an operation stamped at `nowMs` is signed with — the core's
+ * rule (`user_op::validity_window`): `validAfter` 0, `validUntil` now + 30 min.
+ */
+export function userOpValidityWindow(nowMs: number): { validAfter: bigint; validUntil: bigint } {
+	const [after, until] = Array.from(wasm.userOpValidityWindow(nowMs));
+	return { validAfter: BigInt(after), validUntil: BigInt(until) };
+}
+
+/**
+ * §35 (review 0-1): the relying party the web wallet uses on `host` — the
+ * core's rule (`service_defaults::web_relying_party_id`), which `passkey.ts`
+ * `relyingPartyId` follows (it must answer before the core loads; the shared
+ * vector `rp-id.json` holds the two together).
+ */
+export function webRelyingPartyId(host: string, packagedExtension: boolean): string {
+	return wasm.webRelyingPartyId(host, packagedExtension);
+}
+
+/** §35: what a page is told when its operation expired before it was submitted. */
+export function userOpExpiredDetail(): string {
+	return wasm.userOpExpiredDetail();
 }
 
 /**
@@ -1409,7 +1436,9 @@ function attestOpJson(op: AttestOp): string {
 		pre_verification_gas: op.preVerificationGas.toString(),
 		max_fee_per_gas: op.maxFeePerGas.toString(),
 		max_priority_fee_per_gas: op.maxPriorityFeePerGas.toString(),
-		paymaster_and_data_hex: toHex(op.paymasterAndData)
+		paymaster_and_data_hex: toHex(op.paymasterAndData),
+		valid_after: Number(op.validAfter ?? 0n),
+		valid_until: Number(op.validUntil ?? 0n)
 	});
 }
 
@@ -1491,6 +1520,12 @@ export type RelayRejection =
 	 * its own.
 	 */
 	| 'nonce_used'
+	/**
+	 * §35: the operation's window closed before the EntryPoint saw it (the
+	 * relay's `AA22 expired or not due`): nothing was sent, and it can never
+	 * land as signed — the person signs it anew.
+	 */
+	| 'expired'
 	| { other: string };
 
 /** The end of one submit (`SubmitVerdict`). Hand-written: no ts-rs type exists. */
