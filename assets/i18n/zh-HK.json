@@ -124,7 +124,7 @@
   },
   "analytics": {
    "title": "分享匿名使用統計",
-   "subtitle": "只統計開啟了哪些頁面、完成了哪些步驟 — 絕不包含地址、金額或名稱。"
+   "subtitle": "預設關閉，只有你開啟才會分享。只統計開啟了哪些頁面、完成了哪些步驟 — 絕不包含地址、金額、名稱或交易。"
   },
   "agent": {
    "title": "AI 代理",
@@ -1575,10 +1575,12 @@
    "selfCallBlockedSafeTx": "這筆請求要你的密鑰授權一筆稍後才執行的 Safe 交易。Vela 拒絕了它——這種簽章可以在你不在場時使用。什麼都沒有簽。",
    "parentSafeBlocked": "呢個網站要你嘅帳戶替你所在嘅多簽做變更或批准（{{safe}} 上嘅 {{function}}）。Vela 從不容許網站咁做——請喺該多簽自己嘅頁面操作。乜都冇簽。",
    "parentSafeUnchecked": "呢個網站要你嘅帳戶替一個 Safe 操作（{{safe}} 上嘅 {{function}}），而 Vela 無法確認你係咪佢嘅成員。Vela 寧願拒絕都唔會估——請連網後再試，或喺該多簽自己嘅頁面操作。乜都冇簽。",
+   "multisigSelfCallBlocked": "這個網站要求這個多簽更改由誰控制它（{{function}}）。Vela 從不允許網站這樣做——成員請在該多簽自己的頁面更改。甚麼都沒有提議。",
    "stillConfirming": "尚未上鏈。Vela 會繼續監察，請勿重複發送。",
    "maybeSent": "可能已經發出。Vela 會繼續監察，請勿重複發送。",
    "refused": "網絡已拒絕此交易，沒有發出任何內容。",
    "wentFirst": "此帳戶的另一筆交易已先完成，此筆沒有發出任何內容。",
+   "expired": "它在提交之前就已過期，甚麼都沒有發出。",
    "notSentTitle": "尚未發出",
    "notSentBody": "你在此網絡上的上一筆交易仍在處理中。請待其完成後再試一次。",
    "unknownOutcome": "已過 24 小時仍未確認。",
@@ -1724,6 +1726,7 @@
    "reasonFeeToken": "中繼暫時未能為這個幣報價。正在重試——亦可改用其他幣支付手續費。",
    "reasonSimulation": "中繼暫時未能試行這筆交易，正在自動重試。",
    "reasonQuoteHigh": "中繼的 gas 價格目前遠高於網絡本身，正在自動重試。",
+   "reasonSettlementHigh": "中繼要按超過這筆交易可能用到的 gas 收費——Vela 不接受這個報價。正在自動重試。",
    "reasonChainDown": "暫時無法連接 {{chain}}，未能計算費用，正在自動重試。",
    "reasonInternal": "Vela 內部發生問題。如問題持續，請重新開啟 App。",
    "rowShort": "需要 ~{{need}}，現有 {{have}}",
@@ -1732,6 +1735,7 @@
    "reasonFeeTokenStopped": "中繼暫時未能為這個幣報價。可以改用其他幣支付，或者再試一次。",
    "reasonSimulationStopped": "中繼未能試行這筆交易。",
    "reasonQuoteHighStopped": "中繼的 gas 價格目前遠高於網絡本身。",
+   "reasonSettlementHighStopped": "中繼要按超過這筆交易可能用到的 gas 收費——Vela 不接受這個報價。",
    "reasonChainDownStopped": "暫時無法連接 {{chain}}，未能計算費用。"
   },
   "dock": {

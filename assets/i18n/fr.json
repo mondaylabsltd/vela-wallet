@@ -124,7 +124,7 @@
   },
   "analytics": {
    "title": "Partager des statistiques d'utilisation anonymes",
-   "subtitle": "Seulement les écrans ouverts et les étapes terminées — jamais d'adresses, de montants ni de noms."
+   "subtitle": "Désactivé sauf si vous l’activez. Seulement les écrans ouverts et les étapes terminées — jamais d’adresses, de montants, de noms ni de transactions."
   },
   "agent": {
    "title": "Agent IA",
@@ -1580,10 +1580,12 @@
    "selfCallBlockedSafeTx": "Cette demande veut que votre clé autorise une transaction Safe à exécuter plus tard. Vela la refuse : une telle signature peut servir sans vous. Rien n’a été signé.",
    "parentSafeBlocked": "Ce site a demandé à votre compte de modifier ou d’approuver quelque chose pour un multisig dont vous êtes membre ({{function}} sur {{safe}}). Vela ne laisse jamais un site faire cela — utilisez l’écran du multisig lui-même. Rien n’a été signé.",
    "parentSafeUnchecked": "Ce site a demandé à votre compte d’agir pour un Safe ({{function}} sur {{safe}}), et Vela n’a pas pu vérifier si vous en êtes propriétaire. Vela refuse plutôt que de deviner — réessayez une fois en ligne, ou utilisez l’écran du multisig lui-même. Rien n’a été signé.",
+   "multisigSelfCallBlocked": "Ce site a demandé à ce multisig de changer qui le contrôle ({{function}}). Vela ne laisse jamais un site faire cela — les membres le changent depuis l’écran du multisig lui-même. Rien n’a été proposé.",
    "stillConfirming": "Pas encore sur la chaîne. Vela continue de vérifier — ne l’envoyez pas à nouveau.",
    "maybeSent": "Elle a peut-être été envoyée. Vela continue de vérifier — ne l’envoyez pas à nouveau.",
    "refused": "Le réseau l’a refusée — rien n’a été envoyé.",
    "wentFirst": "Une autre transaction de ce compte est passée avant — rien n’a été envoyé.",
+   "expired": "Elle a expiré avant d’être soumise — rien n’a été envoyé.",
    "notSentTitle": "Pas encore envoyée",
    "notSentBody": "Votre transaction précédente sur ce réseau est encore en cours de traitement. Réessayez une fois qu’elle sera terminée.",
    "unknownOutcome": "Toujours non confirmée après 24 heures.",
@@ -1768,6 +1770,7 @@
    "reasonFeeToken": "Le relais ne peut pas coter cette monnaie pour le moment. Nouvelle tentative — ou payez les frais avec une autre monnaie.",
    "reasonSimulation": "Le relais n'a pas encore pu simuler cette transaction. Nouvelle tentative automatique.",
    "reasonQuoteHigh": "Le prix du gas du relais est en ce moment bien au-dessus de celui du réseau. Nouvelle tentative automatique.",
+   "reasonSettlementHigh": "Le relais veut facturer plus de gaz que cette transaction ne peut en consommer — Vela n’accepte pas ce devis. Nouvel essai automatique.",
    "reasonChainDown": "Impossible de joindre {{chain}} pour calculer les frais. Nouvelle tentative automatique.",
    "reasonInternal": "Un problème est survenu dans Vela. Si cela continue, rouvrez l'app.",
    "rowShort": "Il faut ~{{need}}, vous avez {{have}}",
@@ -1776,6 +1779,7 @@
    "reasonFeeTokenStopped": "Le relais ne peut pas coter cette monnaie pour le moment. Payez avec une autre monnaie, ou réessayez.",
    "reasonSimulationStopped": "Le relais n'a pas pu simuler cette transaction.",
    "reasonQuoteHighStopped": "Le prix du gas du relais est en ce moment bien au-dessus de celui du réseau.",
+   "reasonSettlementHighStopped": "Le relais veut facturer plus de gaz que cette transaction ne peut en consommer — Vela n’accepte pas ce devis.",
    "reasonChainDownStopped": "Impossible de joindre {{chain}} pour calculer les frais."
   },
   "dock": {

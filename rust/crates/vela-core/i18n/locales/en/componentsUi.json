@@ -279,10 +279,12 @@
       "selfCallBlockedSafeTx": "This request asks your key to authorise a Safe transaction for later execution. Vela refuses it — a signature like that can be used without you. Nothing was signed.",
       "parentSafeBlocked": "This site asked your account to change or approve something for a multisig you’re a member of ({{function}} on {{safe}}). Vela never lets a site do that — use the multisig’s own screen. Nothing was signed.",
       "parentSafeUnchecked": "This site asked your account to act for a Safe ({{function}} on {{safe}}), and Vela couldn’t check whether you’re one of its owners. Vela refuses rather than guess — try again when you’re online, or use the multisig’s own screen. Nothing was signed.",
+      "multisigSelfCallBlocked": "This site asked this multisig to change who controls it ({{function}}). Vela never lets a site do that — members change it from the multisig’s own screen. Nothing was proposed.",
       "stillConfirming": "Not on-chain yet. Vela keeps checking — don't send it again.",
       "maybeSent": "It may have been sent. Vela keeps checking — don't send it again.",
       "refused": "The network refused it — nothing was sent.",
       "wentFirst": "Another transaction from this account went first — nothing was sent.",
+      "expired": "It expired before it was submitted — nothing was sent.",
       "notSentTitle": "Not sent yet",
       "notSentBody": "Your previous transaction on this network is still being processed. Try again once it's done.",
       "unknownOutcome": "Still unconfirmed after 24 hours.",
@@ -428,6 +430,7 @@
       "reasonFeeToken": "The relay can't price this coin right now. Retrying — or pay in another coin.",
       "reasonSimulation": "The relay couldn't test-run this transaction yet. Retrying automatically.",
       "reasonQuoteHigh": "The relay's gas price is far above the network's right now. Retrying automatically.",
+      "reasonSettlementHigh": "The relay asked to charge for more gas than this transaction can use — Vela won’t accept that quote. Retrying automatically.",
       "reasonChainDown": "Can't reach {{chain}} to price this. Retrying automatically.",
       "reasonInternal": "Something went wrong inside Vela. If it keeps happening, reopen the app.",
       "rowShort": "Need ~{{need}}, have {{have}}",
@@ -436,6 +439,7 @@
       "reasonFeeTokenStopped": "The relay can't price this coin right now. Pay in another coin, or try again.",
       "reasonSimulationStopped": "The relay couldn't test-run this transaction.",
       "reasonQuoteHighStopped": "The relay's gas price is far above the network's right now.",
+      "reasonSettlementHighStopped": "The relay asked to charge for more gas than this transaction can use — Vela won’t accept that quote.",
       "reasonChainDownStopped": "Can't reach {{chain}} to price this."
     },
     "dock": {

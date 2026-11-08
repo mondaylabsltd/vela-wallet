@@ -227,10 +227,12 @@
       "selfCallBlockedSafeTx": "Bu istek, sonradan çalıştırılacak bir Safe işlemini onaylamanızı istiyor. Böyle bir imza siz yokken de kullanılabileceği için Vela reddetti. Hiçbir şey imzalanmadı.",
       "parentSafeBlocked": "Bu site, üyesi olduğun bir multisig için hesabından bir şeyi değiştirmesini veya onaylamasını istedi ({{safe}} üzerinde {{function}}). Vela bunu hiçbir siteye yaptırmaz — multisig’in kendi ekranını kullan. Hiçbir şey imzalanmadı.",
       "parentSafeUnchecked": "Bu site, hesabından bir Safe adına işlem yapmasını istedi ({{safe}} üzerinde {{function}}) ve Vela onun sahiplerinden biri olup olmadığını kontrol edemedi. Vela tahmin etmek yerine reddeder — çevrimiçiyken tekrar dene veya multisig’in kendi ekranını kullan. Hiçbir şey imzalanmadı.",
+      "multisigSelfCallBlocked": "Bu site, bu multisig'i kimin kontrol ettiğini değiştirmesini istedi ({{function}}). Vela bir sitenin bunu yapmasına asla izin vermez — üyeler bunu multisig'in kendi ekranından değiştirir. Hiçbir şey önerilmedi.",
       "stillConfirming": "Henüz zincire yazılmadı. Vela kontrol ediyor — tekrar göndermeyin.",
       "maybeSent": "Gönderilmiş olabilir. Vela kontrol ediyor — tekrar göndermeyin.",
       "refused": "Ağ reddetti — hiçbir şey gönderilmedi.",
       "wentFirst": "Bu hesabın başka bir işlemi önce gitti — hiçbir şey gönderilmedi.",
+      "expired": "Gönderilmeden önce süresi doldu — hiçbir şey gönderilmedi.",
       "notSentTitle": "Henüz gönderilmedi",
       "notSentBody": "Bu ağdaki önceki işleminiz hâlâ işleniyor. Tamamlandığında yeniden deneyin.",
       "unknownOutcome": "24 saat sonra hâlâ onaylanmadı.",
@@ -415,6 +417,7 @@
       "reasonFeeToken": "Relay şu anda bu coin için fiyat veremiyor. Yeniden deneniyor — ya da ücreti başka bir coin ile ödeyin.",
       "reasonSimulation": "Relay bu işlemi henüz deneme olarak çalıştıramadı. Otomatik olarak yeniden deneniyor.",
       "reasonQuoteHigh": "Relay'in gas fiyatı şu anda ağın fiyatının çok üstünde. Otomatik olarak yeniden deneniyor.",
+      "reasonSettlementHigh": "Aktarıcı, bu işlemin kullanabileceğinden fazla gaz için ücret istedi — Vela bu teklifi kabul etmez. Otomatik olarak yeniden deneniyor.",
       "reasonChainDown": "Ücreti hesaplamak için {{chain}} ağına ulaşılamıyor. Otomatik olarak yeniden deneniyor.",
       "reasonInternal": "Vela'nın içinde bir sorun oluştu. Sürerse uygulamayı yeniden açın.",
       "rowShort": "Gereken ~{{need}}, mevcut {{have}}",
@@ -423,6 +426,7 @@
       "reasonFeeTokenStopped": "Relay şu anda bu coin için fiyat veremiyor. Başka bir coin ile ödeyin ya da yeniden deneyin.",
       "reasonSimulationStopped": "Relay bu işlemi deneme olarak çalıştıramadı.",
       "reasonQuoteHighStopped": "Relay'in gas fiyatı şu anda ağın fiyatının çok üstünde.",
+      "reasonSettlementHighStopped": "Aktarıcı, bu işlemin kullanabileceğinden fazla gaz için ücret istedi — Vela bu teklifi kabul etmez.",
       "reasonChainDownStopped": "Ücreti hesaplamak için {{chain}} ağına ulaşılamıyor."
     },
     "dock": {

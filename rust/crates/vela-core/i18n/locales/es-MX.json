@@ -124,7 +124,7 @@
     },
     "analytics": {
       "title": "Compartir estadísticas de uso anónimas",
-      "subtitle": "Solo qué pantallas se abren y qué pasos terminan — nunca direcciones, montos ni nombres."
+      "subtitle": "Apagado a menos que lo actives. Solo qué pantallas se abren y qué pasos terminan — nunca direcciones, montos, nombres ni transacciones."
     },
     "agent": {
       "title": "Agente de IA",

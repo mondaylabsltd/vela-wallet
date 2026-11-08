@@ -124,7 +124,7 @@
     },
     "analytics": {
       "title": "Share anonymous usage statistics",
-      "subtitle": "Which screens open and which steps finish — never addresses, amounts or names."
+      "subtitle": "Off unless you turn it on. Only which screens open and which steps finish — never addresses, amounts, names or transactions."
     },
     "agent": {
       "title": "AI agent",

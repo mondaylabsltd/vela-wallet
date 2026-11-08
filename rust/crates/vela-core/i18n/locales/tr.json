@@ -124,7 +124,7 @@
     },
     "analytics": {
       "title": "Anonim kullanım istatistiklerini paylaş",
-      "subtitle": "Yalnızca açılan ekranlar ve tamamlanan adımlar — asla adres, tutar veya isim yok."
+      "subtitle": "Siz açmadıkça kapalıdır. Yalnızca açılan ekranlar ve tamamlanan adımlar — asla adres, tutar, isim veya işlem yok."
     },
     "agent": {
       "title": "Yapay zekâ ajanı",
