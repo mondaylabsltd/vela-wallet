@@ -472,6 +472,54 @@ if (boundary.length) {
   failures.push(...boundary);
 }
 
+// ---------------------------------------------------------------------------
+// VELA-2026-002 (the 0.9.9 hotfix): the parent-Safe guard's rule table
+// (`tests/vectors/rules/parent-safe-guard.json`), through the shipped wasm's
+// door to it (`parentSafeCheck`). The table lives under `rules/`, which the
+// corpus scan above never reads; it is replayed here case for case — deep
+// equality with `expect` — as `app_parent_safe_guard.rs` replays it in the
+// crate and the uniffi bridge on the natives.
+// ---------------------------------------------------------------------------
+
+/** Key-sorted JSON, so two equal values compare equal whatever their key order. */
+function sortedJson(value) {
+  if (Array.isArray(value)) return `[${value.map(sortedJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${sortedJson(value[k])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+let parentSafeTotal = 0;
+{
+  const doc = JSON.parse(readFileSync(join(VECTORS_DIR, 'rules', 'parent-safe-guard.json'), 'utf8'));
+  if (!Array.isArray(doc.cases) || doc.cases.length < 70) {
+    failures.push(`parent-safe-guard: the table shrank to ${doc.cases?.length ?? 0} cases`);
+  }
+  if (typeof wasm.parentSafeCheck !== 'function') {
+    failures.push('parent-safe-guard: the shipped wasm has no `parentSafeCheck`');
+  } else {
+    for (const c of doc.cases ?? []) {
+      parentSafeTotal++;
+      let actual;
+      try {
+        actual = JSON.parse(wasm.parentSafeCheck(JSON.stringify(c.input)));
+      } catch (e) {
+        failures.push(`parent-safe-guard::${c.name} — threw ${e?.message ?? e}`);
+        continue;
+      }
+      if (sortedJson(actual) !== sortedJson(c.expect)) {
+        failures.push(
+          `parent-safe-guard::${c.name} — expected ${JSON.stringify(c.expect)}, got ${JSON.stringify(actual)}`,
+        );
+      }
+    }
+  }
+}
+
 if (failures.length) {
   console.error(`verify-web: ${failures.length} of ${total} cases FAILED:\n${failures.join('\n')}`);
   process.exit(1);
@@ -481,3 +529,4 @@ console.log(
     ` (${skipped} skipped — core-only functions with no binding surface: ${[...CORE_ONLY_FNS].join(', ')})`,
 );
 console.log(`verify-web: ${2 + 3} boundary regressions green (FR-023 borrow safety, FR-024 non-finite vars)`);
+console.log(`verify-web: ${parentSafeTotal} parent-safe-guard cases green (VELA-2026-002, parentSafeCheck)`);

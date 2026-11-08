@@ -1049,6 +1049,13 @@ export function matchSelector(sig: string, calldata: Uint8Array): boolean;
  */
 export function minGasPriceWei(chain_id: number): string;
 
+/**
+ * `parent_safe_guard::check` over JSON: a `CheckInput` in, a
+ * `ParentVerdict` out (`{ verdict: "clear" | "refuse" | "read", … }`), or
+ * `{ "error": … }` for an input that does not read.
+ */
+export function parentSafeCheck(input_json: string): string;
+
 export function parsePublicKey(hex: string): P256PublicKey;
 
 /**
@@ -1816,6 +1823,7 @@ export interface InitOutput {
     readonly networkadmincore_new: () => number;
     readonly networkadmincore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly networkadmincore_view: (a: number) => [number, number, number, number];
+    readonly parentSafeCheck: (a: number, b: number) => [number, number];
     readonly parsePublicKey: (a: number, b: number) => [number, number, number];
     readonly parseUserOpStatus: (a: number, b: number) => [number, number];
     readonly passkeyDirectoryEntry: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
