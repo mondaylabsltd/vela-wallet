@@ -20,6 +20,8 @@ use wasm_bindgen::prelude::*;
 /// cores the web shell drives with events and effect results.
 mod bridge;
 mod onboarding;
+/// VELA-2026-002: the parent-Safe guard's rule, for the vector replay.
+mod parent_safe_guard;
 mod settings;
 /// Where an account's signatures go: its sign-in key.
 mod signing;

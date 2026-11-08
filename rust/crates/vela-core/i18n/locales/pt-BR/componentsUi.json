@@ -217,6 +217,8 @@
       "selfCallBlockedBody": "Esta solicitação mudaria quem controla a sua carteira ({{function}}). Assinar uma vez pode entregar a carteira a outra pessoa, então a Vela recusa. Nada foi assinado.",
       "selfCallBlockedLegBody": "A etapa {{index}} desta solicitação mudaria quem controla a sua carteira ({{function}}). Assinar uma vez pode entregar a carteira a outra pessoa, então a Vela recusa a solicitação inteira. Nada foi assinado.",
       "selfCallBlockedSafeTx": "Esta solicitação pede que a sua chave autorize uma transação Safe para ser executada depois. A Vela recusa — uma assinatura dessas pode ser usada sem você. Nada foi assinado.",
+      "parentSafeBlocked": "Este site pediu para sua conta alterar ou aprovar algo para um Safe do qual você é dono ({{function}} em {{safe}}). A Vela nunca deixa um site fazer isso — use o app do próprio Safe. Nada foi assinado.",
+      "parentSafeUnchecked": "Este site pediu para sua conta agir por um Safe ({{function}} em {{safe}}), e a Vela não conseguiu verificar se você é um dos donos. A Vela recusa em vez de adivinhar — tente de novo quando estiver online ou use o app do próprio Safe. Nada foi assinado.",
       "stillConfirming": "Ainda não está na rede. O Vela continua verificando — não envie de novo.",
       "maybeSent": "Talvez já tenha sido enviada. O Vela continua verificando — não envie de novo.",
       "refused": "A rede recusou — nada foi enviado.",

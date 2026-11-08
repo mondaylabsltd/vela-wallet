@@ -1436,6 +1436,8 @@
    "selfCallBlockedBody": "This request would change who controls your wallet ({{function}}). Signing it once could hand your wallet to someone else, so Vela refuses it. Nothing was signed.",
    "selfCallBlockedLegBody": "Step {{index}} of this request would change who controls your wallet ({{function}}). Signing it once could hand your wallet to someone else, so Vela refuses the whole request. Nothing was signed.",
    "selfCallBlockedSafeTx": "This request asks your key to authorise a Safe transaction for later execution. Vela refuses it — a signature like that can be used without you. Nothing was signed.",
+   "parentSafeBlocked": "This site asked your account to act for a Safe you own ({{function}} on {{safe}}). Vela never lets a site do that. Nothing was signed.",
+   "parentSafeUnchecked": "This site asked your account to act for a Safe ({{function}} on {{safe}}), and Vela couldn’t check if you own it, so it refused. Try again online. Nothing was signed.",
    "stillConfirming": "Not on-chain yet. Vela keeps checking — don't send it again.",
    "maybeSent": "It may have been sent. Vela keeps checking — don't send it again.",
    "refused": "The network refused it — nothing was sent.",

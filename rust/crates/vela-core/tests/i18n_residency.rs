@@ -71,7 +71,14 @@ const SC005_BUDGET: usize = 145_400;
 /// measurement at 85.94%. Moved with the budget, the same way and approved with
 /// it: ~1.4 KB of room above the measurement. The sentence SC-005 requires — one language plus
 /// `en` — is asserted separately and does not move.
-const SC005_REDUCTION_PERCENT: f64 = 85.8;
+///
+/// 2026-11-08 (VELA-2026-002, the 0.9.9 hotfix): the refusal of a site's
+/// request to act for a Safe the account owns needs its two sentences in
+/// every locale; cut to the bone in `en` and `ja` they still put the
+/// measurement at 85.76%. The budget above still holds (runtime route
+/// 145,272); only this claim moves, to 85.7. The owner's call, flagged in
+/// the hotfix report.
+const SC005_REDUCTION_PERCENT: f64 = 85.7;
 
 fn engine_with(active: &str) -> I18n {
     let en = match Catalog::embedded("en") {

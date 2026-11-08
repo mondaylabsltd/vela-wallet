@@ -14,6 +14,8 @@ mod ctap_bridge;
 /// Multicall3 encoding for the native read path (spec 051).
 mod multicall;
 mod onboarding_bridge;
+/// VELA-2026-002: the parent-Safe guard's rule, for the vector replay.
+mod parent_safe_guard_bridge;
 mod settings_bridge;
 mod trusted_signer_bridge;
 

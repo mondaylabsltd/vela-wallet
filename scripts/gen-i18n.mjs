@@ -804,8 +804,14 @@ for (let i = 1; i < PATHS.length; i++) {
 //   device or the person's own network, which is neither the padlock nor the
 //   warning. (`componentsUi.bugReport.previewRpc` is reworded, not added.)
 //   1778 + 2 = 1780 leaves, 101 branches.
-if (PATHS.length !== 1881) fail(`expected 1881 paths (1780 leaf + 101 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1780) fail(`expected 1780 leaf paths, got ${leafSet.size}`);
+// 1883 (VELA-2026-002, the 0.9.9 hotfix, 2026-11-08): +
+//   `componentsUi.signing.parentSafe{Blocked,Unchecked}` — what the sheet says
+//   when a site asks this account to change or approve something for a Safe
+//   it owns, or when whether it owns that Safe could not be read
+//   (`SignBlockedView.parent` / `reason`). 1780 + 2 = 1782 leaves, 101
+//   branches.
+if (PATHS.length !== 1883) fail(`expected 1883 paths (1782 leaf + 101 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1782) fail(`expected 1782 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 101) fail(`expected 101 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

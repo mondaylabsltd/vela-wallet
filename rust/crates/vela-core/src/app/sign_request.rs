@@ -116,6 +116,9 @@ use serde_json::{json, Value};
 
 use super::approval_guard::enforce_no_unlimited;
 use super::fee_policy::{is_tempo_chain, tempo_quote_is_stale, FeeTier, TEMPO_FEE_TOKEN_DECIMALS};
+use super::parent_safe_guard::{
+    self as parent_guard, OwnerFact, ParentReason, ParentTarget, ParentVerdict, SafeOwnerAnswer,
+};
 use super::self_call_guard::{detect_self_call, enforce_no_self_call, SelfCallBlock};
 use super::sign_confirm::ConfirmBlock;
 use super::token_trust::TrustSimJudgment;
@@ -380,6 +383,12 @@ pub enum SignErrorKind {
     /// (spec 081, `self_call_guard`). Never 4001: the user did not reject it,
     /// the wallet refused it.
     SelfCallBlocked,
+    /// -32603 — the request would have made this account act for a Safe it
+    /// owns (VELA-2026-002, `parent_safe_guard`):
+    /// `execTransaction`, `approveHash`, an owner/module/guard change, or a
+    /// `SafeTx` / `SafeMessage` signature under that Safe's domain — or
+    /// whether it owns the Safe could not be read. Never 4001, never "anyway".
+    ParentSafeBlocked,
     /// -32603 — 'Gas account funding cancelled'.
     FundingCancelled,
     /// -32603 — submission failed; `detail` echoes the shell's own message.
@@ -682,6 +691,21 @@ pub enum SignOperation {
     /// switch landed, which is what sequences "switch first, then the
     /// approval surface may act".
     SwitchActiveAccount { index: u32 },
+    /// VELA-2026-002: read whether `account` owns `safe` — `eth_call` of `data`
+    /// (`isOwner(account)`, built here) to `safe` at `latest` on `chain_id`,
+    /// bounded by the shell's own read timeout. Answered
+    /// [`SignShellResult::SafeOwnerRead`] with the same `id`, `chain_id` and
+    /// `safe`: the node's `result`, its JSON-RPC error, or `unreachable`. The
+    /// shell never decides anything from it; until every read is answered
+    /// the confirm stays shut ([`ConfirmBlock::Reading`]), and a read nobody
+    /// could make refuses the request.
+    ReadSafeOwner {
+        id: String,
+        chain_id: u32,
+        safe: String,
+        account: String,
+        data: String,
+    },
     /// Wait `ms`, then answer [`SignShellResult::SimVerdictTimerFired`] with
     /// the same `id` and `round` (PR 3) — the deadline of the wait the
     /// confirm keeps for the simulation's verdict ([`SIM_VERDICT_WAIT_MS`]).
@@ -837,6 +861,13 @@ pub enum SignShellResult {
     SimVerdictTimerFired {
         id: String,
         round: u32,
+    },
+    /// The answer to [`SignOperation::ReadSafeOwner`] (VELA-2026-002).
+    SafeOwnerRead {
+        id: String,
+        chain_id: u32,
+        safe: String,
+        answer: SafeOwnerAnswer,
     },
 }
 
@@ -1455,6 +1486,12 @@ struct Pending {
     held: Option<SignResponsePayload>,
     /// Where the wallet's own simulation of this request stands (PR 3).
     sim: SimWait,
+    /// VELA-2026-002: the Safes this request would act for (other than the signer),
+    /// and what the chain said of each so far.
+    parent_targets: Vec<ParentTarget>,
+    owner_facts: Vec<OwnerFact>,
+    /// VELA-2026-002: reads of those Safes still out — the confirm stays shut.
+    owner_reading: bool,
 }
 
 /// The wait the confirm keeps for the simulation's verdict (PR 3).
@@ -1845,6 +1882,15 @@ pub struct SignBlockedView {
     pub leg_index: Option<u32>,
     /// Found inside a `multiSend` or `execTransaction` payload.
     pub nested: bool,
+    /// The Safe this account owns that the request would have acted for
+    /// (VELA-2026-002). `None`: the account itself (spec 081). The sheet
+    /// says `componentsUi.signing.parentSafeBlocked` for it, or
+    /// `parentSafeUnchecked` when `reason` is `unchecked`.
+    #[serde(default)]
+    pub parent: Option<String>,
+    /// Why — `owner` or `unchecked`; `None` without `parent`.
+    #[serde(default)]
+    pub reason: Option<ParentReason>,
 }
 
 /// What the signing sheet is doing, in the words a person reads (spec 082
@@ -2122,9 +2168,13 @@ impl App for SignRequest {
                 // is the request's, told apart by its own id and round. Were
                 // it dropped with a killed pipeline's attempt, the confirm it
                 // holds would never open.
+                // A Safe's ownership read is the request's too (VELA-2026-002), told
+                // apart by its id.
                 let own_correlation = matches!(
                     result,
-                    SignShellResult::AccountSwitched | SignShellResult::SimVerdictTimerFired { .. }
+                    SignShellResult::AccountSwitched
+                        | SignShellResult::SimVerdictTimerFired { .. }
+                        | SignShellResult::SafeOwnerRead { .. }
                 );
                 if attempt != model.attempt && !own_correlation {
                     // A result from a rejected pipeline (BUG-2): the 4001 is
@@ -2223,6 +2273,10 @@ impl App for SignRequest {
             .is_some_and(|p| p.responded || p.held.is_some())
         {
             Some(ConfirmBlock::Answered)
+        } else if model.pending.as_ref().is_some_and(|p| p.owner_reading) {
+            // VELA-2026-002: whether this account owns a Safe the request would act
+            // for is still being read.
+            Some(ConfirmBlock::Reading)
         } else if model.previous_in_flight().is_some() {
             Some(ConfirmBlock::PreviousPending)
         } else {
@@ -2323,6 +2377,45 @@ fn blocked_view(block: &SelfCallBlock) -> SignBlockedView {
         selector: block.selector.clone(),
         leg_index: block.leg_index,
         nested: block.nested,
+        parent: None,
+        reason: None,
+    }
+}
+
+/// VELA-2026-002: the sheet's refusal of a request that would act for a Safe this
+/// account owns.
+fn parent_blocked_view(target: &ParentTarget, reason: ParentReason) -> SignBlockedView {
+    SignBlockedView {
+        function: target.function.clone(),
+        selector: target.selector.clone(),
+        leg_index: target.leg_index,
+        nested: target.nested,
+        parent: Some(target.safe.clone()),
+        reason: Some(reason),
+    }
+}
+
+/// The kind a blocked request is answered with.
+fn blocked_kind(blocked: &SignBlockedView) -> SignErrorKind {
+    if blocked.parent.is_some() {
+        SignErrorKind::ParentSafeBlocked
+    } else {
+        SignErrorKind::SelfCallBlocked
+    }
+}
+
+/// The detail a blocked request is answered with: the function, and for a
+/// parent Safe which one and why.
+fn blocked_detail(blocked: &SignBlockedView) -> String {
+    match (&blocked.parent, blocked.reason) {
+        (Some(safe), Some(ParentReason::Unchecked)) => {
+            format!(
+                "{} on {safe}: ownership could not be checked",
+                blocked.function
+            )
+        }
+        (Some(safe), _) => format!("{} on {safe}", blocked.function),
+        _ => blocked.function.clone(),
     }
 }
 
@@ -2585,10 +2678,25 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
         ) as usize)
         .map(|a| a.address.clone())
         .unwrap_or_default();
-    let refusal = serde_json::from_str::<Value>(&arrival.params_json)
-        .ok()
-        .and_then(|params| detect_self_call(&arrival.method, Some(&params), &signer));
-    if let Some(block) = refusal {
+    let parsed_params = serde_json::from_str::<Value>(&arrival.params_json).ok();
+    // VELA-2026-002: the Safes other than this account the request would act
+    // for. Each is read on chain (`isOwner`) before it can be signed.
+    let chain_id = arrival
+        .per_request_chain
+        .unwrap_or_else(|| model.global_chain_id());
+    let parent_targets = parsed_params
+        .as_ref()
+        .map(|params| parent_guard::parent_targets(&arrival.method, params, &signer, chain_id))
+        .unwrap_or_default();
+    let parent_verdict = parent_guard::verdict(&parent_targets, &[]);
+    let refusal = match &parent_verdict {
+        ParentVerdict::Refuse { target, reason } => Some(parent_blocked_view(target, *reason)),
+        _ => parsed_params
+            .as_ref()
+            .and_then(|params| detect_self_call(&arrival.method, Some(params), &signer))
+            .map(|block| blocked_view(&block)),
+    };
+    if let Some(blocked) = refusal {
         // The sheet opens refused, and the answer waits for the dismissal.
         //
         // Answering here instead would be tidier for the page — but the window
@@ -2599,13 +2707,13 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
         // read it, which is the whole point of refusing visibly. So the
         // request stays pending, unsignable, until the person closes it —
         // exactly like every other request that waits for a decision.
-        model.blocked = Some(blocked_view(&block));
         model.sign_error_refused = false;
         model.sign_error_refusal_key = None;
         model.sign_error = Some(SignErrorNotice::new(
-            SignErrorKind::SelfCallBlocked,
-            Some(block.function.as_str().to_owned()),
+            blocked_kind(&blocked),
+            Some(blocked.function.clone()),
         ));
+        model.blocked = Some(blocked);
         model.pending = Some(Pending {
             id: arrival.id,
             method: arrival.method,
@@ -2619,11 +2727,33 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
             responded: false,
             held: None,
             sim: SimWait::None,
+            parent_targets,
+            owner_facts: Vec::new(),
+            owner_reading: false,
         });
         commands.push(render());
         return Command::all(commands);
     }
     model.blocked = None;
+
+    // VELA-2026-002: any other Safe it would act for is read before it can be signed.
+    let reads = match parent_verdict {
+        ParentVerdict::Read { reads } => reads,
+        _ => Vec::new(),
+    };
+    for read in &reads {
+        commands.push(request_op(
+            model,
+            SignOperation::ReadSafeOwner {
+                id: arrival.id.clone(),
+                chain_id: read.chain_id,
+                safe: read.safe.clone(),
+                account: signer.clone(),
+                data: parent_guard::is_owner_calldata(&signer),
+            },
+            false,
+        ));
+    }
 
     // Ported quirk: a lingering `signError` from a previous request is NOT
     // cleared by an arrival (`handleIncoming` never touches it) — the sheet
@@ -2641,9 +2771,77 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
         responded: false,
         held: None,
         sim: SimWait::None,
+        parent_targets,
+        owner_facts: Vec::new(),
+        owner_reading: !reads.is_empty(),
     });
     commands.push(render());
     Command::all(commands)
+}
+
+// ---------------------------------------------------------------------------
+// VELA-2026-002 — the parent-Safe guard's reads
+// ---------------------------------------------------------------------------
+
+/// A read of whether the signer owns `safe` came back for request `id`.
+fn on_owner_read(
+    model: &mut Model,
+    id: &str,
+    chain_id: u32,
+    safe: &str,
+    answer: &SafeOwnerAnswer,
+) -> Command<SignEffect, Event> {
+    let Some(pending) = model.pending.as_mut().filter(|p| p.id == id) else {
+        // The request it was for is gone: nothing to decide.
+        return Command::done();
+    };
+    let fact = OwnerFact {
+        chain_id,
+        safe: safe.to_ascii_lowercase(),
+        reading: parent_guard::classify_owner_answer(answer),
+    };
+    if !pending
+        .owner_facts
+        .iter()
+        .any(|f| f.chain_id == fact.chain_id && f.safe == fact.safe)
+    {
+        pending.owner_facts.push(fact);
+    }
+    on_parent_facts(model)
+}
+
+/// The request on the sheet against what is known now: refused the moment a
+/// Safe it would act for is one this account owns (or could not be read);
+/// signable once every one is read and none is.
+fn on_parent_facts(model: &mut Model) -> Command<SignEffect, Event> {
+    let Some(pending) = model.pending.as_ref() else {
+        return render();
+    };
+    if model.blocked.is_some() || pending.responded || model.inflight.is_some() {
+        return render();
+    }
+    match parent_guard::verdict(&pending.parent_targets, &pending.owner_facts) {
+        ParentVerdict::Refuse { target, reason } => {
+            let blocked = parent_blocked_view(&target, reason);
+            model.sign_error_refused = false;
+            model.sign_error_refusal_key = None;
+            model.sign_error = Some(SignErrorNotice::new(
+                SignErrorKind::ParentSafeBlocked,
+                Some(blocked.function.clone()),
+            ));
+            model.blocked = Some(blocked);
+            if let Some(pending) = model.pending.as_mut() {
+                pending.owner_reading = false;
+            }
+        }
+        ParentVerdict::Clear => {
+            if let Some(pending) = model.pending.as_mut() {
+                pending.owner_reading = false;
+            }
+        }
+        ParentVerdict::Read { .. } => {}
+    }
+    render()
 }
 
 // ---------------------------------------------------------------------------
@@ -2797,6 +2995,11 @@ fn approve_with(
         return Command::done();
     }
     if model.funding.is_some() {
+        return Command::done();
+    }
+    // A refused request is never signed (spec 081, VELA-2026-002), and one whose
+    // Safes are still being read waits — however the shell asks.
+    if model.blocked.is_some() || pending.owner_reading {
         return Command::done();
     }
     // §12.1.6: the approval surface may not act before the granted-account
@@ -3041,6 +3244,27 @@ fn proceed_submit(model: &mut Model) -> Command<SignEffect, Event> {
             Some(block.function.as_str().to_owned()),
         );
     }
+    // VELA-2026-002 again, on the FINAL params: every Safe they would act for must be
+    // one the reads at arrival cleared — a Safe nobody read is "couldn't
+    // check", never signed.
+    let facts = model
+        .pending
+        .as_ref()
+        .filter(|p| p.id == fl.id)
+        .map(|p| p.owner_facts.clone())
+        .unwrap_or_default();
+    let targets = parent_guard::parent_targets(&fl.method, &parsed, &signer, fl.chain_id);
+    if let ParentVerdict::Refuse { target, reason } = parent_guard::enforce(&targets, &facts) {
+        let blocked = parent_blocked_view(&target, reason);
+        let detail = blocked_detail(&blocked);
+        model.blocked = Some(blocked);
+        return fail_inflight(
+            model,
+            CODE_INTERNAL,
+            SignErrorKind::ParentSafeBlocked,
+            Some(detail),
+        );
+    }
 
     if fl.unlimited_approved {
         // Seen and kept — the site's bytes go out as asked.
@@ -3192,8 +3416,8 @@ fn reject(model: &mut Model) -> Command<SignEffect, Event> {
             &pending.id,
             err_payload(
                 CODE_INTERNAL,
-                SignErrorKind::SelfCallBlocked,
-                Some(blocked.function.clone()),
+                blocked_kind(blocked),
+                Some(blocked_detail(blocked)),
             ),
         ),
         None => respond_op(
@@ -3701,6 +3925,12 @@ fn accept(model: &mut Model, result: SignShellResult) -> Command<SignEffect, Eve
         }
         SignShellResult::Responded | SignShellResult::RecordUpdated => Command::done(),
         SignShellResult::SimVerdictTimerFired { id, round } => on_sim_deadline(model, &id, round),
+        SignShellResult::SafeOwnerRead {
+            id,
+            chain_id,
+            safe,
+            answer,
+        } => on_owner_read(model, &id, chain_id, &safe, &answer),
         SignShellResult::RecordPersisted => on_record_persisted(model),
         SignShellResult::PreCheck { funding } => on_precheck(model, funding),
         SignShellResult::Sponsorship { outcome } => on_sponsorship(model, outcome),

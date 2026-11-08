@@ -217,6 +217,8 @@
       "selfCallBlockedBody": "Cette demande changerait qui contrôle votre portefeuille ({{function}}). La signer une seule fois peut le remettre à quelqu’un d’autre, alors Vela la refuse. Rien n’a été signé.",
       "selfCallBlockedLegBody": "L’étape {{index}} de cette demande changerait qui contrôle votre portefeuille ({{function}}). La signer une seule fois peut le remettre à quelqu’un d’autre, alors Vela refuse toute la demande. Rien n’a été signé.",
       "selfCallBlockedSafeTx": "Cette demande veut que votre clé autorise une transaction Safe à exécuter plus tard. Vela la refuse : une telle signature peut servir sans vous. Rien n’a été signé.",
+      "parentSafeBlocked": "Ce site a demandé à votre compte de modifier ou d’approuver quelque chose pour un Safe dont vous êtes propriétaire ({{function}} sur {{safe}}). Vela ne laisse jamais un site faire cela — utilisez l’application de ce Safe. Rien n’a été signé.",
+      "parentSafeUnchecked": "Ce site a demandé à votre compte d’agir pour un Safe ({{function}} sur {{safe}}), et Vela n’a pas pu vérifier si vous en êtes propriétaire. Vela refuse plutôt que de deviner — réessayez une fois en ligne, ou utilisez l’application de ce Safe. Rien n’a été signé.",
       "stillConfirming": "Pas encore sur la chaîne. Vela continue de vérifier — ne l’envoyez pas à nouveau.",
       "maybeSent": "Elle a peut-être été envoyée. Vela continue de vérifier — ne l’envoyez pas à nouveau.",
       "refused": "Le réseau l’a refusée — rien n’a été envoyé.",

@@ -1389,6 +1389,8 @@
    "selfCallBlockedBody": "Questa richiesta cambierebbe chi controlla il tuo wallet ({{function}}). Firmarla una volta può consegnarlo a qualcun altro, quindi Vela la rifiuta. Non è stato firmato nulla.",
    "selfCallBlockedLegBody": "Il passaggio {{index}} di questa richiesta cambierebbe chi controlla il tuo wallet ({{function}}). Firmarla una volta può consegnarlo a qualcun altro, quindi Vela rifiuta l’intera richiesta. Non è stato firmato nulla.",
    "selfCallBlockedSafeTx": "Questa richiesta chiede alla tua chiave di autorizzare una transazione Safe da eseguire più tardi. Vela la rifiuta: una firma così può essere usata senza di te. Non è stato firmato nulla.",
+   "parentSafeBlocked": "Questo sito ha chiesto al tuo account di modificare o approvare qualcosa per un Safe di cui sei proprietario ({{function}} su {{safe}}). Vela non lo permette mai a un sito: usa l’app di quel Safe. Non è stato firmato nulla.",
+   "parentSafeUnchecked": "Questo sito ha chiesto al tuo account di agire per un Safe ({{function}} su {{safe}}) e Vela non è riuscita a verificare se ne sei proprietario. Vela rifiuta invece di tirare a indovinare: riprova quando sei online o usa l’app di quel Safe. Non è stato firmato nulla.",
    "stillConfirming": "Non ancora sulla chain. Vela continua a controllare: non inviarla di nuovo.",
    "maybeSent": "Potrebbe essere già stata inviata. Vela continua a controllare: non inviarla di nuovo.",
    "refused": "La rete l’ha rifiutata: non è stato inviato nulla.",

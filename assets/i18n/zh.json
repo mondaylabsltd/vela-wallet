@@ -1394,6 +1394,8 @@
    "selfCallBlockedBody": "这笔请求会改变谁能控制你的钱包（{{function}}）。签一次就可能把钱包交到别人手里，所以 Vela 拒绝了它。什么都没有签。",
    "selfCallBlockedLegBody": "这笔请求的第 {{index}} 步会改变谁能控制你的钱包（{{function}}）。签一次就可能把钱包交到别人手里，所以 Vela 拒绝了整笔请求。什么都没有签。",
    "selfCallBlockedSafeTx": "这笔请求要你的钥匙授权一笔以后再执行的 Safe 交易。Vela 拒绝了它——这样的签名可以在你不在场时被使用。什么都没有签。",
+   "parentSafeBlocked": "这个网站要你的账户替你作为所有者的 Safe 做变更或批准（{{safe}} 上的 {{function}}）。Vela 从不允许网站这样做——请在该 Safe 自己的应用里操作。什么都没有签。",
+   "parentSafeUnchecked": "这个网站要你的账户替一个 Safe 操作（{{safe}} 上的 {{function}}），而 Vela 无法确认你是不是它的所有者。Vela 宁可拒绝也不去猜——请联网后再试，或在该 Safe 自己的应用里操作。什么都没有签。",
    "stillConfirming": "还没上链。Vela 会继续查看，请不要重复发送。",
    "maybeSent": "可能已经发出。Vela 会继续查看，请不要重复发送。",
    "refused": "网络拒绝了这笔交易，什么都没有发出。",

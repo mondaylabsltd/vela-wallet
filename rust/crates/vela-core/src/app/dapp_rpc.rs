@@ -896,6 +896,12 @@ pub fn sign_error_message(kind: SignErrorKind) -> &'static str {
         SignErrorKind::SelfCallBlocked => {
             "The wallet refused a call that would change who controls the account"
         }
+        // VELA-2026-002: a site asked this account to change or approve
+        // something for a Safe it owns, or whether it owns that Safe could not
+        // be read. The detail names the call and the Safe.
+        SignErrorKind::ParentSafeBlocked => {
+            "The wallet refused a request to act for a Safe this account owns"
+        }
         SignErrorKind::FundingCancelled => "Gas account funding cancelled",
         SignErrorKind::SubmitFailed => "The transaction could not be submitted",
         SignErrorKind::StaleFeeQuote => "The fee quote expired",

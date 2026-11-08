@@ -217,6 +217,8 @@
       "selfCallBlockedBody": "Bu istek cüzdanınızı kimin kontrol ettiğini değiştirir ({{function}}). Bir kez imzalamak cüzdanı başkasına devredebilir, bu yüzden Vela reddetti. Hiçbir şey imzalanmadı.",
       "selfCallBlockedLegBody": "Bu isteğin {{index}}. adımı cüzdanınızı kimin kontrol ettiğini değiştirir ({{function}}). Bir kez imzalamak cüzdanı başkasına devredebilir, bu yüzden Vela isteğin tamamını reddetti. Hiçbir şey imzalanmadı.",
       "selfCallBlockedSafeTx": "Bu istek, sonradan çalıştırılacak bir Safe işlemini onaylamanızı istiyor. Böyle bir imza siz yokken de kullanılabileceği için Vela reddetti. Hiçbir şey imzalanmadı.",
+      "parentSafeBlocked": "Bu site, sahiplerinden biri olduğun bir Safe için hesabından bir şeyi değiştirmesini veya onaylamasını istedi ({{safe}} üzerinde {{function}}). Vela bunu hiçbir siteye yaptırmaz — o Safe’in kendi uygulamasını kullan. Hiçbir şey imzalanmadı.",
+      "parentSafeUnchecked": "Bu site, hesabından bir Safe adına işlem yapmasını istedi ({{safe}} üzerinde {{function}}) ve Vela onun sahiplerinden biri olup olmadığını kontrol edemedi. Vela tahmin etmek yerine reddeder — çevrimiçiyken tekrar dene veya o Safe’in kendi uygulamasını kullan. Hiçbir şey imzalanmadı.",
       "stillConfirming": "Henüz zincire yazılmadı. Vela kontrol ediyor — tekrar göndermeyin.",
       "maybeSent": "Gönderilmiş olabilir. Vela kontrol ediyor — tekrar göndermeyin.",
       "refused": "Ağ reddetti — hiçbir şey gönderilmedi.",
