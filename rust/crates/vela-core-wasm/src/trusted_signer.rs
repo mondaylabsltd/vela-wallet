@@ -510,12 +510,27 @@ pub fn trusted_signer_page_target(
 }
 
 /// R6's ruling for the web on the bytes `trustedSignerPageTarget`'s URL
-/// served (`launch::admit`): `{line, launch, versionToTrust}` — the integrity
-/// line (`IntegrityLine`), the address to open with the request handed over
-/// by `postMessage` (`CheckedPage::post_launch`; `null` unless the page was
-/// admitted and the check is fresh), and the version a self-hosted page asks
-/// to be trusted. `observed` is the sha256 of the body (`null` when it could
-/// not be fetched); `now_ms` the shell's clock.
+/// served (`launch::admit`): `{line, launch, fromBytes, versionToTrust}` —
+/// the integrity line (`IntegrityLine`), the address to open with the
+/// request handed over by `postMessage` (`CheckedPage::post_launch`; `null`
+/// unless the page was admitted and the check is fresh), the fragment to
+/// open THE BYTES THAT WERE HASHED with instead (`CheckedPage::bytes_launch`,
+/// §38: `null` unless `openerOrigin` — the wallet's own origin — may open
+/// this version that way), and the version a self-hosted page asks to be
+/// trusted. `observed` is the sha256 of the body (`null` when it could not
+/// be fetched); `now_ms` the shell's clock.
+/// The published page versions the web wallet may open from the bytes its
+/// check hashed (`integrity::FROM_BYTES`, §38), as a JSON array of sha256
+/// hex. The wallet's build reads it: a page opened from bytes is a `blob:`
+/// document under the WALLET's Content-Security-Policy, so each of these
+/// pages' own script hash must be in that policy (`vite.config.ts`) or the
+/// page would open and run nothing.
+#[wasm_bindgen(js_name = trustedSignerFromBytes)]
+#[must_use]
+pub fn trusted_signer_from_bytes() -> String {
+    serde_json::to_string(integrity::FROM_BYTES).unwrap_or_else(|_| "[]".to_owned())
+}
+
 #[wasm_bindgen(js_name = trustedSignerPageAdmit)]
 #[must_use]
 pub fn trusted_signer_page_admit(
@@ -525,6 +540,7 @@ pub fn trusted_signer_page_admit(
     observed: Option<String>,
     now_ms: f64,
     lang: &str,
+    opener_origin: Option<String>,
 ) -> String {
     let index = index_versions(index_json.as_deref());
     let trusted = trusted_list(trusted_json);
@@ -540,6 +556,7 @@ pub fn trusted_signer_page_admit(
             return serde_json::json!({
                 "line": launch::IntegrityLine::no_version(why),
                 "launch": null,
+                "fromBytes": null,
                 "versionToTrust": null,
             })
             .to_string()
@@ -558,9 +575,14 @@ pub fn trusted_signer_page_admit(
     let launch_url = admission
         .page()
         .and_then(|page| page.post_launch(lang, now).ok());
+    let from_bytes = admission.page().and_then(|page| {
+        page.bytes_launch(opener_origin.as_deref().unwrap_or_default(), lang, now)
+            .ok()
+    });
     serde_json::json!({
         "line": admission.line(),
         "launch": launch_url,
+        "fromBytes": from_bytes,
         "versionToTrust": admission.version_to_trust(),
     })
     .to_string()

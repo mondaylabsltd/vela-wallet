@@ -1709,7 +1709,7 @@ window.VelaCS = window.VelaCS || {};
   function isExtension(origin) {
     if (typeof origin !== 'string') return false;
     if (EXTENSIONS.indexOf(origin) >= 0) return true;
-    var here = typeof location === 'object' && location ? String(location.hostname || '') : '';
+    var here = ns.place ? ns.place.host() : typeof location === 'object' && location ? String(location.hostname || '') : '';
     return LOOPBACK_HOST.test(here) && /^chrome-extension:\/\/[a-p]{32}$/.test(origin);
   }
 
@@ -1732,7 +1732,7 @@ window.VelaCS = window.VelaCS || {};
   function isWebWallet(origin) {
     if (typeof origin !== 'string') return false;
     if (WEB_WALLETS.indexOf(origin) >= 0) return true;
-    var here = typeof location === 'object' && location ? String(location.hostname || '') : '';
+    var here = ns.place ? ns.place.host() : typeof location === 'object' && location ? String(location.hostname || '') : '';
     var parsed = null;
     try { parsed = new URL(origin); } catch (e) { return false; }
     return LOOPBACK_HOST.test(here) && parsed.protocol === 'http:' && LOOPBACK_HOST.test(parsed.hostname) &&

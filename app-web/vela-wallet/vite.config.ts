@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import cloudflareAdapter from '@sveltejs/adapter-cloudflare';
@@ -77,11 +77,65 @@ function appHtmlScriptHash(): string {
 	return `sha256-${createHash('sha256').update(scripts[0][1], 'utf8').digest('base64')}`;
 }
 
+/**
+ * §38 (review 0-5): the signing page's script, for every page the wallet opens
+ * FROM THE BYTES ITS CHECK HASHED (`page-handoff`, `fromBytes`). Such a page is
+ * a `blob:` document, and a blob document is held to its creator's policy as
+ * well as its own — so without its script's hash here the page would open
+ * and run nothing (measured in Chromium, Firefox and WebKit).
+ *
+ * Which pages is the core's word (`trustedSignerFromBytes`, read from the
+ * shipped wasm); each page's bytes are the committed deployment's, hashed
+ * again here so a file that is not its version fails the build, and the
+ * script hash is read from that page's own `<meta>` CSP — the one value the
+ * browser will compare. Only that one inline script is admitted, by hash:
+ * nothing else of the page's policy is loosened, and the page's own
+ * `default-src 'none'` still governs it.
+ */
+async function signingPageScriptHashes(): Promise<string[]> {
+	const loader = pathToFileURL(
+		fileURLToPath(new URL('../../rust/scripts/load-wasm-node.mjs', import.meta.url))
+	).href;
+	const { loadShippedCore } = (await import(/* @vite-ignore */ loader)) as {
+		loadShippedCore: () => Promise<{ trustedSignerFromBytes?: () => string }>;
+	};
+	const core = await loadShippedCore();
+	if (typeof core.trustedSignerFromBytes !== 'function') {
+		throw new Error('the shipped core has no trustedSignerFromBytes — run build:wasm');
+	}
+	const versions = JSON.parse(core.trustedSignerFromBytes()) as string[];
+	return versions.flatMap((version) => {
+		const bytes = readFileSync(
+			fileURLToPath(new URL(`../trusted-signer/dist/b/${version}/sign.html`, import.meta.url))
+		);
+		const served = createHash('sha256').update(bytes).digest('hex');
+		if (served !== version) {
+			throw new Error(`trusted-signer/dist/b/${version}/sign.html hashes to ${served}`);
+		}
+		const policy = /<meta http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(
+			bytes.toString('utf8')
+		)?.[1];
+		const scripts = policy
+			?.split(';')
+			.map((directive) => directive.trim().split(/\s+/))
+			.find(([name]) => name === 'script-src')
+			?.slice(1)
+			.filter((token) => /^'sha256-[A-Za-z0-9+/]+=*'$/.test(token))
+			.map((token) => token.slice(1, -1));
+		if (!scripts?.length) throw new Error(`signing page ${version} names no script hash`);
+		return scripts;
+	});
+}
+
 const WALLET_CSP: NonNullable<KitConfig['csp']> = {
 	mode: 'hash',
 	directives: {
 		...Object.fromEntries(Object.entries(CSP_DIRECTIVES).map(([k, v]) => [k, [...v]])),
-		'script-src': [...CSP_DIRECTIVES['script-src'], appHtmlScriptHash()]
+		'script-src': [
+			...CSP_DIRECTIVES['script-src'],
+			appHtmlScriptHash(),
+			...(EXTENSION_TARGET ? [] : await signingPageScriptHashes())
+		]
 	} as NonNullable<KitConfig['csp']>['directives']
 };
 

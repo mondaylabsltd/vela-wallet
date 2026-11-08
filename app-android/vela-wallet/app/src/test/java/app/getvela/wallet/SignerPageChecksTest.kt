@@ -64,7 +64,7 @@ class SignerPageChecksTest {
     }
 
     @Test
-    fun `a fresh check is reused, and one past a day is run again before anything opens`() {
+    fun `a fresh check is reused, and one past ten minutes is run again before anything opens`() {
         var now = 1_760_000_000_000L
         val checks = OfficialDist.checks(clock = { now })
         runBlocking { checks.ensure(official) }
@@ -72,11 +72,19 @@ class SignerPageChecksTest {
         runBlocking { checks.ensure(official) }
         assertEquals("a fresh check is not fetched again", first, OfficialDist.fetches.get())
 
+        // §38: ten minutes vouch for opening; the line stands for a day.
+        now += 11 * 60 * 1000L
+        assertEquals("the line stands", SignerIntegrityState.MATCHES, checks.line(official).state)
+        assertNull("…but opens nothing until it is run again", checks.admitted(official))
+        assertNotNull(runBlocking { checks.ensure(official) })
+        val second = OfficialDist.fetches.get()
+        assertTrue("the stale page was fetched again", second > first)
+
         now += 24 * 60 * 60 * 1000L + 1
-        assertEquals("a stale check vouches for nothing", SignerIntegrityState.CHECKING, checks.line(official).state)
+        assertEquals("a day-old check vouches for nothing", SignerIntegrityState.CHECKING, checks.line(official).state)
         assertNull("…and admits nothing until it is run again", checks.admitted(official))
         assertNotNull(runBlocking { checks.ensure(official) })
-        assertTrue("the stale page was fetched again", OfficialDist.fetches.get() > first)
+        assertTrue("the stale page was fetched again", OfficialDist.fetches.get() > second)
         assertTrue(checks.line(official).opens)
     }
 
@@ -253,7 +261,8 @@ class SignerPageChecksTest {
         runBlocking { checks.refresh(listOf(official)) }
         assertEquals("kept", SignerIntegrityState.MATCHES, checks.line(official).state)
         assertEquals(first, checks.line(official).checkedAtMs)
-        assertNotNull("still opens", checks.admitted(official))
+        // §38: its line stands; opening on it needs a check minutes old.
+        assertNull("a thirteen-hour-old check opens nothing", checks.admitted(official))
         assertFalse("an attempt that could not complete rests", checks.refreshDue(official))
 
         now += uniffi.vela_core_uniffi.signerPageRefreshSchedule().retryAfterMs.toLong() + 1
@@ -289,8 +298,10 @@ class SignerPageChecksTest {
         now += 13 * 60 * 60 * 1000L
         val refresh = scope.launch { checks.check(official) }
         runBlocking { withTimeout(5_000L) { while (checks.checks.value[SignerPageChecks.key(official)]?.running != true) kotlinx.coroutines.delay(5) } }
-        assertEquals("a fresh verdict holds", SignerIntegrityState.MATCHES, checks.line(official).state)
-        assertNotNull("and still opens", checks.admitted(official))
+        assertEquals("a standing verdict holds", SignerIntegrityState.MATCHES, checks.line(official).state)
+        // §38: Open waits for the check that is running.
+        assertFalse(checks.line(official).opens)
+        assertNull("and opens nothing on the old one", checks.admitted(official))
 
         now += 12 * 60 * 60 * 1000L
         assertEquals("a stale one reads checking", SignerIntegrityState.CHECKING, checks.line(official).state)

@@ -20,8 +20,12 @@ window.VelaCS = window.VelaCS || {};
   // other surface recognises. The extension is gone (owner, 2026-09-23: the
   // Trusted Signer is reached only by the Android, iOS and desktop clients, in
   // the device's own browser), and with it that hazard.
+  //
+  // The host is `ns.place.host()`: the address's, or — for a page the web
+  // wallet opened from the bytes it checked (a blob document, §38) — its
+  // origin's, which is the wallet's own (`wallet.getvela.app` folds the same).
   function relyingPartyId() {
-    var host = location.hostname;
+    var host = ns.place ? ns.place.host() : location.hostname;
     if (host === RP_ID || host.endsWith('.' + RP_ID)) return RP_ID;
     return host;
   }

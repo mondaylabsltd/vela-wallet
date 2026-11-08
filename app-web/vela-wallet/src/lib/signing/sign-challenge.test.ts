@@ -26,7 +26,7 @@ import { readFileSync } from 'node:fs';
 import { createHash, webcrypto } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { hashTypedData, keccak256 } from '$lib/core/kernels';
+import { hashTypedData, keccak256, trustedSignerFromBytes } from '$lib/core/kernels';
 import { computeSafeMessageHash } from '$lib/services/safe-transaction';
 import { AskerGoneError } from '$lib/signing/core/sign-types';
 import { CHECK_MS, pageHandoff, type PageHandoffDeps } from './page-handoff.svelte';
@@ -668,6 +668,101 @@ describe('the page, everywhere: the hand-off and the answer the core accepts', (
 			expect(win.closed).toBe(true);
 		});
 	}
+
+	it('§38: from the wallet’s own origin, the window opens the bytes the check hashed — never the address', async () => {
+		const { keys, answer } = await pageAccount();
+		const [newest] = trustedSignerFromBytes();
+		const bytes = readFileSync(
+			fileURLToPath(
+				new URL(`../../../../trusted-signer/dist/b/${newest}/sign.html`, import.meta.url)
+			)
+		);
+		const { deps, from, intent, sent } = browser(bytes);
+		const WALLET = 'https://wallet.getvela.app';
+		const fetched: string[] = [];
+		const objectUrls: ArrayBuffer[] = [];
+		const revoked: string[] = [];
+		setPageHandoffDeps({
+			...deps,
+			fetch: (async (input: RequestInfo | URL) => {
+				const url = String(input);
+				fetched.push(url);
+				if (url.endsWith('/index.json')) {
+					return new Response(JSON.stringify({ versions: [newest, VERSION] }), { status: 200 });
+				}
+				return new Response(new Uint8Array(bytes), { status: 200 });
+			}) as typeof fetch,
+			origin: () => WALLET,
+			objectUrl: (body) => {
+				objectUrls.push(body);
+				return 'blob:https://wallet.getvela.app/1f0e';
+			},
+			revokeUrl: (url) => revoked.push(url)
+		});
+		const asks = signature('personal_sign');
+		const pending = signChallenge(asks.challenge!, {
+			account: ADDRESS,
+			keys,
+			credentials: [],
+			request: asks.request
+		});
+		await until(() => pageHandoff.current?.phase === 'ready');
+		pageHandoff.current?.open();
+		// The bytes, from the check — one fetch of the page, and the window asks nobody.
+		expect(deps.open).toHaveBeenCalledWith(
+			`blob:https://wallet.getvela.app/1f0e#ch=post&lang=en&b=${newest}`
+		);
+		expect(fetched.filter((url) => !url.endsWith('/index.json'))).toEqual([
+			`https://sign.getvela.app/b/${newest}/sign`
+		]);
+		expect(Buffer.from(objectUrls[0]).equals(bytes)).toBe(true);
+		// A blob document is this origin: the page's address answers nothing.
+		from({ vela: 'ready', v: 1 }, PAGE_ORIGIN);
+		expect(intent()).toBeUndefined();
+		from({ vela: 'ready', v: 1 }, WALLET);
+		const handed = intent();
+		expect(handed?.intent.method).toBe('personal_sign');
+		expect(sent.every((s) => s.origin === WALLET)).toBe(true);
+		from({ vela: 'result', id: handed?.id, result: await answer(asks.challenge!) }, WALLET);
+		const assertion = await pending;
+		expect(assertion.credentialId).toBe(keys[0].credentialId);
+		expect(revoked).toEqual(['blob:https://wallet.getvela.app/1f0e']);
+	});
+
+	it('§38: an extension’s origin cannot use getvela.app’s passkeys, so it opens the checked address', async () => {
+		const { keys } = await pageAccount();
+		const [newest] = trustedSignerFromBytes();
+		const bytes = readFileSync(
+			fileURLToPath(
+				new URL(`../../../../trusted-signer/dist/b/${newest}/sign.html`, import.meta.url)
+			)
+		);
+		const { deps } = browser(bytes);
+		const objectUrl = vi.fn(() => 'blob:x');
+		setPageHandoffDeps({
+			...deps,
+			fetch: (async (input: RequestInfo | URL) =>
+				String(input).endsWith('/index.json')
+					? new Response(JSON.stringify({ versions: [newest] }), { status: 200 })
+					: new Response(new Uint8Array(bytes), { status: 200 })) as typeof fetch,
+			origin: () => 'chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl',
+			objectUrl
+		});
+		const asks = signature('personal_sign');
+		void signChallenge(asks.challenge!, {
+			account: ADDRESS,
+			keys,
+			credentials: [],
+			request: asks.request
+		}).catch(() => {});
+		await until(() => pageHandoff.current?.phase === 'ready');
+		pageHandoff.current?.open();
+		expect(deps.open).toHaveBeenCalledWith(
+			`https://sign.getvela.app/b/${newest}/sign?ch=post&lang=en`
+		);
+		expect(objectUrl).not.toHaveBeenCalled();
+		pageHandoff.current?.cancel();
+	});
 
 	it('a multisig executor’s operation: the page is told its number and the core’s safeTxHash at it (r7-1)', async () => {
 		const { keys, answer } = await pageAccount();

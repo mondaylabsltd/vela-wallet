@@ -52,13 +52,15 @@ import uniffi.vela_core_uniffi.signingPageTrusted
  * browser one thing and this check another; the words a person reads say
  * "matches Vela's published build list · checked …", never "certified".
  *
- * A check vouches for 24 hours (the core's `MAX_CHECK_AGE_MS`): after that the
- * line reads "checking" and nothing opens until the page is checked again.
- * So a page in use is checked again in the background well before then
+ * A check vouches for OPENING for ten minutes (the core's `MAX_CHECK_AGE_MS`,
+ * §38): past that, Open checks the page again first ([admitted] is null), so
+ * the bytes a page opens on were checked minutes before. Its line stands for
+ * a day (`LINE_MAX_AGE_MS`), with the time it ran, and only then reads
+ * "checking". A page in use is checked again in the background twice a day
  * ([refresh], spec 102 D-14: on start, on every return to the foreground and
  * hourly — the core says which pages are due), and a refresh that could not
- * complete keeps a check that still vouches (`signerPageKeepOrReplace`):
- * Open almost never waits, and a good line never flickers to "checking".
+ * complete keeps a line that still stands (`signerPageKeepOrReplace`): a
+ * good line never flickers to "checking".
  *
  * **Trust is per page** (D-15): the versions a person trusted are the saved
  * page's own (`signingPageTrusted`), recorded by `SigningPagesCore`'s

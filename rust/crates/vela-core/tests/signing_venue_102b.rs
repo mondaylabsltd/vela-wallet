@@ -36,7 +36,8 @@ use vela_core::signing_venue::{
 use vela_core::trusted_signer::integrity::{CheckFailure, NoVersion, Verdict};
 use vela_core::trusted_signer::launch::{
     admit, checked_time, keep_or_replace, line_while_checking, refresh_due, target, Admission,
-    IntegrityState, CHECK_HEADERS, MAX_CHECK_AGE_MS, REFRESH_AFTER_MS, RETRY_AFTER_MS,
+    IntegrityState, CHECK_HEADERS, LINE_MAX_AGE_MS, MAX_CHECK_AGE_MS, REFRESH_AFTER_MS,
+    RETRY_AFTER_MS,
 };
 use vela_core::trusted_signer::{signer_url, SignerUrlError, DEFAULT_SIGNER_URL};
 
@@ -480,10 +481,14 @@ fn unreachable_check(at: u64) -> Admission {
     )
 }
 
-/// A day vouches; past it the page is refused until checked again, and while
-/// that runs the line is "checking" — with Open off.
+/// Ten minutes vouch for opening (§38, down from a day); past that the page is
+/// refused until checked again, and while that runs the line keeps the last
+/// verdict, with its time, and Open off — "checking" once that line is more
+/// than a day old.
 #[test]
 fn a_stale_check_reads_checking_while_it_runs_again() {
+    assert_eq!(MAX_CHECK_AGE_MS, 10 * 60 * 1000);
+    assert_eq!(LINE_MAX_AGE_MS, DAY);
     let checked = official_check(1_000);
     assert!(checked.is_fresh(1_000 + MAX_CHECK_AGE_MS));
     assert!(!checked.is_fresh(1_001 + MAX_CHECK_AGE_MS));
@@ -493,8 +498,14 @@ fn a_stale_check_reads_checking_while_it_runs_again() {
     let during = line_while_checking(Some(&checked), 2_000);
     assert_eq!(during.state, IntegrityState::Matches);
     assert!(during.opens);
-    // Re-running a stale one (at Open): "checking", Open off.
+    // Re-running one too old to open on (at Open): the morning's verdict,
+    // Open off until the new check lands.
     let during = line_while_checking(Some(&checked), 2_000 + MAX_CHECK_AGE_MS);
+    assert_eq!(during.state, IntegrityState::Matches);
+    assert_eq!(during.checked_at_ms, Some(1_000));
+    assert!(!during.opens);
+    // Older than its line stands: "checking", Open off.
+    let during = line_while_checking(Some(&checked), 2_000 + LINE_MAX_AGE_MS);
     assert_eq!(during.state, IntegrityState::Checking);
     assert!(!during.opens);
     assert_eq!(during.key, "componentsUi.signing.integrity.checking");
@@ -511,7 +522,7 @@ fn a_stale_check_reads_checking_while_it_runs_again() {
 /// spaced out.
 #[test]
 fn checks_are_refreshed_in_the_background_before_they_expire() {
-    assert_eq!(REFRESH_AFTER_MS, MAX_CHECK_AGE_MS / 2);
+    assert_eq!(REFRESH_AFTER_MS, LINE_MAX_AGE_MS / 2);
     assert!(refresh_due(None, None, 5));
     assert!(
         !refresh_due(Some(0), None, REFRESH_AFTER_MS),
@@ -527,8 +538,9 @@ fn checks_are_refreshed_in_the_background_before_they_expire() {
     assert!(checked
         .page()
         .is_some_and(|page| page.refresh_due(None, DAY * 3 / 4)));
-    // Always before the check stops vouching.
-    const { assert!(REFRESH_AFTER_MS + RETRY_AFTER_MS < MAX_CHECK_AGE_MS) };
+    // Always before the line stops standing. (Opening checks on its own,
+    // shorter clock: MAX_CHECK_AGE_MS.)
+    const { assert!(REFRESH_AFTER_MS + RETRY_AFTER_MS < LINE_MAX_AGE_MS) };
 }
 
 /// A refresh that could not complete keeps a check that still vouches; one
@@ -537,13 +549,16 @@ fn checks_are_refreshed_in_the_background_before_they_expire() {
 fn a_refresh_that_could_not_complete_keeps_the_good_check() {
     let now = DAY / 2 + 1;
     let kept = keep_or_replace(Some(official_check(0)), unreachable_check(now), now);
-    assert!(
-        kept.is_fresh(now),
+    assert_eq!(
+        kept.line().state,
+        IntegrityState::Matches,
         "offline for a moment: the morning's check stands"
     );
+    // ...as a line: opening on it needs a check minutes old.
+    assert!(!kept.is_fresh(now));
 
     // Too old to stand: the failure is the news.
-    let late = MAX_CHECK_AGE_MS + 1;
+    let late = LINE_MAX_AGE_MS + 1;
     let replaced = keep_or_replace(Some(official_check(0)), unreachable_check(late), late);
     assert_eq!(replaced.line().state, IntegrityState::CouldNotCheck);
 
@@ -859,6 +874,18 @@ fn a_venue_refusal_carries_its_values() {
 
 #[test]
 fn the_check_asks_for_the_page_as_a_browser_navigation_does() {
+    // §38: every request header a host can key a top-level navigation on.
+    let header = |name: &str| {
+        CHECK_HEADERS
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(name))
+            .map(|(_, value)| *value)
+    };
+    assert_eq!(header("Sec-Fetch-Dest"), Some("document"));
+    assert_eq!(header("Sec-Fetch-Mode"), Some("navigate"));
+    assert_eq!(header("Sec-Fetch-Site"), Some("none"));
+    assert_eq!(header("Sec-Fetch-User"), Some("?1"));
+    assert_eq!(header("Upgrade-Insecure-Requests"), Some("1"));
     let accept = CHECK_HEADERS
         .iter()
         .find(|(name, _)| name.eq_ignore_ascii_case("accept"))

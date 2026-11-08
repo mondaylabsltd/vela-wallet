@@ -869,8 +869,11 @@ export function trustedSignerPageTarget(
 
 /**
  * R6's ruling on what the target's URL served (`launch::admit`): the line to
- * draw, and the address to open (handed the request by `postMessage`) — `null`
- * unless the page was admitted.
+ * draw, the address to open (handed the request by `postMessage`) — `null`
+ * unless the page was admitted — and, §38, the fragment to open THE BYTES THE
+ * CHECK HASHED with instead (`fromBytes`, `CheckedPage::bytes_launch`):
+ * `null` unless `openerOrigin` (this wallet's own origin) may open this
+ * version that way.
  */
 export function trustedSignerPageAdmit(
 	base: string,
@@ -878,8 +881,14 @@ export function trustedSignerPageAdmit(
 	observed: string | null,
 	nowMs: number,
 	lang: string,
-	trusted: string[] = []
-): { line: IntegrityLine; launch: string | null; versionToTrust: string | null } {
+	trusted: string[] = [],
+	openerOrigin: string | null = null
+): {
+	line: IntegrityLine;
+	launch: string | null;
+	fromBytes: string | null;
+	versionToTrust: string | null;
+} {
 	return JSON.parse(
 		wasm.trustedSignerPageAdmit(
 			base,
@@ -887,9 +896,20 @@ export function trustedSignerPageAdmit(
 			JSON.stringify(trusted),
 			observed ?? undefined,
 			nowMs,
-			lang
+			lang,
+			openerOrigin ?? undefined
 		)
-	) as { line: IntegrityLine; launch: string | null; versionToTrust: string | null };
+	) as {
+		line: IntegrityLine;
+		launch: string | null;
+		fromBytes: string | null;
+		versionToTrust: string | null;
+	};
+}
+
+/** The page versions the wallet may open from their bytes (`integrity::FROM_BYTES`, §38). */
+export function trustedSignerFromBytes(): string[] {
+	return JSON.parse(wasm.trustedSignerFromBytes()) as string[];
 }
 
 /**

@@ -25,7 +25,7 @@
   var lastGone = false;    // the request on screen lost its wallet
   var lastWithdrawn = false; // …because the wallet said it gave up on it (r7-5)
 
-  ns.i18n.setLocale(ns.i18n.detect(new URLSearchParams(location.search).get('lang')));
+  ns.i18n.setLocale(ns.i18n.detect(ns.place.params().get('lang')));
   document.title = t('ui.pageName');
 
   /**
@@ -39,16 +39,20 @@
    * browser opened — which is what the wallet checked before opening it — and
    * it is a label, not a proof: a page cannot vouch for its own bytes (076).
    * The wallet's check is the proof; this line says which page that was.
+   *
+   * A page the web wallet opened from the bytes it checked (§38) has no
+   * address of its own; its version is the one the wallet hashed, named in
+   * the fragment (`lib/place.js`) — the same label, from the same check.
    */
-  function versionOf(path) {
-    var match = /\/b\/([0-9a-f]{64})\//.exec(path || '');
-    return match ? match[1].slice(0, 8) : null;
+  function versionOf() {
+    var version = ns.place.version();
+    return version ? version.slice(0, 8) : null;
   }
 
   (function trustLine() {
     var line = document.getElementById('trust');
     if (!line) return;
-    var version = versionOf(location.pathname);
+    var version = versionOf();
     var parts = [
       t('ui.pageName'),
       version ? t('ui.version', { version: version }) : null,

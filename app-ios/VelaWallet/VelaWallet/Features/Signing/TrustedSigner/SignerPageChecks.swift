@@ -24,14 +24,16 @@
 //  outside the browser. The line says "matches Vela's published build list",
 //  never "verified" or "untampered".
 //
-//  A check vouches for 24 hours (the core's `MAX_CHECK_AGE_MS`); after that the
-//  line reads "checking" and the page is fetched again before it opens. So
-//  that Open almost never waits for that (D-14), every page in use is checked
-//  again in the background once its check is half a day old — on start, on
-//  every return to the foreground, and hourly — when the core says it is due
-//  (`signerPageRefreshDue`). A refresh that could not complete keeps a ruling
-//  that still vouches (`signerPageKeepOrReplace`), and a good line does not
-//  flicker to "checking" while one runs (`signerIntegrityLineWhileChecking`).
+//  A check vouches for OPENING for ten minutes (the core's `MAX_CHECK_AGE_MS`,
+//  §38): past that the page is fetched again before it opens (`openable` is
+//  nil), so the bytes a page opens on were checked minutes before. Its line
+//  stands for a day (`LINE_MAX_AGE_MS`), with the time it ran. Every page in
+//  use is checked again in the background once its check is half a day old —
+//  on start, on every return to the foreground, and hourly — when the core
+//  says it is due (`signerPageRefreshDue`). A refresh that could not complete
+//  keeps a line that still stands (`signerPageKeepOrReplace`), and a good line
+//  does not flicker to "checking" while one runs
+//  (`signerIntegrityLineWhileChecking`).
 //
 //  Trust is per page (D-15): the versions a person trusted live on that saved
 //  page (`vela.signingPages`, read through `signingPageTrusted`), and "Trust
