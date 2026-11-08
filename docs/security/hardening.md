@@ -698,3 +698,8 @@ DNSSEC/CAA/registry lock) is done. The owner decides; nothing here depends on it
    exceptions in `deny.toml`. Or explicitly accept the licence risk for one release.
 5. **getvela.app's Worker**: bump kit, svelte and devalue (bun audit, in range).
 6. **Decide on the page-scoped RP ID** (above).
+7. **Read the first `web-core-reproducible` run.** If the Linux container's bytes differ from
+   the committed (macOS-built) module, commit the container's build, which the job keeps as an
+   artifact, and run `build:wasm` in the container from then on (R22-2).
+8. **The phones' page path end to end** (the R21 tester): build the harness for a page-signed
+   send and a multisig approval on an emulator or simulator, using `VELA_PAGE_LAUNCH` (above).
