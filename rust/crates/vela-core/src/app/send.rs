@@ -932,6 +932,9 @@ pub enum SendEstimateFailure {
     /// measurement — refused, not signed (mirrors `FeeFailure::GasQuoteTooHigh`;
     /// the send vocabulary is the fee vocabulary).
     GasQuoteTooHigh,
+    /// §35: the relay billed more gas than the operation can use
+    /// (`FeeFailure::SettlementGasTooHigh`) — a quote Vela won't accept.
+    SettlementGasTooHigh,
     /// The 15s race lost (`useSendController.ts:768-770`).
     Timeout,
     Other,
@@ -956,6 +959,7 @@ impl From<FeeFailure> for SendEstimateFailure {
             FeeFailure::CalculationFailed => Self::CalculationFailed,
             FeeFailure::EstimateFailed => Self::EstimateFailed,
             FeeFailure::GasQuoteTooHigh => Self::GasQuoteTooHigh,
+            FeeFailure::SettlementGasTooHigh => Self::SettlementGasTooHigh,
             FeeFailure::ChainRead { rate_limited } => Self::ChainRead { rate_limited },
             FeeFailure::WouldFail => Self::WouldFail,
             FeeFailure::Internal => Self::Internal,
@@ -991,6 +995,9 @@ impl SendEstimateFailure {
             Self::ChainRead { .. } => ESTIMATE_CHAIN_DOWN_BODY_KEY,
             Self::Internal => super::fee_policy::REASON_INTERNAL_KEY,
             Self::QuoteUnavailable | Self::EstimateFailed => ESTIMATE_RELAY_BODY_KEY,
+            // §35: the relay's quote, refused — said as that, not as an
+            // estimate that could not be built.
+            Self::SettlementGasTooHigh => "componentsUi.gas.reasonSettlementHighStopped",
             Self::MissingPublicKey
             | Self::FeeTokenUnavailable
             | Self::CalculationFailed
