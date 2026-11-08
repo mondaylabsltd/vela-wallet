@@ -943,6 +943,16 @@ fn submit_failure_with(
             refused: true,
             signer: None,
         },
+        // §35: its window closed before the EntryPoint saw it — nothing was
+        // sent. Answered as the core reads it (`on_submit_outcome`): the
+        // core's own sentence for the page, and on the sheet "it expired
+        // before it was submitted", calmly, with Try again (a new signature,
+        // with a window of its own).
+        user_op::SubmitFailure::Expired => SignSubmitOutcome::Failed {
+            message: vela_core::user_op::EXPIRED_DETAIL.to_owned(),
+            refused: true,
+            signer: None,
+        },
         // Spec 099 R8: the passkey failed, and the core is told how.
         user_op::SubmitFailure::Signer { kind, message } => SignSubmitOutcome::Failed {
             message,
@@ -2402,7 +2412,7 @@ mod tests {
     fn a_held_nonce_at_submit_is_told_and_tried_again() {
         use crate::flows::fixtures::ReceiptStage;
         use vela_core::app::sign_confirm::NOT_SENT_BODY_KEY;
-        use vela_core::app::tx_tracker::REFUSED_KEY;
+        use vela_core::app::tx_tracker::{REFUSED_EXPIRED_KEY, REFUSED_KEY};
         storage::tests::with_temp_state("sign-held-nonce", || {
             let s = crate::signing::SigningStrings::resolve(&crate::loc::Loc::from_env());
             let clock = crate::signing::status::Clock {
@@ -2425,6 +2435,9 @@ mod tests {
                 // A spent nonce is the relay's refusal of this op, as the web
                 // answers it: no retry of the same signature.
                 (user_op::SubmitFailure::NonceUsed, REFUSED_KEY, false),
+                // §35: it expired before it was submitted — not sent, said
+                // calmly in its own sentence, and Try again signs anew.
+                (user_op::SubmitFailure::Expired, REFUSED_EXPIRED_KEY, true),
             ] {
                 let (mut host, submit, ops) = signed("rid-held");
                 let persist = only(&ops, "the record");

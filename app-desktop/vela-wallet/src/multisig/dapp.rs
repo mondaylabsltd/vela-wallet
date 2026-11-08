@@ -79,16 +79,62 @@ pub fn parent_refusal(refusal: &vela_core::app::multisig_dapp::DappError) -> Opt
     })
 }
 
+/// §35 (SEC-PARENT-2): a refusal the machine gave because the site would
+/// have made this multisig call ITSELF to change who controls it
+/// (`multisig_dapp::self_call_refusal`) — the catalog key it is said in and
+/// the call, both the core's.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SelfCallRefusal {
+    /// `componentsUi.signing.multisigSelfCallBlocked`.
+    pub key: String,
+    /// The admin function the site asked for (`addOwnerWithThreshold`, …).
+    pub function: String,
+}
+
+/// The self-call refusal in `refusal`, when it is one
+/// (`data.reason == "self_call"`); `None` for every other refusal.
+#[must_use]
+pub fn self_call_refusal(
+    refusal: &vela_core::app::multisig_dapp::DappError,
+) -> Option<SelfCallRefusal> {
+    let data = refusal.data.as_ref()?;
+    if data.get("reason").and_then(Value::as_str) != Some("self_call") {
+        return None;
+    }
+    let text = |field: &str| {
+        data.get(field)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    };
+    // The core always names its sentence; were it ever missing, it is the
+    // one sentence a self-call refusal has.
+    let key = Some(text("key"))
+        .filter(|key| !key.is_empty())
+        .unwrap_or_else(|| vela_core::app::multisig_dapp::SELF_CALL_BLOCKED_KEY.to_owned());
+    Some(SelfCallRefusal {
+        key,
+        function: text("function"),
+    })
+}
+
 /// What the refusal of a site's request says, title and body, in `loc`'s
 /// language: a parent-Safe refusal (§31) in the signing sheet's own words —
-/// "Vela can't sign this", then the call and the Safe — and any other (a
-/// message, dapp-7) as "a multisig can't sign messages yet", naming `site`.
+/// "Vela can't sign this", then the call and the Safe — a self-call refusal
+/// (§35) under the same title, naming the call, and any other (a message,
+/// dapp-7) as "a multisig can't sign messages yet", naming `site`.
 #[must_use]
 pub fn refusal_words(
     loc: &crate::loc::Loc,
     refusal: Option<&vela_core::app::multisig_dapp::DappError>,
     site: &str,
 ) -> (gpui::SharedString, String) {
+    if let Some(own) = refusal.and_then(self_call_refusal) {
+        return (
+            loc.t("componentsUi.signing.selfCallBlockedTitle"),
+            loc.t_text(&own.key, "function", &own.function).to_string(),
+        );
+    }
     match refusal.and_then(parent_refusal) {
         Some(parent) => (
             loc.t("componentsUi.signing.selfCallBlockedTitle"),
@@ -409,6 +455,75 @@ mod tests {
             "invite_shared": false,
         }))
         .unwrap()
+    }
+
+    /// §35 (SEC-PARENT-2): the core's self-call refusal is said in its own
+    /// words in every language the app ships — "Vela can't sign this", then
+    /// the call the site asked for — never the parent-Safe sentence nor "a
+    /// multisig can't sign messages yet", and with no placeholder left.
+    #[test]
+    fn a_self_call_refusal_says_the_call_it_refused() {
+        use vela_core::app::self_call_guard::{SelfCallBlock, SelfCallFunction};
+        const MULTISIG: &str = "0xAbC0000000000000000000000000000000000001";
+        let refusal = vela_core::app::multisig_dapp::self_call_refusal(
+            &SelfCallBlock {
+                function: SelfCallFunction::ChangeThreshold,
+                selector: "0x694e80c3".into(),
+                leg_index: Some(1),
+                nested: false,
+            },
+            MULTISIG,
+        );
+        let own = self_call_refusal(&refusal).expect("a self-call refusal");
+        assert_eq!(
+            own.key,
+            vela_core::app::multisig_dapp::SELF_CALL_BLOCKED_KEY
+        );
+        assert_eq!(own.function, "changeThreshold");
+        assert!(parent_refusal(&refusal).is_none(), "not a parent-Safe one");
+        for lang in crate::loc::LANGUAGES {
+            let loc = crate::loc::Loc::for_language(lang);
+            let (title, body) = refusal_words(&loc, Some(&refusal), "evil.example");
+            assert_eq!(
+                title,
+                loc.t("componentsUi.signing.selfCallBlockedTitle"),
+                "{lang}"
+            );
+            assert_eq!(
+                body,
+                loc.t_text(&own.key, "function", "changeThreshold")
+                    .to_string(),
+                "{lang}"
+            );
+            assert!(body.contains("changeThreshold"), "{lang}: {body}");
+            assert!(
+                !body.contains("{{") && !body.contains("componentsUi."),
+                "{lang}: {body}"
+            );
+            assert_ne!(
+                title,
+                loc.t("connect.browser.multisigNoMessagesTitle"),
+                "{lang}"
+            );
+        }
+        let en = crate::loc::Loc::for_language("en");
+        let (_, body) = refusal_words(&en, Some(&refusal), "evil.example");
+        assert_eq!(
+            body,
+            "This site asked this multisig to change who controls it (changeThreshold). Vela never lets a site do that — members change it from the multisig’s own screen. Nothing was proposed."
+        );
+        // Without its key (never sent so by the core) it is still the one
+        // sentence; a refusal that is neither is the message refusal.
+        let mut bare = refusal.clone();
+        if let Some(data) = bare.data.as_mut() {
+            data["key"] = json!("");
+        }
+        assert_eq!(self_call_refusal(&bare).map(|r| r.key), Some(own.key));
+        let message = vela_core::app::multisig_dapp::multisig_refusal("personal_sign")
+            .expect("a message is refused");
+        assert!(self_call_refusal(&message).is_none());
+        let (title, _) = refusal_words(&en, Some(&message), "evil.example");
+        assert_eq!(title, en.t("connect.browser.multisigNoMessagesTitle"));
     }
 
     #[test]

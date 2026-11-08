@@ -713,8 +713,21 @@ VELA_PROVISION_PROFILE=path/to/VelaWallet.provisionprofile \
 open "dist/macos/$(uname -m)/Vela Wallet.app"
 ```
 
+**Which domain a build's platform passkeys live under (§35).** The core's
+rule (`service_defaults::relying_party_id`): a release build's — the bundle
+above is one — are `getvela.app`'s; a test build's (any debug or
+`dev-fixtures` build) are its own `TEST_RP_DOMAIN`, read at compile time
+(`TEST_RP_DOMAIN=passkeys.example.org cargo build`), whose association file
+must list the build. A test build without one refuses
+"This device" in the core's words ("This test build has no passkey
+domain…") rather than fall back to `getvela.app`, whose association file
+lists only the store apps. A release build never reads the test domain, and
+`scripts/check-store-binary.sh` checks its binary does not carry it.
+
 The phone (caBLE) and USB security-key methods need neither: the phone runs
-the ceremony itself, and the USB key is driven by this app's own CTAP client.
+the ceremony itself, and the USB key is driven by this app's own CTAP client
+— under `getvela.app` in every build, since no association file gates a
+CTAP client.
 
 Other switches, all read at startup: `VELA_INTRO=1` shows the first-run intro
 again, `VELA_TEST_PANIC=1` panics once inside the next background task (to

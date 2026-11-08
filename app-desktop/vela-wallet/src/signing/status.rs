@@ -1544,6 +1544,8 @@ mod tests {
         let loc = crate::loc::Loc::from_env();
         for reason in [
             RefusalReason::NonceUsed,
+            // §35: expired before it was included — its own sentence.
+            RefusalReason::Expired,
             RefusalReason::FeeBelowMarket,
             RefusalReason::SimulationFailed,
             RefusalReason::Unknown,
@@ -1567,6 +1569,9 @@ mod tests {
         }
         let went_first = loc.t("componentsUi.signing.wentFirst");
         assert_ne!(went_first, s.refused);
+        let expired = loc.t(vela_core::app::tx_tracker::REFUSED_EXPIRED_KEY);
+        assert_ne!(expired, s.refused);
+        assert_ne!(expired, went_first);
         // Another operation's entry says nothing about this one.
         let mut other = entry(TrackStatus::Rejected, TrackOutcome::Final, None);
         other.user_op_hash = "0xother".to_owned();

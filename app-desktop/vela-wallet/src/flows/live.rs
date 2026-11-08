@@ -4048,6 +4048,10 @@ fn tx_error_text(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
         // (send-15): nothing was sent — "Not sent", calmly, and "Review
         // again" signs anew ([`tx_error_notice`]).
         vela_core::app::send::SendTxErrorKey::NonceUsed => s.went_first.clone(),
+        // §35: its window closed before the EntryPoint saw it: nothing was
+        // sent — "Not sent", calmly, as a nonce another transaction spent,
+        // and "Try again" signs anew with a window of its own.
+        vela_core::app::send::SendTxErrorKey::Expired => s.expired.clone(),
         vela_core::app::send::SendTxErrorKey::VenueBlocked => {
             send.tx_venue_block.as_ref().map_or_else(
                 || s.tx_error_generic.clone(),
@@ -4098,7 +4102,9 @@ fn tx_error_retry(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
         SendTxErrorKey::VenueBlocked
         | SendTxErrorKey::PageRefused
         | SendTxErrorKey::ProposalNotSupported => None,
-        SendTxErrorKey::NonceUsed => Some(s.tx_review_again.clone()),
+        // §35: an expired operation is reviewed again too — a fresh quote,
+        // window and signature (the web's `send.txReviewAgain`).
+        SendTxErrorKey::NonceUsed | SendTxErrorKey::Expired => Some(s.tx_review_again.clone()),
         _ => Some(s.tx_retry.clone()),
     }
 }
@@ -4525,7 +4531,11 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
 pub(crate) fn tx_error_notice(send: &SendView, s: &FlowStrings) -> Option<SendNotice> {
     use vela_core::app::send::SendTxErrorKey;
     let held = send.tx_error == Some(SendTxErrorKey::PreviousPending);
-    let went_first = send.tx_error == Some(SendTxErrorKey::NonceUsed);
+    // Said as a spent nonce is (§35): it never went, and nothing is wrong.
+    let went_first = matches!(
+        send.tx_error,
+        Some(SendTxErrorKey::NonceUsed | SendTxErrorKey::Expired)
+    );
     let not_sent = held || went_first;
     tx_error_text(send, s).map(|body| SendNotice {
         dismiss: None,
@@ -5626,6 +5636,24 @@ mod tests {
         assert_eq!(went.body, s.went_first);
         assert_eq!(went.action, Some(s.tx_review_again.clone()));
         assert!(went.calm && !went.error);
+
+        // §35: it expired before it was submitted — said as calmly, in its
+        // own sentence, and Review again signs anew with its own window.
+        let expired = failed_with(SendTxErrorKey::Expired).expect("a notice");
+        assert_eq!(expired.title, Some(s.status_not_sent.clone()));
+        assert_eq!(expired.body, s.expired);
+        assert_eq!(
+            expired.body,
+            crate::loc::Loc::from_env().t(vela_core::app::send::EXPIRED_KEY)
+        );
+        assert_ne!(expired.body, s.went_first);
+        assert!(
+            !expired.body.starts_with("componentsUi."),
+            "{}",
+            expired.body
+        );
+        assert_eq!(expired.action, Some(s.tx_review_again.clone()));
+        assert!(expired.calm && !expired.error);
 
         let proposal = failed_with(SendTxErrorKey::ProposalNotSupported).expect("a notice");
         assert_eq!(proposal.body, s.tx_error_proposal_not_supported);

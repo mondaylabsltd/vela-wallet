@@ -2423,3 +2423,164 @@ fn a_site_cannot_make_a_multisig_act_for_a_safe_it_owns_or_that_cannot_be_read()
     let parent = refused_for_parent(&mut sim, &multisig, unread, &approve, "unchecked");
     assert_eq!(parent.key, "componentsUi.signing.parentSafeUnchecked");
 }
+
+// -- §35: a site may never make a multisig call itself to change who controls it
+
+/// The shared vector (SEC-PARENT-2): every site's request that would make
+/// the multisig call itself with an admin selector.
+const SELF_CALL: &str =
+    include_str!("../../../../rust/crates/vela-core/tests/vectors/rules/multisig-self-call.json");
+
+/// The vector's calls, `SELF` as `multisig`'s address (`SELF_UPPER` in upper
+/// case, `SELFADDR` inside a payload as its 20 bytes, lower case, no 0x).
+fn self_calls(case: &Value, multisig: &str) -> Value {
+    let bare = multisig.trim_start_matches("0x").to_ascii_lowercase();
+    let calls: Vec<Value> = case["calls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|call| {
+            let to = match call["to"].as_str().unwrap() {
+                "SELF" => multisig.to_owned(),
+                "SELF_UPPER" => format!("0x{}", bare.to_ascii_uppercase()),
+                other => other.to_owned(),
+            };
+            serde_json::json!({
+                "to": to,
+                "value": call["value"],
+                "data": call["data"].as_str().unwrap().replace("SELFADDR", &bare),
+            })
+        })
+        .collect();
+    Value::Array(calls)
+}
+
+/// The vector, through the desktop's own entry for a site's request to a
+/// multisig ([`super::dapp`]: the browser's `Forwarded`, `Holds::hold`, the
+/// real proposals machine): each admin call on the multisig itself is
+/// refused at arrival — said first, in the self-call words naming the call
+/// (never "a multisig can't sign messages", never the parent-Safe sentence),
+/// nothing drafted, nothing signed, then answered -32603 (never 4001). A
+/// plain transfer to it, or a token transfer elsewhere, is drafted for
+/// review as any other request.
+#[test]
+fn a_site_cannot_make_a_multisig_call_itself_to_change_who_controls_it() {
+    use super::dapp::{self, Holds, Step};
+    use crate::executor::dapp_browser::Forwarded;
+    use serde_json::json;
+    use vela_core::app::multisig_dapp::HeldStage;
+
+    let vector: Value = serde_json::from_str(SELF_CALL).unwrap();
+    let en = crate::loc::Loc::for_language("en");
+    let cases = vector["cases"].as_array().unwrap();
+    assert_eq!(cases.len(), 13, "the vector's cases");
+    let mut refused = 0;
+    for case in cases {
+        let name = case["name"].as_str().unwrap();
+        let mut sim = booted(&[0, 1]);
+        sim.long_waits_parked = true;
+        let multisig = created(&mut sim);
+        let rows = sim.machines.accounts_view.accounts.clone();
+        let account = dapp::multisig_of(&multisig, &rows).cloned().unwrap();
+        let passkeys = sim.world().passkeys.len();
+        let mut holds = Holds::default();
+        let ask = holds.hold(
+            &Forwarded {
+                tab: "t1".to_owned(),
+                id: "35".to_owned(),
+                method: "wallet_sendCalls".to_owned(),
+                params_json: json!([{ "version": "2.0.0", "chainId": "0x64", "from": multisig,
+                                      "calls": self_calls(case, &multisig) }])
+                .to_string(),
+                origin: "https://evil.example".to_owned(),
+                chain_id: 100,
+                granted_address: multisig.clone(),
+            },
+            &account,
+            None,
+        );
+        sim.proposals(ask);
+        let Some(function) = case["refused"].as_str() else {
+            let (_, held) = holds
+                .at(&sim.machines.proposals_view, HeldStage::Reviewing)
+                .unwrap_or_else(|| panic!("{name}: {:?}", sim.machines.proposals_view.dapp));
+            assert!(held.refusal.is_none(), "{name}");
+            assert!(
+                sim.machines.proposals_view.draft.is_some(),
+                "{name}: drafted for review"
+            );
+            assert_eq!(
+                sim.world().passkeys.len(),
+                passkeys,
+                "{name}: nothing signed"
+            );
+            continue;
+        };
+        refused += 1;
+        let (rid, held) = holds
+            .at(&sim.machines.proposals_view, HeldStage::Refused)
+            .unwrap_or_else(|| panic!("{name}: {:?}", sim.machines.proposals_view.dapp));
+        let refusal = held.refusal.clone().expect("said first");
+        let data = refusal.data.clone().unwrap();
+        assert_eq!(refusal.code, -32603, "{name}");
+        assert_eq!(data["reason"], "self_call", "{name}");
+        assert_eq!(data["function"], function, "{name}");
+        assert_eq!(data["leg"], case["leg"], "{name}");
+        assert_eq!(data["key"], vector["key"], "{name}");
+        assert!(
+            data["safe"]
+                .as_str()
+                .is_some_and(|safe| safe.eq_ignore_ascii_case(&multisig)),
+            "{name}: {data}"
+        );
+        assert!(
+            sim.machines.proposals_view.draft.is_none(),
+            "{name}: nothing drafted"
+        );
+
+        // The dialog's words: "Vela can't sign this", then the call.
+        let own = dapp::self_call_refusal(&refusal).expect("a self-call refusal");
+        assert_eq!(own.function, function, "{name}");
+        assert!(dapp::parent_refusal(&refusal).is_none(), "{name}");
+        let (title, body) = dapp::refusal_words(&en, Some(&refusal), "evil.example");
+        assert_eq!(
+            title,
+            en.t("componentsUi.signing.selfCallBlockedTitle"),
+            "{name}"
+        );
+        assert_eq!(
+            body,
+            en.t_text(
+                vela_core::app::multisig_dapp::SELF_CALL_BLOCKED_KEY,
+                "function",
+                function
+            )
+            .to_string(),
+            "{name}"
+        );
+        assert!(body.contains(function), "{name}: {body}");
+
+        // Read, then answered with the refusal — never 4001, nothing signed.
+        assert!(
+            holds.step(&sim.machines.proposals_view).is_empty(),
+            "{name}: not answered before it was read"
+        );
+        sim.proposals(ProposalsEvent::DappLeave { id: rid });
+        let steps = holds.step(&sim.machines.proposals_view);
+        let [Step::Answer { answer, .. }] = steps.as_slice() else {
+            panic!("{name}: {steps:?}");
+        };
+        assert_eq!(
+            answer.error.as_ref().map(|e| e.code),
+            Some(-32603),
+            "{name}"
+        );
+        assert!(answer.result.is_none(), "{name}");
+        assert_eq!(
+            sim.world().passkeys.len(),
+            passkeys,
+            "{name}: nothing signed"
+        );
+    }
+    assert_eq!(refused, 11, "every refusing case ran");
+}
