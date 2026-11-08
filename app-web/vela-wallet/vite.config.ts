@@ -7,6 +7,9 @@ import cloudflareAdapter from '@sveltejs/adapter-cloudflare';
 import staticAdapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { withBrotliCoreAdapter } from './scripts/wasm-brotli.mjs';
+import { createHash } from 'node:crypto';
+import type { KitConfig } from '@sveltejs/kit';
+import { CSP_DIRECTIVES } from './src/lib/security-headers';
 
 /**
  * `docs/design/onboarding/launch` is the repo-wide source of truth for animations
@@ -57,6 +60,30 @@ const LAUNCH_ANIMATIONS = fileURLToPath(
  * budgets — cannot move because the extension exists.
  */
 const EXTENSION_TARGET = process.env.VELA_TARGET === 'extension';
+
+/**
+ * §35 (review 1-1): the hosted wallet's CSP, hash-based. SvelteKit hashes its
+ * own inline scripts; `app.html`'s one render-blocking script (theme, text
+ * scale, the launch and intro gates) is hashed here, from the file itself, so
+ * an edit to it can never ship unhashed — the page would refuse to run it. The
+ * extension's pages have the manifest's own CSP (`extension/manifest.json`),
+ * and `extension/build.mjs` moves every inline script out to a file.
+ */
+function appHtmlScriptHash(): string {
+	const html = readFileSync(fileURLToPath(new URL('./src/app.html', import.meta.url)), 'utf8');
+	const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+	if (scripts.length !== 1)
+		throw new Error(`app.html: expected one inline script, got ${scripts.length}`);
+	return `sha256-${createHash('sha256').update(scripts[0][1], 'utf8').digest('base64')}`;
+}
+
+const WALLET_CSP: NonNullable<KitConfig['csp']> = {
+	mode: 'hash',
+	directives: {
+		...Object.fromEntries(Object.entries(CSP_DIRECTIVES).map(([k, v]) => [k, [...v]])),
+		'script-src': [...CSP_DIRECTIVES['script-src'], appHtmlScriptHash()]
+	} as NonNullable<KitConfig['csp']>['directives']
+};
 
 /**
  * Where the extension build lands: `extension/dist` — the package Chrome
@@ -171,7 +198,7 @@ export default defineConfig({
 			// `_app` → `app` for the extension only; see (2) above. This has to be
 			// set here rather than fixed up in `extension/build.mjs`, because the
 			// name is baked into every prerendered page's asset references.
-			...(EXTENSION_TARGET ? { appDir: 'app' } : {}),
+			...(EXTENSION_TARGET ? { appDir: 'app' } : { csp: WALLET_CSP }),
 			adapter: EXTENSION_TARGET
 				? staticAdapter({
 						// The app is served from the extension's ROOT, not a

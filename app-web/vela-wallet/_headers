@@ -9,3 +9,14 @@
 # (perf-4).
 /vela_core_bg.*
   Cache-Control: public, immutable, max-age=31536000
+
+# §35 (review 1-1): every response — src/lib/security-headers.ts is the one
+# list (the Worker's responses get it from hooks.server.ts; the pages' script
+# policy is the hash-based CSP <meta> SvelteKit writes into each prerendered
+# page). `security-headers.test.ts` pins this block to that list.
+/*
+  Content-Security-Policy: frame-ancestors 'none'; object-src 'none'; base-uri 'self'
+  X-Frame-Options: DENY
+  Permissions-Policy: publickey-credentials-get=(self), publickey-credentials-create=(self), camera=(self), clipboard-write=(self), web-share=(self), screen-wake-lock=(self), microphone=(), geolocation=(), payment=(), usb=(), serial=(), hid=(), bluetooth=(), midi=(), display-capture=(), accelerometer=(), gyroscope=(), magnetometer=(), browsing-topics=()
+  Referrer-Policy: no-referrer
+  X-Content-Type-Options: nosniff
