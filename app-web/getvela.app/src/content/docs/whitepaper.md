@@ -114,8 +114,13 @@ stands for the founding set, so changing owners on one chain would make the
 account differ from chain to chain.
 
 Passkeys belong to a relying party — Vela's are created for **`getvela.app`**.
-Browsers offer them only to pages on getvela.app or its subdomains, which is what
-makes them phishing-resistant; it is also a dependency this paper returns to below.
+Browsers offer them only to pages on getvela.app or its subdomains (or to origins
+getvela.app declares as related), and a phone's built-in passkeys work only in apps
+getvela.app vouches for. That is what makes them resistant to phishing by
+websites. It does not make them resistant to software you run: Chrome lets an
+extension with permission for getvela.app use them, and a program on your
+computer can ask a security key or a phone for a getvela.app signature directly.
+The domain is also a dependency this paper returns to below.
 
 ### Signing flow
 
@@ -220,8 +225,15 @@ self-custody gives you is that Vela is not a second party who can.
   check; another key restores access. But a key cannot be removed: if one may be in
   someone else's hands, move your funds to a new wallet, because the old address
   stays spendable by that key on every network.
-- **Phishing** — a passkey cannot be typed into a fake site, and browsers offer it
-  only to pages on getvela.app and its subdomains.
+- **Phishing by a website** — a passkey cannot be typed into a fake site, and
+  browsers offer it only to pages on getvela.app and its subdomains (or origins it
+  declares as related).
+- **Software you run** — not covered by the passkey itself. A browser extension
+  with access to getvela.app, an app getvela.app vouches for (today only Vela's
+  own app, on its release key), or a program that talks to a security key or phone
+  directly (a CTAP client, which writes the origin into the signed data itself)
+  can ask for a getvela.app signature. The system prompt names the domain, not
+  the transaction, so whatever you approve there is signed.
 - **Malicious dApp** — addressed by clear signing, the approval guard, and a
   refusal: a request for a call from your Safe to itself — `enableModule`,
   `addOwnerWithThreshold`, `swapOwner`, `setFallbackHandler`, `setGuard` and the

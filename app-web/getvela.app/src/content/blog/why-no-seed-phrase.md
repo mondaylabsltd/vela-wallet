@@ -8,6 +8,8 @@ tags: [security, passkeys, design]
 
 > **Corrections, 22 September 2026.** This post originally called seed phrases "the single biggest cause of lost crypto"; we don't have a source for that ranking, so the description now says what we can support. It also said passkeys use "the same technology that guards Apple Pay" — they don't: Apple Pay uses the Secure Element with card tokens, while passkeys are WebAuthn credentials held by a password manager or security key. And since August a Vela wallet can have up to seven keys, including hardware security keys that sync nowhere, so it no longer rests on one platform keychain. See [how passkeys work](/docs/passkeys) and [signers & security keys](/docs/signers).
 
+> **Correction, 8 November 2026.** This post said "there is nothing to phish". That overstated it. A passkey resists phishing by *websites*: there is nothing to type, and a browser offers a getvela.app passkey only to pages on getvela.app and its subdomains. It does not resist *software you run*. A browser extension with access to getvela.app, or a program on your computer that talks to a security key or phone directly, can ask for a getvela.app signature, and the prompt shows the domain, not the transaction. The bullet below now says this. See [what using getvela.app means](/docs/self-hosting#if-getvela-app-disappears).
+
 Almost every self-custodial wallet hands you twelve words and tells you that
 they are the most important thing you now own. Lose them and your money is gone.
 Let someone see them and your money is gone. We decided Vela would not do that.
@@ -40,8 +42,12 @@ For Vela, that means:
 
 - There is no secret for you to store, because Vela never gives you one to write
   down — and the key itself never reaches the app.
-- There is nothing to phish. A fake support page cannot ask you to "type your
-  passkey" — there's nothing to type.
+- A fake website cannot phish it. A fake support page cannot ask you to "type
+  your passkey" — there's nothing to type — and browsers offer a getvela.app
+  passkey only to pages on getvela.app and its subdomains. Software you run is
+  another matter: an extension with access to getvela.app, or a program that
+  talks to your security key or phone directly, can ask for a signature, and the
+  prompt shows the domain, not the transaction. Install only software you trust.
 - Signing a transaction feels like unlocking your phone, because it is the same
   gesture.
 
