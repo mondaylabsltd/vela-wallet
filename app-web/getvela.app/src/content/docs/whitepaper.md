@@ -9,12 +9,15 @@ description: "How Vela works and what you do — and don't — have to trust to 
 
 # Whitepaper
 
-<Callout type="info" title="Status: alpha · last revised September 2026">
-This page describes how Vela works today and what you do and don't have to trust
-to use it. Vela is in <a href="/blog/vela-is-in-alpha">alpha</a> — start with
-small amounts. Vela has no token. Everything here can be checked against the
+<Callout type="info" title="Status: alpha · last revised November 2026">
+This page describes how Vela works and what you do and don't have to trust to
+use it. Vela is in <a href="/blog/vela-is-in-alpha">alpha</a> — start with small
+amounts. Vela has no token. Everything here can be checked against the
 open-source code; where the code and this page disagree, the code is right and
-this page is a bug.
+this page is a bug. Last verified against commit <code>fa6083c87</code> (the
+development branch, which includes the unreleased multisig feature). The
+reference threat model, with a code location and a test for every claim, is
+<a href="https://github.com/mondaylabsltd/vela-wallet/blob/main/docs/SECURITY-MODEL.md">SECURITY-MODEL.md</a>.
 </Callout>
 
 ## Summary
@@ -33,6 +36,11 @@ services are open source, and you can run your own copy of each. What you
 trust, in short: the contracts, the authenticators that hold your keys, the code
 of the app you sign with, the domain your passkeys belong to, and the services you
 point the app at.
+
+A Vela account can also be an owner of a **multisig**: a separate Safe that
+several people's accounts (or other wallets) control together, M of N. Multisig
+is built but **not released yet**; it is described below where it changes the
+picture.
 
 ## Why Vela exists
 
@@ -81,7 +89,11 @@ EVM chain
 
 Supporting services, all open source: a **public-key index** that registers new
 wallets in an on-chain registry and answers lookups, a **chain-data** directory,
-and an **exchange-rate** feed. See the [self-hosting guide](/docs/self-hosting).
+and an **exchange-rate** feed. For multisig (unreleased), a **genesis service**
+records a multisig's setup and runs a **mailbox** where members leave proposals
+and approvals, and the **PeerConnect** relay carries an outside owner's wallet
+session. An optional **signing page** at sign.getvela.app can show and sign a
+request on its own. See the [self-hosting guide](/docs/self-hosting).
 
 ### Account
 
@@ -141,13 +153,18 @@ The domain is also a dependency this paper returns to below.
   includes a transfer from your Safe to the relay's address. The amount and
   recipient are part of what you sign, so you pay exactly what the confirm screen
   showed.
-- The fee is **three times the gas the wallet reserves for the operation**
-  (the simulated estimates raised by half, with minimums), **priced at the higher
-  of the wallet's own gas-price reading and the relay's price for the chosen
-  speed**, with a minimum of about $0.01. On Tempo the multiple is two. The padding
-  and the headroom in the price put the fee above the operation's actual on-chain
-  cost, more so for the first transaction on a network; the relay keeps the
-  difference. The exact amount is on the confirm screen before you sign.
+- Where the relay bills the gas an operation uses, the fee is
+  **`settlementGas × inBandFeePerGas`**: the gas the relay says it will bill,
+  times the per-gas price it publishes for the chosen speed, with a minimum of
+  about $0.01. The wallet checks both. It refuses a `settlementGas` above the
+  smaller of the gas limits the operation is signed with and 125% of the wallet's
+  own gas model plus 50,000, and a per-gas price more than three times the same
+  formula applied to its own gas-price reading. Against a relay that publishes
+  neither figure, the fee is three times the operation's gas limits at the higher
+  of the two gas prices (two times on Tempo). Either way the fee is above the
+  on-chain cost, and the relay keeps the difference. The exact amount is on the
+  confirm screen before you sign, and from the moment you confirm, the amount and
+  fee you pressed are the ones signed, or nothing is.
 - The fee goes to whichever relay the wallet is set to: Vela's by default, or any
   vela-relay deployment, including one you run.
 - The fee is paid in the network's coin or in a USD stablecoin the relay accepts
@@ -165,12 +182,24 @@ the app for common contracts, fetched from the chain-data service, or matched to
 standard token shapes — then, as a last resort, a public selector database,
 labelled best effort. Anything left gets an explicit blind-signing warning.
 A fetched descriptor is never labelled verified — only one built into the app,
-or a fetched one identical to it, earns that word. An on-chain approval
-at the "unlimited" level (2^200 or more) is shown in red with a cap on offer;
-unless you cap it, it is sent exactly as the dApp built it. A large finite
-approval is shown with a caution; signed permits can't be capped, so they are
-signed as asked or rejected. Details:
-[clear signing](/docs/clear-signing).
+or a fetched one identical to it, earns that word — and only those can mark a
+call as low-risk (green). A typed-data message is not "just a signature": a
+permit or an order can move assets, and it gets the same checks.
+
+A transaction is **simulated** before you sign, and the result counts only when
+two independent RPC providers agree on it (or your own node, if you chose "Only
+use my node"). When Vela could not read something it checks — no simulation,
+one node answering, two nodes disagreeing, a simulation that fails, a call
+nobody can decode — the confirm button says "… anyway", is styled as a danger,
+and has to be **held for 1.5 seconds**. **Refuse blind signing** (Settings →
+Security, off by default) refuses all of those instead.
+
+An approval at the "unlimited" level (2^128 or more; 2^200 in v0.9.8 and
+earlier) is shown in red with a cap on offer; unless you cap it, it is sent
+exactly as the dApp built it. One at a hundred times your balance or more is
+called out too. Approvals hidden inside a batch or a `multicall` are found and
+checked the same way. Signed permits can't be capped, so they are signed as
+asked or rejected. Details: [clear signing](/docs/clear-signing).
 
 ### Networks
 
@@ -210,14 +239,23 @@ self-custody gives you is that Vela is not a second party who can.
 - **The code of the app you sign with.** It builds the transaction and shows you
   what it does. A compromised app can show one thing and ask you to sign another;
   the authenticator's prompt will not tell you the difference.
-- The **RPC endpoints** you read from: a lying node can show wrong balances or a
-  wrong simulation preview. You can set your own.
+- The **RPC endpoints** you read from: a lying node can show wrong balances and
+  history. It cannot make a simulation or a safety check read as clean on its
+  own, because those need two independent providers to agree — but two providers
+  that are really one, or that collude, can. You can set your own node.
 - The **chain-data and exchange-rate services**: they supply token lists,
   descriptors, the fee-token list and the rates used to turn a fiat amount into a
   token amount.
 - The **relay**: it can't change what you signed, but it can delay or refuse it,
-  choose when it lands (so it could front-run a swap within your slippage), and set
-  the gas price your fee is based on, up to three times the wallet's own reading.
+  and choose when it lands — within the **30 minutes** every operation is valid
+  for, after which the chain refuses it. So it could still trade ahead of a swap
+  within your slippage inside that window. It sets the gas price your fee is
+  based on, up to three times the wallet's own reading, and the gas it bills is
+  capped as above.
+- The **public-key index**, only for finding your wallet on a new device: its
+  answer is checked against the registry contract on chain, and a wallet with
+  several keys that only the index vouches for shows no address to receive at
+  until the chain confirms it.
 
 **Threats considered**
 
@@ -234,13 +272,22 @@ self-custody gives you is that Vela is not a second party who can.
   directly (a CTAP client, which writes the origin into the signed data itself)
   can ask for a getvela.app signature. The system prompt names the domain, not
   the transaction, so whatever you approve there is signed.
-- **Malicious dApp** — addressed by clear signing, the approval guard, and a
-  refusal: a request for a call from your Safe to itself — `enableModule`,
-  `addOwnerWithThreshold`, `swapOwner`, `setFallbackHandler`, `setGuard` and the
-  rest of that family — is blocked, including inside a batch or a `MultiSend`,
-  as is any leg carrying a `delegatecall` and a `SafeTx` typed-data signature.
-  Any one of them, signed once, would hand over the account as completely as the
-  Bybit payload did, so the wallet does not offer them to be signed at all.
+- **Malicious dApp** — addressed by clear signing, simulation, the approval
+  guard, and refusals with no "anyway": a request for a call from your Safe to
+  itself — `enableModule`, `addOwnerWithThreshold`, `swapOwner`,
+  `setFallbackHandler`, `setGuard` and the rest of that family — is blocked,
+  including inside a batch or a `MultiSend`, as is any leg carrying a
+  `delegatecall` and a `SafeTx` typed-data signature. The same refusal covers any
+  Safe your account is an owner of (a multisig): a site cannot use your account's
+  authority to execute, approve or sign for it. Any one of them, signed once,
+  would hand over an account as completely as the Bybit payload did, so the wallet
+  does not offer them to be signed at all. A "Sign in with Ethereum" request for a
+  different site, address or network is refused too. What the sheet showed is
+  what is signed: the wallet refuses to sign an operation whose calls or fee
+  differ from the ones reviewed.
+- **Lying RPC node** — it can show you wrong balances. It cannot, alone, make a
+  simulation or a multisig's safety checks read as clean: those need a second,
+  independent provider to agree, and otherwise the confirm is "… anyway".
 - **Compromised backend service** (relay, index, chain data, exchange rates) — no
   signing power, but real influence: refusing service, misleading descriptors or
   token lists, wrong exchange rates that change how much a fiat amount sends, and
@@ -250,15 +297,21 @@ self-custody gives you is that Vela is not a second party who can.
   line saying nothing authenticated them. Each service can be replaced.
 - **Compromised app delivery** — a tampered web deployment, extension update or
   app build could present a malicious transaction for you to sign. This is the
-  [Bybit](/docs/bybit-attack) class of attack. Mitigations today are limited: the
-  decoding and approval guard in the app itself, notarized macOS builds, and
-  building the extension or apps from source yourself (release packages carry
-  SHA-256 checksums and GitHub build-provenance attestations naming the commit
-  and workflow run; the Windows installer is still not code-signed). The
+  [Bybit](/docs/bybit-attack) class of attack, and **for a wallet whose keys
+  belong to getvela.app, Vela does not stop it**: a compromised wallet can ask
+  your passkey for a signature directly. What exists: the web core (the compiled
+  code that makes every decision) rebuilds byte for byte from the source and is
+  attested by CI; release packages carry GitHub build-provenance attestations
+  (macOS images are notarized; the Windows installer is not code-signed); and you
+  can build the extension or apps yourself. The
   [Trusted Signer](/docs/clear-signing-self-host), an independent signing page
-  that does not share the app's code, can be chosen as the way you sign in the
-  desktop, iPhone and Android apps; the desktop's integrity check only logs a
-  mismatched page, and the phone apps don't check yet.
+  that does not share the app's code, can be chosen as the way you sign on every
+  surface. Every app checks the page's bytes against the versions it ships with
+  and refuses one that doesn't match. For a getvela.app wallet it guarantees that
+  a tampered *interface* cannot make you approve one thing and sign another, but
+  not that a fully compromised app can't sign without it. Only for a wallet made
+  on a self-hosted page, whose keys belong to that page's domain, is the page the
+  one thing that can sign.
 - **Anything served from the domain** — any page on getvela.app or its
   subdomains, including a script it loads, could request signatures from Vela
   passkeys, and the prompt shows only "getvela.app". The website therefore forbids
@@ -268,14 +321,31 @@ self-custody gives you is that Vela is not a second party who can.
   own code, though by default they still fetch descriptors and use services under
   getvela.app.
 
+### Multisig (not released)
+
+A Vela multisig is an unmodified Safe v1.4.1 whose owners are Vela accounts,
+ordinary wallets, or other contracts, any M of N. Its members, threshold and
+settings are read from the chain (two providers again), never taken from Vela's
+service. Each member's device decodes, simulates and checks the transaction
+itself and recomputes the hash it approves; a change to who controls the
+multisig that the transaction does not declare is refused with no override.
+Vela signs only safe shapes: no `delegatecall` except into Safe's
+MultiSendCallOnly, no gas refunds out of the multisig, no module, guard or
+fallback-handler changes. The **mailbox** is not trusted: everything read from it
+is recomputed, a stranger's post is kept out of the list and the counts, and it
+cannot hold up the next transaction. But the mailbox needs no login, and anyone
+who knows a multisig's address can read its pending proposals.
+
 ## Recovery
 
 Creating a wallet publishes its public keys and address to a public
 **registry contract** on Gnosis (copyable to Ethereum). On a new device you sign
 in with **any one** key; the app finds the wallet through the index or, failing
 that, directly from the registry, and checks that the keys recompute to the
-recorded address. A single-key wallet can also be rebuilt from two signatures
-with no registry at all.
+recorded address. The index's answer is checked against the registry on chain;
+if no chain can confirm a wallet with several keys yet, you are signed in but the
+wallet shows no address to receive at until it is confirmed. A single-key wallet
+can also be rebuilt from two signatures with no registry at all.
 
 <Callout type="warning" title="Your keys are your recovery">
 There is no seed phrase, no social recovery and no guardian — nothing Vela could
@@ -307,8 +377,15 @@ data. Vela's index sees that record before submitting it, and the addresses you
 look up names for; Vela's relay sees your address, the operations you submit and
 the RPC endpoint your app uses (including any API key in its URL), and keeps
 operations for a limited time to retry and diagnose. Every service sees your IP
-address. The website uses cookieless analytics. The
-[privacy policy](/privacy) is the authoritative list.
+address. The multisig mailbox (unreleased) stores proposals and approvals with
+no login: anyone who knows a multisig's address can read its pending
+transactions. Bug reports become public GitHub issues.
+
+The website uses cookieless analytics (Rybbit). The web wallet and the browser
+extension send usage statistics **only if you turn them on** (off by default),
+and never anything about a transaction, an address or an amount. The iPhone,
+Android and desktop apps send none. The [privacy policy](/privacy) is the
+authoritative list.
 
 ## Open source
 
@@ -325,8 +402,8 @@ speculate on. Fees are paid in each network's coin or a stablecoin.
 
 Safe's contracts, its 4337 and passkey modules, and EntryPoint v0.7 are
 independently audited and widely used. **Vela's own code — the apps, the backend
-services and the registry contract — has not had an independent third-party
-audit, and none is scheduled**; a professional audit is a goal for when the
+services, the key registry contract and the multisig SafeGenesisRegistry — has
+not had an independent third-party audit, and none is scheduled**; a professional audit is a goal for when the
 project can fund one, not a commitment with a date. Until then, review is
 informal: the code is open, capable members of the community read it, and it is
 reviewed with AI tools. That helps; it is not equivalent to a professional audit.
