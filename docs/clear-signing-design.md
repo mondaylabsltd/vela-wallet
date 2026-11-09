@@ -1,5 +1,15 @@
 # Vela Clear Signing — Design Document
 
+> **Status (R23, 2026-11-09, checked against commit `fa6083c87`).** This is the original UX
+> design. The rules it sketches now live in the core, and where this document and the code
+> differ, the code is right: `rust/crates/vela-core/src/app/clear_signing.rs` (decoding,
+> provenance, risk), `rust/crates/vela-core/src/app/sign_confirm.rs` (the confirm's posture and
+> hold), `rust/crates/vela-core/src/app/sim_outcome.rs` and
+> `rust/crates/vela-core/src/app/corroborate.rs` (simulation). Corrected below: EIP-712 typed
+> data is **not** "no asset risk" (§2.3, §3.4–§3.5, §8); risk is floored by provenance (§7);
+> and simulation, which this document never described, is §9. The security statements are in
+> [`docs/SECURITY-MODEL.md`](SECURITY-MODEL.md) §6.1, §6.4 and §6.6.
+
 ## 1. Design Philosophy
 
 **One sentence:** Make every signing request instantly understandable to anyone, regardless of crypto experience.
@@ -38,7 +48,7 @@ Everything else is secondary. Technical details exist for verification, not comp
 | **Normal** | `accent` (#c35a2a) | warm/cool tint | Accent | Swap, send, transfer |
 | **Caution** | `warning` (#d4890a) | yellow tint | Accent | Approve, permit (limited) |
 | **Danger** | `danger` (#d43a2a) | red tint | Red | Unlimited approve, blind sign, unknown |
-| **Signature** | `purple` (#6c5ce7) | purple tint | Purple | personal_sign, EIP-712 (no asset risk) |
+| **Signature** | `purple` (#6c5ce7) | purple tint | Purple | personal_sign that is not a sign-in (it moves nothing by itself). **Not** EIP-712: a typed-data message can be a permit, an order or a transfer authorisation, and is graded like a call (see §3.5) |
 
 ### 2.4 Button Labels
 
@@ -128,7 +138,7 @@ When no ERC-7730 descriptor matches.
 
 ### 3.4 `personal_sign` — Message Signing
 
-**No ERC-7730 lookup needed.** This is a plain text message (no asset risk).
+**No ERC-7730 lookup needed.** This is a plain text message: signing it moves nothing by itself. It is still a signature the account makes (an EIP-1271 signature over its `SafeMessage`, ERC-6492-wrapped when the account is undeployed), so a sign-in (EIP-4361) inside it is refused unless it binds to the requesting site, its URI and the request's chain (`clear_signing::sign_in_refusal`), and `eth_sign` is treated as blind.
 
 **UI:**
 - Intent: **"Sign Message"** (purple — signature, no asset movement)
@@ -157,7 +167,7 @@ When no ERC-7730 descriptor matches.
 - Intent word from descriptor (e.g., "Sign Permit", "UniswapX Dutch Order")
 - Token card if `tokenAmount` field exists
 - Spender/recipient bar if `addressName` field exists
-- **Key difference from personal_sign:** Shows structured fields, may involve asset risk
+- **Key difference from personal_sign:** Shows structured fields, and **can authorise asset movement**: an ERC-2612 or Permit2 permit, a Permit2 witness transfer, an order. The approval guard reads these (`approval_guard`), and a `SafeTx` or `SafeMessage` for a Safe the account owns is refused outright (`parent_safe_guard`)
 - Button color: Purple for pure signatures, accent if involves value transfer
 
 **Distinguishing from personal_sign:**
@@ -374,6 +384,13 @@ Current registry:
 
 ## 7. Risk Assessment Logic
 
+> **R23 note.** The sketch below is the original design. The code differs in three ways that
+> matter for security: (1) only a reading whose provenance is verified (`BuiltIn`,
+> `PinnedMatch`) may be graded **Safe**; every other reading is floored at Normal, whatever its
+> intent word (`project_result`); (2) `personal_sign` is not graded "safe" — see §3.4; (3) the
+> confirm's posture is decided separately from the risk colour, by whether every check could be
+> read (`sign_confirm::posture`, §9).
+
 ```
 function assessRisk(intent, fields, method):
   if method === 'personal_sign':
@@ -403,10 +420,41 @@ function assessRisk(intent, fields, method):
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| personal_sign color | Purple | Communicates "signature only, no asset risk" |
+| personal_sign color | Purple | Communicates "signature only — nothing moves by itself". Not used for EIP-712, which can authorise asset movement |
 | Blind sign button | Red "Sign Anyway" | Explicit friction for dangerous actions |
 | Contract address | Always visible + copyable | Security requirement — users must verify |
 | Details panel | Collapsed by default | Reduces cognitive load; power users can expand |
 | Token amounts | Big numbers, no hex | Most users don't understand wei or hex values |
 | Unlimited approvals | Red highlight + warning text | Critical security signal |
 | EIP-712 vs personal_sign | Different components | Different risk profiles need different UIs |
+
+---
+
+## 9. Simulation and the confirm's posture (added R23)
+
+What the sheet says a transaction will do comes from two sources: the decoding above, and a
+**simulation** of the transaction against current chain state (`eth_simulateV1`).
+
+- **Two independent providers.** The simulation counts only when two endpoints from different
+  providers (by registrable domain) answer and agree on its meaning: the same set of balances
+  moving in the same direction, figures within 2 % (`sim_outcome::SIM_AGREE_BPS`; the worse
+  figure is shown). With "Only use my node" on, the person's node is trusted alone, and the sheet
+  says so. Each source must have reported the chain's id first (`app::corroborate`,
+  `rust/crates/vela-core/src/app/rpc_pool.rs`).
+- **What the person sees.** The balance changes, or a line saying why there are none: not offered
+  by the network, not back yet, only one node answered, two nodes disagreed, or the transaction
+  would fail.
+- **The posture** (`sign_confirm::posture`). The confirm is plain only when every check was read.
+  It is **"… anyway"** — danger-styled and held for 1.5 s (`sign_confirm::HOLD_TO_CONFIRM_MS`;
+  two presses with assistive technology) — when the call or message is blind, a batch leg is
+  unread, or the simulation did not come back, is not offered, was not confirmed by a second
+  provider, or reverts. While the simulation is still out, the confirm is shut ("Checking…"),
+  so "Sign anyway" never flashes over a check that comes back plain.
+- **Refuse blind signing** (Settings → Security, `prefs::keys::REFUSE_BLIND_SIGNING`, off by
+  default) turns every "… anyway" into a refusal.
+- **Multisig.** A multisig review adds a state diff (`debug_traceCall`) that refuses any
+  undeclared change to who controls the multisig, with no override
+  (`multisig_review::StateVerdict`).
+
+What simulation does not do: it is one block's view, not the execution; two colluding providers
+can agree on a lie; and a Vela account's own transactions get no state diff.

@@ -207,7 +207,7 @@ pnpm preview    # wrangler dev of the built worker on :4173
 
 The step-by-step guide for users is **[getvela.app/docs/self-hosting](https://getvela.app/docs/self-hosting)**; this section is the developer summary.
 
-The wallet uses four Vela-operated services by default. Each can be replaced in **Settings → Advanced → Service Endpoints** (desktop: Settings → Service Endpoints). Defaults are in `rust/crates/vela-core/src/app/network_admin.rs`.
+The wallet uses four Vela-operated services by default. Each can be replaced in **Settings → Advanced → Service Endpoints** (desktop: Settings → Service Endpoints). Defaults are in `rust/crates/vela-core/src/service_defaults.rs`, the one source every shell reads (`docs/multisig-machines.md` §28; `network_admin.rs` keeps aliases).
 
 | Service | Default | Repository | `/api/health` `service` |
 | --- | --- | --- | --- |
