@@ -35,6 +35,19 @@ export interface MultisigMessages {
 	 * words. Absent in fixtures that draw no refusal ({@link testBuildRefused}).
 	 */
 	testBuild?: { productionWriteRefused: string };
+	/**
+	 * R22 / r21-1: the signing sheet's words a multisig button shares — a held
+	 * confirm's ("Hold to confirm", "Press again to confirm"), and an
+	 * execution that expired before it was submitted, said as the Send says
+	 * it ("Not sent", `componentsUi.signing.expired`). Absent in fixtures that
+	 * draw none: the buttons are then plain and the expiry is said generically.
+	 */
+	signing?: {
+		holdToConfirm: string;
+		confirmAgain: string;
+		notSent: string;
+		expired: string;
+	};
 	switcher: {
 		section: string;
 		create: string;
@@ -813,6 +826,18 @@ export interface ReviewMessages {
 	stateDeclared: string;
 	/** `{{network}}`: no state-diff source; only the decoding rules stand. */
 	stateUnread: string;
+	/**
+	 * R22 (review 1-2), `{{network}}`: one node answered the state diff and
+	 * nobody independent confirmed it (`reason: uncorroborated`), or two
+	 * independent nodes disagreed (`reason: disagreed`).
+	 */
+	stateUnconfirmed: string;
+	stateDisagreed: string;
+	/**
+	 * R22: "Refuse blind signing" is on and this review signs only "… anyway"
+	 * — the door's `reason_key` (`home.multisig.review.blindRefused`).
+	 */
+	blindRefused: string;
 	sourceTrace: string;
 	sourceProbe: string;
 	/** What moves was read from the probe's balances (no simulation offered). */
@@ -1649,6 +1674,9 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		stateUnchanged: '',
 		stateDeclared: '',
 		stateUnread: '',
+		stateUnconfirmed: '',
+		stateDisagreed: '',
+		blindRefused: '',
 		sourceTrace: '',
 		sourceProbe: '',
 		movesProbe: '',

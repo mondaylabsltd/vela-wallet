@@ -170,6 +170,8 @@ export type SettingsPageId =
 	 * extension only, so the route adds its nav entry.
 	 */
 	| 'privacy'
+	/** R22: "Refuse blind signing" — the Security panel (the phone's Security section). */
+	| 'security'
 	| 'about';
 
 /**
@@ -470,6 +472,11 @@ export interface NetworkDetailModel {
 	 * network whose RPC is the person's own.
 	 */
 	onlyMine?: SwitchRowModel;
+	/**
+	 * R22: under the switch — what it means for Vela's safety checks
+	 * (`settingsModals.network.onlyMineTrust`).
+	 */
+	onlyMineTrust?: string;
 	/** The same notice as the row's, beside the RPC it is about. */
 	nodeCallout?: CalloutModel;
 }

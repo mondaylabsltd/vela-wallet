@@ -107,6 +107,12 @@
 		 */
 		analytics?: SwitchRowModel;
 		/**
+		 * R22: the Security section — "Refuse blind signing", with its live
+		 * state (`refuse-blind.svelte.ts`), placed above Advanced so it is
+		 * found. Absent in the gallery.
+		 */
+		security?: { title: string; row: SwitchRowModel };
+		/**
 		 * Spec 103: Settings → AI agent, with its live state — web only, so the
 		 * route adds the row that opens it. Absent in the gallery.
 		 */
@@ -167,6 +173,7 @@
 		onstorageclear,
 		onprefevent,
 		analytics,
+		security,
 		agent,
 		sites,
 		onaccountselect,
@@ -264,6 +271,17 @@
 		close();
 		page = 'home';
 		if (!SECTIONS_OF_HOME.has(id)) selectRow(id);
+		return true;
+	}
+
+	/**
+	 * R22: one network's editor — its RPC field and "Only use my node" right
+	 * under it (the signing sheet's hint under an unconfirmed check, `?network=`).
+	 */
+	export function openNetwork(id: string): boolean {
+		close();
+		onnetevent?.({ kind: 'select-network', id });
+		page = 'network-detail';
 		return true;
 	}
 
@@ -470,6 +488,16 @@
 					{/if}
 
 					{#each sections as section, index (index)}
+						{#if security !== undefined && section.collapsible === true}
+							<!-- R22: Security, above Advanced — "Refuse blind signing" is
+							     found without opening anything. -->
+							<SectionLabel label={security.title} />
+							<SwitchRow
+								row={security.row}
+								divider={false}
+								onchange={(on) => onprefevent?.({ kind: 'refuse-blind', on })}
+							/>
+						{/if}
 						{#if section.label === undefined && index > 0}
 							<!-- A group with no heading still starts a group: without the
 							     air a heading would have given it, About ran straight on

@@ -97,7 +97,9 @@ const signAndSubmit: SignEffect = {
 		credential_id: 'cred-1',
 		max_fee_per_gas: null,
 		gas_fee_token: null,
-		quoted_fee: null
+		quoted_fee: null,
+		review:
+			'{"kind":"calls","chain_id":100,"account":"0x88cCA0EeDbF2C4426110bbFc998F048689266894","calls":[{"to":"0x0000000000000000000000000000000000000001","value":"1","data":"0x"}],"fee":null}'
 	}
 };
 

@@ -63,6 +63,9 @@
 	import { adviceCard } from '$lib/agent/advisor';
 	import PageHandoffSheet from '$lib/signing/ui/PageHandoffSheet.svelte';
 	import { pageHandoff } from '$lib/signing/page-handoff.svelte';
+	import { refuseBlind } from '$lib/settings/refuse-blind.svelte';
+	import { ownNodeSettingsHref } from '$lib/settings/own-node-href';
+	import { ownNodes } from '$lib/services/own-node.svelte';
 
 	interface Props {
 		messages: SigningMessages;
@@ -711,6 +714,16 @@
 			sim: checked !== null && checked.requestId === signView.request?.id ? checked.sim : null,
 			simRechecking: recheckingFor !== null && recheckingFor === signView.request?.id,
 			messageUnread: unreadFor !== null && unreadFor === signView.request?.id,
+			// R22: "Refuse blind signing" — the core's gate refuses an "… anyway".
+			refuseBlind: refuseBlind.current(),
+			// R22: where "Only use my node" is, for an unconfirmed verdict's hint.
+			ownNodeHref: (chainId: number) =>
+				ownNodeSettingsHref(
+					typeof document === 'undefined' ? 'en' : document.documentElement.lang || 'en',
+					chainId
+				),
+			// R22: a network read through the person's own node alone.
+			ownNodeOnly: (chainId: number) => ownNodes.ownOnly.includes(chainId),
 			feeOpen,
 			speed: {
 				view: speedControl.view,
@@ -835,7 +848,20 @@
 		onclosestart={() => (closeIntent = closeIntentNow())}
 		onclose={closeSheet}
 		onretry={() => signRequest.dispatch({ type: 'retry_tapped' })}
-		onconfirm={() => signRequest.dispatch({ type: 'approve_tapped', opts: approveOpts() })}
+		onconfirm={() => {
+			// R22 (D4): a hand-off card this confirm raises carries its posture.
+			const confirm = model.confirm;
+			pageHandoff.posture =
+				(confirm.holdMs ?? 0) > 0 || confirm.danger
+					? {
+							danger: confirm.danger === true,
+							holdMs: confirm.holdMs ?? 0,
+							holdLabel: confirm.holdLabel ?? '',
+							againLabel: confirm.againLabel ?? ''
+						}
+					: null;
+			signRequest.dispatch({ type: 'approve_tapped', opts: approveOpts() });
+		}}
 		onmessageunread={(unread) => (unreadFor = unread ? (signView.request?.id ?? null) : null)}
 		onrecheck={() => simAgain?.()}
 		onchip={guardChip}

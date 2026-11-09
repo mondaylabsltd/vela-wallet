@@ -44,14 +44,21 @@
 		oninput={(value) => onfield?.('rpc', value)}
 		onblur={() => onfieldblur?.('rpc')}
 	/>
+	{#if detail.onlyMine !== undefined}
+		<!-- R22: right under the network's own RPC, never buried — and what it
+		     means for the safety checks, said under it. -->
+		<div class="only-mine">
+			<SwitchRow row={detail.onlyMine} onchange={ononlymine} />
+			{#if detail.onlyMineTrust !== undefined}
+				<p class="trust" data-testid="only-mine-trust">{detail.onlyMineTrust}</p>
+			{/if}
+		</div>
+	{/if}
 	{#if detail.callout !== undefined}
 		<Callout callout={detail.callout} />
 	{/if}
 	{#if detail.nodeCallout !== undefined}
 		<Callout callout={detail.nodeCallout} />
-	{/if}
-	{#if detail.onlyMine !== undefined}
-		<SwitchRow row={detail.onlyMine} onchange={ononlymine} />
 	{/if}
 	<UrlField
 		field={detail.explorer}
@@ -65,6 +72,18 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-3xl);
+	}
+
+	.only-mine {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-sm);
+	}
+
+	.trust {
+		margin: 0;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-subtle);
 	}
 
 	.identity {

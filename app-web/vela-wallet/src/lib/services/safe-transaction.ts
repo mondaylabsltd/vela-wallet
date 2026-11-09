@@ -54,7 +54,7 @@ import {
 } from '$lib/core/kernels';
 import { rpcCall } from './rpc-adapter';
 import { maybeDeliveredOf, PoolFailedError } from './rpc-pool';
-import type { SignedReview } from '$lib/core/generated/SignedReview';
+import type { OperationReview } from './sign-attest';
 import { assertChallengeSigned, attestedSafeOpHash } from './sign-attest';
 import { requestUserOpReceipt, USER_OP_RECEIPT_POLL_INTERVAL_MS } from './tx-reconciler';
 import { clearEstimateReverts, recordEstimateReverts } from './estimate-verdict';
@@ -353,7 +353,10 @@ export async function sendNative(
 	// Pay gas in this whitelisted stablecoin (null/omitted = native).
 	gasFeeToken?: string | null,
 	// In-band chains only: the displayed fee (amount + recipient) — signed verbatim.
-	quotedFee?: QuotedInBandFee
+	quotedFee?: QuotedInBandFee,
+	// R22: a site's request, as the person confirmed it (`SignAndSubmit.review`):
+	// the operation is signed only if it is exactly that (`attestDappSafeOpHash`).
+	review: OperationReview | null = null
 ): Promise<SubmitResult> {
 	if (isTempoChain(chainId)) {
 		// Tempo has no native coin; a native send is unusual but routed for consistency
@@ -365,7 +368,8 @@ export async function sendNative(
 			chainId,
 			publicKeyHex,
 			signFn,
-			quotedFee
+			quotedFee,
+			review
 		);
 	}
 	// In-band settlement: gas is repaid by a batched transfer, not a prefunded gas account.
@@ -376,7 +380,8 @@ export async function sendNative(
 		chainId,
 		publicKeyHex,
 		signFn,
-		quotedFee
+		quotedFee,
+		review
 	);
 }
 
@@ -438,7 +443,10 @@ export async function sendContractCall(
 	// Pay gas in this whitelisted stablecoin (null/omitted = native).
 	gasFeeToken?: string | null,
 	// In-band chains only: the displayed fee (amount + recipient) — signed verbatim.
-	quotedFee?: QuotedInBandFee
+	quotedFee?: QuotedInBandFee,
+	// R22: a site's request, as the person confirmed it (`SignAndSubmit.review`):
+	// the operation is signed only if it is exactly that (`attestDappSafeOpHash`).
+	review: OperationReview | null = null
 ): Promise<SubmitResult> {
 	if (isTempoChain(chainId)) {
 		return sendUserOpTempo(
@@ -448,7 +456,8 @@ export async function sendContractCall(
 			chainId,
 			publicKeyHex,
 			signFn,
-			quotedFee
+			quotedFee,
+			review
 		);
 	}
 	return sendUserOpInBand(
@@ -458,7 +467,8 @@ export async function sendContractCall(
 		chainId,
 		publicKeyHex,
 		signFn,
-		quotedFee
+		quotedFee,
+		review
 	);
 }
 
@@ -478,7 +488,7 @@ export async function sendBatchCalls(
 	quotedFee?: QuotedInBandFee,
 	// A send: the review the person confirmed. The operation is signed only
 	// if it is exactly this (`attestedSafeOpHash`).
-	review: SignedReview | null = null,
+	review: OperationReview | null = null,
 	// The gas the confirmed fee was priced on, fresh and for exactly these
 	// calls (the core's `SubmitUserOp.prepared`): signed without simulating
 	// and measuring again. In-band only; Tempo measures as before.
@@ -1914,7 +1924,7 @@ async function sendUserOpTempo(
 	publicKeyHex: WalletSigner,
 	signFn: SignFn,
 	quotedFee?: QuotedInBandFee,
-	review: SignedReview | null = null
+	review: OperationReview | null = null
 ): Promise<SubmitResult> {
 	await verifyChainReady(chainId);
 
@@ -2169,7 +2179,7 @@ async function sendUserOpInBand(
 	 *  recipient). Signed VERBATIM — what the user saw is what executes. */
 	quotedFee?: QuotedInBandFee,
 	/** A send: the review the person confirmed; signed only if it is exactly this. */
-	review: SignedReview | null = null,
+	review: OperationReview | null = null,
 	/** The gas the confirmed fee was priced on (`PreparedInBandGas`). */
 	prepared: PreparedInBandGas | null = null
 ): Promise<SubmitResult> {

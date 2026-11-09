@@ -50,6 +50,17 @@ export const SIM_WILL_FAIL_REASON_KEY = 'componentsUi.signing.simWillFailReason'
 export const SIM_WILL_FAIL_KEY = 'componentsUi.signing.simWillFail';
 
 /**
+ * R22 (review 1-2): the cautions the core names for a simulation nobody
+ * independent confirmed (`sim_outcome::KEY_UNCONFIRMED`, `KEY_DISAGREED` —
+ * `SimVerdict.notice_key` under `kind: 'unconfirmed'`), and the quiet line it
+ * names when the person's own node answered alone (`KEY_OWN_NODE`,
+ * `SimVerdict.source_key`). `verdict.test.ts` replays the core's vectors.
+ */
+export const SIM_UNCONFIRMED_KEY = 'componentsUi.signing.simUnconfirmed';
+export const SIM_DISAGREED_KEY = 'componentsUi.signing.simDisagreed';
+export const SIM_OWN_NODE_KEY = 'componentsUi.signing.simOwnNode';
+
+/**
  * Spec 102 (D4): the hand-off card's words — the gallery's, and live wherever
  * a signature goes to the account's trusted signing page: every signing sheet
  * (`SigningMessages.handoff`, the page everywhere since 2026-10-30) and a
@@ -324,6 +335,33 @@ export interface SigningMessages {
 	 */
 	simRecheck: string;
 	simRechecking: string;
+	/**
+	 * R22 (review 1-2): the sheet's simulation nobody independent confirmed
+	 * — one node answered (`componentsUi.signing.simUnconfirmed`), or two
+	 * independent nodes disagreed (`…simDisagreed`): the core's
+	 * `SimVerdict.notice_key` under `kind: 'unconfirmed'`.
+	 */
+	simUnconfirmed: string;
+	simDisagreed: string;
+	/**
+	 * R22: "Checked by your own node only" — the quiet line under the balance
+	 * changes when "Only use my node" answered alone (`SimVerdict.source_key`).
+	 */
+	simOwnNode: string;
+	/**
+	 * R22: under an unconfirmed verdict, where a trusted node is set
+	 * (`componentsUi.signing.ownNodeHint`), and its action into this network's
+	 * RPC settings (`home.nodeFallbackOpen`, "Network settings").
+	 */
+	ownNodeHint: string;
+	ownNodeAction: string;
+	/**
+	 * R22 (review 1-3): a held confirm — "Hold to confirm" beside it and as its
+	 * hint (`componentsUi.signing.holdToConfirm`), and the assistive path's
+	 * armed words, "Press again to confirm" (`…confirmAgain`).
+	 */
+	holdToConfirm: string;
+	confirmAgain: string;
 	/**
 	 * A balance row's label for a token nobody vouches for
 	 * (`componentsUi.signing.balanceUnverifiedToken`): the row says this and

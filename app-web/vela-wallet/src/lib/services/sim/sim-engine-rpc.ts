@@ -22,6 +22,7 @@
  * `{ ok: false }` (per-call `status`/`error`), not `null`.
  */
 import { rpcCall } from '../rpc-adapter';
+import { corroboratedEnvelope, type CorroboratedCall } from '../corroborated-read';
 import {
 	deriveAssetDeltas,
 	parseRevertReason,
@@ -63,36 +64,31 @@ function simulatePayload(from: string, calls: SimCall[], stateOverrides?: unknow
 	};
 }
 
-/** The pool gave up: no node answered (the core's wire form for it). */
-const UNREACHABLE_REPLY = '{"unreachable":true}';
-
 /**
- * The same read, UNREAD: the node's reply as it came, for the core to say
- * what it means (`simOutcome` — PR 3 device round). The JSON-RPC envelope
- * itself (`{"result": …}` or `{"error": …}`), or `{"unreachable":true}` when
- * every endpoint failed. Nothing here decides whether a call ran, reverted
- * or could not be checked: this file's own reading (`rpcSimulate`, the
- * port) calls a status that is neither 0 nor 1 a success, and the core calls
- * it "could not check".
+ * The same read, UNREAD and CORROBORATED (R22, review 1-2): both nodes'
+ * replies as they came, in the core's envelope (`rpcCorroboratedEnvelope`)
+ * — the first node's JSON-RPC answer, a second, independent node's
+ * (`witness`), or `ownNode` when the person's own node answered alone — or
+ * `{"unreachable":true}` when every endpoint failed. For the core to say what
+ * it means (`simOutcome`): a reply nobody independent confirmed is
+ * "unconfirmed", never a plain verdict. Nothing here decides whether a call
+ * ran, reverted, could not be checked, or whether the two agree.
  */
 export async function rpcSimulateReply(
 	from: string,
 	calls: SimCall[],
 	chainId: number,
-	stateOverrides?: unknown
+	stateOverrides?: unknown,
+	call?: CorroboratedCall
 ): Promise<string> {
 	// Nothing was asked: an answer nobody can read, never "nothing moves".
 	if (!calls.length || !calls[0]?.to) return '{}';
-	try {
-		const res = await rpcCall(
-			'eth_simulateV1',
-			[simulatePayload(from, calls, stateOverrides), 'latest'],
-			chainId
-		);
-		return JSON.stringify(res ?? {});
-	} catch {
-		return UNREACHABLE_REPLY;
-	}
+	return corroboratedEnvelope(
+		'eth_simulateV1',
+		[simulatePayload(from, calls, stateOverrides), 'latest'],
+		chainId,
+		call
+	);
 }
 
 /**

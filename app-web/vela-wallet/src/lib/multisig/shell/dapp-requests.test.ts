@@ -14,6 +14,7 @@ import '$lib/i18n/wasm-init.server';
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MultisigShellDeps } from './handler';
+import { withWitness } from './witnessed.testing';
 
 const SERVICE = 'http://service.test';
 const SAFE = '0x00000000000000000000000000000000000000a1';
@@ -40,34 +41,37 @@ const { multisigUi } = await import('../core/ui.svelte');
 
 function deps(over: Partial<MultisigShellDeps> = {}): MultisigShellDeps {
 	const map = new Map<string, string>();
-	return {
-		// The mailbox is out of reach: a draft cannot take a number.
-		fetch: (async () => new Response('{}', { status: 503 })) as unknown as typeof fetch,
-		rpc: async () => ({ error: { code: -32000, message: 'no node here' } }),
-		storage: () => ({
-			getItem: (k: string) => map.get(k) ?? null,
-			setItem: (k: string, v: string) => void map.set(k, v),
-			removeItem: (k: string) => void map.delete(k)
-		}),
-		now: () => 1_000,
-		random: (n) => new Uint8Array(n).fill(0xab),
-		passkey: async () => ({ type: 'passkey_cancelled' }),
-		askRisk: async () => false,
-		sendCalls: async () => ({ type: 'calls_cancelled' }),
-		quoteCalls: async () => ({ type: 'quote_failed', detail: 'none' }),
-		simulate: async () => null,
-		recipientFacts: async () => ({ isContract: null, firstTime: null }),
-		userOpStatus: async () => null,
-		peer: {
-			open: async () => ({ room: 'r1', invite: null, pairing: null }),
-			send: async () => {},
-			receive: async () => ({ closed: 'closed' }),
-			close: async () => {}
+	return withWitness(
+		{
+			// The mailbox is out of reach: a draft cannot take a number.
+			fetch: (async () => new Response('{}', { status: 503 })) as unknown as typeof fetch,
+			rpc: async () => ({ error: { code: -32000, message: 'no node here' } }),
+			storage: () => ({
+				getItem: (k: string) => map.get(k) ?? null,
+				setItem: (k: string, v: string) => void map.set(k, v),
+				removeItem: (k: string) => void map.delete(k)
+			}),
+			now: () => 1_000,
+			random: (n) => new Uint8Array(n).fill(0xab),
+			passkey: async () => ({ type: 'passkey_cancelled' }),
+			askRisk: async () => false,
+			sendCalls: async () => ({ type: 'calls_cancelled' }),
+			quoteCalls: async () => ({ type: 'quote_failed', detail: 'none' }),
+			simulate: async () => null,
+			recipientFacts: async () => ({ isContract: null, firstTime: null }),
+			userOpStatus: async () => null,
+			peer: {
+				open: async () => ({ room: 'r1', invite: null, pairing: null }),
+				send: async () => {},
+				receive: async () => ({ closed: 'closed' }),
+				close: async () => {}
+			},
+			wallet: async () => null,
+			notice: () => {},
+			...over
 		},
-		wallet: async () => null,
-		notice: () => {},
-		...over
-	};
+		over
+	);
 }
 
 const account = {

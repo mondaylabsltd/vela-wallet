@@ -12,4 +12,19 @@ block: ConfirmBlock | null,
  * signing in progress, the funding sheet, a refusal's own panel, a short
  * fee coin's line under the fee).
  */
-key: string | null, };
+key: string | null, 
+/**
+ * R22: the confirm is "… anyway" ("Sign anyway", in the danger style):
+ * something Vela checks could not be read ([`posture`]).
+ */
+anyway: boolean, 
+/**
+ * R22: the request is a danger (a drain's shape, an unlimited grant, a
+ * revert, `eth_sign`): drawn in the danger style.
+ */
+danger: boolean, 
+/**
+ * R22: hold the confirm this long before it acts ([`HOLD_TO_CONFIRM_MS`];
+ * `0`: a plain press), or confirm twice through the accessible path.
+ */
+hold_ms: number, };

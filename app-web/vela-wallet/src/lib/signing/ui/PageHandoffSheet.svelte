@@ -92,7 +92,19 @@
 			},
 			page: { name: h.official ? m.official : h.host, host: h.host },
 			integrity,
-			open: { label: m.open, enabled: h.phase === 'ready' || h.phase === 'waiting' },
+			open: {
+				label: m.open,
+				enabled: h.phase === 'ready' || h.phase === 'waiting',
+				// R22 (D4): the Open is the confirm that raised the card.
+				...(pageHandoff.posture && h.kind !== 'ceremony'
+					? {
+							danger: pageHandoff.posture.danger,
+							holdMs: pageHandoff.posture.holdMs,
+							holdLabel: pageHandoff.posture.holdLabel,
+							againLabel: pageHandoff.posture.againLabel
+						}
+					: {})
+			},
 			waiting:
 				h.phase === 'waiting'
 					? { title: m.waiting, hint: m.waitingHint, reopen: m.reopen }

@@ -3,11 +3,12 @@
  * pays for (r4-5, r4-7). When it cannot run and each look's pace are the
  * machine's (app_multisig_presence.rs, app_multisig_proposals.rs).
  */
+import '$lib/i18n/wasm-init.server';
 import { describe, expect, it } from 'vitest';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
 import { blockOf } from '../shell/proposal-failure';
 
-const { feeCoin, feeWords, whyText } = await import('./execution-words');
+const { balanceCoin, feeCoin, feeWords, whyText } = await import('./execution-words');
 
 type Priced = Extract<import('./execution').ExecutionPreview, { kind: 'priced' }>;
 
@@ -136,15 +137,19 @@ describe('the fee line (r4-7)', () => {
 
 	it('r5reg-15: reads in the wallet’s fee precision — never six decimals, never "0"', () => {
 		const at = (wei: bigint) => ({ ...priced(), fee: { amount: wei, recipient: '0xfe' } });
-		// 0.035412… USDC read "0.035412 USDC": four decimals, as the wallet's fee rows.
+		// 0.035412… USDC read "0.035412 USDC": four decimals, as the wallet's fee
+		// rows — r21-2: rounded UP, never below the charge.
 		expect(feeWords(words(), at(35_412_345_678_901_234n), opts).fee).toBe(
-			'Network fee ≈ 0.0354 USDC, paid by Alice'
+			'Network fee ≈ 0.0355 USDC, paid by Alice'
 		);
 		// A tiny fee widens to its first digit, so it never reads as free.
 		expect(feeWords(words(), at(12_345_678_901_234n), opts).fee).toBe(
-			'Network fee ≈ 0.000012 USDC, paid by Alice'
+			'Network fee ≈ 0.000013 USDC, paid by Alice'
 		);
-		expect(feeCoin(35_412_345_678_901_234n, 'USDC')).toBe('0.0354 USDC');
+		expect(feeCoin(35_412_345_678_901_234n, 'USDC')).toBe('0.0355 USDC');
+		// What the executor HOLDS is cut down, never shown as more than there is.
+		expect(balanceCoin(35_412_345_678_901_234n, 'USDC')).toBe('0.0354 USDC');
+		expect(balanceCoin(12_345_678_901_234n, 'USDC')).toBe('0.000012 USDC');
 	});
 
 	it('names the executor’s own first deployment, and no share it could not measure', () => {

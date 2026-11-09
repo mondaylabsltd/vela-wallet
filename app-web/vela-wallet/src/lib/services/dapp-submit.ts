@@ -52,7 +52,13 @@ import {
 } from './safe-transaction';
 import { enforceNoUnlimited } from './approval-guard';
 import { toShellCall } from './amount-codec';
-import { assertChallengeSigned, attestedSafeMessageHash } from './sign-attest';
+import {
+	assertChallengeSigned,
+	attestedDappDigest,
+	attestedSafeMessageHash,
+	SignAttestError,
+	type DappReviewed
+} from './sign-attest';
 import { findAccountByAddress, findAccountByCredentialId, type SignerAccount } from './accounts';
 import { spaceNetworksSync } from './networks';
 import { resolveChainId } from './chain-id';
@@ -352,13 +358,17 @@ async function signSafeMessage(
 function attestedMessageHash(
 	originalHash: Uint8Array,
 	chainId: number,
-	safeAddress: string
+	safeAddress: string,
+	review: string | null | undefined
 ): Uint8Array {
+	// R22 (review 1-5): only the digest the sheet read, for this account — the
+	// core's check (`attestDappMessageHash`) — is wrapped and signed.
+	const digest = attestedDappDigest(originalHash, safeAddress, review);
 	return attestedSafeMessageHash(
-		originalHash,
+		digest,
 		chainId,
 		safeAddress,
-		computeSafeMessageHash(originalHash, chainId, safeAddress)
+		computeSafeMessageHash(digest, chainId, safeAddress)
 	);
 }
 
@@ -393,12 +403,17 @@ export async function handlePersonalSign(
 	account: SigningAccount,
 	safeAddress: string,
 	chainId: number,
-	hooks?: DAppSubmitHooks
+	hooks?: DAppSubmitHooks,
+	// R22: what the person confirmed (`SignAndSubmit.review`); none: refused.
+	review?: string | null
 ): Promise<string> {
 	// personal_sign has no embedded chainId — use the fallback
 	assertChainSupported(chainId);
 
-	const hexMsg = request.params[0] as string;
+	// R22: `eth_sign` carries its message second (`[account, message]`) and is
+	// the same EIP-191 digest the core reads for the sheet
+	// (`sign_message::original_hash`) — what is signed is what was shown.
+	const hexMsg = request.params[request.method === 'eth_sign' ? 1 : 0] as string;
 	const msgBytes = personalSignBytes(hexMsg);
 
 	const prefix = new TextEncoder().encode(`\x19Ethereum Signed Message:\n${msgBytes.length}`);
@@ -407,7 +422,7 @@ export async function handlePersonalSign(
 	combined.set(msgBytes, prefix.length);
 	const originalHash = keccak256(combined);
 
-	const safeHash = attestedMessageHash(originalHash, chainId, safeAddress);
+	const safeHash = attestedMessageHash(originalHash, chainId, safeAddress, review);
 	const { assertion, signerAddress } = await signSafeMessage(
 		request,
 		account,
@@ -428,7 +443,9 @@ export async function handleSignTypedData(
 	account: SigningAccount,
 	safeAddress: string,
 	chainId: number,
-	hooks?: DAppSubmitHooks
+	hooks?: DAppSubmitHooks,
+	// R22: what the person confirmed (`SignAndSubmit.review`); none: refused.
+	review?: string | null
 ): Promise<string> {
 	// The core's reading — the very document the sheet decoded (audit
 	// 2026-10-01). A request that is not one is never signed.
@@ -443,7 +460,7 @@ export async function handleSignTypedData(
 	assertChainSupported(effectiveChainId);
 
 	const originalHash = hashTypedData(typedData);
-	const safeHash = attestedMessageHash(originalHash, effectiveChainId, safeAddress);
+	const safeHash = attestedMessageHash(originalHash, effectiveChainId, safeAddress, review);
 	const { assertion, signerAddress } = await signSafeMessage(
 		request,
 		account,
@@ -470,8 +487,11 @@ export async function handleSendTransaction(
 	gasFeeToken?: string | null,
 	// In-band: the displayed fee (amount + recipient) — signed verbatim.
 	quotedFee?: QuotedInBandFee,
-	hooks?: DAppSubmitHooks
+	hooks?: DAppSubmitHooks,
+	// R22: what the person confirmed (`SignAndSubmit.review`); none: refused.
+	review?: string | null
 ): Promise<string> {
+	const reviewed = dappReviewed(review);
 	const txDict = request.params[0] as Record<string, string>;
 	const effectiveChainId = resolveChainId(chainId, txDict.chainId);
 	assertChainSupported(effectiveChainId);
@@ -514,10 +534,21 @@ export async function handleSendTransaction(
 		signFn,
 		maxFeeOverride,
 		gasFeeToken,
-		quotedFee
+		quotedFee,
+		reviewed
 	);
 
 	return answerFor(txResult, effectiveChainId, onSubmitted, hooks);
+}
+
+/**
+ * R22 (review 1-5): the request's review as the operation is attested
+ * against — refused at once, before anything is built or signed, when the
+ * core handed none.
+ */
+function dappReviewed(review: string | null | undefined): DappReviewed {
+	if (!review) throw new SignAttestError('No review of this request; nothing was signed.');
+	return { dapp: review };
 }
 
 /**
@@ -543,7 +574,8 @@ function sendOneCall(
 	signFn: SignFn,
 	maxFeeOverride: bigint | undefined,
 	gasFeeToken: string | null | undefined,
-	quotedFee: QuotedInBandFee | undefined
+	quotedFee: QuotedInBandFee | undefined,
+	review: DappReviewed
 ): Promise<SubmitResult> {
 	if (call.data === '0x' || call.data === '') {
 		return sendNative(
@@ -555,7 +587,8 @@ function sendOneCall(
 			signFn,
 			maxFeeOverride,
 			gasFeeToken,
-			quotedFee
+			quotedFee,
+			review
 		);
 	}
 	return sendContractCall(
@@ -568,7 +601,8 @@ function sendOneCall(
 		signFn,
 		maxFeeOverride,
 		gasFeeToken,
-		quotedFee
+		quotedFee,
+		review
 	);
 }
 
@@ -673,7 +707,9 @@ export async function handleGenericSign(
 	account: SigningAccount,
 	safeAddress: string,
 	chainId: number,
-	hooks?: DAppSubmitHooks
+	hooks?: DAppSubmitHooks,
+	// R22: what the person confirmed (`SignAndSubmit.review`); none: refused.
+	review?: string | null
 ): Promise<string> {
 	assertChainSupported(chainId);
 
@@ -681,7 +717,7 @@ export async function handleGenericSign(
 	const jsonBytes = new TextEncoder().encode(jsonStr);
 	const originalHash = keccak256(jsonBytes);
 
-	const safeHash = attestedMessageHash(originalHash, chainId, safeAddress);
+	const safeHash = attestedMessageHash(originalHash, chainId, safeAddress, review);
 	const { assertion, signerAddress } = await signSafeMessage(
 		request,
 		account,
@@ -739,7 +775,11 @@ export async function handleDAppRequest(
 	guardOwner: SubmitGuardOwner = 'ts',
 	// Spec 082: the claims, the ceremony and the answer window. Absent → the
 	// request is signed as before (a caller with no asker to lose).
-	hooks?: DAppSubmitHooks
+	hooks?: DAppSubmitHooks,
+	// R22 (review 1-5): the request as the person confirmed it — the core's
+	// `DappReview` JSON (`SignAndSubmit.review`). Every transaction, batch and
+	// signature is hashed only against it; none, and nothing is signed.
+	review?: string | null
 ): Promise<unknown> {
 	const { method } = request;
 
@@ -759,7 +799,8 @@ export async function handleDAppRequest(
 			onSubmitted,
 			gasFeeToken,
 			quotedFee,
-			hooks
+			hooks,
+			review
 		);
 	} else if (method === 'wallet_sendCalls') {
 		return handleSendCalls(
@@ -771,14 +812,15 @@ export async function handleDAppRequest(
 			quotedFee,
 			guardOwner,
 			onSubmitted,
-			hooks
+			hooks,
+			review
 		);
-	} else if (method === 'personal_sign') {
-		return handlePersonalSign(request, account, safeAddress, chainId, hooks);
+	} else if (method === 'personal_sign' || method === 'eth_sign') {
+		return handlePersonalSign(request, account, safeAddress, chainId, hooks, review);
 	} else if (method.includes('signTypedData')) {
-		return handleSignTypedData(request, account, safeAddress, chainId, hooks);
+		return handleSignTypedData(request, account, safeAddress, chainId, hooks, review);
 	} else {
-		return handleGenericSign(request, account, safeAddress, chainId, hooks);
+		return handleGenericSign(request, account, safeAddress, chainId, hooks, review);
 	}
 }
 
@@ -807,8 +849,11 @@ export async function handleSendCalls(
 	// Spec 082: the op is reported to the core like any other on-chain request,
 	// so the batch is recorded, tracked and ended by the tracker.
 	onSubmitted?: OnSubmitted,
-	hooks?: DAppSubmitHooks
+	hooks?: DAppSubmitHooks,
+	// R22: what the person confirmed (`SignAndSubmit.review`); none: refused.
+	review?: string | null
 ): Promise<string> {
+	const reviewed = dappReviewed(review);
 	const payload = request.params[0] as {
 		calls: Array<{
 			to: string;
@@ -879,7 +924,8 @@ export async function handleSendCalls(
 			signFn,
 			undefined,
 			gasFeeToken,
-			quotedFee
+			quotedFee,
+			reviewed
 		);
 		return batchIdFor(txResult, onSubmitted);
 	}
@@ -893,7 +939,8 @@ export async function handleSendCalls(
 		signFn,
 		undefined,
 		gasFeeToken,
-		quotedFee
+		quotedFee,
+		reviewed
 	);
 	return batchIdFor(txResult, onSubmitted);
 }

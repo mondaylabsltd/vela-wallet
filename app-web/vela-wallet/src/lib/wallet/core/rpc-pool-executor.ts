@@ -474,7 +474,14 @@ export function createRpcPoolExecutor(
 					return result({ outcome: { type: 'network' }, latencyMs: 0 });
 				}
 
-				if (!hedge && held.kind === 'rpc' && hedgePolicy.isHedged('rpc', operation.method)) {
+				// R22: a corroborated read is never hedged — an early answer would
+				// skip its witness (the core leaves it out of `pending_urls` too).
+				if (
+					!hedge &&
+					held.kind === 'rpc' &&
+					held.corroborate !== true &&
+					hedgePolicy.isHedged('rpc', operation.method)
+				) {
 					hedge = {
 						method: operation.method,
 						params: held.params,
@@ -502,6 +509,9 @@ export function createRpcPoolExecutor(
 			}
 
 			case 'probe_chain_id': {
+				// R22: asked during a fastest-RPC race AND before a corroborated
+				// read's POST (an endpoint says which chain it serves first) —
+				// answered every time, or that read waits for ever.
 				const { reported, latencyMs } = await probe(operation.url, operation.timeout_ms);
 				return {
 					type: 'chain_id_probed',

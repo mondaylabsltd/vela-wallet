@@ -140,7 +140,7 @@ test('an unreachable chain is SAID, never shown as a confident zero (T152 findin
 	// Ethereum's only endpoint answers 500 to everything: the pool exhausts it,
 	// the core marks the chain failed, and — since it is not rate-limited — it
 	// is a banner chain. Registered last so it wins over the JSON stub.
-	await page.route(/stub-rpc\.test\/rpc\/1$/, (route) =>
+	await page.route(/(?:stub|witness)-rpc\.test\/rpc\/1$/, (route) =>
 		route.fulfill({ status: 500, body: 'no' })
 	);
 	await openHome(page);
@@ -160,7 +160,7 @@ test('an unreachable chain’s status line opens the list, its row the RPC fix, 
 }) => {
 	// The same dead endpoint as above; the JSON stub still answers any other
 	// path under /rpc/<n>, which is what makes a "working URL" possible here.
-	await page.route(/stub-rpc\.test\/rpc\/1$/, (route) =>
+	await page.route(/(?:stub|witness)-rpc\.test\/rpc\/1$/, (route) =>
 		route.fulfill({ status: 500, body: 'no' })
 	);
 	await openHome(page);
@@ -242,7 +242,7 @@ test('every unreachable network is listed with what was last read there, and one
 }, testInfo) => {
 	// BNB Chain and Polygon are down from the start: never read.
 	let bnbDown = true;
-	await page.route(/stub-rpc\.test\/rpc\/(56|137)$/, (route) =>
+	await page.route(/(?:stub|witness)-rpc\.test\/rpc\/(56|137)$/, (route) =>
 		route.request().url().endsWith('/56') && !bnbDown
 			? route.fallback()
 			: route.fulfill({ status: 500, body: 'no' })
@@ -255,7 +255,7 @@ test('every unreachable network is listed with what was last read there, and one
 
 	// Ethereum goes quiet after it was read holding 1.5 ETH. Opening the list
 	// reads every chain again, so it joins — first, with what it last held.
-	await page.route(/stub-rpc\.test\/rpc\/1$/, (route) =>
+	await page.route(/(?:stub|witness)-rpc\.test\/rpc\/1$/, (route) =>
 		route.fulfill({ status: 500, body: 'no' })
 	);
 	// r13-4: the pool may name it before the list is opened (three silent
@@ -315,7 +315,7 @@ test('the refresh under the total reads again, says so, and moves nothing (issue
 	// and read "Updated now". The read is out as long as the test says.
 	let releaseRead: () => void = () => {};
 	const readHeld = new Promise<void>((resolve) => (releaseRead = resolve));
-	await page.route(/stub-rpc\.test\/rpc\/(\d+)/, async (route) => {
+	await page.route(/(?:stub|witness)-rpc\.test\/rpc\/(\d+)/, async (route) => {
 		await readHeld;
 		return route.fallback();
 	});

@@ -33,7 +33,14 @@ import type { GuardEditorView } from '$lib/core/generated/GuardEditorView';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignApproveOpts } from '$lib/core/generated/SignApproveOpts';
 import type { SignView } from '$lib/core/generated/SignView';
-import { feeAmountText, feeLineParts, feeOptionPriceUsd, feeParts } from '$lib/flows/fee-line';
+import {
+	feeAmountText,
+	feeLineParts,
+	feeOptionPriceUsd,
+	feeParts,
+	NATIVE_FEE_PLACES,
+	TOKEN_FEE_PLACES
+} from '$lib/flows/fee-line';
 import { offeredTier, speedControlModel } from '$lib/flows/speed-control';
 import type { FeeSpeedModel } from '$lib/flows/model';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
@@ -132,6 +139,22 @@ export interface SigningLiveInputs {
 	 * Absent: nothing observed, nothing held.
 	 */
 	messageUnread?: boolean;
+	/**
+	 * R22: the person's "Refuse blind signing" (`refuseBlindSigning`) — every
+	 * request that signs only "… anyway" is refused by the core's gate.
+	 */
+	refuseBlind?: boolean;
+	/**
+	 * R22: where a network's RPC settings open ("Only use my node"), for the
+	 * hint under a simulation nobody independent confirmed. Absent: none.
+	 */
+	ownNodeHref?: (chainId: number) => string;
+	/**
+	 * R22: whether a network is read through the person's own node alone
+	 * ("Only use my node") — its checks carry the own-node line, and the
+	 * verdict's place keeps room for it. Absent: none is.
+	 */
+	ownNodeOnly?: (chainId: number) => boolean;
 	m: SigningMessages;
 	identity: WalletIdentity;
 	identicon: (seed: string) => string;
@@ -1418,7 +1441,7 @@ function feeSelector(
 	// 0.000083 OKB fee as "~0 OKB", and a fee that reads as free is the one
 	// thing this sheet may never say.
 	const feeAmount = (raw: string, decimals: number, contract: string | null) =>
-		feeAmountText(Number(raw) / 10 ** decimals, contract === null ? 6 : 4);
+		feeAmountText(raw, decimals, contract === null ? NATIVE_FEE_PLACES : TOKEN_FEE_PLACES);
 	const chainId = sign.request?.chain_id ?? 1;
 	return inputs.feeOpen === true && fee.options.length > 1
 		? {
@@ -1534,7 +1557,8 @@ function verdictNow(inputs: SigningLiveInputs): VerdictShown {
 			said: landedVerdict(sim, {
 				m,
 				nativeSymbol: nativeSymbol(request.chain_id),
-				preset: resolvedFormatKeys().number
+				preset: resolvedFormatKeys().number,
+				...ownNodeHrefOf(inputs, request.chain_id)
 			})
 		};
 	}
@@ -1550,9 +1574,15 @@ function verdictNow(inputs: SigningLiveInputs): VerdictShown {
 		said: landedVerdict(sim, {
 			m,
 			nativeSymbol: nativeSymbol(request.chain_id),
-			preset: resolvedFormatKeys().number
+			preset: resolvedFormatKeys().number,
+			...ownNodeHrefOf(inputs, request.chain_id)
 		})
 	};
+}
+
+/** R22: the hint's way to this network's RPC settings, when the host offers one. */
+function ownNodeHrefOf(inputs: SigningLiveInputs, chainId: number): { ownNodeHref?: string } {
+	return inputs.ownNodeHref ? { ownNodeHref: inputs.ownNodeHref(chainId) } : {};
 }
 
 /** The verdict's place is itself saying that the transaction is expected to fail. */
@@ -1600,7 +1630,10 @@ function withSimVerdict(
 		{
 			kind: 'verdict',
 			inner: [inner],
-			rooms: verdictRooms(inputs.m),
+			rooms: verdictRooms(
+				inputs.m,
+				inputs.sign.request ? inputs.ownNodeOnly?.(inputs.sign.request.chain_id) === true : false
+			),
 			landed: shown.stage === 'landed'
 		}
 	];
@@ -2000,13 +2033,19 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	// PR 3: and, last, the sheet's own simulation — while its verdict is out
 	// (`sign.sim_checking`) the core holds the confirm and names the line
 	// ("Checking what this transaction does…"). Nothing is ANDed on here.
+	// R22 (review 1-3): and the sheet's own simulation verdict and the
+	// person's "Refuse blind signing" — the core says from them how hard the
+	// confirm is (`anyway`, `danger`, `hold_ms`) and refuses every "… anyway"
+	// for a person who asked it to (`blind_refused`).
 	const confirmState = signConfirmState(
 		sign,
 		guard,
 		clear,
 		fee,
 		inputs.speed?.view.tier ?? null,
-		inputs.messageUnread === true
+		inputs.messageUnread === true,
+		inputs.sim?.verdict ?? null,
+		inputs.refuseBlind === true
 	);
 	const enabled = confirmState?.enabled === true;
 	// r18-6 (§31): the core is still reading whether this account owns the
@@ -2015,7 +2054,17 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	// a shut, plain "Sign" under "Reading the request…": never "… anyway",
 	// never the danger tone, whatever the clear-signing view says.
 	const ownerReading = sign.confirm_block === 'reading';
-	const anyway = clear.sign_anyway && !ownerReading;
+	// R22: "… anyway" is the core's (`ConfirmState.anyway` — any check Vela
+	// could not read: blind, a leg nobody reads, a simulation not back, not
+	// offered, unconfirmed or failing), never a rule of this shell's.
+	// While the core still holds the confirm for the sheet's own simulation
+	// (`sim_checking`) the request is not judged yet either: the shut confirm
+	// stays the plain label — it never flashes "… anyway" in red for the
+	// verdict's few hundred ms and turns back, nothing can be pressed then.
+	const judging = ownerReading || (sign.sim_checking && !enabled);
+	const anyway = confirmState?.anyway === true && !judging;
+	const danger = (anyway || confirmState?.danger === true) && !judging;
+	const holdMs = judging ? 0 : (confirmState?.hold_ms ?? 0);
 	// signer-11: an open confirm after a passkey prompt that signed nothing
 	// says so — the confirm is the way to try again.
 	const note =
@@ -2105,8 +2154,9 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 							? clear.confirm.intent
 							: m.confirmPlain,
 			enabled,
-			// cs-8: nobody could read this request — the red "Sign anyway".
-			...(anyway ? { danger: true } : {}),
+			// cs-8 / R22: an "… anyway" or a danger — the danger style, held.
+			...(danger ? { danger: true } : {}),
+			...(holdMs > 0 ? { holdMs, holdLabel: m.holdToConfirm, againLabel: m.confirmAgain } : {}),
 			...(note
 				? {
 						// cs-17: a grant-all waits for "Allow all" or "Revoke", not an amount.

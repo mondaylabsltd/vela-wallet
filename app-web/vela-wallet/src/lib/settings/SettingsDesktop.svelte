@@ -77,6 +77,12 @@
 		 */
 		analytics?: SwitchRowModel;
 		/**
+		 * R22: the Security section — "Refuse blind signing", with its live
+		 * state (`refuse-blind.svelte.ts`), placed above Advanced so it is
+		 * found. Absent in the gallery.
+		 */
+		security?: { title: string; row: SwitchRowModel };
+		/**
 		 * Spec 103: Settings → AI agent, with its live state — web only, so the
 		 * route adds its nav entry. Absent in the gallery.
 		 */
@@ -129,6 +135,7 @@
 		onnetevent,
 		onprefevent,
 		analytics,
+		security,
 		agent,
 		sites,
 		onchainselect,
@@ -205,6 +212,8 @@
 				return { title: sites?.title ?? model.title, description: sites?.subtitle };
 			case 'privacy':
 				return { title: model.privacy.title, description: undefined };
+			case 'security':
+				return { title: security?.title ?? model.title, description: undefined };
 			case 'signing-pages':
 				return {
 					title: model.signingPages?.title ?? model.title,
@@ -246,6 +255,7 @@
 		'agent',
 		'sites',
 		'privacy',
+		'security',
 		'signing-pages'
 	]);
 
@@ -266,8 +276,20 @@
 		if (!PANELS.has(panel) || (panel === 'agent' && agent === undefined)) return false;
 		if (panel === 'sites' && sites === undefined) return false;
 		if (panel === 'privacy' && analytics === undefined) return false;
+		if (panel === 'security' && security === undefined) return false;
 		closeOverlay();
 		openPage(panel as SettingsPageId);
+		return true;
+	}
+
+	/**
+	 * R22: one network's editor, expanded in the networks panel — its RPC field
+	 * and "Only use my node" right under it (`?network=`).
+	 */
+	export function openNetwork(id: string): boolean {
+		closeOverlay();
+		openPage('networks');
+		onnetevent?.({ kind: 'select-network', id });
 		return true;
 	}
 
@@ -542,6 +564,11 @@
 				<SigningPagesPanel panel={model.signingPages} />
 			{:else if page === 'about'}
 				<AboutPanel panel={model.about} layout="inline" />
+			{:else if page === 'security' && security !== undefined}
+				<SwitchRow
+					row={security.row}
+					onchange={(on) => onprefevent?.({ kind: 'refuse-blind', on })}
+				/>
 			{:else if page === 'privacy' && analytics !== undefined}
 				<SwitchRow row={analytics} onchange={(on) => onprefevent?.({ kind: 'analytics', on })} />
 			{:else if page === 'sites' && sites !== undefined}

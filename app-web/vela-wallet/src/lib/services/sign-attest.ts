@@ -22,6 +22,8 @@
  */
 
 import {
+	attestDappMessageHash,
+	attestDappSafeOpHash,
 	attestReviewedSafeOpHash,
 	attestSafeMessageHash,
 	attestSafeOpHash,
@@ -33,6 +35,22 @@ import type { SignedReview } from '$lib/core/generated/SignedReview';
 
 export class SignAttestError extends Error {
 	override readonly name = 'SignAttestError';
+}
+
+/**
+ * R22 (review 1-5): a site's request as the person confirmed it — the core's
+ * `DappReview` JSON, frozen from the FINAL params the sheet showed
+ * (`SignAndSubmit.review`).
+ */
+export interface DappReviewed {
+	dapp: string;
+}
+
+/** What an operation is signed against: a send's review, or a site's. */
+export type OperationReview = SignedReview | DappReviewed;
+
+function isDapp(review: OperationReview): review is DappReviewed {
+	return typeof (review as DappReviewed).dapp === 'string';
 }
 
 function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
@@ -59,7 +77,7 @@ export function attestedSafeOpHash(
 	chainId: number,
 	calls: AttestCalls | null,
 	shellHash: Uint8Array,
-	review: SignedReview | null = null
+	review: OperationReview | null = null
 ): Uint8Array {
 	let coreHash: Uint8Array;
 	try {
@@ -67,7 +85,23 @@ export function attestedSafeOpHash(
 	} catch (error) {
 		throw new SignAttestError(`The core refused to attest this operation: ${reason(error)}`);
 	}
-	if (review !== null) {
+	if (review !== null && isDapp(review)) {
+		// R22: a site's transaction or batch — its calls in order, then at most
+		// the one fee leg to the quoted recipient; anything else is refused.
+		let reviewed: Uint8Array;
+		try {
+			reviewed = attestDappSafeOpHash(op, review.dapp, chainId);
+		} catch (error) {
+			throw new SignAttestError(
+				`The operation is not the request the person confirmed; nothing was signed: ${reason(error)}`
+			);
+		}
+		if (!sameBytes(reviewed, coreHash)) {
+			throw new SignAttestError(
+				'The operation is not the request the person confirmed; nothing was signed.'
+			);
+		}
+	} else if (review !== null) {
 		let reviewed: Uint8Array;
 		try {
 			reviewed = attestReviewedSafeOpHash(op, review, chainId);
@@ -86,6 +120,33 @@ export function attestedSafeOpHash(
 		);
 	}
 	return coreHash;
+}
+
+/**
+ * R22 (review 1-5): a site's signature digest, before the `SafeMessage` wrap
+ * — back only when it is exactly the digest the sheet read for `account`
+ * (`attestDappMessageHash`); a missing review or any other digest refuses.
+ */
+export function attestedDappDigest(
+	originalHash: Uint8Array,
+	account: string,
+	review: string | null | undefined
+): Uint8Array {
+	if (!review) {
+		throw new SignAttestError('No review of this request; nothing was signed.');
+	}
+	let checked: Uint8Array;
+	try {
+		checked = attestDappMessageHash(originalHash, account, review);
+	} catch (error) {
+		throw new SignAttestError(
+			`The message is not the one the person read; nothing was signed: ${reason(error)}`
+		);
+	}
+	if (!sameBytes(checked, originalHash)) {
+		throw new SignAttestError('The message is not the one the person read; nothing was signed.');
+	}
+	return checked;
 }
 
 /** The EIP-1271 message hash both implementations agree on, or a refusal. */

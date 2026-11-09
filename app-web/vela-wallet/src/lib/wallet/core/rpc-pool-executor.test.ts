@@ -642,6 +642,55 @@ describe('hedged reads (perf-6)', () => {
 		}
 	});
 
+	// R22: a corroborated read is never hedged nor answered early — an early
+	// answer would skip its witness (even if a view still named endpoints).
+	it('a corroborated read is never hedged, and nobody answers it early', async () => {
+		vi.useFakeTimers();
+		try {
+			const fetchSpy = vi.fn(() => new Promise<Response>(() => {}));
+			vi.stubGlobal('fetch', fetchSpy);
+			const { registry, early } = hedgeRegistry();
+			const executor = createRpcPoolExecutor(
+				{
+					...registry,
+					payload: () => ({
+						method: 'eth_getBalance',
+						params: [],
+						kind: 'rpc' as const,
+						corroborate: true
+					})
+				},
+				policy
+			);
+			void executor.execute(post(SLOW));
+			await vi.advanceTimersByTimeAsync(5000);
+			expect(fetchSpy).toHaveBeenCalledTimes(1);
+			expect(early).toEqual([]);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	// R22: the chain-id probe before a corroborated read's POST — no race on —
+	// is answered every time, the endpoint's own words.
+	it('a chain-id probe outside any race is answered with what the endpoint said', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x64' }), {
+						headers: { 'content-type': 'application/json' }
+					})
+			)
+		);
+		const executor = createRpcPoolExecutor(makeRegistry());
+		await expect(
+			executor.execute(
+				effect({ type: 'probe_chain_id', chain_id: 100, url: SLOW, timeout_ms: 3000 })
+			)
+		).resolves.toMatchObject({ type: 'chain_id_probed', chain_id: 100, url: SLOW, reported: 100 });
+	});
+
 	it('a write, or a call without a kind, is never hedged', async () => {
 		vi.useFakeTimers();
 		try {

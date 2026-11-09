@@ -138,6 +138,21 @@ class Handoffs {
 	 * its multisig host stands in.
 	 */
 	drawers = $state<Record<HandoffKind, number>>({ approval: 0, signature: 0, ceremony: 0 });
+	/**
+	 * R22 (spec 102 D4): the card's Open IS the confirm that raised it — the
+	 * dApp sheet's, a multisig approve or execute — and follows its posture:
+	 * the danger style for an "… anyway" or a danger, held for the core's
+	 * `hold_ms`. Set by that confirm as it is pressed; `null`: a plain Open.
+	 */
+	posture = $state<HandoffPosture | null>(null);
+}
+
+/** R22: how hard the confirm behind a hand-off is (`ConfirmState`, `SignDoor`). */
+export interface HandoffPosture {
+	danger: boolean;
+	holdMs: number;
+	holdLabel: string;
+	againLabel: string;
 }
 
 /** The hand-off on screen, if any. */

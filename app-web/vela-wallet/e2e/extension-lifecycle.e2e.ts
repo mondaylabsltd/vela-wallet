@@ -37,7 +37,13 @@ import {
 	confirmSigning
 } from './extension-helpers';
 import { NATIVE_SENTINEL, TRANSFER_TOPIC } from '../src/lib/signing/sim-replies';
-import { abiWord, aggregate3CallCount, encodeAggregate3Result, happyRelay } from './stub-chain';
+import {
+	abiWord,
+	aggregate3CallCount,
+	encodeAggregate3Result,
+	happyRelay,
+	PRESS_IN_DOM
+} from './stub-chain';
 
 const APP_ROOT = join(import.meta.dirname, '..');
 const DAPP_PORT = 8827;
@@ -431,7 +437,13 @@ async function pointAtStubNet(wallet: Page): Promise<void> {
 					aaguidDirectoryURL: `${net}/aaguid`
 				})
 			);
-			const rows = chainIds.map((chainId) => ({ chainId, rpcURL: `${net}/rpc/${chainId}` }));
+			// R22: the stub net is the person's own node on every chain ("Only use
+			// my node"): its checks believed alone, and said so.
+			const rows = chainIds.map((chainId) => ({
+				chainId,
+				rpcURL: `${net}/rpc/${chainId}`,
+				onlyMine: true
+			}));
 			return new Promise<void>((resolve, reject) => {
 				const open = indexedDB.open('vela', 1);
 				open.onupgradeneeded = () => open.result.createObjectStore('kv');
@@ -522,7 +534,8 @@ async function confirmInPanel(wallet: Page): Promise<void> {
 			{ timeout: 60_000 }
 		)
 		.toBe(false);
-	await inSidePanel(wallet, `panel.document.querySelector(arg).click();`, CONFIRM);
+	// R22: a held confirm is pressed twice from a script (the assistive path).
+	await inSidePanel(wallet, PRESS_IN_DOM, CONFIRM);
 }
 
 /** Refuse whatever the panel's dialog shows, with its ✕ (the core's 4001). */

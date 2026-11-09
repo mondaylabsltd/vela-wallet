@@ -86,7 +86,7 @@ test.beforeEach(async ({ page }) => {
 test('r12-2: three networks that never answer are said — never a Live zero', async ({ page }) => {
 	test.setTimeout(120_000);
 	// Soneium, Unichain, Celo: held from the start. Registered last, so they win.
-	await neverAnswer(page, /stub-rpc\.test\/rpc\/(1868|130|42220)$/, () => true);
+	await neverAnswer(page, /(?:stub|witness)-rpc\.test\/rpc\/(1868|130|42220)$/, () => true);
 	await openHome(page);
 	const line = page.getByRole('button', { name: "Can't reach 3 networks right now" });
 	await expect(line).toBeVisible({ timeout: 60_000 });
@@ -98,7 +98,7 @@ test('r12-3: a network that stops answering in a warm session is named without a
 }) => {
 	test.setTimeout(150_000);
 	let down = false;
-	await neverAnswer(page, /stub-rpc\.test\/rpc\/1$/, () => down);
+	await neverAnswer(page, /(?:stub|witness)-rpc\.test\/rpc\/1$/, () => down);
 	await openHome(page);
 	// Everything answered: a live zero, honestly.
 	await expect(page.getByText(en('home.liveIndicator'), { exact: true })).toBeVisible({
@@ -134,8 +134,8 @@ test('r13-4: a network whose every node hangs in a warm session is named in time
 	// Ethereum's are asked: every other network answers from its stub).
 	await page.route(
 		(url) =>
-			/stub-rpc\.test\/rpc\/1$/.test(url.href) ||
-			!/stub-rpc\.test|localhost|127\.0\.0\.1/.test(url.href),
+			/(?:stub|witness)-rpc\.test\/rpc\/1$/.test(url.href) ||
+			!/(?:stub|witness)-rpc\.test|localhost|127\.0\.0\.1/.test(url.href),
 		(route: Route) => {
 			const request = route.request();
 			const rpc = request.method() === 'POST' && (request.postData() ?? '').includes('jsonrpc');

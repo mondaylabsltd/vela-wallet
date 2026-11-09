@@ -13,25 +13,35 @@ import type { ReviewStateMessages } from '../messages';
 
 export type { MultisigReviewState, MultisigSignDoor };
 
+/** R22: the reason a door shut by "Refuse blind signing" names (`BLIND_REFUSED_KEY`). */
+export const BLIND_REFUSED_KEY = 'home.multisig.review.blindRefused';
+
 /** A shut door, for a state the core could not be asked about. */
 const SHUT: MultisigSignDoor = {
 	shows: 'loading',
 	enabled: false,
 	anyway: false,
 	reason_key: null,
-	retry: false
+	retry: false,
+	hold_ms: 0
 };
 
-/** The core's door for a review in `state` (`null`: not asked yet). */
+/**
+ * The core's door for a review in `state` (`null`: not asked yet). R22:
+ * `refuseBlind` is the person's "Refuse blind signing" — a review that signs
+ * only "… anyway" is then shut (`home.multisig.review.blindRefused`); and the
+ * door says how long an "… anyway" or a danger is held (`hold_ms`).
+ */
 export function reviewDoor(
 	state: MultisigReviewState | null | undefined,
-	review: unknown
+	review: unknown,
+	refuseBlind = false
 ): MultisigSignDoor {
 	try {
 		return JSON.parse(
 			wasm.multisigLinkCall(
 				'review.door',
-				JSON.stringify({ state: state ?? null, review: review ?? null })
+				JSON.stringify({ state: state ?? null, review: review ?? null, refuseBlind })
 			)
 		) as MultisigSignDoor;
 	} catch {

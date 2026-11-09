@@ -61,7 +61,9 @@
 	import type { RelayStatus } from '$lib/multisig/generated/RelayStatus';
 	import TxReview from '$lib/multisig/external/TxReview.svelte';
 	import ReviewStateNote from '$lib/multisig/ui/ReviewStateNote.svelte';
-	import { reviewDoor } from '$lib/multisig/core/review-door';
+	import { BLIND_REFUSED_KEY, reviewDoor } from '$lib/multisig/core/review-door';
+	import HoldConfirm from '$lib/ui/HoldConfirm.svelte';
+	import { refuseBlind } from '$lib/settings/refuse-blind.svelte';
 	import AuthorityNotice from '$lib/multisig/ui/AuthorityNotice.svelte';
 	import { findingLines } from '$lib/multisig/ui/findings';
 	import type { Finding } from '$lib/multisig/core/refusal';
@@ -492,9 +494,18 @@
 	 * read yet (or not read at all) is a blind signature.
 	 */
 	const requestDoor = $derived(
-		reviewDoor(requestReview?.reviewState ?? null, requestReview?.review ?? null)
+		// R22: with "Refuse blind signing" — and the door's hold.
+		reviewDoor(
+			requestReview?.reviewState ?? null,
+			requestReview?.review ?? null,
+			refuseBlind.current()
+		)
 	);
-	const linkDoor = $derived(reviewDoor(tx?.reviewState ?? null, tx?.review ?? null));
+	const linkDoor = $derived(
+		reviewDoor(tx?.reviewState ?? null, tx?.review ?? null, refuseBlind.current())
+	);
+	/** R22: "Refuse blind signing" shut this transaction's door — nothing here signs it. */
+	const linkRefused = $derived(linkDoor.reason_key === BLIND_REFUSED_KEY);
 	/** The link's transaction as the review draws it: the core reading of it. */
 	const linkShown = $derived<OutsideTxShown | null>(
 		tx
@@ -708,6 +719,7 @@
 					/>
 					<ReviewStateNote
 						m={all.review.state}
+						blindRefused={all.review.blindRefused}
 						door={requestDoor}
 						network={chainName(entry.safeTx.chainId)}
 						onRetry={() => act({ type: 'review_again' })}
@@ -743,12 +755,15 @@
 					>
 					{#if !requestEnough && (entry.method !== 'eth_signTypedData_v4' || (entry.safeTx && hashes))}
 						<!-- §12: a multisig transaction goes to the wallet only once its review is read. -->
-						<Button
-							variant="value"
+						<HoldConfirm
+							variant={entry.safeTx && requestDoor.anyway ? 'danger' : 'value'}
 							shape="rounded"
 							disabled={wrongAccount || (!!entry.safeTx && !requestDoor.enabled)}
 							testid="connect-request-sign"
-							onclick={() =>
+							holdMs={entry.safeTx ? requestDoor.hold_ms : 0}
+							holdLabel={all.signing?.holdToConfirm ?? ''}
+							againLabel={all.signing?.confirmAgain ?? ''}
+							onconfirm={() =>
 								act({ type: 'answer_request', session: entry.session, id: entry.id, go: true })}
 							>{entry.stage === 'fallback'
 								? m.signHash
@@ -757,7 +772,7 @@
 										{
 											wallet: walletName
 										}
-									)}</Button
+									)}</HoldConfirm
 						>
 					{/if}
 				</div>
@@ -960,6 +975,7 @@
 				<!-- §12: its review being read, or not read — said, with Try again; nothing offered. -->
 				<ReviewStateNote
 					m={all.review.state}
+					blindRefused={all.review.blindRefused}
 					door={linkDoor}
 					network={chainName(tx.chainId)}
 					onRetry={() => act({ type: 'review_again' })}
@@ -1132,10 +1148,15 @@
 						{fillTemplate(m.typedUnsupported, { wallet: walletName })}
 						{fillTemplate(m.ethSignOffer, { hash: txHashes.safeTxHash })}
 					</p>
-					<Button
-						variant="value"
+					<HoldConfirm
+						variant={linkDoor.anyway ? 'danger' : 'value'}
 						shape="rounded"
-						onclick={() => act({ type: 'approve', account, form: 'ethSign' })}>{m.signHash}</Button
+						disabled={linkRefused}
+						holdMs={linkDoor.hold_ms}
+						holdLabel={all.signing?.holdToConfirm ?? ''}
+						againLabel={all.signing?.confirmAgain ?? ''}
+						onconfirm={() => act({ type: 'approve', account, form: 'ethSign' })}
+						>{m.signHash}</HoldConfirm
 					>
 					{#if tx.members.deployed}
 						<p class="muted">{m.approveOnChainOffer}</p>
@@ -1192,26 +1213,38 @@
 								</p>
 							{/if}
 						{/if}
-						<Button
-							variant={cannotPay ? 'secondary' : 'value'}
+						<HoldConfirm
+							variant={cannotPay ? 'secondary' : linkDoor.anyway ? 'danger' : 'value'}
 							shape="rounded"
-							disabled={cannotPay}
-							onclick={() => act({ type: 'execute', account })}
-							>{fillTemplate(m.executeWith, { wallet: walletName })}</Button
+							disabled={cannotPay || linkRefused}
+							holdMs={linkDoor.hold_ms}
+							holdLabel={all.signing?.holdToConfirm ?? ''}
+							againLabel={all.signing?.confirmAgain ?? ''}
+							onconfirm={() => act({ type: 'execute', account })}
+							>{fillTemplate(m.executeWith, { wallet: walletName })}</HoldConfirm
 						>
 					{/if}
 					{#if can?.canApprove && (!can.canExecute || cannotPay)}
-						<Button
-							variant="value"
+						<HoldConfirm
+							variant={linkDoor.anyway ? 'danger' : 'value'}
 							shape="rounded"
-							onclick={() => act({ type: 'approve', account, form: null })}
-							>{fillTemplate(m.signInWallet, { wallet: walletName })}</Button
+							disabled={linkRefused}
+							holdMs={linkDoor.hold_ms}
+							holdLabel={all.signing?.holdToConfirm ?? ''}
+							againLabel={all.signing?.confirmAgain ?? ''}
+							onconfirm={() => act({ type: 'approve', account, form: null })}
+							>{fillTemplate(m.signInWallet, { wallet: walletName })}</HoldConfirm
 						>
 					{:else if can?.canApprove}
-						<Button
-							variant="secondary"
+						<HoldConfirm
+							variant={linkDoor.anyway ? 'danger' : 'secondary'}
 							shape="rounded"
-							onclick={() => act({ type: 'approve', account, form: null })}>{m.approveOnly}</Button
+							disabled={linkRefused}
+							holdMs={linkDoor.hold_ms}
+							holdLabel={all.signing?.holdToConfirm ?? ''}
+							againLabel={all.signing?.confirmAgain ?? ''}
+							onconfirm={() => act({ type: 'approve', account, form: null })}
+							>{m.approveOnly}</HoldConfirm
 						>
 					{/if}
 					{#if can?.canReject}

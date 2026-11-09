@@ -87,10 +87,13 @@ vi.mock('$lib/signing/fee-calls', () => ({ feeCallsOf: () => fake.calls }));
 // The node's reply to the sheet's one simulation. `simulateRequest`, the
 // core's reading of the reply (`simOutcome`) and the trust machine's judgment
 // of a check's moves (the resident `token_trust` session) are real.
+// R22: the reply as two independent nodes gave it alike (the corroborated
+// envelope `rpcSimulateReply` now hands over) — an honest network.
 vi.mock('$lib/services/sim/sim-engine-rpc', () => ({
-	rpcSimulateReply: (from: string, calls: unknown[], chainId: number) => {
+	rpcSimulateReply: async (from: string, calls: unknown[], chainId: number) => {
 		fake.simulated.push({ from, calls, chainId });
-		return fake.nodeReply();
+		const reply = await fake.nodeReply();
+		return (await import('$lib/signing/sim-witnessed')).agreed(reply);
 	}
 }));
 vi.mock('$lib/core/kernels', async (importOriginal) => ({

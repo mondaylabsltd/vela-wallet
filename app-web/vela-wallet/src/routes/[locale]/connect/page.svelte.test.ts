@@ -337,6 +337,17 @@ const SEND: OutsideTxTitle = {
 };
 
 /** A SafeTx as the core page machine shows it for review (`TxShown`). */
+/**
+ * R22 (review 1-3): these reviews check nothing on chain, so the door signs
+ * only "… anyway" and holds (`hold_ms`); a test's `click()` is the assistive
+ * path — the first activation arms ("Press again to confirm"), the second
+ * confirms.
+ */
+function confirmHeld(control: HTMLElement): void {
+	control.click();
+	control.click();
+}
+
 function shownOf(tx: SafeTx, over: Partial<OutsideTxShown> = {}): OutsideTxShown {
 	return {
 		chainId: 5042002,
@@ -418,7 +429,7 @@ describe('the connect page says where it stands (r4)', () => {
 		expect(drawn).toContain(hashes.messageHash);
 		// The wallet is asked on the tap, not before.
 		expect(answers()).toHaveLength(0);
-		button('Sign with MetaMask')!.click();
+		confirmHeld(button('Sign with MetaMask')!);
 		expect(answers()).toEqual([{ type: 'answer_request', session: 's', id: 'r1', go: true }]);
 		await screen.unmount();
 	});
@@ -453,7 +464,7 @@ describe('the connect page says where it stands (r4)', () => {
 		host().set({ requestReview: shownOf(TX) });
 		await vi.waitFor(() => expect(testid('review-failed')).toBeNull());
 		expect(sign()?.disabled).toBe(false);
-		sign()!.click();
+		confirmHeld(sign()!);
 		expect(answers()).toEqual([{ type: 'answer_request', session: 's', id: 'r1', go: true }]);
 		await screen.unmount();
 	});
@@ -675,13 +686,13 @@ describe("the link's own transaction, from here (r4C-2, r4C-9)", () => {
 		);
 		await vi.waitFor(() => expect(testid('authority-risk')).not.toBeNull());
 		await vi.waitFor(() => expect(button('Sign with MetaMask')).toBeDefined());
-		button('Sign with MetaMask')!.click();
+		confirmHeld(button('Sign with MetaMask')!);
 		await vi.waitFor(() => expect(testid('outside-risk-confirm')).not.toBeNull());
 		expect(fake.acted, 'nothing asked of the wallet before the tap').toEqual([]);
 		button('authority.signRiskCancel')!.click();
 		await vi.waitFor(() => expect(testid('outside-risk-confirm')).toBeNull());
 		expect(fake.acted).toEqual([]);
-		button('Sign with MetaMask')!.click();
+		confirmHeld(button('Sign with MetaMask')!);
 		await vi.waitFor(() => expect(button('authority.signRiskConfirm')).toBeDefined());
 		button('authority.signRiskConfirm')!.click();
 		await vi.waitFor(() => expect(fake.acted).toEqual(['approve']));

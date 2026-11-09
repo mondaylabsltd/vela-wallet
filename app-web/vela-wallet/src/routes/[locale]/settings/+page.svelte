@@ -64,6 +64,7 @@
 	import { venueModel } from '$lib/settings/venue';
 	import { track } from '$lib/analytics';
 	import { analyticsConsent } from '$lib/analytics/consent.svelte';
+	import { refuseBlind } from '$lib/settings/refuse-blind.svelte';
 	import {
 		agentSetUp,
 		agentSettings,
@@ -435,6 +436,30 @@
 		});
 	});
 
+	// R22: `?network=<chainId>` (the signing sheet's hint under a simulation
+	// nobody independent confirmed): that network's editor, where its RPC and
+	// "Only use my node" are.
+	onMount(() => {
+		const asked = new URLSearchParams(location.search).get('network') ?? '';
+		if (!/^[1-9]\d{0,15}$/.test(asked)) return;
+		const chainId = Number(asked);
+		replaceUrl(location.pathname + location.hash);
+		void (async () => {
+			const deadline = Date.now() + 5_000;
+			const ready = () => {
+				const layout = wide.current ? desktopSettings : phoneSettings;
+				const row = net.networks.find((r) => r.chain_id === chainId);
+				return layout !== undefined && row !== undefined ? { layout, row } : null;
+			};
+			let found = ready();
+			while (found === null && Date.now() < deadline) {
+				await new Promise((done) => setTimeout(done, 50));
+				found = ready();
+			}
+			found?.layout.openNetwork(found.row.id);
+		})();
+	});
+
 	// Spec 106: back from clientmcp.dev — finish the sign-in where it began
 	// (its language), then show the AI agent page with the result.
 	onMount(() => {
@@ -572,6 +597,10 @@
 				return;
 			case 'analytics':
 				prefer({ kind: 'analytics', value: event.on });
+				return;
+			case 'refuse-blind':
+				// R22: the person's own; what it means is the core's.
+				refuseBlind.set(event.on);
 				return;
 			case 'agent':
 				configureAgent({ enabled: event.on, bridge_url: null, client_token: null });
@@ -763,6 +792,17 @@
 	 * and the connected sites (owner, 2026-10-29): in 高级 on the phone, its
 	 * own Privacy panel on the desktop.
 	 */
+	/** R22: Security → "Refuse blind signing", off unless switched on. */
+	const securitySection = $derived({
+		title: m.sections.security,
+		row: {
+			id: 'settings-refuse-blind',
+			title: m.refuseBlind.title,
+			subtitle: m.refuseBlind.subtitle,
+			on: refuseBlind.current()
+		} satisfies SwitchRowModel
+	});
+
 	const analyticsRow = $derived<SwitchRowModel>({
 		id: 'settings-analytics',
 		icon: 'eye-off',
@@ -1132,6 +1172,13 @@
 			signingPages: undefined,
 			nav: model.nav.flatMap((item) => {
 				if (item.id === 'signing-pages') return [];
+				// R22: Security, high in the list — before the networks.
+				if (item.id === 'networks') {
+					return [
+						{ id: 'security' as const, icon: 'shield-check' as const, label: m.sections.security },
+						item
+					];
+				}
 				if (item.id !== 'endpoints') return [item];
 				const agentItem = { id: 'agent' as const, icon: 'link-2' as const, label: m.agent.title };
 				const sitesItem = { id: 'sites' as const, icon: 'globe' as const, label: m.sites.title };
@@ -1361,6 +1408,7 @@
 				onnetevent={onNetEvent}
 				onprefevent={onPrefEvent}
 				analytics={analyticsRow}
+				security={securitySection}
 				agent={agentPanel}
 				sites={sitesPanel}
 				onaccountselect={selectAccount}
@@ -1395,6 +1443,7 @@
 				onstorageclear={clearRow}
 				onprefevent={onPrefEvent}
 				analytics={analyticsRow}
+				security={securitySection}
 				agent={agentPanel}
 				sites={sitesPanel}
 				onaccountselect={selectAccount}

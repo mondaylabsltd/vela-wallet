@@ -7,4 +7,14 @@ import type { SignSubmitOutcome } from "./SignSubmitOutcome";
 /**
  * What the shell observed. Every clock-bearing variant carries `now_ms`.
  */
-export type SignShellResult = { "type": "pre_check", funding: SignFundingNeeded | null, } | { "type": "sponsorship", outcome: SignSponsorship, } | { "type": "submit", outcome: SignSubmitOutcome, now_ms: number, } | { "type": "responded" } | { "type": "record_persisted" } | { "type": "record_updated" } | { "type": "account_switched" } | { "type": "sim_verdict_timer_fired", id: string, round: number, } | { "type": "safe_owner_read", id: string, chain_id: number, safe: string, answer: SafeOwnerAnswer, };
+export type SignShellResult = { "type": "pre_check", funding: SignFundingNeeded | null, } | { "type": "sponsorship", outcome: SignSponsorship, } | { "type": "submit", outcome: SignSubmitOutcome, now_ms: number, } | { "type": "responded" } | { "type": "record_persisted" } | { "type": "record_updated" } | { "type": "account_switched" } | { "type": "sim_verdict_timer_fired", id: string, round: number, } | { "type": "safe_owner_read", id: string, chain_id: number, safe: string, answer: SafeOwnerAnswer, 
+/**
+ * R22 (SEC-PARENT-3): the same read, answered by a second,
+ * independent node (the shell's corroborated pool read). A "not an
+ * owner" stands only when it agrees — or when `own_node`.
+ */
+witness?: SafeOwnerAnswer, 
+/**
+ * R22: the person's own node answered alone ("Only use my node").
+ */
+own_node?: boolean, };

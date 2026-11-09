@@ -5,6 +5,9 @@
  * itself USDC, WETH's mainnet address on Gnosis — and the sheet is built from
  * its view. The core decides; these tests hold the drawing to it.
  */
+import { judgedByFreshMachine, simOutcome } from '$lib/core/kernels';
+import { witnessed } from './sim-witnessed';
+import type { SimEnded } from './verdict';
 import { describe, expect, it } from 'vitest';
 import type { ClearOperation } from '$lib/core/generated/ClearOperation';
 import type { ClearShellResult } from '$lib/core/generated/ClearShellResult';
@@ -136,6 +139,15 @@ const FEE: FeeView = {
 	failure: null
 };
 
+/** R22: a corroborated simulation under which nothing of the account's moves. */
+function checkedSim(chainId: number): SimEnded {
+	const verdict = simOutcome(
+		ME,
+		witnessed(JSON.stringify({ result: [{ calls: [{ status: '0x1', logs: [] }] }] }))
+	)!;
+	return { verdict, judged: judgedByFreshMachine(ME, chainId, verdict.deltas) };
+}
+
 function sheet(view: ClearSigningView, to: string, data: string, chainId = 100): SigningModel {
 	const sign: SignView = {
 		...INITIAL_SIGN_VIEW,
@@ -162,7 +174,10 @@ function sheet(view: ClearSigningView, to: string, data: string, chainId = 100):
 		m,
 		identity: { name: 'Clear One', address: ME, identiconSvg: '<svg/>' },
 		identicon: () => '<svg/>',
-		descriptorHost: HOST
+		descriptorHost: HOST,
+		// R22: the transaction was checked — two nodes agree nothing of the
+		// account's moves — so its confirm is the reading's own, not "… anyway".
+		sim: checkedSim(chainId)
 	};
 	return buildSigningModel(inputs)!;
 }

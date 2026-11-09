@@ -17,6 +17,7 @@
  * as `chrome-extension://<the published id>` — the id this package's manifest
  * key derives.
  */
+import { holdPress } from './stub-chain';
 import { execFileSync } from 'node:child_process';
 import { createECDH, createPrivateKey } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
@@ -171,7 +172,8 @@ async function handOff(context: BrowserContext, win: Page): Promise<Page> {
 	await expect(card).toHaveAttribute('data-phase', 'ready', { timeout: 30_000 });
 	await expect(card).toContainText('sign.getvela.app');
 	const opened = context.waitForEvent('page');
-	await card.getByRole('button').click();
+	// R22 (D4): the card's Open is the confirm that raised it — held when it was.
+	await holdPress(card.getByRole('button'));
 	const signer = await opened;
 	await signer.waitForURL(/sign\.getvela\.app\/b\/[0-9a-f]{64}\/sign\?ch=post/);
 	const cdp = await context.newCDPSession(signer);

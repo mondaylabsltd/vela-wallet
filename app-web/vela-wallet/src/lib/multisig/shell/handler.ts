@@ -64,6 +64,18 @@ export interface MultisigShellDeps {
 	 * the person's own ask (the core's `rpc.person`, r17-10) — always sent.
 	 */
 	rpc(chainId: number, method: string, params: unknown, person?: boolean): Promise<RpcReply>;
+	/**
+	 * R22 (review 1-2): one CORROBORATED read through the pool — two
+	 * independent nodes, or the person's own alone — as the core's envelope
+	 * (`rpcCorroboratedEnvelope`, a JSON object): `{result | error, witness?,
+	 * ownNode?}`. Throws when no node answered (its words the `detail`).
+	 */
+	rpcCorroborated(
+		chainId: number,
+		method: string,
+		params: unknown,
+		person?: boolean
+	): Promise<unknown>;
 	/** `localStorage`, or `null` where there is none (it answers `store_failed`). */
 	storage(): Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null;
 	now(): number;
@@ -76,7 +88,11 @@ export interface MultisigShellDeps {
 	sendCalls(op: Op<'send_calls'>, signal: AbortSignal): Promise<MultisigShellResult>;
 	/** The fee pipeline: answered `quoted` / `quote_failed`. */
 	quoteCalls(op: Op<'quote_calls'>): Promise<MultisigShellResult>;
-	/** The signing sheet's simulation envelope (`rpcSimulateReply`), or `null`. */
+	/**
+	 * The signing sheet's simulation envelope (`rpcSimulateReply`), or `null`.
+	 * R22: always corroborated — the core's envelope with the witness's answer
+	 * (or `ownNode`), as a JSON string.
+	 */
 	simulate(op: Op<'simulate'>): Promise<string | null>;
 	/** What the send flow knows of a recipient (`resolveRecipientRisk`). */
 	recipientFacts(
@@ -263,6 +279,23 @@ export function multisigShell(deps: MultisigShellDeps) {
 				}
 			}
 			case 'rpc': {
+				if (op.corroborate === true) {
+					// R22: a guard's read — both nodes' answers in the core's
+					// envelope, compared by the core. No node answered (or not in
+					// time): unanswered, with the pool's words (a rate limit says so).
+					let envelope: unknown;
+					try {
+						envelope = await within(
+							deps.rpcCorroborated(op.chain_id, op.method, op.params, op.person ?? false),
+							op.bound_ms
+						);
+					} catch (error) {
+						return { type: 'rpc_unanswered', detail: errorText(error) };
+					}
+					if (envelope === null)
+						return { type: 'rpc_unanswered', detail: `no answer in ${op.bound_ms} ms` };
+					return { type: 'rpc_corroborated', envelope };
+				}
 				let reply: RpcReply | null;
 				try {
 					reply = await within(

@@ -22,8 +22,10 @@ import {
 describe('review state door (§12, shared vectors)', () => {
 	for (const c of vectors.door) {
 		it(c.name, () => {
-			const args = c.args as { state?: unknown; review?: unknown };
-			expect(reviewDoor((args.state ?? null) as never, args.review ?? null)).toEqual(c.expect);
+			const args = c.args as { state?: unknown; review?: unknown; refuseBlind?: boolean };
+			expect(
+				reviewDoor((args.state ?? null) as never, args.review ?? null, args.refuseBlind ?? false)
+			).toEqual(c.expect);
 		});
 	}
 

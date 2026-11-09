@@ -17,6 +17,7 @@
  *   one line, and the switcher says it of the multisig not shown; a new one
  *   from another member is counted on the next read.
  */
+import { HOLD_PRESS_MS } from './stub-chain';
 import { expect, test, type Browser, type Page } from '@playwright/test';
 import { multisigCore } from './core-facts';
 import { en } from './live-helpers';
@@ -205,7 +206,9 @@ test('a rejection: a cancellation at the same number, read as one; only one of t
 
 	await test.step('rejected on its review: one cancellation at its number, approved by member two', async () => {
 		await rejectToReview();
-		await review.getByRole('button', { name: /^Propose( and approve)?( anyway)?$/ }).click();
+		await review
+			.getByRole('button', { name: /^Propose( and approve)?( anyway)?$/ })
+			.click({ delay: HOLD_PRESS_MS });
 		await expect.poll(() => world.mailbox.length, { timeout: 30_000 }).toBe(2);
 		const cancellation = world.mailbox[1];
 		// The same number, nothing moved: a call to itself, of nothing.
@@ -271,7 +274,9 @@ async function proposeSend(page: Page, amount: string): Promise<void> {
 	await expect(advance).toBeEnabled({ timeout: 30_000 });
 	await advance.click();
 	await expect(page.getByRole('heading', { name: en('send.confirmTitle') })).toBeVisible();
-	await page.getByRole('button', { name: /^Propose( and approve)?( anyway)?$/ }).click();
+	await page
+		.getByRole('button', { name: /^Propose( and approve)?( anyway)?$/ })
+		.click({ delay: HOLD_PRESS_MS });
 	const hashes = page.getByTestId('review-hashes');
 	await expect(hashes).toBeVisible({ timeout: 60_000 });
 	const sheet = hashes.locator('xpath=ancestor::*[@role="dialog"][1]');
@@ -279,7 +284,9 @@ async function proposeSend(page: Page, amount: string): Promise<void> {
 	// state-change check nor a simulation — the review is drawn, said in
 	// danger with Try again, and proposed only "… anyway".
 	await expect(sheet.getByTestId('review-unchecked')).toBeVisible();
-	await sheet.getByRole('button', { name: /^Propose( and approve)? anyway$/ }).click();
+	await sheet
+		.getByRole('button', { name: /^Propose( and approve)? anyway$/ })
+		.click({ delay: HOLD_PRESS_MS });
 }
 
 test('what waits: one line on the home, the other multisig in the switcher, a new one counted', async ({

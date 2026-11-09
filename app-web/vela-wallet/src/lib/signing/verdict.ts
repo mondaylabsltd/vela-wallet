@@ -44,7 +44,14 @@ import type { SimVerdict } from '$lib/core/generated/SimVerdict';
 import type { TrustSimJudgment } from '$lib/core/generated/TrustSimJudgment';
 import type { TrustSimView } from '$lib/core/generated/TrustSimView';
 import { fill } from '$lib/wallet/messages';
-import { SIM_WILL_FAIL_KEY, SIM_WILL_FAIL_REASON_KEY, type SigningMessages } from './messages';
+import {
+	SIM_DISAGREED_KEY,
+	SIM_OWN_NODE_KEY,
+	SIM_UNCONFIRMED_KEY,
+	SIM_WILL_FAIL_KEY,
+	SIM_WILL_FAIL_REASON_KEY,
+	type SigningMessages
+} from './messages';
 import { reverted } from './sim-replies';
 import type { BalanceRow, BalancesBlock, VerdictBlock, WarningBlock } from './model';
 
@@ -77,6 +84,11 @@ export type VerdictWords = Pick<
 	| 'warnSimUnavailable'
 	| 'warnWillFail'
 	| 'warnWillFailReason'
+	| 'simUnconfirmed'
+	| 'simDisagreed'
+	| 'simOwnNode'
+	| 'ownNodeHint'
+	| 'ownNodeAction'
 >;
 
 export interface VerdictContext {
@@ -85,6 +97,11 @@ export interface VerdictContext {
 	nativeSymbol: string;
 	/** The person's number preset, by its wire name (`comma_dot`, …). */
 	preset: string;
+	/**
+	 * R22: where this network's RPC settings open ("Only use my node"), for
+	 * the hint under an unconfirmed verdict. Absent: the hint is said alone.
+	 */
+	ownNodeHref?: string;
 }
 
 /** What a landed verdict says. */
@@ -179,6 +196,15 @@ function noticeBlock(verdict: SimVerdict, m: VerdictWords): WarningBlock {
 	if (key === SIM_WILL_FAIL_KEY || key === SIM_WILL_FAIL_REASON_KEY) {
 		return { kind: 'warning', tone, text: m.warnWillFail };
 	}
+	// R22: nobody independent confirmed it — one node's word, or two that
+	// differ. Said in the core's words, with where a trusted node is set.
+	if (key === SIM_UNCONFIRMED_KEY || key === SIM_DISAGREED_KEY) {
+		return {
+			kind: 'warning',
+			tone,
+			text: key === SIM_DISAGREED_KEY ? m.simDisagreed : m.simUnconfirmed
+		};
+	}
 	// The could-not-check key, and anything this build cannot name.
 	return { kind: 'warning', tone, text: m.warnSimUnavailable };
 }
@@ -209,15 +235,33 @@ export function landedVerdict(sim: SimEnded, ctx: VerdictContext): VerdictSaid {
 	const verdict = sim.verdict;
 	if (verdict === null) return unchecked;
 	if (verdict.kind !== 'deltas') {
-		return verdict.notice_key === null
-			? unchecked
-			: { kind: 'notice', block: noticeBlock(verdict, m) };
+		if (verdict.notice_key === null) return unchecked;
+		const block = noticeBlock(verdict, m);
+		// R22: an unconfirmed check says where a node the person trusts is set.
+		return {
+			kind: 'notice',
+			block:
+				verdict.kind === 'unconfirmed'
+					? {
+							...block,
+							ownNode: {
+								text: m.ownNodeHint,
+								action: m.ownNodeAction,
+								...(ctx.ownNodeHref ? { href: ctx.ownNodeHref } : {})
+							}
+						}
+					: block
+		};
 	}
+	// R22: "Checked by your own node only" — who stood behind it, said.
+	const source = verdict.source_key === SIM_OWN_NODE_KEY ? m.simOwnNode : undefined;
 	const judged = sim.judged;
 	if (judged === null || !judged.ready) return unchecked;
 	if (judged.no_change_key !== null) {
 		const line = m.simSaid[judged.no_change_key];
-		return line ? { kind: 'no_change', line, block: quietCard(line, m) } : unchecked;
+		if (!line) return unchecked;
+		const card = quietCard(line, m);
+		return { kind: 'no_change', line, block: source ? { ...card, source } : card };
 	}
 	const rows = balanceRows(judged.judgments, ctx);
 	if (rows.length === 0) return unchecked;
@@ -230,7 +274,8 @@ export function landedVerdict(sim: SimEnded, ctx: VerdictContext): VerdictSaid {
 			kind: 'balances',
 			title: m.balancesTitle,
 			rows,
-			...(unverified ? { note: m.warnUnverifiedAmount, noteTone: 'caution' as const } : {})
+			...(unverified ? { note: m.warnUnverifiedAmount, noteTone: 'caution' as const } : {}),
+			...(source ? { source } : {})
 		}
 	};
 }
@@ -287,17 +332,28 @@ export function longestRevertReason(): string | null {
  * the warning under an unverified token — and that is drawn whole, the place
  * as tall as it is.
  */
-export function verdictRooms(m: VerdictWords): VerdictBlock[] {
+export function verdictRooms(m: VerdictWords, ownNode = false): VerdictBlock[] {
 	const reason = longestRevertReason();
 	const noChange = Object.values(m.simSaid)[0];
+	// R22: on a network read through the person's own node alone, a check
+	// says so under its card ("Checked by your own node only") — its room
+	// keeps that line too, so the landing moves nothing.
+	const source = ownNode ? { source: m.simOwnNode } : {};
 	return [
 		couldNotCheck(m),
+		// R22: one node's word — the caution and where a trusted node is set.
+		{
+			kind: 'warning',
+			tone: 'caution',
+			text: m.simUnconfirmed,
+			ownNode: { text: m.ownNodeHint, action: m.ownNodeAction }
+		},
 		{
 			kind: 'warning',
 			tone: 'danger',
 			text: reason === null ? m.warnWillFail : fill(m.warnWillFailReason, { reason })
 		},
-		quietCard(noChange || m.simChecking, m),
+		{ ...quietCard(noChange || m.simChecking, m), ...source },
 		{
 			kind: 'balances',
 			title: m.balancesTitle,
@@ -305,7 +361,8 @@ export function verdictRooms(m: VerdictWords): VerdictBlock[] {
 				symbol: '0',
 				delta: '0',
 				tone: 'neutral' as const
-			}))
+			})),
+			...source
 		}
 	];
 }

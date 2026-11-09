@@ -520,7 +520,8 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			localization: k('settings.sections.localization'),
 			advanced: k('settings.sections.advanced'),
 			community: k('settings.sections.community'),
-			privacy: k('settings.sections.privacy')
+			privacy: k('settings.sections.privacy'),
+			security: k('settings.sections.security')
 		},
 		account: {
 			switch: k('settings.account.switch'),
@@ -532,6 +533,10 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		analytics: {
 			title: k('settings.analytics.title'),
 			subtitle: k('settings.analytics.subtitle')
+		},
+		refuseBlind: {
+			title: k('settings.refuseBlind.title'),
+			subtitle: k('settings.refuseBlind.subtitle')
 		},
 		sites: {
 			title: k('settings.sites.title'),
@@ -711,6 +716,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			ownNodeDown: k('assets.ownNodeUnreachable'),
 			onlyMine: k('settingsModals.network.onlyMine'),
 			onlyMineHint: k('settingsModals.network.onlyMineHint'),
+			onlyMineTrust: k('settingsModals.network.onlyMineTrust'),
 			hideBody: k('settingsModals.network.hideBody'),
 			moreNetworks: k('settingsModals.network.moreNetworks')
 		},
@@ -1408,7 +1414,10 @@ export const CONFIRM_BLOCK_KEYS = [
 	// cs-10: a message taller than the sheet whose end has not been in sight
 	// (`ConfirmBlock::MessageUnread`) — "The message continues — scroll to
 	// read all of it".
-	'componentsUi.signing.confirmBlock.messageUnread'
+	'componentsUi.signing.confirmBlock.messageUnread',
+	// R22: the request signs only "… anyway" and the person turned on
+	// "Refuse blind signing" (`ConfirmBlock::BlindRefused`).
+	'componentsUi.signing.confirmBlock.blindRefused'
 	// No `FeeShort` line: issue #438 — the fee section already says a short
 	// coin, and the confirm's note said it again.
 ] as const;
@@ -1557,6 +1566,13 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		simChecking: k('componentsUi.funding.checking'),
 		simRecheck: k('componentsUi.signing.simRecheck'),
 		simRechecking: k('componentsUi.signing.simRechecking'),
+		simUnconfirmed: k('componentsUi.signing.simUnconfirmed'),
+		simDisagreed: k('componentsUi.signing.simDisagreed'),
+		simOwnNode: k('componentsUi.signing.simOwnNode'),
+		ownNodeHint: k('componentsUi.signing.ownNodeHint'),
+		ownNodeAction: k('home.nodeFallbackOpen'),
+		holdToConfirm: k('componentsUi.signing.holdToConfirm'),
+		confirmAgain: k('componentsUi.signing.confirmAgain'),
 		balanceUnverifiedToken: k('componentsUi.signing.balanceUnverifiedToken'),
 		// PR 3 device round: the verdict's quiet line, by the key the core names.
 		simSaid: Object.fromEntries(SIM_SAID_KEYS.map((key) => [key, k(key)])),
@@ -1712,6 +1728,13 @@ export function resolveMultisigMessages(locale: Locale): MultisigMessages {
 		...words,
 		handoff: resolveHandoffMessages(locale),
 		// r18-8 (§28, §32): a test build's refusal, in its own words.
-		testBuild: { productionWriteRefused: t(locale, 'common.testBuild.productionWriteRefused') }
+		testBuild: { productionWriteRefused: t(locale, 'common.testBuild.productionWriteRefused') },
+		// R22 / r21-1: the held confirm's words and an expired execution's.
+		signing: {
+			holdToConfirm: t(locale, 'componentsUi.signing.holdToConfirm'),
+			confirmAgain: t(locale, 'componentsUi.signing.confirmAgain'),
+			notSent: t(locale, 'componentsTx.receipt.statusNotSent'),
+			expired: t(locale, 'componentsUi.signing.expired')
+		}
 	};
 }

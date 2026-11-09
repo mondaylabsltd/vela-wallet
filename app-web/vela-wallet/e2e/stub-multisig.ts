@@ -208,6 +208,13 @@ export class MultisigWorld {
 	checksTurnedAwayUntil = 0;
 	/** The node simulates (`eth_simulateV1` runs and succeeds); else it says "not here". */
 	simulates = false;
+	/**
+	 * R22: the node traces (`debug_traceCall`, a plain send's prestate diff:
+	 * the multisig's nonce moves on, nothing else); else it says "not here". With
+	 * both checks read, a review signs with a plain press; with either unread
+	 * it signs only "… anyway" (the core's R22 rule).
+	 */
+	traces = false;
 
 	/** `address`'s native balance on `chainId` here (none unless set). */
 	balance(chainId: number, address: string): bigint {
@@ -413,7 +420,8 @@ export class MultisigWorld {
 			| { id?: number; method: string; params?: unknown[] }
 			| { id?: number; method: string; params?: unknown[] }[];
 		const calls = Array.isArray(body) ? body : [body];
-		const check = (m: string) => m === 'eth_call' || m === 'eth_simulateV1';
+		const check = (m: string) =>
+			m === 'eth_call' || m === 'eth_simulateV1' || m === 'debug_traceCall';
 		if (Date.now() < this.checksTurnedAwayUntil && calls.some((c) => check(c.method)))
 			return route.abort('connectionrefused');
 		const one = (call: { id?: number; method: string; params?: unknown[] }) => {
@@ -546,6 +554,22 @@ export class MultisigWorld {
 						}
 					]
 				};
+			case 'debug_traceCall': {
+				if (!this.traces) return { error: { code: -32601, message: `${method} not here` } };
+				// A plain send's diff: the multisig's nonce (slot 5) moves on by one,
+				// and nothing that decides who controls it.
+				// (The trace runs the transaction at its own number, put in place by
+				// the override — deployed here or not.)
+				const to = String((params[0] as { to?: string } | undefined)?.to ?? '').toLowerCase();
+				const nonce = BigInt(this.safes.get(`${chainId}:${to}`)?.nonce ?? 0);
+				const slot = `0x${word(5)}`;
+				return {
+					result: {
+						pre: { [to]: { storage: { [slot]: `0x${word(nonce)}` } } },
+						post: { [to]: { storage: { [slot]: `0x${word(nonce + 1n)}` } } }
+					}
+				};
+			}
 			default:
 				return { error: { code: -32601, message: `${method} not here` } };
 		}
@@ -605,7 +629,14 @@ export async function useWorldNetworks(page: Page, chainIds = [100]): Promise<vo
 				};
 			}),
 		{
-			rows: chainIds.map((chainId) => ({ chainId, rpcURL: `${RPC_HOST}/${chainId}` })),
+			// R22: the world's one node is honestly the person's own ("Only use
+			// my node"): its checks are believed alone, and said so — never a
+			// second, independent node it is not.
+			rows: chainIds.map((chainId) => ({
+				chainId,
+				rpcURL: `${RPC_HOST}/${chainId}`,
+				onlyMine: true
+			})),
 			shown: chainIds
 		}
 	);

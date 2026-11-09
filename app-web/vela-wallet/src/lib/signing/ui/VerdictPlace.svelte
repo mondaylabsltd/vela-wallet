@@ -44,6 +44,7 @@
 			text={block.text}
 			{room}
 			recheck={room ? undefined : block.recheck}
+			ownNode={block.ownNode}
 			{onrecheck}
 		/>
 	{:else}
@@ -52,6 +53,7 @@
 			rows={block.rows}
 			note={block.note}
 			noteTone={block.noteTone}
+			source={block.source}
 			{room}
 		/>
 	{/if}

@@ -48,4 +48,17 @@ no_change_key: string | null,
  * that spoke and did not simulate (`not_offered`) is not asked again:
  * it would say the same.
  */
-recheck: boolean, };
+recheck: boolean, 
+/**
+ * R22: who stands behind `deltas` — `corroborated` (two independent
+ * nodes agreed) or `own_node` (the person's own node alone, by their
+ * choice: "Only use my node"). `None` for every kind but `deltas`, and
+ * for a verdict another reading made.
+ */
+source?: string, 
+/**
+ * R22: the line the sheet says about `source` — [`KEY_OWN_NODE`]
+ * ("Checked by your own node only") when the person's node answered
+ * alone; `None` otherwise. The UI says who it trusted.
+ */
+source_key?: string, };

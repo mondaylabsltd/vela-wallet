@@ -11,4 +11,11 @@ export type RpcEvent = { "type": "bans_loaded", entries: Array<RpcBanEntry>, } |
  * reach (never the outage's two-node probe), and every POST of it
  * is [`RpcOperation::JsonRpcPost::must_send`]. Absent: `false`.
  */
-person: boolean, } | { "type": "bundler_base_requested", call_id: string, chain_id: number, now_ms: number, } | { "type": "best_rpc_url_requested", call_id: string, chain_id: number, now_ms: number, } | { "type": "invalidate_all" } | { "type": "refresh_chain", chain_id: number, };
+person: boolean, 
+/**
+ * R22: a read a signing verdict stands on — answered by two
+ * independent endpoints, each of which reported this chain's id
+ * first (module doc, "Corroborated reads"). RPC calls only. Absent:
+ * `false`.
+ */
+corroborate: boolean, } | { "type": "bundler_base_requested", call_id: string, chain_id: number, now_ms: number, } | { "type": "best_rpc_url_requested", call_id: string, chain_id: number, now_ms: number, } | { "type": "invalidate_all" } | { "type": "refresh_chain", chain_id: number, };

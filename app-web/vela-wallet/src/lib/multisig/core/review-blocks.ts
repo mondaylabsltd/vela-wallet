@@ -22,6 +22,11 @@ export interface ReviewContext {
 	nativeSymbol: string;
 	/** The person's number preset (`resolvedFormatKeys().number`). */
 	preset: string;
+	/**
+	 * R22: where this network's RPC settings open ("Only use my node"), for
+	 * the hint under a simulation nobody independent confirmed.
+	 */
+	ownNodeHref?: string;
 	/** The name this device knows for an address, if any. */
 	nameOf: (address: string) => string | null;
 	/**
@@ -94,8 +99,18 @@ export function stateBlocks(review: MultisigReviewOut, ctx: ReviewContext): Bloc
 				},
 				{ kind: 'source', text: source, tone: 'neutral' }
 			];
-		case 'unavailable':
-			return [{ kind: 'warning', tone: 'caution', text: fillTemplate(m.stateUnread, { network }) }];
+		case 'unavailable': {
+			// R22 (review 1-2): the core names why — one node's word nobody
+			// independent confirmed, or two nodes that disagree; anything else is
+			// "couldn't check" as before.
+			const text =
+				v.reason === 'uncorroborated' && m.stateUnconfirmed
+					? m.stateUnconfirmed
+					: v.reason === 'disagreed' && m.stateDisagreed
+						? m.stateDisagreed
+						: m.stateUnread;
+			return [{ kind: 'warning', tone: 'caution', text: fillTemplate(text, { network }) }];
+		}
 		case 'reverts':
 			// The verdict's place says it fails; nothing would change.
 			return [];
@@ -266,7 +281,15 @@ export function movesBlocks(
 	if (!review || !sim) {
 		return [{ kind: 'verdict', inner: [checkingCard(m)], rooms: verdictRooms(m), landed: false }];
 	}
-	const said = landedVerdict(sim, { m, nativeSymbol: ctx.nativeSymbol, preset: ctx.preset });
+	// R22: an unconfirmed simulation and an own-node check are said as the
+	// signing sheet says them (`landedVerdict`: the core's notice key, its
+	// `source_key`), with where a trusted node is set.
+	const said = landedVerdict(sim, {
+		m,
+		nativeSymbol: ctx.nativeSymbol,
+		preset: ctx.preset,
+		...(ctx.ownNodeHref ? { ownNodeHref: ctx.ownNodeHref } : {})
+	});
 	const out: Block[] = [
 		{ kind: 'verdict', inner: [said.block], rooms: verdictRooms(m), landed: true }
 	];

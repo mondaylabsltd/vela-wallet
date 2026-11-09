@@ -109,6 +109,9 @@ async function backFrom(
 ): Promise<void> {
 	const world = new MultisigWorld();
 	world.simulates = true;
+	// R22: both of the review's checks read once the network answers — its
+	// one press after recovery is a plain Approve, never "… anyway".
+	world.traces = true;
 	const ms = await multisigOf(
 		[FIXTURES.one, OUTSIDE.address],
 		2,

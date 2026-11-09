@@ -47,6 +47,20 @@ import {
 } from '../core/proposal-errors';
 import type { MultisigActionState } from '../generated/MultisigActionState';
 import { readShellFailure } from './failure';
+import { failureSaid } from '../core/review-door';
+
+/**
+ * r21-1: an execution that expired before it was submitted — the relay's
+ * AA22, whatever kind the detail wrapped it in (the core's `review.failure`
+ * reads it: `expired`, or AA22 in a `not_sent` / `unknown` detail's words).
+ * Said as the Send says it: "Not sent", calmly, and pressing again signs anew.
+ */
+export class ExecutionExpiredError extends Error {
+	constructor() {
+		super('the operation expired before it was submitted');
+		this.name = 'ExecutionExpiredError';
+	}
+}
 import { ChainUnavailableError } from '../core/chain';
 import type { MultisigAmount } from '../generated/MultisigAmount';
 
@@ -172,6 +186,8 @@ function unknownFailure(): Error {
 
 /** A `failed` action's detail, by its kind: the typed error the sheets word. */
 export function detailError(detail: string): Error {
+	// r21-1: the core's reading first — an expiry is one whatever wrapped it.
+	if (failureSaid(detail).kind === 'expired') return new ExecutionExpiredError();
 	const shell = readShellFailure(detail);
 	// Plain text is no kind: unknown, its words never drawn. A kind this build
 	// does not know is unknown too (the switch's default).
