@@ -1,9 +1,13 @@
 # F01 · Supported Networks Registry (24 Chains + Custom)
 
+> **Superseded (R23): the code contradicts the network list in part. The 24 mainnets (20 shown by default; Stable, MegaETH, Plume and XRPL EVM hidden) match the code. Not in this document: the built-in list also holds 9 testnets for the testnet environment (spec 105), and every read a signing verdict stands on is asked of two independent providers and chain-id probed first.**
+>
+> **What is true:** `rust/crates/vela-core/src/app/network_admin.rs` (`BUILTIN_CHAINS`), `rust/crates/vela-core/src/app/shown_networks.rs`; `docs/security/hardening.md` §12. Checked against the code at commit `fa6083c87` (R23, 2026-11-09). This document is kept as history; it does not describe the product.
+
 | | |
 |---|---|
 | **Epic** | F — Networks & RPC Infrastructure |
-| **Status** | ✅ Shipped |
+| **Status** | ⚠️ Superseded (R23, 2026-11-09): see the note above |
 | **Owner** | Shelchin |
 | **Depends on** | — |
 | **Related** | F02, F03, E04, G10 |

@@ -1,9 +1,13 @@
 # A03 · Privacy, No-Token & No-Tracking Principles
 
+> **Superseded (R23): the code contradicts FR-3 and §1 in part. The R21 analytics text (opt-in, off by default, no transaction-outcome event) matches the code. What does not: servers persist more than "the passkey public key + account name" — the multisig genesis service and its mailbox store multisig geneses, proposals and approvals (unauthenticated, CORS `*`), and the relay keeps submitted operations for a limited time; and §1's "the only device permission is Camera" contradicts FR-1's own list.**
+>
+> **What is true:** `app-web/vela-wallet/src/lib/analytics/consent.svelte.ts`, `app-web/vela-wallet/src/lib/analytics/catalog.ts`; `docs/security/hardening.md` §3, §10; `docs/SECURITY-MODEL.md` §11 (privacy); getvela.app's privacy page (`app-web/getvela.app/src/routes/privacy/+page.svelte`). Checked against the code at commit `fa6083c87` (R23, 2026-11-09). This document is kept as history; it does not describe the product.
+
 | | |
 |---|---|
 | **Epic** | A — Product Foundations & Cross-Cutting |
-| **Status** | ✅ Shipped |
+| **Status** | ⚠️ Superseded (R23, 2026-11-09): see the note above |
 | **Owner** | Shelchin |
 | **Depends on** | A01 |
 | **Related** | A02, B08, N05, N04 |

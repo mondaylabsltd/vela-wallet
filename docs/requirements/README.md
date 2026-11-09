@@ -1,5 +1,15 @@
 # Vela Wallet — Requirements Documents (Master Index)
 
+> **This directory is not normative.** It is the product's requirements archive: what each part
+> was meant to do when it was written. It is not a specification and it is not a security
+> statement. Where a document here and the code disagree, the code is right. Security claims
+> live in [`docs/SECURITY-MODEL.md`](../SECURITY-MODEL.md), which cites the code for each one.
+> A document the code is known to contradict carries a "Superseded (R23)" note under its title,
+> with a pointer to what is true, and ⚠️ in the index below (R23 sweep, 2026-11-09, at commit
+> `fa6083c87`: A03, B09, C04, F01, G06, J01, J05, K02, K03, K08). Documents without that note
+> were not all re-checked in that sweep; treat their claims as history until you have read the
+> code they cite.
+
 > **Purpose.** This directory decomposes the *entire* Vela Wallet product into **100 independent
 > requirement documents (PRDs)**, ordered so that each doc's dependencies come before it
 > (foundations → identity → money movement → dApp → polish → ops). Read top-to-bottom and the
@@ -37,6 +47,7 @@ roughly one requirement per meaningful behavior, and leave room for the roadmap 
 | 🚧 | In progress (roadmap "now"). *A 🚧 tag left over from the `feat/contacts-groups-payroll-batch` branch is stale — contacts, groups and payroll batch all landed; the rules are in `rust/crates/vela-core/src/app/{contacts,contacts_io,batch_import}.rs`.* |
 | 🔜 | Next (planned, roadmap "next") |
 | 🧭 | Exploring (roadmap "later" — directional, not committed) |
+| ⚠️ | Superseded: the code contradicts the document; its note says what is true |
 
 > **Read this before trusting a §10 anchor.** Every PRD written before spec 039 cites source
 > anchors under the repo-root `src/`, `modules/`, `e2e/`, `plugins/` or `targets/` — the Expo tree,
@@ -55,7 +66,7 @@ roughly one requirement per meaningful behavior, and leave room for the roadmap 
 - **Audit posture:** Safe contracts are independently audited; **Vela's own integration is not, and none is scheduled.** Never write "audit planned."
 - **No token, ever.** No airdrop, no farming.
 - **Alpha, stated honestly** — no scary "tolerate bugs" banners (trust > disclaimers).
-- **Fees:** `3 × padded gas limits × max(wallet gas reading, relay price for the chosen speed)`, minimum ≈ $0.01 (Tempo: ×2, pathUSD), paid in band to the relay and shown as **one** exact amount before signing; a relay quote above 3× the wallet's own reading is refused. Not "≈2×". **24 built-in networks** (spec 080 claim ledger).
+- **Fees:** where the relay bills the gas an operation uses (it returns `settlementGas` and publishes `inBandFeePerGas` per speed), the fee is `max(settlementGas × inBandFeePerGas[tier], floor)`; `settlementGas` is capped at the lower of the signed gas limits and 125% of the wallet's own gas model + 50,000, and a per-gas price above 3× the same formula on the wallet's own reading is refused. Only against a relay that publishes neither figure is it `3 × gas limits × max(wallet gas reading, relay price for the chosen speed)` (Tempo: ×2, pathUSD). Minimum ≈ $0.01. Paid in band to the relay and shown as **one** exact amount before signing; not "≈2×". The default speed is *standard*. **24 built-in mainnets**, 20 shown by default (`docs/ARCHITECTURE.md` "Fee model", R23).
 - **Fee and bundler facts come from the core**, `rust/crates/vela-core/src/app/fee_policy.rs`.
   (The old guardrail pointed at `deployer-api.ts`, a mock, and `bundler-service.ts`; both were in
   the deleted Expo tree.)
@@ -69,7 +80,7 @@ roughly one requirement per meaningful behavior, and leave room for the roadmap 
 |---|---|---|---|
 | A01 | Product Vision, Scope & Non-Goals ("does less on purpose") | ✅ | — |
 | A02 | Brand, Voice, Honesty & Alpha/Audit Posture | ✅ | A01 |
-| A03 | Privacy, No-Token & No-Tracking Principles | ✅ | A01 |
+| A03 | Privacy, No-Token & No-Tracking Principles | ⚠️ superseded | A01 |
 | A04 | Cross-Platform Runtime & Platform-Abstraction Seam | ✅ | — |
 | A05 | App Bootstrap, Splash & Font-Boot Gate | ✅ | A04 |
 | A06 | Local Persistence & Storage Model | ✅ | A04 |
@@ -85,7 +96,7 @@ roughly one requirement per meaningful behavior, and leave room for the roadmap 
 | B06 | Safe v1.4.1 Account Model & Canonical Contract Set | ✅ | B01 |
 | B07 | Counterfactual CREATE2 Address Derivation (Same Address Every Chain) | ✅ | B01, B06 |
 | B08 | Public-Key Index: Upload + On-Chain Publish (Gnosis) | ✅ | B07 |
-| B09 | Recovery Model (OS Passkey Sync) & Honest Limits | ✅ | B01 |
+| B09 | Recovery Model (OS Passkey Sync) & Honest Limits | ⚠️ superseded | B01 |
 
 ### Epic C — Onboarding & Wallet Lifecycle (5)
 | ID | Title | Status | Deps |
@@ -93,7 +104,7 @@ roughly one requirement per meaningful behavior, and leave room for the roadmap 
 | C01 | Welcome & Value-Prop Onboarding | ✅ | A01 |
 | C02 | Create Wallet (Passkey Enrollment → Address) | ✅ | B01, B07 |
 | C03 | Account Naming & On-Chain Name Publish | ✅ | B08 |
-| C04 | Restore Existing Wallet via Passkey Sync | ✅ | B09 |
+| C04 | Restore Existing Wallet via Passkey Sync | ⚠️ superseded | B09 |
 | C05 | Multiple Accounts & Account Switcher | ✅ | C02 |
 
 ### Epic D — Balances, Portfolio & Activity (8)
@@ -122,7 +133,7 @@ roughly one requirement per meaningful behavior, and leave room for the roadmap 
 ### Epic F — Networks & RPC Infrastructure (8)
 | ID | Title | Status | Deps |
 |---|---|---|---|
-| F01 | Supported Networks Registry (24 Chains + Custom) | ✅ | — |
+| F01 | Supported Networks Registry (24 Chains + Custom) | ⚠️ superseded | — |
 | F02 | Custom Network Add — Contract-Suite + Precompile Validation | ✅ | F01, B06 |
 | F03 | RPC Pool Auto-Discovery & 6-Tier Scoring | ✅ | F01 |
 | F04 | RPC Failover, Banning & Self-Heal | ✅ | F03 |
@@ -139,7 +150,7 @@ roughly one requirement per meaningful behavior, and leave room for the roadmap 
 | G03 | Gas Estimation (Inflation, Floors, Refuse-Doomed Ops) | ✅ | G01 |
 | G04 | Gas Price Oracle, Tiers & Wallet↔Bundler Parity | ✅ | F07 |
 | G05 | Fee Model (3× Padded Gas, ~3× Cap Guard) | ✅ | G04 |
-| G06 | Gas Account (Relayer EOA) & Sponsored Activation | ✅ | F07 |
+| G06 | Gas Account (Relayer EOA) & Sponsored Activation | ⚠️ superseded | F07 |
 | G07 | Underfunded Detection & Top-Up Modal (Cross-Repo Coupling) | ✅ | G06 |
 | G08 | Nonce Caching & Already-Pending Recovery | ✅ | G01 |
 | G09 | Receipt Polling (Unconfirmed vs Bundler-Unreachable) | ✅ | G01 |
@@ -173,11 +184,11 @@ roughly one requirement per meaningful behavior, and leave room for the roadmap 
 ### Epic J — Simulation & Safety Guards (5)
 | ID | Title | Status | Deps |
 |---|---|---|---|
-| J01 | Simulation Engine Cascade (`eth_simulateV1` → Tevm → `eth_call`) | ✅ | F03 |
+| J01 | Simulation Engine Cascade (`eth_simulateV1` → Tevm → `eth_call`) | ⚠️ superseded | F03 |
 | J02 | Asset-Change Preview (`BalanceChangePreview`) | ✅ | J01 |
 | J03 | Asymmetric Trust Model (Received vs Sent Confidence) | ✅ | J02 |
 | J04 | Revert-Reason Decoding | ✅ | J01 |
-| J05 | Never-Unlimited Approval Guard & Editing UX | ✅ | I06 |
+| J05 | Never-Unlimited Approval Guard & Editing UX | ⚠️ superseded | I06 |
 
 ### Epic K — dApp Connect (8)
 
@@ -189,13 +200,13 @@ roughly one requirement per meaningful behavior, and leave room for the roadmap 
 | ID | Title | Status | Deps |
 |---|---|---|---|
 | K01 | WalletPair Pairing Over WebSocket Relay (QR, No BLE) | ⛔ not built | — |
-| K02 | MITM-Resistant Fingerprint Verification & E2E Badge | ✅ | K01 |
-| K03 | Single-Session Model & Auto-Restore | ✅ | K01 |
+| K02 | MITM-Resistant Fingerprint Verification & E2E Badge | ⚠️ superseded | K01 |
+| K03 | Single-Session Model & Auto-Restore | ⚠️ superseded | K01 |
 | K04 | Capability Advertisement & JSON-RPC Method Map | ✅ | K01, B07 |
 | K05 | EIP-1271 Message Signing (SafeMessage Double-Wrap) | ✅ | G02 |
 | K06 | SIWE Parsing & Domain-Binding Defense | ✅ | K05 |
 | K07 | EIP-5792 Batch Calls (`wallet_sendCalls` → `multiSend`) | ✅ | G01 |
-| K08 | Connection Resilience (Heartbeat, Reconnect, Deadlines) | ✅ | K01 |
+| K08 | Connection Resilience (Heartbeat, Reconnect, Deadlines) | ⚠️ superseded | K01 |
 
 ### Epic L — Connection Activity & History (3)
 | ID | Title | Status | Deps |

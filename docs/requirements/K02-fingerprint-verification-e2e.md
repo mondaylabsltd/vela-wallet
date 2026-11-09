@@ -1,9 +1,13 @@
 # K02 · MITM-Resistant Fingerprint Verification & E2E Badge
 
+> **Superseded (R23): the code contradicts the whole document. WalletPair pairing and the fingerprint comparison were never built in any shell. A state machine survives in the core (`app/dapp_session.rs`) but no screen drives it. dApps reach the wallet through an injected EIP-1193 / EIP-6963 provider with per-origin grants.**
+>
+> **What is true:** `rust/crates/vela-core/src/app/dapp_browser.rs`, `rust/crates/vela-core/src/app/dapp_permissions.rs`; the Epic K note in this directory's `README.md`. Checked against the code at commit `fa6083c87` (R23, 2026-11-09). This document is kept as history; it does not describe the product.
+
 | | |
 |---|---|
 | **Epic** | K — dApp Connect |
-| **Status** | ✅ Shipped |
+| **Status** | ⚠️ Superseded (R23, 2026-11-09): see the note above |
 | **Owner** | Shelchin |
 | **Depends on** | K01 |
 | **Related** | K03, K08 |

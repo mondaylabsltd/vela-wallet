@@ -134,8 +134,11 @@ Roadmap items that don't have their own PRD live as **forward-FRs** inside an ex
 - **When code moves:** update the `file:line` anchors (or at least the symbol names) in §10 so the
   doc stays verifiable. A PRD whose anchors don't resolve is a bug.
 - **Guardrails are non-negotiable:** no Bluetooth *in the dApp path*, no "audit planned," no
-  "beta/tolerate-bugs" banner, 20 networks shown by default (not 8, 12 or 24), fee = 3 × padded
-  gas × tier price shown before signing (not 60%, not ≈2×). See the index guardrails before writing.
+  "beta/tolerate-bugs" banner, 20 networks shown by default (not 8, 12 or 24), fee =
+  `settlementGas × inBandFeePerGas` where the relay bills gas used (3 × padded gas × tier price
+  only against a relay that publishes neither), shown before signing (not 60%, not ≈2×). See the
+  index guardrails before writing. This directory is not normative: the code wins, and security
+  claims live in [`docs/SECURITY-MODEL.md`](../SECURITY-MODEL.md).
 
 ---
 
