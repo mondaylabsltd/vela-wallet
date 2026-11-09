@@ -10,6 +10,11 @@ source: d3c8b770a0ca
 
 # Whitepaper
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/whitepaper">English page</a> is authoritative for security statements.
+</Callout>
+
 <Callout type="info" title="Status: alfa · terakhir direvisi September 2026">
 Halaman ini menjelaskan bagaimana Vela bekerja saat ini dan apa yang perlu dan tidak
 perlu Anda percayai untuk memakainya. Vela masih dalam tahap

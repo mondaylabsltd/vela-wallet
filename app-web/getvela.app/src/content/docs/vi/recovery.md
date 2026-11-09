@@ -10,6 +10,11 @@ source: 77cf3f24c7c7
 
 # Khôi phục & đăng nhập
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/recovery">English page</a> is authoritative for security statements.
+</Callout>
+
 Không có cụm từ khôi phục, việc khôi phục dựa vào hai thứ: **một khóa bạn vẫn còn giữ**,
 và **một bản ghi công khai cho biết những khóa nào thuộc về ví của bạn**.
 

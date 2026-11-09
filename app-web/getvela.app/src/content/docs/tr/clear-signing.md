@@ -10,6 +10,11 @@ source: 29a66a1584f1
 
 # Açık imzalama
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/clear-signing">English page</a> is authoritative for security statements.
+</Callout>
+
 Pek çok cüzdan, tanımadığı her sözleşme için hâlâ ham veri gösterir; "kör imzalama"
 — gerçekte okuyamadığınız çağrıları onaylamak — cüzdanların boşaltılma yollarından
 biridir. Vela'nın yanıtı **açık imzalama**: siz imzalamadan önce işlem, mümkün olduğu

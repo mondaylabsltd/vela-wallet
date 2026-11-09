@@ -4,7 +4,16 @@ description: "A febbraio 2025 Bybit ha perso circa 1,5 miliardi di dollari. I co
 source: d8217ceb16b2
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
 # L'attacco a Bybit, e la strada che ha usato
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/bybit-attack">English page</a> is authoritative for security statements.
+</Callout>
 
 Il 21 febbraio 2025 Bybit ha perso circa **1,5 miliardi di dollari** da un cold
 wallet multisig Safe. È il furto più grande nella storia del settore, e vale la

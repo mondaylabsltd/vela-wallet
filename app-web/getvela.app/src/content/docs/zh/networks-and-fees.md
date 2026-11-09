@@ -10,6 +10,11 @@ source: ba67791e85d6
 
 # 网络与手续费
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/networks-and-fees">English page</a> is authoritative for security statements.
+</Callout>
+
 ## 内置网络
 
 Vela 默认显示 **20 条网络**，全部是主网：

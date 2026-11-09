@@ -10,6 +10,11 @@ source: 29a66a1584f1
 
 # Firma legible
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/clear-signing">English page</a> is authoritative for security statements.
+</Callout>
+
 Muchas wallets todavía muestran datos crudos para cualquier contrato que no
 reconocen, y la «firma a ciegas» (aprobar llamadas que en realidad no puedes leer)
 es una de las formas en que vacían wallets. La respuesta de Vela es la **firma

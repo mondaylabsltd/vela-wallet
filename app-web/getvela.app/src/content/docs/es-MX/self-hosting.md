@@ -10,6 +10,11 @@ source: f24224b633b4
 
 # Guía de autoalojamiento
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/self-hosting">English page</a> is authoritative for security statements.
+</Callout>
+
 Tu dinero está en un contrato Safe on-chain, controlado por tus llaves. Nada de lo
 que opera Vela puede moverlo. Lo que Vela sí opera es la maquinaria que hace cómoda
 la wallet: un relay que envía tus transacciones, un índice que ayuda a un

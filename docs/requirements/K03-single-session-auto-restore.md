@@ -1,9 +1,13 @@
 # K03 · Single-Session Model & Auto-Restore
 
+> **Superseded (R23): the code contradicts the whole document. There is no single WalletPair session and no remote-inject restore. Grants are stored per origin (`vela.perm.<origin>`), and several sites can be connected at once, each through the injected provider.**
+>
+> **What is true:** `rust/crates/vela-core/src/app/dapp_browser.rs`, `rust/crates/vela-core/src/app/dapp_permissions.rs`. Checked against the code at commit `fa6083c87` (R23, 2026-11-09). This document is kept as history; it does not describe the product.
+
 | | |
 |---|---|
 | **Epic** | K — dApp Connect |
-| **Status** | ✅ Shipped |
+| **Status** | ⚠️ Superseded (R23, 2026-11-09): see the note above |
 | **Owner** | Shelchin |
 | **Depends on** | K01 |
 | **Related** | K02, K08, C05, L01 |

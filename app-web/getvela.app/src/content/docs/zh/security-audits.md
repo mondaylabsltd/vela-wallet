@@ -4,6 +4,15 @@ description: "Vela 依赖的每一个合约、谁审计了哪个版本、审计�
 source: 6f7e13ae7d38
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/security-audits">English page</a> is authoritative for security statements.
+</Callout>
+
 “经过审计”是针对特定版本的特定代码的说法，所以这一页列出具体的报告、提交和部署地址——也列出
 **没有**审计过的东西，这同样重要。
 

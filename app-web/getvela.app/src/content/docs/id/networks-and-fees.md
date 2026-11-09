@@ -10,6 +10,11 @@ source: ba67791e85d6
 
 # Jaringan & biaya
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/networks-and-fees">English page</a> is authoritative for security statements.
+</Callout>
+
 ## Jaringan bawaan
 
 Vela menampilkan **20 jaringan** secara default, semuanya mainnet:

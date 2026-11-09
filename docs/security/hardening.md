@@ -1,5 +1,7 @@
 # Hardening: closing the doors (Round 21), making the defences true (Round 22)
 
+*The decision record behind [`docs/SECURITY-MODEL.md`](../SECURITY-MODEL.md), which summarises it for reviewers. Every path, symbol and id cited here is checked to exist by `scripts/ci/check-doc-claims.mjs` in CI (last run clean at commit `fa6083c87`, 2026-11-09).*
+
 Round 21 closes the code items of the 2026-11-07 core-dev security review that the
 earlier P0 work left open: review items 1-6 (relay power), 1-8 (telemetry), 1-1 (web origin
 hardening), the 0-1 follow-up (a test RP ID), and SEC-PARENT-2 from `docs/KNOWN-BUGS.md`.
@@ -1237,6 +1239,14 @@ use, on a dedicated registrable domain, after the domain-security work (review 1
 DNSSEC/CAA/registry lock) is done. The owner decides; nothing here depends on it.
 
 ## Round 22 go-live (the owner)
+
+> **R23 note (checked at `fa6083c87`).** The lanes below each name their own page as "first in
+> `BUILD_ALLOWED`". After the merge, the first entry of `integrity::BUILD_ALLOWED` is
+> `e95fb59d…`, one page carrying both `674b7333`'s opening from bytes and Service Worker pin and
+> `e7ee3925`'s Permit2 witness reading and 2^128 line; `integrity::FROM_BYTES` lists it and
+> `674b7333`. Deploy `app-web/trusted-signer/dist/` as built (it holds every listed version), and
+> check `e95fb59d…` with the `curl … | shasum -a 256` step. `integrity::LAUNCH` is still
+> `6d7172b4…`.
 
 1. **Deploy the signing page** `app-web/trusted-signer/dist/`, including the new `dist/sw.js`,
    with page `674b7333` first in `BUILD_ALLOWED`.

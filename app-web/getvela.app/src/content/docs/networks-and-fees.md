@@ -9,6 +9,12 @@ description: "The 20 networks Vela shows by default, how to add another, exactly
 
 # Networks & fees
 
+<Callout type="info" title="Last verified November 2026">
+Checked against the code at commit <code>fa6083c87</code>. The fee rule is
+<code>fee_policy.rs</code> in Vela's shared core; where this page and the code
+disagree, the code is right.
+</Callout>
+
 ## Built-in networks
 
 Vela shows **20 networks** by default, all mainnets:
@@ -73,26 +79,39 @@ sponsorship policy.
 <span id="fee"></span>
 
 The confirm screen shows one amount, in the fee coin and in your display
-currency. It is calculated like this:
+currency. How it is calculated depends on what the relay publishes.
 
-- **Gas the wallet reserves.** The wallet simulates the transaction and reserves
-  more gas than it expects to use: the verification and execution estimates are
-  each raised by half, with minimums (for example, verification is at least
-  300,000 gas once the wallet is deployed, and 2,000,000 for the transaction
-  that deploys it).
-- **Gas price.** The higher of the wallet's own reading of the network's gas
-  price and the relay's price for the speed you chose. The default speed is
-  *fast*, which the relay prices at about 1.8 × the base fee plus twice the
-  priority fee.
-- **Fee = 3 × reserved gas × gas price**, with a minimum of about $0.01. On Tempo
-  the multiple is 2 and the fee is paid in pathUSD.
+**Where the relay bills the gas used** (Ethereum, Gnosis, Polygon, BNB Chain and
+their testnets, with Vela's relay):
 
-The reserve is padded well above what the transaction will use and the price
-includes headroom, so the fee is more than the transaction costs on-chain — more
-again for your first transaction on a network, which also deploys your wallet.
-The relay pays the real cost and keeps the rest; nothing is refunded. On cheap
-networks this is cents; on Ethereum mainnet it can be a real amount. You never
-have to guess: the exact amount is on the confirm screen before you sign.
+- **Gas billed (`settlementGas`).** With its quote the relay says how much gas it
+  will bill for this operation: what its simulation measured plus 15% and
+  30,000, and never more than the operation's own gas limits.
+- **Price per gas (`inBandFeePerGas`).** The relay publishes one per speed:
+  1.1 × (1.5 × the next block's base fee + a tip) for *slow* and *standard*, with
+  1.75 × the base fee for *fast*, the tips being the 25th, 50th and 70th
+  percentile of recent blocks' rewards. The default speed is *standard*.
+- **Fee = `settlementGas × inBandFeePerGas`**, with a minimum of about $0.01.
+
+The wallet does not take either figure on trust. It refuses a quote whose
+`settlementGas` is above the smaller of the gas limits the operation is signed
+with and 125% of the wallet's own gas model plus 50,000, and a price per gas more
+than three times the same formula applied to the wallet's own reading of the
+network. Nothing is signed on a refused quote.
+
+**Against a relay that publishes neither figure** (other networks, or an older
+relay), the fee is **3 × the operation's gas limits × the higher of the wallet's
+own gas-price reading and the relay's price for the chosen speed**, with the same
+minimum. On Tempo the multiple is 2 and the fee is paid in pathUSD.
+
+Either way the fee is more than the transaction costs on-chain — more again for
+your first transaction on a network, which also deploys your wallet. The relay
+pays the real cost and keeps the rest; nothing is refunded. On cheap networks
+this is cents; on Ethereum mainnet it can be a real amount. You never have to
+guess: the exact amount is on the confirm screen before you sign, it is rounded
+up, never down, and from the moment you confirm, the amount and fee you pressed
+are the ones signed — if a new quote arrives in between, nothing is signed and
+the screen says the fee moved.
 
 **Who gets it.** The fee goes to whoever runs the relay the wallet is set to —
 Vela's unless you change it. Any vela-relay deployment works, including
@@ -103,7 +122,8 @@ formula whichever relay you pick.
 The fee amount and the address it goes to are part of the operation you sign. A
 relay that changed either would invalidate your signature, so you pay exactly
 the amount shown — no more, even if gas rises before inclusion. A relay's
-gas-price quote more than three times the wallet's own reading is refused.
+price per gas more than three times the wallet's own reading is refused, and so
+is a bill for more gas than the operation can use.
 </Callout>
 
 ### What you can pay with
@@ -142,7 +162,10 @@ explains how to run one.
 The relay receives an operation that is already signed. It cannot change the
 recipient, the amount, the fee or anything else. It can delay or refuse it, and it
 chooses when it lands — so for a swap it could, in principle, trade ahead of you
-within your slippage.
+within your slippage. Every operation is signed with a **30-minute** validity
+window: after that the chain refuses it, so a relay cannot hold a signed
+operation and land it later. If one expires, the wallet says nothing was sent,
+and you sign again.
 
 ### When a relay runs out of gas
 
@@ -183,6 +206,14 @@ endpoints** per network — the built-in ones, public fallbacks, and any provide
 keys or endpoints you add — and moves to the next one when an endpoint is slow
 or down. You can set your own endpoint per network under **Settings →
 Networks**, in every app.
+
+A balance is one node's answer. A **signing check** is not: a simulation, a
+multisig's safety checks and an ownership check count only when two endpoints
+from **different providers** agree, each having first reported the right chain.
+One node answering, or two disagreeing, turns the confirm into "… anyway", held
+for 1.5 seconds. With **Only use my node** on, your own node is trusted alone,
+and the confirm screen says so. Providers are told apart by their domain name,
+so two brands that share one backend would count as two.
 
 The relay is sent the RPC address the wallet uses for a network — including any
 API key in it — with every request, so it can reach the network you use. The

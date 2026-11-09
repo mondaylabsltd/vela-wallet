@@ -1,5 +1,7 @@
 # How to verify Vela's web core and signing page yourself
 
+*Last verified against commit `fa6083c87` (2026-11-09). A one-page summary of every check, with what each proves and does not, is [How to verify Vela yourself](review-pack.md#how-to-verify-vela-yourself); the threat model is [`SECURITY-MODEL.md`](../SECURITY-MODEL.md).*
+
 Two things Vela ships to browsers are built bytes committed to this repository, not code a
 browser compiles from source:
 

@@ -10,6 +10,11 @@ source: fcfb268d3492
 
 # Trusted Signer
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/clear-signing-self-host">English page</a> is authoritative for security statements.
+</Callout>
+
 Vela は承認の前にすべての取引をデコードしますし、そのデコードは誠実な仕事です。けれど、その仕事をしているのは、取引を組み立てたのと同じアプリです。アプリ自体、あるいはアプリがあなたに届く経路が改ざんされれば、あるものを見せて、別のものに署名させることができます。[Bybit](/ja/docs/bybit-attack) で起きたのは、まさにそれでした。
 
 Trusted Signer は、それを 2 つに分けるために存在します。アプリはリクエストを渡すだけで、確認と署名は別のページで行われます。端から端まで読むことも、1 バイトも違わずに再ビルドすることも、自分で動かすこともできるページです。

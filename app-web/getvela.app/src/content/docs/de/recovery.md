@@ -10,6 +10,11 @@ source: 77cf3f24c7c7
 
 # Wiederherstellung und Anmeldung
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/recovery">English page</a> is authoritative for security statements.
+</Callout>
+
 Ohne Seed-Phrase beruht die Wiederherstellung auf zwei Dingen: **einem Schlüssel, den
 du noch hast**, und **einem öffentlichen Eintrag darüber, welche Schlüssel zu deiner
 Wallet gehören**.

@@ -10,6 +10,11 @@ source: fcfb268d3492
 
 # Trusted Signer
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/clear-signing-self-host">English page</a> is authoritative for security statements.
+</Callout>
+
 Vela her işlemi siz onaylamadan önce çözer ve bu çözümleme dürüst bir iştir — ama
 işlemi oluşturan uygulamanın kendisinin yaptığı bir iştir. Uygulamaya ya da size
 ulaşma yoluna müdahale edilmişse, size bir şey gösterip başka bir şey imzalayabilir.

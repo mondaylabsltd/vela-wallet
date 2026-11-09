@@ -10,6 +10,11 @@ source: d3c8b770a0ca
 
 # Whitepaper
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/whitepaper">English page</a> is authoritative for security statements.
+</Callout>
+
 <Callout type="info" title="Situação: alfa · última revisão em setembro de 2026">
 Esta página descreve como a Vela funciona hoje e em que você precisa e não precisa
 confiar para usá-la. A Vela está em <a href="/blog/vela-is-in-alpha">alfa</a> — comece

@@ -4,7 +4,16 @@ description: "Pada Februari 2025 Bybit kehilangan sekitar $1,5 miliar. Yang jebo
 source: d8217ceb16b2
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
 # Serangan Bybit, dan jalur yang dipakainya
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/bybit-attack">English page</a> is authoritative for security statements.
+</Callout>
 
 Pada 21 Februari 2025, Bybit kehilangan sekitar **$1,5 miliar** dari cold wallet
 multisig Safe. Ini pencurian terbesar dalam sejarah industri ini, dan layak dibaca

@@ -4,6 +4,15 @@ description: "Vela 依賴的每一份合約、誰審計了哪個版本、審計�
 source: 6f7e13ae7d38
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/security-audits">English page</a> is authoritative for security statements.
+</Callout>
+
 「經過審計」是針對特定版本的特定程式碼而言的，所以本頁會引用具體的報告、提交紀錄和部署地址——也會列出
 **沒有**經過審計的東西，這同樣重要。
 

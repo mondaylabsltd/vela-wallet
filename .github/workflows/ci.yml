@@ -201,6 +201,16 @@ jobs:
         run: |
           node scripts/ci/check-scenarios.mjs --self-test
           node scripts/ci/check-scenarios.mjs --summary "$GITHUB_STEP_SUMMARY"
+      # R23: every code path, symbol, advisory id and KNOWN-BUGS id cited in
+      # docs/SECURITY-MODEL.md, docs/security/hardening.md and
+      # docs/security/review-pack.md names something in this tree. A rename
+      # that orphans a citation fails here, so the security docs cannot drift
+      # from the code without someone noticing. It proves a citation exists,
+      # not that it supports its sentence.
+      - name: Security docs cite code that exists
+        run: |
+          node scripts/ci/check-doc-claims.mjs --self-test
+          node scripts/ci/check-doc-claims.mjs
       # §38: the vendored PeerConnect client is the bytes VENDOR.json records
       # (the rebuild from its commit is `supply-chain`'s).
       - name: The vendored PeerConnect client is what VENDOR.json records

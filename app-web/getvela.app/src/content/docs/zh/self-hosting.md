@@ -10,6 +10,11 @@ source: f24224b633b4
 
 # 自托管指南
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/self-hosting">English page</a> is authoritative for security statements.
+</Callout>
+
 你的钱在链上的 Safe 合约里，由你的钥匙控制。Vela 不持有钥匙，在你的 Safe 上没有角色，所以它运行的任何东西
 都无法自己动用或冻结你的钱；但请你的钥匙签名的软件是它编写并提供的。Vela 运行的，是让钱包用起来方便的那套机器：替你提交交易的中继、帮新设备找回钱包的
 索引、链数据目录、汇率源，以及各个 App 本身。

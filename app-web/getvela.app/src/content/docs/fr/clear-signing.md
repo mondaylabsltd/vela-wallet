@@ -10,6 +10,11 @@ source: 29a66a1584f1
 
 # Signature lisible
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/clear-signing">English page</a> is authoritative for security statements.
+</Callout>
+
 Beaucoup de portefeuilles affichent encore des données brutes pour tout contrat
 qu'ils ne reconnaissent pas, et la « signature à l'aveugle » — approuver des appels
 que l'on ne peut pas vraiment lire — est l'une des façons dont les portefeuilles se

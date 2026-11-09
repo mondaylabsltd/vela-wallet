@@ -10,6 +10,11 @@ source: d3c8b770a0ca
 
 # 白皮书
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/whitepaper">English page</a> is authoritative for security statements.
+</Callout>
+
 <Callout type="info" title="状态：alpha · 2026 年 9 月修订">
 这一页讲 Vela 目前如何运作，以及使用它时你需要信任什么、不需要信任什么。Vela 还处于
 <a href="/blog/vela-is-in-alpha">alpha 阶段</a>——请先用小额。Vela 没有代币。这里的每一条都能

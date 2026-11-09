@@ -10,6 +10,11 @@ source: ba67791e85d6
 
 # 網路與費用
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/networks-and-fees">English page</a> is authoritative for security statements.
+</Callout>
+
 ## 內建網路
 
 Vela 預設顯示 **20 條網路**，全部是主網：

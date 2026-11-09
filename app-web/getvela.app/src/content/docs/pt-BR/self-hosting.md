@@ -10,6 +10,11 @@ source: f24224b633b4
 
 # Guia de auto-hospedagem
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/self-hosting">English page</a> is authoritative for security statements.
+</Callout>
+
 O seu dinheiro está num contrato Safe on-chain, controlado pelas suas chaves. Nada
 do que a Vela roda consegue movê-lo. O que a Vela roda é a engrenagem que torna a
 carteira prática: um relay que envia as suas transações, um índice que ajuda um

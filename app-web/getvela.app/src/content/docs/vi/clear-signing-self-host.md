@@ -10,6 +10,11 @@ source: fcfb268d3492
 
 # Trusted Signer
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/clear-signing-self-host">English page</a> is authoritative for security statements.
+</Callout>
+
 Vela giải mã mọi giao dịch trước khi bạn duyệt, và việc giải mã đó được làm một cách trung
 thực — nhưng nó do chính ứng dụng đã dựng giao dịch thực hiện. Nếu ứng dụng, hoặc con đường
 nó đến tay bạn, bị can thiệp, nó có thể cho bạn xem một thứ và ký một thứ khác. Đó chính xác

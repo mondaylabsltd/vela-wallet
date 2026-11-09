@@ -10,6 +10,11 @@ source: 29a66a1584f1
 
 # Понятная подпись
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/clear-signing">English page</a> is authoritative for security statements.
+</Callout>
+
 Многие кошельки до сих пор показывают сырые данные для любого незнакомого им
 контракта, а «слепая подпись» — одобрение вызовов, которые вы на самом деле не
 можете прочитать, — один из способов, которыми опустошают кошельки. Ответ Vela —

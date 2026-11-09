@@ -1,9 +1,13 @@
 # G06 · Gas Account (Relayer EOA) & Sponsored Activation
 
+> **Superseded (R23): the code contradicts the whole document. There is no per-account relayer EOA, no activation deposit and no "free activation". The relay is paid in band: a transfer inside the MultiSend the passkey signs, with zero EntryPoint fees and no paymaster. Where the relay bills gas used, the fee is `max(settlementGas × inBandFeePerGas[tier], floor)`, and `settlementGas` is capped against the wallet's own gas model. An empty relay treasury is reported before anything is signed; a contribution to it is voluntary, non-refundable and does not pay for the transaction.**
+>
+> **What is true:** `rust/crates/vela-core/src/app/fee_policy.rs` (`settlement_gas_cap`); `docs/ARCHITECTURE.md` "Fee model"; `docs/security/hardening.md` §2. Checked against the code at commit `fa6083c87` (R23, 2026-11-09). This document is kept as history; it does not describe the product.
+
 | | |
 |---|---|
 | **Epic** | G — Transaction Engine (ERC-4337) |
-| **Status** | ✅ Shipped |
+| **Status** | ⚠️ Superseded (R23, 2026-11-09): see the note above |
 | **Owner** | Shelchin |
 | **Depends on** | F07 |
 | **Related** | G05, G07, F02 |

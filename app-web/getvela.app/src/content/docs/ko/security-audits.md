@@ -4,6 +4,15 @@ description: "Vela가 의존하는 모든 컨트랙트, 누가 어느 버전을 
 source: 6f7e13ae7d38
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/security-audits">English page</a> is authoritative for security statements.
+</Callout>
+
 "감사를 받았다"는 말은 특정 버전의 특정 코드에 대한 주장입니다. 그래서 이 페이지는 보고서,
 커밋, 배포 주소를 구체적으로 제시하고, 감사를 **받지 않은** 것도 함께 적습니다. 그 목록도
 똑같이 중요하기 때문입니다.

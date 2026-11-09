@@ -4,7 +4,16 @@ description: "Em fevereiro de 2025, a Bybit perdeu cerca de US$ 1,5 bilhão. Os 
 source: d8217ceb16b2
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
 # O ataque à Bybit e o caminho que ele usou
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/bybit-attack">English page</a> is authoritative for security statements.
+</Callout>
 
 Em 21 de fevereiro de 2025, a Bybit perdeu cerca de **US$ 1,5 bilhão** de uma
 carteira fria multisig Safe. É o maior roubo da história do setor, e vale a pena

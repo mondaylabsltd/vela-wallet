@@ -4,7 +4,16 @@ description: "2025 年 2 月、Bybit は約 15 億ドルを失いました。破
 source: d8217ceb16b2
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
 # Bybit の事件と、攻撃が通った経路
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/bybit-attack">English page</a> is authoritative for security statements.
+</Callout>
 
 2025 年 2 月 21 日、Bybit は Safe のマルチシグのコールドウォレットから約 **15 億ドル**を失いました。この業界の歴史上最大の盗難であり、丁寧に読む価値があります。たったひとつを除いて、ほとんどすべてが*正しかった*からです。
 

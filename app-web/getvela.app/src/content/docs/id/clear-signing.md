@@ -10,6 +10,11 @@ source: 29a66a1584f1
 
 # Clear signing
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/clear-signing">English page</a> is authoritative for security statements.
+</Callout>
+
 Banyak dompet masih menampilkan data mentah untuk kontrak apa pun yang tidak mereka
 kenali, dan "tanda tangan buta" (blind signing) — menyetujui panggilan yang sebenarnya
 tidak bisa Anda baca — adalah salah satu cara dompet dikuras. Jawaban Vela adalah

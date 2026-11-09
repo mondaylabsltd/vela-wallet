@@ -10,6 +10,11 @@ source: fcfb268d3492
 
 # 可信签名器
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/clear-signing-self-host">English page</a> is authoritative for security statements.
+</Callout>
+
 Vela 在你批准每一笔交易之前都会先解码，这份解码是实打实的活——但干这活的，是构造这笔交易的同一个应用。如果这个应用、或者它送到你手上的那条路被动了手脚，它就能给你看一样东西、却签下另一样。[Bybit](/zh/docs/bybit-attack) 遇到的正是这件事。
 
 可信签名器存在的意义，就是把这件事一分为二：App 只负责把请求交出去，核对和签名则发生在另一个页面上——一个你可以从头读到尾、逐字节重新构建、或者自己运行的页面。

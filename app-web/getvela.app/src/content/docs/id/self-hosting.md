@@ -10,6 +10,11 @@ source: f24224b633b4
 
 # Panduan hosting sendiri
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/self-hosting">English page</a> is authoritative for security statements.
+</Callout>
+
 Uang Anda ada di kontrak Safe on-chain, dikendalikan oleh kunci Anda. Tidak ada yang
 dijalankan Vela yang bisa memindahkannya. Yang dijalankan Vela adalah mesin yang membuat
 dompet nyaman dipakai: relay yang mengirim transaksi Anda, indeks yang membantu perangkat

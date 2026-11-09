@@ -10,6 +10,11 @@ source: 77cf3f24c7c7
 
 # Recuperación e inicio de sesión
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/recovery">English page</a> is authoritative for security statements.
+</Callout>
+
 Sin frase semilla, la recuperación descansa en dos cosas: **una llave que todavía
 tengas** y **un registro público de qué llaves pertenecen a tu wallet**.
 

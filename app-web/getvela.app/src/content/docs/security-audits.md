@@ -11,6 +11,9 @@ Last verified on 8 November 2026, against commit `eebc246f4` (the development br
 includes the unreleased multisig feature) and release v0.9.8. Each audit date and finding below
 was checked against the cited report. If you find an error, tell us and we will fix it. To
 report a vulnerability, see the [security policy](https://github.com/mondaylabsltd/vela-wallet/blob/main/SECURITY.md).
+The "Gaps in Vela's own defences" list was re-checked on 9 November 2026 against commit
+`fa6083c87`. The threat model, with a code location for every claim, is
+[SECURITY-MODEL.md](https://github.com/mondaylabsltd/vela-wallet/blob/main/docs/SECURITY-MODEL.md).
 
 ## The funds path
 
@@ -192,13 +195,15 @@ trade-off:
 
 - **An unlimited approval goes out if you keep it** — a deliberate trade-off,
   because a capped approval breaks Permit2 and batched swaps. An "unlimited"
-  approval (2^200 or more; 2^152 for Permit2) is shown in red and sent as the dApp
-  asked unless you cap it. Signed permits can't be capped anywhere.
-- **The Trusted Signer is opt-in, and its integrity check does not refuse yet.**
-  The independent signing page is used only on a device where you chose it when
-  you created your wallet or signed in, and the web wallet can't use it. The
-  desktop app compares the page with the versions it ships with but only logs a
-  mismatch; the phone apps don't check yet.
+  approval (2^128 or more; 2^200, or 2^152 for Permit2, in v0.9.8 and earlier) is
+  shown in red and sent as the dApp asked unless you cap it. Signed permits can't
+  be capped anywhere.
+- **The Trusted Signer is opt-in, and for a getvela.app wallet it is not an
+  authority boundary.** The independent signing page is used only on a device
+  where you chose it. Every app refuses a page whose bytes don't match the
+  versions it ships with. But the apps can ask a getvela.app passkey directly,
+  so a fully compromised app does not need the page; only a wallet made on a
+  self-hosted page has the page as its one way to sign.
 - **The website loads a third-party analytics script** on the same domain as the
   passkeys. The site forbids its pages from using passkeys (a Permissions-Policy
   header), and keeps the script off the page that holds a key.

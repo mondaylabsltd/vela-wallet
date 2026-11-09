@@ -4,7 +4,16 @@ description: "Tháng 2/2025, Bybit mất khoảng 1,5 tỷ USD. Hợp đồng Sa
 source: d8217ceb16b2
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
 # Vụ tấn công Bybit, và con đường nó đã dùng
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/bybit-attack">English page</a> is authoritative for security statements.
+</Callout>
 
 Ngày 21/2/2025, Bybit mất khoảng **1,5 tỷ USD** từ một ví lạnh đa chữ ký Safe. Đó là vụ
 trộm lớn nhất trong lịch sử ngành, và đáng đọc kỹ, vì gần như mọi thứ trong vụ này đều

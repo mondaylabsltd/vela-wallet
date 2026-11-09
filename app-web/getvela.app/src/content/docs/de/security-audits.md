@@ -4,6 +4,15 @@ description: "Jeder Vertrag, von dem Vela abhängt, wer welche Version auditiert
 source: 6f7e13ae7d38
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/security-audits">English page</a> is authoritative for security statements.
+</Callout>
+
 „Auditiert“ ist eine Aussage über bestimmten Code in einer bestimmten Version, deshalb
 nennt diese Seite die Berichte, die Commits und die bereitgestellten Adressen – und
 listet auf, was **nicht** auditiert ist, was genauso wichtig ist.

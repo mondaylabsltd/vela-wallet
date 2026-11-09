@@ -10,6 +10,11 @@ source: fcfb268d3492
 
 # Trusted Signer
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/clear-signing-self-host">English page</a> is authoritative for security statements.
+</Callout>
+
 Vela는 승인하기 전에 모든 거래를 디코딩하고, 그 디코딩은 성실하게 이루어집니다. 하지만 그
 작업을 하는 것은 거래를 만든 바로 그 앱입니다. 앱이나 앱이 사용자에게 전달되는 경로가
 변조되면, 한 가지를 보여 주고 다른 것에 서명하게 할 수 있습니다.
