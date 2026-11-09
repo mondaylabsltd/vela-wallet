@@ -476,7 +476,7 @@ pub enum RpcCallVerdict {
         /// alone ("Only use my node") and it answered — trusted alone, by
         /// their choice, and said so.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        #[cfg_attr(feature = "bindings", ts(optional))]
+        #[cfg_attr(feature = "bindings", ts(as = "Option<bool>", optional))]
         own_node: bool,
     },
     /// `eth_getLogs` range/size cap (invariant ⑤): the caller splits the
