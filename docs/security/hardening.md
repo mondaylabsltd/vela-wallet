@@ -1,5 +1,7 @@
 # Hardening: closing the doors (Round 21), making the defences true (Round 22)
 
+*The decision record behind [`docs/SECURITY-MODEL.md`](../SECURITY-MODEL.md), which summarises it for reviewers. Every path, symbol and id cited here is checked to exist by `scripts/ci/check-doc-claims.mjs` in CI (last run clean at commit `fa6083c87`, 2026-11-09).*
+
 Round 21 closes the code items of the 2026-11-07 core-dev security review that the
 earlier P0 work left open: review items 1-6 (relay power), 1-8 (telemetry), 1-1 (web origin
 hardening), the 0-1 follow-up (a test RP ID), and SEC-PARENT-2 from `docs/KNOWN-BUGS.md`.
