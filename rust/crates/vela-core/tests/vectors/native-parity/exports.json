@@ -596,13 +596,13 @@
    "fn": "trusted_signer_signature_request",
    "input": {
     "method": "personal_sign",
-    "params_json": "[\"0x48656c6c6f2c2056656c61\",\"0x83E6C79b32FA450155e0E9334a7197E21df29920\"]",
+    "params_json": "[\"0x48656c6c6f2c2056656c61\",\"0x540D7CF44D261948531c39a6570Aea3C8a4A0113\"]",
     "origin": "https://app.example",
     "origin_seen_by_browser": true,
     "chain_id": 100,
     "chain_name": "Gnosis",
     "native_symbol": "xDAI",
-    "account": "0x83E6C79b32FA450155e0E9334a7197E21df29920",
+    "account": "0x540D7CF44D261948531c39a6570Aea3C8a4A0113",
     "account_name": "Savings",
     "credential_ids_hex": [
      "780a3232339d9cfb12c126072718759d"
@@ -612,7 +612,7 @@
    "expect": {
     "value": {
      "context": {
-      "account": "0x83E6C79b32FA450155e0E9334a7197E21df29920",
+      "account": "0x540D7CF44D261948531c39a6570Aea3C8a4A0113",
       "allowCredentials": [
        "eAoyMjOdnPsSwSYHJxh1nQ"
       ],
@@ -645,7 +645,7 @@
       "origin": "https://app.example",
       "params": [
        "0x48656c6c6f2c2056656c61",
-       "0x83E6C79b32FA450155e0E9334a7197E21df29920"
+       "0x540D7CF44D261948531c39a6570Aea3C8a4A0113"
       ]
      }
     }
@@ -656,13 +656,13 @@
    "fn": "trusted_signer_signature_request",
    "input": {
     "method": "personal_sign",
-    "params_json": "[\"0x48656c6c6f2c2056656c61\",\"0x83E6C79b32FA450155e0E9334a7197E21df29920\"]",
+    "params_json": "[\"0x48656c6c6f2c2056656c61\",\"0x540D7CF44D261948531c39a6570Aea3C8a4A0113\"]",
     "origin": "https://app.example",
     "origin_seen_by_browser": false,
     "chain_id": 100,
     "chain_name": "Gnosis",
     "native_symbol": "xDAI",
-    "account": "0x83E6C79b32FA450155e0E9334a7197E21df29920",
+    "account": "0x540D7CF44D261948531c39a6570Aea3C8a4A0113",
     "account_name": "Savings",
     "credential_ids_hex": [
      "780a3232339d9cfb12c126072718759d"
@@ -672,7 +672,7 @@
    "expect": {
     "value": {
      "context": {
-      "account": "0x83E6C79b32FA450155e0E9334a7197E21df29920",
+      "account": "0x540D7CF44D261948531c39a6570Aea3C8a4A0113",
       "allowCredentials": [
        "eAoyMjOdnPsSwSYHJxh1nQ"
       ],
@@ -689,7 +689,7 @@
       "origin": "https://app.example",
       "params": [
        "0x48656c6c6f2c2056656c61",
-       "0x83E6C79b32FA450155e0E9334a7197E21df29920"
+       "0x540D7CF44D261948531c39a6570Aea3C8a4A0113"
       ]
      }
     }
@@ -699,23 +699,23 @@
    "name": "trusted_signer_signature_accept/accepted",
    "fn": "trusted_signer_signature_accept",
    "input": {
-    "request_json": "{\"context\":{\"account\":\"0x83E6C79b32FA450155e0E9334a7197E21df29920\",\"allowCredentials\":[\"eAoyMjOdnPsSwSYHJxh1nQ\"],\"chainId\":100,\"chainName\":\"Gnosis\",\"dapp\":{\"name\":\"app.example\",\"origin\":\"https://app.example\",\"source\":\"vela_browser\"},\"keyRoute\":{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"hints\":[\"client-device\"],\"place\":\"trusted_signer\",\"transports\":[\"internal\",\"hybrid\"]},\"nativeSymbol\":\"xDAI\",\"signer\":{\"letter\":\"S\",\"name\":\"Savings\"}},\"intent\":{\"method\":\"personal_sign\",\"origin\":\"https://app.example\",\"params\":[\"0x48656c6c6f2c2056656c61\",\"0x83E6C79b32FA450155e0E9334a7197E21df29920\"]}}",
-    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0xd0ee3208c3b90b79ab69116e247018067a53123e799afa39d5e6e559694f76402e0ee53c48a7955e94a4bfc4f32be2b24e6adecb87efb46a7438539d962b244f\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a2265334a653275586b59694578795f5a5269386b573471586f3671384c676f6475376d442d4a6b5663707551222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
+    "request_json": "{\"context\":{\"account\":\"0x540D7CF44D261948531c39a6570Aea3C8a4A0113\",\"allowCredentials\":[\"eAoyMjOdnPsSwSYHJxh1nQ\"],\"chainId\":100,\"chainName\":\"Gnosis\",\"dapp\":{\"name\":\"app.example\",\"origin\":\"https://app.example\",\"source\":\"vela_browser\"},\"keyRoute\":{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"hints\":[\"client-device\"],\"place\":\"trusted_signer\",\"transports\":[\"internal\",\"hybrid\"]},\"nativeSymbol\":\"xDAI\",\"signer\":{\"letter\":\"S\",\"name\":\"Savings\"}},\"intent\":{\"method\":\"personal_sign\",\"origin\":\"https://app.example\",\"params\":[\"0x48656c6c6f2c2056656c61\",\"0x540D7CF44D261948531c39a6570Aea3C8a4A0113\"]}}",
+    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0xf52e4e5c1751ec69717b4e086c8a42921f323b84c607ec7301a32a254f0fbbb7249f12799b4bd01c1ecc700ba97876f9b0c0064af8621b8bb69cce65ca1c400a\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22443145536f315a4b49632d6c36452d6c44666e756c70495333513566466c5a65387a553265496c42584c41222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
     "keys": [
      {
       "credential_id": "780a3232339d9cfb12c126072718759d",
-      "public_key_hex": "04f74af1e2e61d69d951a8b900582abd8f89c9c5bf3fa3d6ce68c41cf813f2a9f2545a2640bb937aa4960c112d021f6900e927c82c7c4a20770a37a5dfd0d41a5c"
+      "public_key_hex": "045a72a7a01f8c9fb2d810e23cdc2455c78bec5f680cc749d4645430e57400bb4a554fd65568986d6334b28f2e89d39055f390da241eba91ea218b9934cbb89106"
      }
     ],
-    "digest_hex": "0x7b725edae5e4622131cbf6518bc916e2a5e8eaaf0b82876eee60fe26455ca6e4"
+    "digest_hex": "0x0f5112a3564a21cfa5e84fa50df9ee969212dd0e5f16565ef335367889415cb0"
    },
    "expect": {
     "value": {
      "accepted": {
       "credential_id_hex": "780a3232339d9cfb12c126072718759d",
-      "signature_der_hex": "3045022100d0ee3208c3b90b79ab69116e247018067a53123e799afa39d5e6e559694f764002202e0ee53c48a7955e94a4bfc4f32be2b24e6adecb87efb46a7438539d962b244f",
+      "signature_der_hex": "3045022100f52e4e5c1751ec69717b4e086c8a42921f323b84c607ec7301a32a254f0fbbb70220249f12799b4bd01c1ecc700ba97876f9b0c0064af8621b8bb69cce65ca1c400a",
       "authenticator_data_hex": "a69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007",
-      "client_data_json_hex": "7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a2265334a653275586b59694578795f5a5269386b573471586f3671384c676f6475376d442d4a6b5663707551222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d"
+      "client_data_json_hex": "7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22443145536f315a4b49632d6c36452d6c44666e756c70495333513566466c5a65387a553265496c42584c41222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d"
      }
     }
    }
@@ -724,12 +724,12 @@
    "name": "trusted_signer_signature_accept/shell_signs_other_bytes",
    "fn": "trusted_signer_signature_accept",
    "input": {
-    "request_json": "{\"context\":{\"account\":\"0x83E6C79b32FA450155e0E9334a7197E21df29920\",\"allowCredentials\":[\"eAoyMjOdnPsSwSYHJxh1nQ\"],\"chainId\":100,\"chainName\":\"Gnosis\",\"dapp\":{\"name\":\"app.example\",\"origin\":\"https://app.example\",\"source\":\"vela_browser\"},\"keyRoute\":{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"hints\":[\"client-device\"],\"place\":\"trusted_signer\",\"transports\":[\"internal\",\"hybrid\"]},\"nativeSymbol\":\"xDAI\",\"signer\":{\"letter\":\"S\",\"name\":\"Savings\"}},\"intent\":{\"method\":\"personal_sign\",\"origin\":\"https://app.example\",\"params\":[\"0x48656c6c6f2c2056656c61\",\"0x83E6C79b32FA450155e0E9334a7197E21df29920\"]}}",
-    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0xd0ee3208c3b90b79ab69116e247018067a53123e799afa39d5e6e559694f76402e0ee53c48a7955e94a4bfc4f32be2b24e6adecb87efb46a7438539d962b244f\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a2265334a653275586b59694578795f5a5269386b573471586f3671384c676f6475376d442d4a6b5663707551222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
+    "request_json": "{\"context\":{\"account\":\"0x540D7CF44D261948531c39a6570Aea3C8a4A0113\",\"allowCredentials\":[\"eAoyMjOdnPsSwSYHJxh1nQ\"],\"chainId\":100,\"chainName\":\"Gnosis\",\"dapp\":{\"name\":\"app.example\",\"origin\":\"https://app.example\",\"source\":\"vela_browser\"},\"keyRoute\":{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"hints\":[\"client-device\"],\"place\":\"trusted_signer\",\"transports\":[\"internal\",\"hybrid\"]},\"nativeSymbol\":\"xDAI\",\"signer\":{\"letter\":\"S\",\"name\":\"Savings\"}},\"intent\":{\"method\":\"personal_sign\",\"origin\":\"https://app.example\",\"params\":[\"0x48656c6c6f2c2056656c61\",\"0x540D7CF44D261948531c39a6570Aea3C8a4A0113\"]}}",
+    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0xf52e4e5c1751ec69717b4e086c8a42921f323b84c607ec7301a32a254f0fbbb7249f12799b4bd01c1ecc700ba97876f9b0c0064af8621b8bb69cce65ca1c400a\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22443145536f315a4b49632d6c36452d6c44666e756c70495333513566466c5a65387a553265496c42584c41222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
     "keys": [
      {
       "credential_id": "780a3232339d9cfb12c126072718759d",
-      "public_key_hex": "04f74af1e2e61d69d951a8b900582abd8f89c9c5bf3fa3d6ce68c41cf813f2a9f2545a2640bb937aa4960c112d021f6900e927c82c7c4a20770a37a5dfd0d41a5c"
+      "public_key_hex": "045a72a7a01f8c9fb2d810e23cdc2455c78bec5f680cc749d4645430e57400bb4a554fd65568986d6334b28f2e89d39055f390da241eba91ea218b9934cbb89106"
      }
     ],
     "digest_hex": "0xd9298a10d1b0735837dc4bd85dac641b0f3cef27a47e5d53a54f2f3f5b2fcffa"
@@ -744,15 +744,15 @@
    "name": "trusted_signer_signature_accept/foreign_key",
    "fn": "trusted_signer_signature_accept",
    "input": {
-    "request_json": "{\"context\":{\"account\":\"0x83E6C79b32FA450155e0E9334a7197E21df29920\",\"allowCredentials\":[\"eAoyMjOdnPsSwSYHJxh1nQ\"],\"chainId\":100,\"chainName\":\"Gnosis\",\"dapp\":{\"name\":\"app.example\",\"origin\":\"https://app.example\",\"source\":\"vela_browser\"},\"keyRoute\":{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"hints\":[\"client-device\"],\"place\":\"trusted_signer\",\"transports\":[\"internal\",\"hybrid\"]},\"nativeSymbol\":\"xDAI\",\"signer\":{\"letter\":\"S\",\"name\":\"Savings\"}},\"intent\":{\"method\":\"personal_sign\",\"origin\":\"https://app.example\",\"params\":[\"0x48656c6c6f2c2056656c61\",\"0x83E6C79b32FA450155e0E9334a7197E21df29920\"]}}",
-    "result_json": "{\"credentialId\":\"QyLXxD5DImt7pYIXz4P6ng\",\"signature\":\"0x68796340f0c97f89c9fb3031b86d919287ca0b846af74faaa26ec5e5f86657c2c1cb1ada573095b99df2559ab6ed46b393279c6deedda527f0d0e71347c5f58f\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a2265334a653275586b59694578795f5a5269386b573471586f3671384c676f6475376d442d4a6b5663707551222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
+    "request_json": "{\"context\":{\"account\":\"0x540D7CF44D261948531c39a6570Aea3C8a4A0113\",\"allowCredentials\":[\"eAoyMjOdnPsSwSYHJxh1nQ\"],\"chainId\":100,\"chainName\":\"Gnosis\",\"dapp\":{\"name\":\"app.example\",\"origin\":\"https://app.example\",\"source\":\"vela_browser\"},\"keyRoute\":{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"hints\":[\"client-device\"],\"place\":\"trusted_signer\",\"transports\":[\"internal\",\"hybrid\"]},\"nativeSymbol\":\"xDAI\",\"signer\":{\"letter\":\"S\",\"name\":\"Savings\"}},\"intent\":{\"method\":\"personal_sign\",\"origin\":\"https://app.example\",\"params\":[\"0x48656c6c6f2c2056656c61\",\"0x540D7CF44D261948531c39a6570Aea3C8a4A0113\"]}}",
+    "result_json": "{\"credentialId\":\"QyLXxD5DImt7pYIXz4P6ng\",\"signature\":\"0x06964bfabcb0d74394de4be527328d1d6e5d15ac114d1f573d9a943d0c223bccba6843dd78dde00c10df07118fc82744b825bb1a4dfe341ec6afaddd598ad508\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22443145536f315a4b49632d6c36452d6c44666e756c70495333513566466c5a65387a553265496c42584c41222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
     "keys": [
      {
       "credential_id": "780a3232339d9cfb12c126072718759d",
-      "public_key_hex": "04f74af1e2e61d69d951a8b900582abd8f89c9c5bf3fa3d6ce68c41cf813f2a9f2545a2640bb937aa4960c112d021f6900e927c82c7c4a20770a37a5dfd0d41a5c"
+      "public_key_hex": "045a72a7a01f8c9fb2d810e23cdc2455c78bec5f680cc749d4645430e57400bb4a554fd65568986d6334b28f2e89d39055f390da241eba91ea218b9934cbb89106"
      }
     ],
-    "digest_hex": "0x7b725edae5e4622131cbf6518bc916e2a5e8eaaf0b82876eee60fe26455ca6e4"
+    "digest_hex": "0x0f5112a3564a21cfa5e84fa50df9ee969212dd0e5f16565ef335367889415cb0"
    },
    "expect": {
     "value": {
@@ -764,15 +764,15 @@
    "name": "trusted_signer_signature_accept/not_user_verified",
    "fn": "trusted_signer_signature_accept",
    "input": {
-    "request_json": "{\"context\":{\"account\":\"0x83E6C79b32FA450155e0E9334a7197E21df29920\",\"allowCredentials\":[\"eAoyMjOdnPsSwSYHJxh1nQ\"],\"chainId\":100,\"chainName\":\"Gnosis\",\"dapp\":{\"name\":\"app.example\",\"origin\":\"https://app.example\",\"source\":\"vela_browser\"},\"keyRoute\":{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"hints\":[\"client-device\"],\"place\":\"trusted_signer\",\"transports\":[\"internal\",\"hybrid\"]},\"nativeSymbol\":\"xDAI\",\"signer\":{\"letter\":\"S\",\"name\":\"Savings\"}},\"intent\":{\"method\":\"personal_sign\",\"origin\":\"https://app.example\",\"params\":[\"0x48656c6c6f2c2056656c61\",\"0x83E6C79b32FA450155e0E9334a7197E21df29920\"]}}",
-    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0x0846770873ffd462060bcee92893db7cd09285c107b3b15cd931383238d213d833ab9a3619bf29f23539488fe1d89976aa879cfed944409695c208db62b41bc8\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490100000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a2265334a653275586b59694578795f5a5269386b573471586f3671384c676f6475376d442d4a6b5663707551222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
+    "request_json": "{\"context\":{\"account\":\"0x540D7CF44D261948531c39a6570Aea3C8a4A0113\",\"allowCredentials\":[\"eAoyMjOdnPsSwSYHJxh1nQ\"],\"chainId\":100,\"chainName\":\"Gnosis\",\"dapp\":{\"name\":\"app.example\",\"origin\":\"https://app.example\",\"source\":\"vela_browser\"},\"keyRoute\":{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"hints\":[\"client-device\"],\"place\":\"trusted_signer\",\"transports\":[\"internal\",\"hybrid\"]},\"nativeSymbol\":\"xDAI\",\"signer\":{\"letter\":\"S\",\"name\":\"Savings\"}},\"intent\":{\"method\":\"personal_sign\",\"origin\":\"https://app.example\",\"params\":[\"0x48656c6c6f2c2056656c61\",\"0x540D7CF44D261948531c39a6570Aea3C8a4A0113\"]}}",
+    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0x221dd469e8ab5e159d6645d3f2861b16354fd44095a9f65f12c9518570e8b79b68aa2d533857675abd5f65f4f5514c43898a02e83d5afecb43edd1c11630b2d3\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490100000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22443145536f315a4b49632d6c36452d6c44666e756c70495333513566466c5a65387a553265496c42584c41222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
     "keys": [
      {
       "credential_id": "780a3232339d9cfb12c126072718759d",
-      "public_key_hex": "04f74af1e2e61d69d951a8b900582abd8f89c9c5bf3fa3d6ce68c41cf813f2a9f2545a2640bb937aa4960c112d021f6900e927c82c7c4a20770a37a5dfd0d41a5c"
+      "public_key_hex": "045a72a7a01f8c9fb2d810e23cdc2455c78bec5f680cc749d4645430e57400bb4a554fd65568986d6334b28f2e89d39055f390da241eba91ea218b9934cbb89106"
      }
     ],
-    "digest_hex": "0x7b725edae5e4622131cbf6518bc916e2a5e8eaaf0b82876eee60fe26455ca6e4"
+    "digest_hex": "0x0f5112a3564a21cfa5e84fa50df9ee969212dd0e5f16565ef335367889415cb0"
    },
    "expect": {
     "value": {
@@ -784,15 +784,15 @@
    "name": "trusted_signer_signature_accept/bad_signature",
    "fn": "trusted_signer_signature_accept",
    "input": {
-    "request_json": "{\"context\":{\"account\":\"0x83E6C79b32FA450155e0E9334a7197E21df29920\",\"allowCredentials\":[\"eAoyMjOdnPsSwSYHJxh1nQ\"],\"chainId\":100,\"chainName\":\"Gnosis\",\"dapp\":{\"name\":\"app.example\",\"origin\":\"https://app.example\",\"source\":\"vela_browser\"},\"keyRoute\":{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"hints\":[\"client-device\"],\"place\":\"trusted_signer\",\"transports\":[\"internal\",\"hybrid\"]},\"nativeSymbol\":\"xDAI\",\"signer\":{\"letter\":\"S\",\"name\":\"Savings\"}},\"intent\":{\"method\":\"personal_sign\",\"origin\":\"https://app.example\",\"params\":[\"0x48656c6c6f2c2056656c61\",\"0x83E6C79b32FA450155e0E9334a7197E21df29920\"]}}",
-    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0xd0ee3208c3b90b79ab69116e247018067a53123e799afa39d5e6e559694f76402e0ee53c48a7955e94a4bfc4f32be2b24e6adecb87efb46a7438539d962b2400\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a2265334a653275586b59694578795f5a5269386b573471586f3671384c676f6475376d442d4a6b5663707551222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
+    "request_json": "{\"context\":{\"account\":\"0x540D7CF44D261948531c39a6570Aea3C8a4A0113\",\"allowCredentials\":[\"eAoyMjOdnPsSwSYHJxh1nQ\"],\"chainId\":100,\"chainName\":\"Gnosis\",\"dapp\":{\"name\":\"app.example\",\"origin\":\"https://app.example\",\"source\":\"vela_browser\"},\"keyRoute\":{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"hints\":[\"client-device\"],\"place\":\"trusted_signer\",\"transports\":[\"internal\",\"hybrid\"]},\"nativeSymbol\":\"xDAI\",\"signer\":{\"letter\":\"S\",\"name\":\"Savings\"}},\"intent\":{\"method\":\"personal_sign\",\"origin\":\"https://app.example\",\"params\":[\"0x48656c6c6f2c2056656c61\",\"0x540D7CF44D261948531c39a6570Aea3C8a4A0113\"]}}",
+    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0xf52e4e5c1751ec69717b4e086c8a42921f323b84c607ec7301a32a254f0fbbb7249f12799b4bd01c1ecc700ba97876f9b0c0064af8621b8bb69cce65ca1c4000\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22443145536f315a4b49632d6c36452d6c44666e756c70495333513566466c5a65387a553265496c42584c41222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
     "keys": [
      {
       "credential_id": "780a3232339d9cfb12c126072718759d",
-      "public_key_hex": "04f74af1e2e61d69d951a8b900582abd8f89c9c5bf3fa3d6ce68c41cf813f2a9f2545a2640bb937aa4960c112d021f6900e927c82c7c4a20770a37a5dfd0d41a5c"
+      "public_key_hex": "045a72a7a01f8c9fb2d810e23cdc2455c78bec5f680cc749d4645430e57400bb4a554fd65568986d6334b28f2e89d39055f390da241eba91ea218b9934cbb89106"
      }
     ],
-    "digest_hex": "0x7b725edae5e4622131cbf6518bc916e2a5e8eaaf0b82876eee60fe26455ca6e4"
+    "digest_hex": "0x0f5112a3564a21cfa5e84fa50df9ee969212dd0e5f16565ef335367889415cb0"
    },
    "expect": {
     "value": {
@@ -804,15 +804,15 @@
    "name": "trusted_signer_signature_accept/signed_another_challenge",
    "fn": "trusted_signer_signature_accept",
    "input": {
-    "request_json": "{\"context\":{\"account\":\"0x83E6C79b32FA450155e0E9334a7197E21df29920\",\"allowCredentials\":[\"eAoyMjOdnPsSwSYHJxh1nQ\"],\"chainId\":100,\"chainName\":\"Gnosis\",\"dapp\":{\"name\":\"app.example\",\"origin\":\"https://app.example\",\"source\":\"vela_browser\"},\"keyRoute\":{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"hints\":[\"client-device\"],\"place\":\"trusted_signer\",\"transports\":[\"internal\",\"hybrid\"]},\"nativeSymbol\":\"xDAI\",\"signer\":{\"letter\":\"S\",\"name\":\"Savings\"}},\"intent\":{\"method\":\"personal_sign\",\"origin\":\"https://app.example\",\"params\":[\"0x48656c6c6f2c2056656c61\",\"0x83E6C79b32FA450155e0E9334a7197E21df29920\"]}}",
-    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0x5fe28e003217b4d475559003070f006c4c32fbfe5bc086e8d2c0a9ccc907197c71ecd174ffb899cc417b969ef7eb616f812cab6c78a9c6799ca40bc9852cca15\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a224c5845575172636d73455142596e79702d3677793963685444374751504d54624169574846354961534945222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
+    "request_json": "{\"context\":{\"account\":\"0x540D7CF44D261948531c39a6570Aea3C8a4A0113\",\"allowCredentials\":[\"eAoyMjOdnPsSwSYHJxh1nQ\"],\"chainId\":100,\"chainName\":\"Gnosis\",\"dapp\":{\"name\":\"app.example\",\"origin\":\"https://app.example\",\"source\":\"vela_browser\"},\"keyRoute\":{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"hints\":[\"client-device\"],\"place\":\"trusted_signer\",\"transports\":[\"internal\",\"hybrid\"]},\"nativeSymbol\":\"xDAI\",\"signer\":{\"letter\":\"S\",\"name\":\"Savings\"}},\"intent\":{\"method\":\"personal_sign\",\"origin\":\"https://app.example\",\"params\":[\"0x48656c6c6f2c2056656c61\",\"0x540D7CF44D261948531c39a6570Aea3C8a4A0113\"]}}",
+    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0x8db8daa6f7de23b9a5969f8db3fea6f449ef3bb261d66a4646978683d904fbf81159fc1bed28fd1f5e3817cc51d3ca62d6ad4afd5bfa0fd7438e776b41aa4f1b\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a224c5845575172636d73455142596e79702d3677793963685444374751504d54624169574846354961534945222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
     "keys": [
      {
       "credential_id": "780a3232339d9cfb12c126072718759d",
-      "public_key_hex": "04f74af1e2e61d69d951a8b900582abd8f89c9c5bf3fa3d6ce68c41cf813f2a9f2545a2640bb937aa4960c112d021f6900e927c82c7c4a20770a37a5dfd0d41a5c"
+      "public_key_hex": "045a72a7a01f8c9fb2d810e23cdc2455c78bec5f680cc749d4645430e57400bb4a554fd65568986d6334b28f2e89d39055f390da241eba91ea218b9934cbb89106"
      }
     ],
-    "digest_hex": "0x7b725edae5e4622131cbf6518bc916e2a5e8eaaf0b82876eee60fe26455ca6e4"
+    "digest_hex": "0x0f5112a3564a21cfa5e84fa50df9ee969212dd0e5f16565ef335367889415cb0"
    },
    "expect": {
     "value": {
@@ -830,7 +830,7 @@
     "multisig": "0x4c3FF6Bc7d1a4b7f4e0e93B4C61b8b1a7e5dF2A9",
     "multisig_name": "Team vault",
     "tx_json": "{\"to\":\"0x6813Eb9362372EEF6200f3b1dbC3f819671cBA69\",\"value\":\"0xde0b6b3a7640000\",\"data\":\"0x\",\"operation\":0,\"safeTxGas\":\"0x0\",\"baseGas\":\"0x0\",\"gasPrice\":\"0x0\",\"gasToken\":\"0x0000000000000000000000000000000000000000\",\"refundReceiver\":\"0x0000000000000000000000000000000000000000\",\"nonce\":\"0x3\"}",
-    "member": "0x83E6C79b32FA450155e0E9334a7197E21df29920",
+    "member": "0x540D7CF44D261948531c39a6570Aea3C8a4A0113",
     "member_name": "Savings",
     "credential_ids_hex": [
      "780a3232339d9cfb12c126072718759d"
@@ -840,7 +840,7 @@
    "expect": {
     "value": {
      "context": {
-      "account": "0x83E6C79b32FA450155e0E9334a7197E21df29920",
+      "account": "0x540D7CF44D261948531c39a6570Aea3C8a4A0113",
       "allowCredentials": [
        "eAoyMjOdnPsSwSYHJxh1nQ"
       ],
@@ -869,7 +869,7 @@
       "params": [
        {
         "chainId": 100,
-        "member": "0x83E6C79b32FA450155e0E9334a7197E21df29920",
+        "member": "0x540D7CF44D261948531c39a6570Aea3C8a4A0113",
         "safe": "0x4c3FF6Bc7d1a4b7f4e0e93B4C61b8b1a7e5dF2A9",
         "safeTx": {
          "baseGas": "0x0",
@@ -900,7 +900,7 @@
     "multisig": "0x4c3FF6Bc7d1a4b7f4e0e93B4C61b8b1a7e5dF2A9",
     "multisig_name": null,
     "tx_json": "{\"to\":\"0x6813Eb9362372EEF6200f3b1dbC3f819671cBA69\",\"value\":\"0xde0b6b3a7640000\",\"data\":\"0x\",\"operation\":0,\"safeTxGas\":\"0x0\",\"baseGas\":\"0x0\",\"gasPrice\":\"0x0\",\"gasToken\":\"0x0000000000000000000000000000000000000000\",\"refundReceiver\":\"0x0000000000000000000000000000000000000000\",\"nonce\":\"0x3\"}",
-    "member": "0x83E6C79b32FA450155e0E9334a7197E21df29920",
+    "member": "0x540D7CF44D261948531c39a6570Aea3C8a4A0113",
     "member_name": null,
     "credential_ids_hex": [
      "780a3232339d9cfb12c126072718759d"
@@ -910,7 +910,7 @@
    "expect": {
     "value": {
      "context": {
-      "account": "0x83E6C79b32FA450155e0E9334a7197E21df29920",
+      "account": "0x540D7CF44D261948531c39a6570Aea3C8a4A0113",
       "allowCredentials": [
        "eAoyMjOdnPsSwSYHJxh1nQ"
       ],
@@ -923,7 +923,7 @@
       "params": [
        {
         "chainId": 100,
-        "member": "0x83E6C79b32FA450155e0E9334a7197E21df29920",
+        "member": "0x540D7CF44D261948531c39a6570Aea3C8a4A0113",
         "safe": "0x4c3FF6Bc7d1a4b7f4e0e93B4C61b8b1a7e5dF2A9",
         "safeTx": {
          "baseGas": "0x0",
@@ -948,32 +948,32 @@
    "name": "trusted_signer_approval_accept/accepted",
    "fn": "trusted_signer_approval_accept",
    "input": {
-    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0x1b631d19920161184da26a95cc214e20fc369ba55935e381d6bd3874adc1ab7599a964db289b44f2c481a006ffc5314d6619011bdf39ca896921e1e089f3c913\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22724f4e7a3947716c6a597179794c5967675671423532317a6e786961597769726e675a5451463155554e4d222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
+    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0x94020e70f51e73acc87bee9791ed34fb6c60499f1295894c6ff6fbe2ac4a9af80810a7ca74a50510ad50168e25cfe5610feb3590510d20da2e70dd1eac0af2e5\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a224833767473664245786f647745712d6c676b48456264634b6c647743367354754c344f4c4f34774b75654d222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
     "chain_id": 100,
-    "member": "0x83E6C79b32FA450155e0E9334a7197E21df29920",
+    "member": "0x540D7CF44D261948531c39a6570Aea3C8a4A0113",
     "safe_tx_hash": "0xa85330e91e1fe41ded31f4f26c53ef624641413f1ee4b96e1c8ff8cf5f7f7442",
     "keys": [
      {
       "credential_id": "780a3232339d9cfb12c126072718759d",
-      "public_key_hex": "04f74af1e2e61d69d951a8b900582abd8f89c9c5bf3fa3d6ce68c41cf813f2a9f2545a2640bb937aa4960c112d021f6900e927c82c7c4a20770a37a5dfd0d41a5c"
+      "public_key_hex": "045a72a7a01f8c9fb2d810e23cdc2455c78bec5f680cc749d4645430e57400bb4a554fd65568986d6334b28f2e89d39055f390da241eba91ea218b9934cbb89106"
      }
     ]
    },
    "expect": {
     "value": {
      "accepted": {
-      "owner": "0x83E6C79b32FA450155e0E9334a7197E21df29920",
+      "owner": "0x540D7CF44D261948531c39a6570Aea3C8a4A0113",
       "ownerGenesis": {
        "factory": "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67",
        "singleton": "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762",
-       "saltNonce": "0xb376239469515f42a301ddbcc2d6ff9d893598d30e891f51076f8e3030a50f19",
-       "initializer": "0xb63e800d0000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000100000000000000000000000038869bf66a61cf6bdb996a6ae40d5853fd43b526000000000000000000000000000000000000000000000000000000000000014000000000000000000000000075cf11467937ce3f2f357ce24ffc3dbf8fd5c226000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000094a4f6affbd8975951142c3999aeab7ecee555c200000000000000000000000000000000000000000000000000000000000001c48d80ff0a00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000172012dd68b007b46fbe91b9a7c3eda5a7a1063cb5b47000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000648d0dc49f0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000100000000000000000000000075cf11467937ce3f2f357ce24ffc3dbf8fd5c2260194a4f6affbd8975951142c3999aeab7ecee555c2000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000640dd9692ff74af1e2e61d69d951a8b900582abd8f89c9c5bf3fa3d6ce68c41cf813f2a9f2545a2640bb937aa4960c112d021f6900e927c82c7c4a20770a37a5dfd0d41a5c0000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+       "saltNonce": "0x3f233c538a02cbad8beb45bbea1203156db5d971bfde7d8e6735e2475b46a8e0",
+       "initializer": "0xb63e800d0000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000100000000000000000000000038869bf66a61cf6bdb996a6ae40d5853fd43b526000000000000000000000000000000000000000000000000000000000000014000000000000000000000000075cf11467937ce3f2f357ce24ffc3dbf8fd5c226000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000094a4f6affbd8975951142c3999aeab7ecee555c200000000000000000000000000000000000000000000000000000000000001c48d80ff0a00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000172012dd68b007b46fbe91b9a7c3eda5a7a1063cb5b47000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000648d0dc49f0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000100000000000000000000000075cf11467937ce3f2f357ce24ffc3dbf8fd5c2260194a4f6affbd8975951142c3999aeab7ecee555c2000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000640dd9692f5a72a7a01f8c9fb2d810e23cdc2455c78bec5f680cc749d4645430e57400bb4a554fd65568986d6334b28f2e89d39055f390da241eba91ea218b9934cbb891060000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
       },
       "signer": "0x94a4F6affBd8975951142c3999aEAB7ecee555c2",
       "authenticatorData": "0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007",
       "clientDataFields": "\"origin\":\"https://sign.getvela.app\",\"crossOrigin\":false",
-      "r": "0x1b631d19920161184da26a95cc214e20fc369ba55935e381d6bd3874adc1ab75",
-      "s": "0x66569b23d764bb0e3b7e5ff9003aceb256cdf991c7ddd3fb8a97e8e2726f5c3e"
+      "r": "0x94020e70f51e73acc87bee9791ed34fb6c60499f1295894c6ff6fbe2ac4a9af8",
+      "s": "0x810a7ca74a50510ad50168e25cfe5610feb3590510d20da2e70dd1eac0af2e5"
      }
     }
    }
@@ -982,14 +982,14 @@
    "name": "trusted_signer_approval_accept/another_tx",
    "fn": "trusted_signer_approval_accept",
    "input": {
-    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0x08be8b567797f62396df485a1f69f5df4eda41f4ad0bbb637b0ba51ad3f9ac439bb98e6b65ce8500feadf01288c7afa8b9192e5ccb57b4dea9ce537d6ebae91c\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22724f4e7a3947716c6a597179794c5967675671423532317a6e786961597769726e675a5451463155554e4d222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
+    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0xec93dc5de3f90a52894fac30b389f582c5b90fb28209c6aacf074ca84718b3fb70fd533d13e1ace50d7d7f7f0776629594e80ca7f9c656cc505b1c6cb566b20f\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a224833767473664245786f647745712d6c676b48456264634b6c647743367354754c344f4c4f34774b75654d222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
     "chain_id": 100,
-    "member": "0x83E6C79b32FA450155e0E9334a7197E21df29920",
+    "member": "0x540D7CF44D261948531c39a6570Aea3C8a4A0113",
     "safe_tx_hash": "0xabababababababababababababababababababababababababababababababab",
     "keys": [
      {
       "credential_id": "780a3232339d9cfb12c126072718759d",
-      "public_key_hex": "04f74af1e2e61d69d951a8b900582abd8f89c9c5bf3fa3d6ce68c41cf813f2a9f2545a2640bb937aa4960c112d021f6900e927c82c7c4a20770a37a5dfd0d41a5c"
+      "public_key_hex": "045a72a7a01f8c9fb2d810e23cdc2455c78bec5f680cc749d4645430e57400bb4a554fd65568986d6334b28f2e89d39055f390da241eba91ea218b9934cbb89106"
      }
     ]
    },
@@ -1003,14 +1003,14 @@
    "name": "trusted_signer_approval_accept/foreign_key",
    "fn": "trusted_signer_approval_accept",
    "input": {
-    "result_json": "{\"credentialId\":\"QyLXxD5DImt7pYIXz4P6ng\",\"signature\":\"0x06635ff91500f77979329a46571805edaaaada577a03f7596de7870fea39fd85451dfb5214630688b1d1beaa47727bc4ea5b632000c1658a2a4fcb63ad382d84\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22724f4e7a3947716c6a597179794c5967675671423532317a6e786961597769726e675a5451463155554e4d222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
+    "result_json": "{\"credentialId\":\"QyLXxD5DImt7pYIXz4P6ng\",\"signature\":\"0xd7b3485bc1f44239b77976af4d43536a95465f4efd94b34cbc59e83cd5202b3fdde3cffd50365f55e486014de2e9fc44e5c18b6f644ce1a6ca4ad600c15c75d0\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490500000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a224833767473664245786f647745712d6c676b48456264634b6c647743367354754c344f4c4f34774b75654d222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
     "chain_id": 100,
-    "member": "0x83E6C79b32FA450155e0E9334a7197E21df29920",
+    "member": "0x540D7CF44D261948531c39a6570Aea3C8a4A0113",
     "safe_tx_hash": "0xa85330e91e1fe41ded31f4f26c53ef624641413f1ee4b96e1c8ff8cf5f7f7442",
     "keys": [
      {
       "credential_id": "780a3232339d9cfb12c126072718759d",
-      "public_key_hex": "04f74af1e2e61d69d951a8b900582abd8f89c9c5bf3fa3d6ce68c41cf813f2a9f2545a2640bb937aa4960c112d021f6900e927c82c7c4a20770a37a5dfd0d41a5c"
+      "public_key_hex": "045a72a7a01f8c9fb2d810e23cdc2455c78bec5f680cc749d4645430e57400bb4a554fd65568986d6334b28f2e89d39055f390da241eba91ea218b9934cbb89106"
      }
     ]
    },
@@ -1024,14 +1024,14 @@
    "name": "trusted_signer_approval_accept/not_user_verified",
    "fn": "trusted_signer_approval_accept",
    "input": {
-    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0xeb10357884738453ce284aa6ff6466ffe066422f23b728c8bc9bac6b10d9d05cc230e4afa03208428c5f0c7f80e0e549f8295639c6b097b0333175435a1b7e8e\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490100000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22724f4e7a3947716c6a597179794c5967675671423532317a6e786961597769726e675a5451463155554e4d222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
+    "result_json": "{\"credentialId\":\"eAoyMjOdnPsSwSYHJxh1nQ\",\"signature\":\"0x1e41ff6d9e6cd1197ab32d0fc9a041dcc45342623033dd9e072dc715249a93f0cc3de14097f6eae859a579f763cb08d909d446730739facd8a67b4aaf0fb34a9\",\"authenticatorData\":\"0xa69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df3490100000007\",\"clientDataJSON\":\"0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a224833767473664245786f647745712d6c676b48456264634b6c647743367354754c344f4c4f34774b75654d222c226f726967696e223a2268747470733a2f2f7369676e2e67657476656c612e617070222c2263726f73734f726967696e223a66616c73657d\"}",
     "chain_id": 100,
-    "member": "0x83E6C79b32FA450155e0E9334a7197E21df29920",
+    "member": "0x540D7CF44D261948531c39a6570Aea3C8a4A0113",
     "safe_tx_hash": "0xa85330e91e1fe41ded31f4f26c53ef624641413f1ee4b96e1c8ff8cf5f7f7442",
     "keys": [
      {
       "credential_id": "780a3232339d9cfb12c126072718759d",
-      "public_key_hex": "04f74af1e2e61d69d951a8b900582abd8f89c9c5bf3fa3d6ce68c41cf813f2a9f2545a2640bb937aa4960c112d021f6900e927c82c7c4a20770a37a5dfd0d41a5c"
+      "public_key_hex": "045a72a7a01f8c9fb2d810e23cdc2455c78bec5f680cc749d4645430e57400bb4a554fd65568986d6334b28f2e89d39055f390da241eba91ea218b9934cbb89106"
      }
     ]
    },

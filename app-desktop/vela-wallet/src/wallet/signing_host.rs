@@ -4133,8 +4133,12 @@ mod sim_wait_tests {
         assert!(checked.gate(true).enabled);
 
         let mut alone = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
-        // Before any verdict lands, a transaction is unread too.
-        assert!(alone.gate(false).anyway);
+        // While its verdict is still out the confirm is shut "Checking…" and
+        // judged only when it lands: never "… anyway" over a check that may
+        // come back plain (§36).
+        let checking = alone.gate(false);
+        assert!(!checking.enabled && !checking.anyway && checking.hold_ms == 0);
+        assert_eq!(checking.block, Some(ConfirmBlock::SimChecking));
         alone.lands(SimVerdict::of_core(
             verdict_of(SimOutcome::Unconfirmed { disagreed: false }),
             vela_core::app::sim_outcome::notice(&SimOutcome::Unconfirmed { disagreed: false }),

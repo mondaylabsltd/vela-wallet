@@ -227,8 +227,8 @@ struct SimVerdictWaitTests {
         await untilOnlyTheVerdictIsMissing(controller)
 
         let gate = controller.confirmState
-        #expect(gate == SignConfirmStateWire(enabled: false, block: "sim_checking", key: Self.checkingKey, anyway: true, holdMs: Self.held),
-                "R22: no verdict yet — the transaction is unread, so \"… anyway\" and held")
+        #expect(gate == SignConfirmStateWire(enabled: false, block: "sim_checking", key: Self.checkingKey),
+                "R22: while the verdict is out nothing is judged — shut \"Checking…\", never \"… anyway\"")
         #expect(rig.simulation.asked == 1, "one simulation, sent")
         #expect(controller.heldSimVerdictTimers == 1, "the core's one deadline, held by the stopped clock")
         #expect(controller.simulation == .pending && controller.simVerdict == nil)
@@ -559,8 +559,8 @@ struct SimVerdictWaitTests {
         #expect((held["round"] as? NSNumber)?.intValue == round)
 
         // The gate takes the block's name and the corpus has its sentence.
-        #expect(scene.gate == SignConfirmStateWire(enabled: false, block: "sim_checking", key: Self.checkingKey, anyway: true, holdMs: Self.held),
-                "R22: no verdict yet — the transaction is unread, so \"… anyway\" and held")
+        #expect(scene.gate == SignConfirmStateWire(enabled: false, block: "sim_checking", key: Self.checkingKey),
+                "R22: while the verdict is out nothing is judged — shut \"Checking…\", never \"… anyway\"")
         #expect(en.t(Self.checkingKey) == "Checking what this transaction does…")
         #expect(Loc(overrideTag: "zh", preferredLanguages: []).t(Self.checkingKey) == "正在检查这笔交易的结果…")
         for tag in Loc.supported {
@@ -757,8 +757,8 @@ struct SimVerdictWaitTests {
         let held = try #require(SimWaitScene.views(waitedOut: false))
         #expect(held.sign.checkingSim && held.sign.simWaitedOutKey == nil)
         #expect(held.sign.request?.id == held.request.id)
-        #expect(held.gate == SignConfirmStateWire(enabled: false, block: "sim_checking", key: Self.checkingKey, anyway: true, holdMs: Self.held),
-                "R22: no verdict yet — the transaction is unread, so \"… anyway\" and held")
+        #expect(held.gate == SignConfirmStateWire(enabled: false, block: "sim_checking", key: Self.checkingKey),
+                "R22: while the verdict is out nothing is judged — shut \"Checking…\", never \"… anyway\"")
 
         let waitedOut = try #require(SimWaitScene.views(waitedOut: true))
         #expect(!waitedOut.sign.checkingSim)
