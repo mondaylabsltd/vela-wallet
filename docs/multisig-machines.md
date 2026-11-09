@@ -2573,7 +2573,16 @@ or two that disagree, is a check Vela could not read.
 | **r21-1** (S3): an expired multisig execution said something generic | `FailureKind::Expired` — a shell's `expired`, or the relay's AA22 in any detail's words — is said in the Send's words (`componentsUi.signing.expired`) with Try again; the dApp sheet reads the relay's AA22 too | `an_expired_operation_is_said_as_expired`; `review-state.json` `failure` +4 |
 | **r21-2** (S4): fees and Max cut to 6 decimals, charged a little more | fees round UP at the shown places (`fee_figure`); a typed amount is exact; Max is the sendable amount cut DOWN to the field's places and that exact figure is sent (`max_shown_exact`) | `a_fee_reads_up_never_below_the_charge`, `max_sends_exactly_what_it_shows`; `send-fee-cover.json` R20 Max 0.005887 |
 
-**Every surface.** (filled in at the end of the round)
+**Every surface.**
+
+| Surface | Corroborated reads | Posture + hold | Refuse blind / own node | dApp attestation | r21-1 / r21-2 |
+| --- | --- | --- | --- | --- | --- |
+| Core | `rpc_pool` witness phase + chain-id probe, `corroborate`, `sim_outcome::classify_envelope`, `multisig_review` `StateRead`, corroborating `Io` (gather, `authorize_signing`, `gate_now`, dApp-flow `isOwner`), `classify_corroborated` | `sign_confirm::posture` / `with_posture`, `door_with` | `prefs::refuse_blind_signing`, `own_node` | `signed_review::DappReview`, `dapp_safe_op_hash`, `dapp_message_hash` | `FailureKind::Expired`; `fee_figure`, `max_shown_exact` |
+| Web, Chrome, Safari | `poolCorroboratedCall`, `corroborated-read.ts` | `HoldConfirm.svelte` (sheet, hand-off Open, multisig + connect page) | Settings → Security; `onlyMineTrust`; own-node hint → network settings | `attestDappSafeOpHash` / `attestDappMessageHash` | `{kind:"expired"}`; `feeFigure` |
+| Android | `RpcPool.call(…, corroborate)` | `VelaHoldToConfirm` (TalkBack, Switch Access, keys) | Security section | `userOpDappSafeOpHash` / `dappMessageHash` | `expired`; `feeFigure` |
+| iOS | `RpcPool` corroborated | `HoldConfirmButton` (VoiceOver, Switch Control) | Security section | `userOpDappSafeOpHash` / `dappMessageHash` | `.expired`; `feeFigure` |
+| Desktop | `pool::corroborated` | `ui/hold_confirm.rs` (Enter/Space, screen reader) | Settings → Security page | `user_op::Reviewed::Dapp` → `dapp_safe_op_hash` | `expired`; `fee_figure` |
+| Signing page | — (runs offline; draws "… anyway" as the app's word) | unchanged | — | the page's own decode | — |
 
 **Left open** (each in `hardening.md`):
 - Provider independence is a URL heuristic.

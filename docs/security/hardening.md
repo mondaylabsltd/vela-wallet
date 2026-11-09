@@ -874,6 +874,17 @@ shown place left".
   still one node's word. They only ADD a caution, and never make a verdict plain.
 - The signing page (trusted signer) runs offline. It draws "… anyway" as the app's word and
   is unchanged this round. Its own hold is the `r22-supply` lane's call.
+- The wallet's own requests (the key-record backup) get no exemption. When their simulation
+  is one node's word they are "… anyway", held. This is honest, and a candidate for a
+  first-party rule.
+- While a simulation's verdict is still out, the confirm is shut ("Checking…") and plain.
+  It is judged only when the verdict lands, so "Sign anyway" never flashes over a check that
+  comes back plain.
+- A single local fork has no independent second node. The onchain harnesses (the web's
+  `seedNetwork`) therefore run with "Only use my node": trusted alone, and said.
+- Hold, the assistive two-press path and the AA22 clock-skew repro are covered by unit and
+  device tests on each shell (Android `HoldToConfirmDeviceTest`). They have not been
+  walked by a person on real hardware.
 
 ---
 
