@@ -10,6 +10,11 @@ source: 77cf3f24c7c7
 
 # Pemulihan & masuk
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/recovery">English page</a> is authoritative for security statements.
+</Callout>
+
 Tanpa frasa pemulihan, pemulihan bertumpu pada dua hal: **kunci yang masih Anda
 pegang**, dan **catatan publik tentang kunci mana saja yang menjadi milik dompet Anda**.
 

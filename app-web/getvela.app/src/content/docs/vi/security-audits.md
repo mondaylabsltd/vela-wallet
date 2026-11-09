@@ -4,6 +4,15 @@ description: "Mọi hợp đồng Vela phụ thuộc vào, ai đã kiểm toán 
 source: 6f7e13ae7d38
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/security-audits">English page</a> is authoritative for security statements.
+</Callout>
+
 "Đã kiểm toán" là một khẳng định về một đoạn mã cụ thể ở một phiên bản cụ thể, nên trang
 này dẫn ra các báo cáo, các commit và các địa chỉ triển khai — và liệt kê cả những gì
 **chưa** được kiểm toán, điều quan trọng không kém.

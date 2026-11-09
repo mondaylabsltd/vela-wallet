@@ -10,6 +10,11 @@ source: d3c8b770a0ca
 
 # Whitepaper
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/whitepaper">English page</a> is authoritative for security statements.
+</Callout>
+
 <Callout type="info" title="Tình trạng: alpha · sửa đổi lần cuối tháng 9/2026">
 Trang này mô tả Vela hoạt động thế nào hiện nay và bạn phải hay không phải tin những gì
 khi dùng nó. Vela đang ở giai đoạn <a href="/blog/vela-is-in-alpha">alpha</a> — hãy bắt

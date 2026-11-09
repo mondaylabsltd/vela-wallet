@@ -4,6 +4,15 @@ description: "Cada contrato del que depende Vela, quién auditó qué versión, 
 source: 6f7e13ae7d38
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/security-audits">English page</a> is authoritative for security statements.
+</Callout>
+
 «Auditado» es una afirmación sobre un código específico en una versión específica,
 así que esta página cita los informes, los commits y las direcciones desplegadas, y
 enumera lo que **no** está auditado, que importa igual.

@@ -10,6 +10,11 @@ source: ba67791e85d6
 
 # 네트워크와 수수료
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/networks-and-fees">English page</a> is authoritative for security statements.
+</Callout>
+
 ## 내장 네트워크
 
 Vela는 기본으로 **20개 네트워크**를 보여 주며, 모두 메인넷입니다.

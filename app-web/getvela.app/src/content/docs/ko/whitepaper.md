@@ -10,6 +10,11 @@ source: d3c8b770a0ca
 
 # 백서
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/whitepaper">English page</a> is authoritative for security statements.
+</Callout>
+
 <Callout type="info" title="상태: 알파 · 2026년 9월 개정">
 이 페이지는 Vela가 현재 어떻게 작동하는지, 그리고 Vela를 쓰려면 무엇을 신뢰해야 하고 무엇은
 신뢰하지 않아도 되는지 설명합니다. Vela는 <a href="/blog/vela-is-in-alpha">알파</a> 단계이니

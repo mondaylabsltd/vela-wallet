@@ -10,6 +10,11 @@ source: f24224b633b4
 
 # 自架指南
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/self-hosting">English page</a> is authoritative for security statements.
+</Callout>
+
 你的錢在鏈上的 Safe 合約裡，由你的金鑰控制。Vela 執行的任何東西都動不了它。
 Vela 執行的，是讓錢包用起來方便的那套機制：替你送出交易的中繼、幫新裝置找回錢包的
 索引、鏈資料目錄、匯率來源，以及各個應用程式本身。

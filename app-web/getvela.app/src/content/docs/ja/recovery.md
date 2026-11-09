@@ -10,6 +10,11 @@ source: 77cf3f24c7c7
 
 # 復旧とサインイン
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/recovery">English page</a> is authoritative for security statements.
+</Callout>
+
 シードフレーズがない場合、復旧は 2 つのものに支えられています。**まだ手元にある鍵**と、**どの鍵があなたのウォレットに属しているかを示す公開の記録**です。
 
 ## ウォレットの作成時に記録されるもの

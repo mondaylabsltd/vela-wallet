@@ -4,6 +4,15 @@ description: "Vela'nın bağlı olduğu her sözleşme, hangi sürümü kimin de
 source: 6f7e13ae7d38
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/security-audits">English page</a> is authoritative for security statements.
+</Callout>
+
 "Denetlendi", belirli bir kodun belirli bir sürümü hakkında bir iddiadır; bu yüzden bu
 sayfa raporları, commit'leri ve dağıtılmış adresleri kaynak olarak veriyor — ve
 **denetlenmemiş** olanları da listeliyor; bu en az o kadar önemli.

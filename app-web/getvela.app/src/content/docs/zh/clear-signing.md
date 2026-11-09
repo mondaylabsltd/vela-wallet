@@ -10,6 +10,11 @@ source: 29a66a1584f1
 
 # 清晰签名
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/clear-signing">English page</a> is authoritative for security statements.
+</Callout>
+
 很多钱包遇到不认识的合约，仍然只显示原始数据；「盲签」——批准你其实读不懂的调用——是钱包
 被掏空的途径之一。Vela 的答案是**清晰签名**：在你签名之前，尽可能把这笔交易解码成你看得懂的东西。
 

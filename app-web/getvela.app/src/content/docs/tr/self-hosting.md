@@ -10,6 +10,11 @@ source: f24224b633b4
 
 # Kendi sunucunuzda barındırma kılavuzu
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/self-hosting">English page</a> is authoritative for security statements.
+</Callout>
+
 Paranız zincir üstünde, anahtarlarınızın kontrol ettiği bir Safe sözleşmesinde duruyor.
 Vela'nın çalıştırdığı hiçbir şey onu taşıyamaz. Vela'nın çalıştırdığı şey, cüzdanı
 kullanışlı kılan düzenektir: işlemlerinizi zincire gönderen bir relay, yeni bir cihazın

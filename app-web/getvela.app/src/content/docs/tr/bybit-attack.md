@@ -4,7 +4,16 @@ description: "Şubat 2025'te Bybit yaklaşık 1,5 milyar dolar kaybetti. Kırıl
 source: d8217ceb16b2
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
 # Bybit saldırısı ve izlediği yol
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/bybit-attack">English page</a> is authoritative for security statements.
+</Callout>
 
 21 Şubat 2025'te Bybit, bir Safe çoklu imza soğuk cüzdanından yaklaşık **1,5 milyar
 dolar** kaybetti. Sektör tarihindeki en büyük hırsızlık bu ve dikkatle okumaya

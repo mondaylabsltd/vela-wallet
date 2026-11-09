@@ -4,6 +4,15 @@ description: "Vela 依賴的每一份合約、誰稽核了哪個版本、稽核�
 source: 6f7e13ae7d38
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/security-audits">English page</a> is authoritative for security statements.
+</Callout>
+
 「經過稽核」是針對特定版本、特定程式碼的說法，所以這一頁列出具體的報告、commit 和部署位址——也列出
 **沒有**稽核過的東西，這一樣重要。
 

@@ -10,6 +10,11 @@ source: 77cf3f24c7c7
 
 # Восстановление и вход
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/recovery">English page</a> is authoritative for security statements.
+</Callout>
+
 Без сид-фразы восстановление держится на двух вещах: на **ключе, который у вас
 остался**, и на **публичной записи о том, какие ключи принадлежат вашему кошельку**.
 

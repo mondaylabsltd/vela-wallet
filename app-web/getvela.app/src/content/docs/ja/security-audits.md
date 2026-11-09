@@ -4,6 +4,15 @@ description: "Vela が依存するすべてのコントラクト、どのバー�
 source: 6f7e13ae7d38
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/security-audits">English page</a> is authoritative for security statements.
+</Callout>
+
 「監査済み」とは、特定のバージョンの特定のコードについての主張です。そのため、このページでは監査報告書、コミット、デプロイ先のアドレスを示します。そして、それと同じくらい重要な、**監査されていない**ものも挙げます。
 
 最終確認日：2026 年 9 月 22 日。誤りを見つけたら知らせてください。修正します。

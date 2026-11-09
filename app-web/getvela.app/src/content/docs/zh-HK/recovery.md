@@ -10,6 +10,11 @@ source: 77cf3f24c7c7
 
 # 復原與登入
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/recovery">English page</a> is authoritative for security statements.
+</Callout>
+
 沒有助記詞，復原就靠兩樣東西：**一把你仍然持有的鑰匙**，以及**一份記錄哪些鑰匙屬於你錢包的公開紀錄**。
 
 ## 建立錢包時會記錄甚麼

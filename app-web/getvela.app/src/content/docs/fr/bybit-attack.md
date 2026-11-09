@@ -4,7 +4,16 @@ description: "En février 2025, Bybit a perdu environ 1,5 milliard de dollars. L
 source: d8217ceb16b2
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
 # L'attaque de Bybit, et le chemin qu'elle a emprunté
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/bybit-attack">English page</a> is authoritative for security statements.
+</Callout>
 
 Le 21 février 2025, Bybit a perdu environ **1,5 milliard de dollars** depuis un
 portefeuille froid multisig Safe. C'est le plus grand vol de l'histoire du secteur,

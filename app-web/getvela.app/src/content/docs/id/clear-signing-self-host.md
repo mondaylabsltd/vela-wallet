@@ -10,6 +10,11 @@ source: fcfb268d3492
 
 # Trusted Signer
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/clear-signing-self-host">English page</a> is authoritative for security statements.
+</Callout>
+
 Vela mendekode setiap transaksi sebelum Anda menyetujuinya, dan dekode itu dikerjakan
 dengan jujur — tetapi dikerjakan oleh aplikasi yang sama yang menyusun transaksinya.
 Kalau aplikasi itu, atau jalur yang membawanya sampai ke Anda, dimanipulasi, aplikasi itu

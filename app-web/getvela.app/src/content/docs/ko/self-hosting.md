@@ -10,6 +10,11 @@ source: f24224b633b4
 
 # 셀프 호스팅 가이드
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/self-hosting">English page</a> is authoritative for security statements.
+</Callout>
+
 자금은 온체인의 Safe 컨트랙트에 있고, 사용자의 키가 제어합니다. Vela가 운영하는 어떤 것도
 자금을 움직일 수 없습니다. Vela가 운영하는 것은 지갑을 편리하게 해 주는 장치들입니다. 거래를
 제출하는 릴레이, 새 기기가 지갑을 찾도록 돕는 인덱스, 체인 데이터 디렉터리, 환율 피드, 그리고

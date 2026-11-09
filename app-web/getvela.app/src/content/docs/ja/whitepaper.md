@@ -10,6 +10,11 @@ source: d3c8b770a0ca
 
 # ホワイトペーパー
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/whitepaper">English page</a> is authoritative for security statements.
+</Callout>
+
 <Callout type="info" title="状況：アルファ版 · 最終改訂 2026 年 9 月">
 このページでは、Vela がいまどう動いているのか、そして使うために何を信頼する必要があり、何を信頼しなくていいのかを説明します。Vela は<a href="/blog/vela-is-in-alpha">アルファ版</a>です。少額から始めてください。Vela にトークンはありません。ここに書いたことはすべて、オープンソースのコードと照らし合わせて確かめられます。コードとこのページが食い違っていれば、正しいのはコードで、このページのほうがバグです。
 </Callout>

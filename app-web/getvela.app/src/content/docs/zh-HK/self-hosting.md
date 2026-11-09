@@ -10,6 +10,11 @@ source: f24224b633b4
 
 # 自行架設指南
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/self-hosting">English page</a> is authoritative for security statements.
+</Callout>
+
 你的錢在鏈上的 Safe 合約裏，由你的鑰匙控制。Vela 運行的任何東西都無法轉移它。Vela 運行的，是讓錢包用起來
 方便的那套機制：替你提交交易的中繼、幫助新裝置找到你錢包的索引、鏈數據目錄、匯率來源，以及各個 App 本身。
 
