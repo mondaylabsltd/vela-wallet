@@ -593,13 +593,13 @@ unconfirmed Vela account can be made a member (§6.12). The full list is the
 
 | Party | Sees | Retention | Opt-out |
 | --- | --- | --- | --- |
-| Registry contract (public, on chain) | each key's public key and credential id, the authenticator model, the wallet name and key labels, the address, the signed registration | permanent | none once written; a wallet need not be registered to work on one device |
+| Registry contract (public, on chain) | each key's public key and credential id, the authenticator model, the wallet name and key labels, the address, the signed registration | permanent | none once written |
 | Key index | the record before it submits it; the addresses you look up names for; your IP | the service's | use your own index |
 | Relay | your address, the operations you submit, the RPC URL (with any key), your IP | operations kept for a limited time to retry and diagnose | run your own relay |
 | RPC providers | every read, your IP | theirs | "Only use my node" |
 | Chain data, rates, passkey directory | what you ask (tokens, descriptors, rates, a model id), your IP | theirs | self-host chain data and rates |
 | Selector databases (sourcify, openchain, 4byte) | a function selector, as a last resort | theirs | — |
-| Genesis service and mailbox | multisig owners, threshold, name; proposals and approvals; **no authentication, CORS `*`**: anyone who knows a Safe's address can read its pending proposals | the service's | — (not yet self-hostable through Settings for every flow) |
+| Genesis service and mailbox | multisig owners, threshold, name; proposals and approvals; **no authentication, CORS `*`**: anyone who knows a Safe's address can read its pending proposals | the service's | — |
 | PeerConnect relay | an encrypted session between Vela and an outside owner's wallet; tokens from `getvela.app/api/peerconnect-token`, or PeerConnect's trial token as a fallback | theirs | — |
 | Bug report service | what you type and attach; filed as a **public** GitHub issue | until deleted | do not send one |
 | Rybbit analytics (`tj.appsdata.org`) | web wallet and extension: **only if turned on** — screens and named moments with coarse details, never an address, amount or transaction outcome (`app-web/vela-wallet/src/lib/analytics/catalog.ts#TX_OUTCOME_EVENTS`, `payload.test.ts`); the website: page views and some clicks, on every page but `/chain-setup` | Rybbit's | off by default in the wallet; the native apps send none |
