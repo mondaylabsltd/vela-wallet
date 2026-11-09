@@ -1,6 +1,6 @@
 # 多签账户：方案
 
-2026-10-27 · 第二版。2026-10-28 起在 web 端实现（分支 `feat/multisig-account`），见下方"实现状态"。
+2026-10-27 · 第二版。§5.2、§5.3.2 于 2026-11-09 与代码核对（提交 `fa6083c87`，见各节开头的说明）。2026-10-28 起在 web 端实现（分支 `feat/multisig-account`），见下方"实现状态"。
 配套的链上合约和服务在独立仓库 `safe-genesis-registry`（本地 `/Volumes/data/production3/safe-genesis-registry`），
 合约已部署，服务尚未上线（见第 8 节）。
 
@@ -35,8 +35,8 @@
   每条链一个 passkey（各链的 safeTxHash 不同）。创建时的阈值步骤和设置里各有一段 passkey 原生恢复说明（2/3 丢一把，另两位替换即可）；
   带延时的恢复模块留作后续设计。
 - 首页面板列出待批准交易，"拒绝"即发起同 nonce 的作废交易；反对票、软过期尚未实现。
-- 多签账户暂不连接 dApp：web 本身没有内置浏览器，扩展仍以 session 的 Vela 账户应答。
-- 执行手续费由执行者账户按现有方式在交易内支付，执行前不单独展示金额（按 relay 当时报价签名）。
+- ~~多签账户暂不连接 dApp：web 本身没有内置浏览器，扩展仍以 session 的 Vela 账户应答。~~（已过时，R23 核对：多签可以连接 dApp，站点请求变成提案，见 `multisig_dapp` 与 `docs/multisig-machines.md` §31、§35。）
+- 执行手续费由执行者账户按现有方式在交易内支付。~~执行前不单独展示金额（按 relay 当时报价签名）。~~（已过时，R23 核对：执行前显示手续费，只按显示的那笔签，web `execution-fee.ts` 的 `ExecutionQuote`、core `Event::Execute.shown_fee`。）
 - 支持 Safe v1.3.0 – v1.5.0 的已知 factory 和 singleton；更早的版本（EIP-712 域里没有 chainId）导入时提示"暂不支持这个版本"。
 - Vela passkey 成员在 v1.5.0 Safe 里的批准挑战不同（合约签名走 `isValidSignature(bytes32,bytes)`），暂未适配；EOA 成员不受影响。
 - 外部签名默认中继 `wss://relay.peerconnect.dev`（可用 `vela.peerconnectRelay` 改）。公共中继要求每端带 token：由 getvela.app 的 `POST /api/peerconnect-token` 用 App Secret（Worker secret `PEERCONNECT_APP_SECRET`）按设备签发（一年有效，设备本地缓存）；该接口不可用时退回 PeerConnect 公开试用 token（两小时）。
@@ -435,6 +435,25 @@ MultisigAccount {
 
 ### 5.2 签名确认页
 
+> **与代码核对（R23，2026-11-09，提交 `fa6083c87`）。以代码为准。** 本节是设计稿；下面几处与代码不符，
+> 安全上的准确说法见 [`docs/SECURITY-MODEL.md`](SECURITY-MODEL.md) §9。
+>
+> - **"安全形状"规则（operation、gas/refund 字段、对多签自身只允许成员管理和作废）照此实现**：
+>   `multisig::review`、`read_batch`、`read_owner_management`；delegatecall 只认 v1.4.1 的
+>   MultiSendCallOnly（`MULTI_SEND_CALL_ONLY`），v1.3.0 的会被拒绝。另外允许一种本节没写的形状：
+>   改名（`Action::Rename`，调用注册表合约，不是自调用）。
+> - **"账户体检……就停止在这条链上签名"与代码不符。** 读到模块、guard、未知 singleton 或未知 fallback
+>   handler 时，`signing_gate` 给出 `Gate::Risk`，`authorize_signing` 在**每一次**签名前弹出风险确认
+>   （`MultisigOperation::AskRisk`），成员确认后仍然可以签。只有这条链读不到（`Unchecked`）、或未部署的多签
+>   genesis 被拒（`Gate::Refused`）时才停止签名。它列在 SECURITY-MODEL §7 的"… anyway"清单里。
+> - **genesis 服务的 `authorityChanged` 提示没有实现**；体检完全由 core 自己读链（`deployed_check`，R22 起
+>   两个独立来源核对）。
+> - **`KeyRoute` 限定 `allowCredentials`**：只用在 Trusted Signer 页这条路上；Vela 自己的签名页把该账户的
+>   全部凭据交给 passkey，再由 core 核对签出的凭据属于这个 owner（`approval_from_assertion`）。
+> - **执行前会显示手续费**，并且只按显示的那笔签（web `execution-fee.ts` 的 `ExecutionQuote`；core `Event::Execute.shown_fee`）。
+>   上面"实现状态"里"执行前不单独展示金额"一句已过时；"多签账户暂不连接 dApp"一句也已过时
+>   （`multisig_dapp`，见 [`docs/multisig-machines.md`](multisig-machines.md) §31、§35）。
+
 当前账户是多签账户时，转账确认页、dApp 交易页、成员管理页都会出现同一块"批准"区域：
 
 ```text
@@ -483,6 +502,26 @@ MultisigAccount {
 [Proposers](https://help.safe.global/en/articles/235770-proposers)、[代付](https://help.safe.global/articles/6461820093-gas-fee-sponsorship-on-safe-transactions)。
 
 #### 5.3.2 Vela 的改进
+
+> **与代码核对（R23，2026-11-09，提交 `fa6083c87`）。以代码为准。** 本节是设计稿，下面的①–⑨只有一部分实现了：
+>
+> | 条目 | 代码里的实际情况 |
+> | --- | --- |
+> | ① 链接"自带全部内容" | **不符。** 链接 `#ms=<chainId>.<多签>.<safeTxHash>` 只指明是哪一笔（`multisig_link::proposal_link`），内容从信箱取，再由 core 重算核对。每笔一个链接，没有按人生成的二维码；外部成员拿到的是 connect 页链接，不是 Safe{Wallet} 链接。 |
+> | ① 打开链接自动添加多签 | 已实现（`multisig_accounts_link`）；本机没有成员时只读预览，不添加。 |
+> | ② "没有任何有效 owner 批准的提案不收" | **不符。** 信箱收任何人的提案（`mailbox-any-signer`，服务端 R22 另加 `nonceTooFar` 上限）。钱包侧：没有成员批准的提案标为 `from_non_member`，不进默认列表、不进任何计数、不参与 `next_nonce_of`，只在"显示非成员的提案"之后带警告出现（`docs/security/hardening.md` §10）。 |
+> | ② 同步到 Safe 交易服务 | **没有实现。** |
+> | ② 信箱不是信任来源 | 已实现：`read_proposal` 重算 safeTxHash、重新解读、逐份核对批准、只计当前成员。 |
+> | ② 公开性要在界面写明 | **没有实现**（只有非成员提案的警告）。信箱无需认证、CORS `*`，见 SECURITY-MODEL §11。 |
+> | ③ 订阅与推送 | **没有实现**；App 打开时每 60 秒拉取信箱（`multisig_presence`）。 |
+> | ④ "不存在盲签" | **不符。** 多签审阅有"… anyway"：状态差异或模拟有一项读不到、或交易本身是盲签，确认就变成"… anyway"，需按住 1.5 秒（`HOLD_TO_CONFIRM_MS`）；只有打开"拒绝盲签"（默认关闭）才会拒绝。成立的是：审阅还没读出来（加载中 / 失败）时一律不能签（§12 的 review door，`door_with`）。 |
+> | ④ 显示 safeTxHash 缩写 | 已实现，完整哈希在详情里。 |
+> | ⑤ 一次批准多笔（批量 `approveHash`） | **没有实现**；只有外部钱包单笔上链批准。 |
+> | ⑥ 批准并执行、用代币付费 | 已实现。 |
+> | ⑦ 反对票、"已无法通过"、建议立即作废、软过期 | **都没有实现**。"拒绝" = 发起同 nonce 的作废提案。 |
+> | ⑦ "下一笔提案自动用被放弃的 nonce" | **不符。** `next_nonce_of` 把新提案排在所有有成员批准的未完成提案之后，被放弃的提案继续占着它的 nonce，要靠作废提案释放。 |
+> | ⑧ 按 nonce 排队 | 已实现；"替换它"没有实现（新草稿总是取下一个空闲 nonce）。 |
+> | ⑨ 提议人 | **没有实现。** |
 
 **① 定向的签名请求：一条链接直达"请李四批准"**
 
