@@ -2264,10 +2264,18 @@ impl App for ClearSigning {
                     surface,
                     ClearSurface::BlindTransaction | ClearSurface::ClearSign
                 ),
+            // R22 (review 1-3): a batch is as readable as its least readable
+            // call — one leg nobody reads makes the whole batch blind.
             sign_anyway: matches!(
                 surface,
                 ClearSurface::BlindTransaction | ClearSurface::BlindTypedData
-            ),
+            ) || (surface == ClearSurface::Batch
+                && batch_view(model).is_some_and(|batch| {
+                    batch
+                        .calls
+                        .iter()
+                        .any(|call| call.surface == ClearSurface::BlindTransaction)
+                })),
             has_invisible_chars: has_invisible_of(model, surface),
         }
     }
@@ -2412,6 +2420,15 @@ pub(crate) fn batch_headline(calls: &[ClearBatchCall]) -> Option<String> {
 fn project_result(mut r: ClearSignResult) -> ClearSignResult {
     r.to_own_token = to_own_token(&r);
     r.verified = r.provenance.is_verified();
+    // R22 (review 1-4): green is a grade only the app's own words may give.
+    // The words "claim", "deposit", "stake" in a fetched descriptor are
+    // anybody's — a compromised descriptor service could paint a drain green
+    // — and a public-database shape, a standard's shape or the app's reading
+    // of a call's shape vouches for no contract. Graded here, on the finished
+    // result, so no builder can grant it by hand.
+    if !r.verified && r.risk == ClearRisk::Safe {
+        r.risk = ClearRisk::Normal;
+    }
     // cs-11: a typed-data string (or a call's) is drawn with every hidden or
     // direction-changing character as its visible marker — "Bob <U+202E>gpj.exe"
     // must not read "Bob exe.jpg". Graded before the words below, so a

@@ -114,8 +114,12 @@ class MultisigReviewStateTest {
             // The raw answer is the vector's, field for field.
             assertEquals(name, expect, MsRules.call("review.door", args))
             // And the typed door the sheets read says the same.
-            val door = MsRules.reviewDoor(args["state"]?.takeUnless { it is JsonNull }, args["review"]?.takeUnless { it is JsonNull })
+            // R22: with the person's "Refuse blind signing" as the case gives it.
+            val refuseBlind = (args["refuseBlind"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "true"
+            val door = MsRules.reviewDoor(args["state"]?.takeUnless { it is JsonNull }, args["review"]?.takeUnless { it is JsonNull }, refuseBlind)
             assertEquals(name, MsSignDoor.of(expect), door)
+            // R22: the hold is the core's, field for field.
+            assertEquals(name, (expect["hold_ms"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toInt() ?: 0, door.holdMs)
         }
     }
 

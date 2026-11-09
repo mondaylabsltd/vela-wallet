@@ -52,6 +52,14 @@ sealed class MultisigShellFailure {
     data class PageSignFailed(val page: String, val message: String? = null) : MultisigShellFailure()
     data class Passkey(val failure: String, val timedOut: Boolean = false, val message: String? = null) : MultisigShellFailure()
     data object NotSent : MultisigShellFailure()
+
+    /**
+     * r21-1 (§36): the relay refused it with AA22 — its validity window had
+     * closed before the EntryPoint saw it. Nothing was sent; said in the
+     * Send's words (`componentsUi.signing.expired`) with Try again, which
+     * signs anew (`review.failure` → `expired`).
+     */
+    data object Expired : MultisigShellFailure()
     data class CannotPay(val need: String, val have: String) : MultisigShellFailure()
 
     /**
@@ -69,6 +77,7 @@ sealed class MultisigShellFailure {
             is PageSignFailed -> JSONObject().put("kind", "page_sign_failed").put("page", page).put("message", message ?: JSONObject.NULL)
             is Passkey -> JSONObject().put("kind", "passkey").put("failure", failure).put("timedOut", timedOut).put("message", message ?: JSONObject.NULL)
             NotSent -> JSONObject().put("kind", "not_sent")
+            Expired -> JSONObject().put("kind", "expired")
             is CannotPay -> JSONObject().put("kind", "cannot_pay").put("need", need).put("have", have)
             is ChainUnreachable -> JSONObject().put("kind", "chain_unreachable").put("chainId", chainId)
             is Unknown ->JSONObject().put("kind", "unknown").put("message", message)
@@ -119,7 +128,7 @@ sealed class MultisigShellFailure {
             UserOpSpine.Failure.PreviousPending -> Unknown("Waiting for the last transaction of this account on this network.")
             UserOpSpine.Failure.NonceUsed -> Unknown("Another transaction of this account went first.")
             // §35: the window closed before the EntryPoint saw it.
-            UserOpSpine.Failure.Expired -> Unknown("The transaction expired before it was submitted; nothing was sent.")
+            UserOpSpine.Failure.Expired -> Expired
             UserOpSpine.Failure.NotCleared -> Unknown("cancelled")
         }
     }
@@ -204,12 +213,24 @@ class MultisigLive(
 
     // -- RPC --------------------------------------------------------------------
 
+    private fun paramList(params: JsonElement): List<Any?> = when (params) {
+        is JsonArray -> params.map(::toOrg)
+        JsonNull -> emptyList()
+        else -> listOf(toOrg(params))
+    }
+
+    /**
+     * R22: a corroborated read through the pool — the first node's body and
+     * a second, independent node's (or the person's own node alone), in the
+     * core's one envelope (`rpcCorroboratedEnvelope`), as a JSON object.
+     */
+    override suspend fun rpcCorroborated(chainId: Int, method: String, params: JsonElement): JsonElement {
+        val answer = pool.call(chainId, method, paramList(params), corroborate = true)
+        return Wire.json.parseToJsonElement(RpcResult.corroboratedEnvelope(answer))
+    }
+
     override suspend fun rpc(chainId: Int, method: String, params: JsonElement): MultisigRpcReply {
-        val list: List<Any?> = when (params) {
-            is JsonArray -> params.map(::toOrg)
-            JsonNull -> emptyList()
-            else -> listOf(toOrg(params))
-        }
+        val list = paramList(params)
         return when (val answer = pool.call(chainId, method, list)) {
             is RpcResult.Body -> {
                 val body = runCatching { Wire.json.parseToJsonElement(answer.json.toString()) }.getOrNull()
@@ -479,7 +500,8 @@ class MultisigLive(
         op.state_overrides?.takeUnless { it is JsonNull }?.let { overrides ->
             body.getJSONArray("blockStateCalls").getJSONObject(0).put("stateOverrides", JSONObject(overrides.toString()))
         }
-        val answer = pool.call(op.chain_id.toInt(), "eth_simulateV1", listOf(body, "latest"))
+        // R22: always corroborated — the reply is the core's envelope (witness / ownNode).
+        val answer = pool.call(op.chain_id.toInt(), "eth_simulateV1", listOf(body, "latest"), corroborate = true)
         return SimDeltas.replyJson(answer)
     }
 

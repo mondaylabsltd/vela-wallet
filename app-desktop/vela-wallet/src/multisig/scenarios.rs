@@ -129,6 +129,7 @@ impl Deps for Shared {
             params: params.clone(),
             bound_ms: bound.map(|b| b.as_millis() as u32),
             person,
+            corroborate: false,
         }) {
             Res::RpcResult { result } => Ok(RpcReply::Result(result)),
             Res::RpcError {
@@ -141,6 +142,27 @@ impl Deps for Shared {
                 data,
             }),
             Res::RpcUnanswered { detail } => Err(detail),
+            other => panic!("{other:?}"),
+        }
+    }
+    fn rpc_corroborated(
+        &self,
+        chain_id: u64,
+        method: &str,
+        params: &Value,
+        bound: Option<Duration>,
+        person: bool,
+    ) -> Value {
+        match self.ask(&Op::Rpc {
+            chain_id,
+            method: method.to_owned(),
+            params: params.clone(),
+            bound_ms: bound.map(|b| b.as_millis() as u32),
+            person,
+            corroborate: true,
+        }) {
+            Res::RpcCorroborated { envelope } => envelope,
+            Res::RpcUnanswered { .. } => serde_json::json!({"unreachable": true}),
             other => panic!("{other:?}"),
         }
     }

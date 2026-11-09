@@ -81,6 +81,10 @@ enum Request {
         /// press) — the core's `CallRequested::person`: always sent, a full
         /// sweep, its chain's cooldowns lifted.
         person: bool,
+        /// R22: a read a signing verdict stands on — the core's
+        /// `CallRequested::corroborate`: answered by two independent
+        /// endpoints, never hedged, and the caller handed both bodies.
+        corroborate: bool,
         reply: Sender<Routed>,
     },
     /// Drop every endpoint's state for a chain, or for all of them.
@@ -156,6 +160,13 @@ impl std::fmt::Display for PoolError {
 pub struct Routed {
     pub answer: Result<Value, PoolError>,
     pub maybe_delivered: bool,
+    /// R22, a corroborated read only: the body the second, independent
+    /// endpoint answered (`RpcCallVerdict::Respond::witness_url`). `None`:
+    /// nobody independent answered, or the read was not corroborated.
+    pub witness: Option<Value>,
+    /// R22, a corroborated read only: the person's own node answered alone,
+    /// by their choice ("Only use my node").
+    pub own_node: bool,
 }
 
 impl Routed {
@@ -163,7 +174,21 @@ impl Routed {
         Self {
             answer: Err(PoolError::Unavailable),
             maybe_delivered: false,
+            witness: None,
+            own_node: false,
         }
+    }
+
+    /// R22: the one envelope the core reads for a corroborated read — built
+    /// only by the core's helper (`corroborate::corroborated_envelope`). The
+    /// pool giving up is no first answer: `{"unreachable": true}`.
+    #[must_use]
+    pub fn envelope(&self) -> Value {
+        vela_core::app::corroborate::corroborated_envelope(
+            self.answer.as_ref().ok(),
+            self.witness.as_ref(),
+            self.own_node,
+        )
     }
 }
 
@@ -301,15 +326,49 @@ fn route_within(
     stop: &dyn Fn() -> bool,
     person: bool,
 ) -> Result<Value, PoolError> {
+    ask_within(
+        chain_id,
+        kind,
+        method,
+        params,
+        Some(budget),
+        stop,
+        Ask {
+            person,
+            corroborate: false,
+        },
+    )
+    .answer
+}
+
+/// How a routed call is asked: on the person's own word (r17-1 / r17-10),
+/// and whether it is corroborated (R22).
+#[derive(Clone, Copy, Debug, Default)]
+struct Ask {
+    person: bool,
+    corroborate: bool,
+}
+
+/// One routed call, waited for at most `budget` (`None`: until the core
+/// concludes), and given up the moment `stop` says so.
+fn ask_within(
+    chain_id: u32,
+    kind: RpcKind,
+    method: &str,
+    params: Value,
+    budget: Option<Duration>,
+    stop: &dyn Fn() -> bool,
+    ask: Ask,
+) -> Routed {
     /// How often a waiting caller looks at `stop`.
     const GLANCE: Duration = Duration::from_millis(200);
     if faulted(chain_id) {
-        return Err(PoolError::Unavailable);
+        return Routed::unavailable();
     }
     let (reply, answer) = channel();
     {
         let Ok(tx) = sender().lock() else {
-            return Err(PoolError::Unavailable);
+            return Routed::unavailable();
         };
         if tx
             .send(Message::Ask(Request::Call {
@@ -317,30 +376,77 @@ fn route_within(
                 kind,
                 method: method.to_owned(),
                 params,
-                person,
+                person: ask.person,
+                corroborate: ask.corroborate,
                 reply,
             }))
             .is_err()
         {
-            return Err(PoolError::Unavailable);
+            return Routed::unavailable();
         }
     }
+    let Some(budget) = budget else {
+        return answer.recv().unwrap_or_else(|_| Routed::unavailable());
+    };
     let deadline = Instant::now() + budget;
     loop {
         let left = deadline.saturating_duration_since(Instant::now());
         if left.is_zero() || stop() {
-            return Err(PoolError::Failed {
-                rate_limited: false,
-            });
+            return Routed {
+                answer: Err(PoolError::Failed {
+                    rate_limited: false,
+                }),
+                ..Routed::unavailable()
+            };
         }
         match answer.recv_timeout(left.min(GLANCE)) {
-            Ok(routed) => return routed.answer,
+            Ok(routed) => return routed,
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                return Err(PoolError::Unavailable);
+                return Routed::unavailable();
             }
         }
     }
+}
+
+/// R22 (review 1-2): a read a signing verdict stands on — the sheet's
+/// simulation, an ownership read, a guard's read — asked of two independent
+/// endpoints (the core's corroborated read: each endpoint says which chain
+/// it serves first, and nobody hedges it), as the ONE envelope the core
+/// reads (`{result | error | unreachable, witness?, ownNode?}`,
+/// [`Routed::envelope`]). `budget`: past it, nobody answered. `person`: the
+/// person's own ask ([`person_call`]). **Blocks.**
+pub fn corroborated(
+    chain_id: u32,
+    method: &str,
+    params: Value,
+    budget: Option<Duration>,
+    person: bool,
+) -> Value {
+    corroborated_routed(chain_id, method, params, budget, person).envelope()
+}
+
+/// [`corroborated`], as the pool answered it — both bodies, before they are
+/// made one envelope.
+pub fn corroborated_routed(
+    chain_id: u32,
+    method: &str,
+    params: Value,
+    budget: Option<Duration>,
+    person: bool,
+) -> Routed {
+    ask_within(
+        chain_id,
+        RpcKind::Rpc,
+        method,
+        params,
+        budget,
+        &|| false,
+        Ask {
+            person,
+            corroborate: true,
+        },
+    )
 }
 
 /// The REST base of the bundler the pool would submit to for this chain
@@ -694,29 +800,18 @@ fn route(chain_id: u32, kind: RpcKind, method: &str, params: Value) -> Routed {
 }
 
 fn route_as(chain_id: u32, kind: RpcKind, method: &str, params: Value, person: bool) -> Routed {
-    if faulted(chain_id) {
-        return Routed::unavailable();
-    }
-    let (reply, answer) = channel();
-    {
-        let Ok(tx) = sender().lock() else {
-            return Routed::unavailable();
-        };
-        if tx
-            .send(Message::Ask(Request::Call {
-                chain_id,
-                kind,
-                method: method.to_owned(),
-                params,
-                person,
-                reply,
-            }))
-            .is_err()
-        {
-            return Routed::unavailable();
-        }
-    }
-    answer.recv().unwrap_or_else(|_| Routed::unavailable())
+    ask_within(
+        chain_id,
+        kind,
+        method,
+        params,
+        None,
+        &|| false,
+        Ask {
+            person,
+            corroborate: false,
+        },
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -980,6 +1075,7 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
                 method,
                 params,
                 person,
+                corroborate,
                 reply,
             } => {
                 next_id += 1;
@@ -994,7 +1090,10 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
                         kind,
                         method: method.clone(),
                         started: Instant::now(),
-                        hedge: Hedge::for_call(kind, &method),
+                        // R22: a corroborated read is never hedged — an early
+                        // answer would skip its witness (the core leaves it
+                        // out of `pending_urls` too, so no hedge targets it).
+                        hedge: Hedge::for_call(kind, &method).filter(|_| !corroborate),
                     },
                 );
                 let pending = host.dispatch(Event::CallRequested {
@@ -1004,6 +1103,7 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
                     method,
                     now_ms: now_ms(),
                     person,
+                    corroborate,
                 });
                 drain(&mut host, pending, &mut inflight, &mut queries, workers);
             }
@@ -1516,11 +1616,17 @@ fn routed_of(verdict: &RpcCallVerdict, bodies: &HashMap<String, Value>) -> Route
         RpcCallVerdict::Respond {
             url,
             maybe_delivered,
+            witness_url,
+            own_node,
         } => Routed {
             answer: bodies.get(url).cloned().ok_or(PoolError::Failed {
                 rate_limited: false,
             }),
             maybe_delivered: *maybe_delivered,
+            // R22: the second, independent node's body, held under its own
+            // URL like the first's — the caller hands both to the core.
+            witness: witness_url.as_ref().and_then(|w| bodies.get(w).cloned()),
+            own_node: *own_node,
         },
         RpcCallVerdict::RangeCap { url, max_span } => Routed {
             answer: Err(PoolError::RangeCap {
@@ -1530,7 +1636,7 @@ fn routed_of(verdict: &RpcCallVerdict, bodies: &HashMap<String, Value>) -> Route
                     .and_then(|body| body.get("error"))
                     .map(Value::to_string),
             }),
-            maybe_delivered: false,
+            ..Routed::unavailable()
         },
         RpcCallVerdict::Failed {
             rate_limited,
@@ -1540,6 +1646,7 @@ fn routed_of(verdict: &RpcCallVerdict, bodies: &HashMap<String, Value>) -> Route
                 rate_limited: *rate_limited,
             }),
             maybe_delivered: *maybe_delivered,
+            ..Routed::unavailable()
         },
         // Not answers to a routed call; a caller waiting on one of these asked
         // the wrong question.
@@ -1547,7 +1654,7 @@ fn routed_of(verdict: &RpcCallVerdict, bodies: &HashMap<String, Value>) -> Route
             answer: Err(PoolError::Failed {
                 rate_limited: false,
             }),
-            maybe_delivered: false,
+            ..Routed::unavailable()
         },
     }
 }
@@ -2260,6 +2367,8 @@ pub(crate) mod tests {
             reached_of(&RpcCallVerdict::Respond {
                 url: String::new(),
                 maybe_delivered: false,
+                witness_url: None,
+                own_node: false,
             }),
             Some(true)
         );
@@ -2944,6 +3053,46 @@ pub(crate) mod tests {
                         .cloned()
                         .unwrap_or((Duration::ZERO, None));
                     std::thread::sleep(delay);
+                    if let Some(response) = response {
+                        let _ = (&stream).write_all(response.as_bytes());
+                    }
+                });
+            }
+        });
+        (format!("http://127.0.0.1:{port}"), log)
+    }
+
+    /// A loopback node of `chain_id` (R22): it answers `eth_chainId` with
+    /// its chain — a corroborated read asks every node which chain it serves
+    /// first — and every other request with `response` (`None`: it hangs up
+    /// unanswered). The log notes the other requests only.
+    pub(crate) fn chain_node(
+        chain_id: u32,
+        response: Option<String>,
+    ) -> (String, std::sync::Arc<Mutex<Vec<Instant>>>) {
+        use std::io::Write as _;
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap_or_else(|error| unreachable!("no loopback port: {error}"));
+        let port = listener
+            .local_addr()
+            .map(|addr| addr.port())
+            .unwrap_or_else(|error| unreachable!("no port: {error}"));
+        let log = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let seen = std::sync::Arc::clone(&log);
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let (seen, response) = (std::sync::Arc::clone(&seen), response.clone());
+                std::thread::spawn(move || {
+                    let body = read_request(&stream);
+                    if body.contains("eth_chainId") {
+                        let reply = http("200 OK", &result_body(&format!("0x{chain_id:x}")));
+                        let _ = (&stream).write_all(reply.as_bytes());
+                        return;
+                    }
+                    if let Ok(mut seen) = seen.lock() {
+                        seen.push(Instant::now());
+                    }
                     if let Some(response) = response {
                         let _ = (&stream).write_all(response.as_bytes());
                     }
@@ -3686,6 +3835,79 @@ pub(crate) mod tests {
             );
             assert_eq!(arrivals(&dead_log).len(), 1);
         });
+    }
+
+    /// R22 (review 1-2): a corroborated read is answered by two independent
+    /// nodes — two loopback ports are two processes the person started, so
+    /// two providers — and the caller is handed both bodies in the core's one
+    /// envelope. Each node says which chain it serves first: the pool's
+    /// `ProbeChainId` is asked outside any fastest-RPC race, and answered.
+    #[test]
+    fn a_corroborated_read_is_answered_by_two_nodes_in_one_envelope() {
+        const CHAIN: u32 = 424_261;
+        storage::tests::with_temp_state("pool-corroborate", || {
+            let first = format!("http://127.0.0.1:{}", fake_rpc(CHAIN, Duration::ZERO));
+            let second = format!("http://127.0.0.1:{}", fake_rpc(CHAIN, Duration::ZERO));
+            seed_two(CHAIN, &first, &second);
+
+            let routed = corroborated_routed(CHAIN, "eth_call", json!([]), None, false);
+            assert_eq!(result_of(&routed.answer), Some(json!("0x1")), "{routed:?}");
+            assert_eq!(
+                routed.witness.as_ref().and_then(|w| w.get("result")),
+                Some(&json!("0x1")),
+                "no witness body: {routed:?}"
+            );
+            assert!(!routed.own_node);
+            assert_eq!(
+                routed.envelope(),
+                json!({"result": "0x1", "witness": {"result": "0x1"}})
+            );
+            // An ordinary read is exactly as before: one node, no witness.
+            let plain = route(CHAIN, RpcKind::Rpc, "eth_call", json!([]));
+            assert_eq!(result_of(&plain.answer), Some(json!("0x1")));
+            assert_eq!(plain.witness, None);
+            assert!(!plain.own_node);
+            assert_eq!(settle(Duration::from_secs(2)), 0, "a read was left open");
+        });
+    }
+
+    /// R22: a node that names another chain when asked which it serves is
+    /// no witness — its `ChainIdProbed` reaches the core (outside any race),
+    /// nothing is asked of it, and the first answer goes back alone: an
+    /// envelope the core believes no plain verdict on.
+    #[test]
+    fn a_wrong_chain_node_is_never_a_witness() {
+        const CHAIN: u32 = 424_262;
+        storage::tests::with_temp_state("pool-corroborate-wrong", || {
+            let first = format!("http://127.0.0.1:{}", fake_rpc(CHAIN, Duration::ZERO));
+            let other = format!("http://127.0.0.1:{}", fake_rpc(CHAIN + 1, Duration::ZERO));
+            seed_two(CHAIN, &first, &other);
+
+            let envelope = corroborated(CHAIN, "eth_call", json!([]), None, false);
+            assert_eq!(envelope, json!({"result": "0x1"}));
+            assert_eq!(settle(Duration::from_secs(2)), 0, "a read was left open");
+        });
+    }
+
+    /// R22: the pool giving up on a corroborated read is no first answer —
+    /// `{"unreachable": true}`, from the core's own helper.
+    #[test]
+    fn a_corroborated_read_nobody_answered_is_unreachable() {
+        let routed = Routed {
+            answer: Err(PoolError::Failed {
+                rate_limited: false,
+            }),
+            maybe_delivered: false,
+            witness: None,
+            own_node: false,
+        };
+        assert_eq!(routed.envelope(), json!({"unreachable": true}));
+        let own = Routed {
+            answer: Ok(json!({"jsonrpc": "2.0", "id": 1, "result": "0x2"})),
+            own_node: true,
+            ..routed
+        };
+        assert_eq!(own.envelope(), json!({"result": "0x2", "ownNode": true}));
     }
 
     /// The pool, against the real network, through the real routing.

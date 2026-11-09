@@ -112,7 +112,7 @@ struct NativeP4Tests {
                 simJudged: { address, chainId, deltas in
                     await trust.simJudged(address: address, chainId: chainId, deltas: deltas)
                 },
-                simulate: { _, _ in await simulation.run() }
+                simulate: { _, _ in .agreed(await simulation.run()) }
             ),
             timers: .stopped
         )

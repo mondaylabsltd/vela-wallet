@@ -54,6 +54,14 @@
 		 */
 		testid?: string;
 		onclick?: () => void;
+		/**
+		 * R22: the held confirm's gesture (`HoldConfirm.svelte`) — the press,
+		 * and its end. Absent on every other button.
+		 */
+		onpointerdown?: (event: PointerEvent) => void;
+		onpointerend?: (event: PointerEvent) => void;
+		/** R22: the element saying how this button acts ("Hold to confirm"). */
+		describedby?: string;
 		children: Snippet;
 	}
 
@@ -67,6 +75,9 @@
 		busyLabel,
 		testid,
 		onclick,
+		onpointerdown,
+		onpointerend,
+		describedby,
 		children
 	}: Props = $props();
 </script>
@@ -89,7 +100,12 @@
 		data-testid={testid}
 		disabled={disabled || loading}
 		aria-busy={loading}
+		aria-describedby={describedby}
 		{onclick}
+		{onpointerdown}
+		onpointerup={onpointerend}
+		onpointercancel={onpointerend}
+		onpointerleave={onpointerend}
 		type="button"
 	>
 		{#if loading && busyLabel !== undefined}

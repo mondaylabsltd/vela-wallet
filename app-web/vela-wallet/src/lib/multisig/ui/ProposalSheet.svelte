@@ -57,6 +57,10 @@
 	} from '../core/review-blocks';
 	import BlockList from '$lib/signing/ui/BlockList.svelte';
 	import { resolvedFormatKeys } from '$lib/services/locale-format';
+	import HoldConfirm from '$lib/ui/HoldConfirm.svelte';
+	import { pageHandoff } from '$lib/signing/page-handoff.svelte';
+	import { refuseBlind } from '$lib/settings/refuse-blind.svelte';
+	import { ownNodeSettingsHref } from '$lib/settings/own-node-href';
 	import {
 		adviceStanding,
 		openReview,
@@ -94,7 +98,7 @@
 		ExecutorCannotPayError,
 		type ExecutionPreview
 	} from '../core/execution';
-	import { feeCoin, feeWords, whyText } from '../core/execution-words';
+	import { balanceCoin, feeCoin, feeWords, whyText } from '../core/execution-words';
 	import {
 		declinedRisk,
 		gateOf,
@@ -108,7 +112,11 @@
 	import { ChainUnavailableError } from '../core/chain';
 	import { progressLine } from '../core/progress';
 	import { proposalsHost, ProposeFailedError } from '../shell/proposals-host.svelte';
-	import { actionError, previewOf as previewFrom } from '../shell/proposal-failure';
+	import {
+		actionError,
+		ExecutionExpiredError,
+		previewOf as previewFrom
+	} from '../shell/proposal-failure';
 	import type { MultisigActionState } from '../generated/MultisigActionState';
 	import type { MultisigTimelineStep } from '../generated/MultisigTimelineStep';
 	import { multisigUi } from '../core/ui.svelte';
@@ -421,7 +429,9 @@
 	 * button that signs, proposes, approves or executes: a review read, and
 	 * its sign rule allowing it. Loading, failed, or not asked keeps it shut.
 	 */
-	const door = $derived(reviewDoor(reviewState, machineReview ?? null));
+	// R22: with the person's "Refuse blind signing" — a review that signs only
+	// "… anyway" is then shut, said in the reason place.
+	const door = $derived(reviewDoor(reviewState, machineReview ?? null, refuseBlind.current()));
 	/** §12: Try again — the machine reads the review again from scratch. */
 	function retryReview(): void {
 		proposalsHost.send(
@@ -486,6 +496,7 @@
 		network: chainName(chainId),
 		nativeSymbol: nativeSymbol(chainId),
 		preset: resolvedFormatKeys().number,
+		ownNodeHref: ownNodeSettingsHref(locale, chainId),
 		nameOf: (address: string) => names.label(address) ?? localName(address),
 		// r5reg-16: a member being added is named as typed when they were added.
 		memberName: (address: string) => typedName(account, address)
@@ -693,7 +704,7 @@
 		 * the figure of the moment it was said — and goes when the core
 		 * withdraws it.
 		 */
-		| { kind: 'failed'; reason: string; action?: 'approve' | 'execute' };
+		| { kind: 'failed'; reason: string; action?: 'approve' | 'execute'; expired?: boolean };
 	let phase = $state<Phase>({ kind: 'idle' });
 	/**
 	 * r5reg-20: executed (here, or anywhere: its number is used) — a past
@@ -740,10 +751,24 @@
 	 */
 	function failedPhase(error: unknown, action?: 'approve' | 'execute'): Phase {
 		if (declinedRisk(error)) return { kind: 'idle' };
+		const expired = error instanceof ExecutionExpiredError;
 		return action
-			? { kind: 'failed', reason: reasonOf(error), action }
-			: { kind: 'failed', reason: reasonOf(error) };
+			? { kind: 'failed', reason: reasonOf(error), action, expired }
+			: { kind: 'failed', reason: reasonOf(error), expired };
 	}
+
+	/**
+	 * r21-1: the failed press expired before it was submitted (the relay's
+	 * AA22) — said calmly in the Send's words, never "That didn't go through".
+	 */
+	const failedExpired = $derived.by((): boolean => {
+		if (phase.kind !== 'failed') return false;
+		if (!phase.action) return phase.expired === true;
+		const now = actionOf(phase.action);
+		if (now === null) return false;
+		if (now.kind === 'working') return phase.expired === true;
+		return actionError(now, chainId) instanceof ExecutionExpiredError;
+	});
 
 	/**
 	 * r17-2: the failed line's words, now. A press's failure follows the
@@ -780,7 +805,7 @@
 				name: names.label(actor.address),
 				symbol,
 				fee: feeCoin(error.need, symbol),
-				balance: feeCoin(error.have, symbol)
+				balance: balanceCoin(error.have, symbol)
 			});
 		}
 		if (error instanceof ExecutionWouldFailError) {
@@ -868,6 +893,8 @@
 		if (cancelled(error)) return m.proposal.reason.passkeyClosed;
 		if (error instanceof PasskeyCheckError) return m.proposal.reason.passkeyFailed;
 		if (error instanceof MailboxRefusedError) return m.proposal.reason.serviceRefused;
+		// r21-1: it expired before it was submitted: nothing was sent.
+		if (error instanceof ExecutionExpiredError) return m.signing?.expired ?? m.proposal.notSent;
 		// The relay provably never took it (refused, or out of reach): nothing was sent.
 		if (error instanceof Error && error.name === 'UserOpNotSentError') return m.proposal.notSent;
 		if (error instanceof ChainUnavailableError || offline()) {
@@ -896,6 +923,7 @@
 			error instanceof PasskeyError ||
 			error instanceof PasskeyCheckError ||
 			error instanceof MailboxRefusedError ||
+			error instanceof ExecutionExpiredError ||
 			cancelled(error)
 		);
 	}
@@ -931,7 +959,24 @@
 	}
 
 	/** The person confirmed the transaction: propose it, approved by this device's member. */
+	/**
+	 * R22 (D4): a press that goes on to a trusted signing page carries the
+	 * door's posture to the hand-off card — its Open is this confirm.
+	 */
+	function notePosture(): void {
+		pageHandoff.posture =
+			door.hold_ms > 0 || door.anyway
+				? {
+						danger: door.anyway,
+						holdMs: door.hold_ms,
+						holdLabel: m.signing?.holdToConfirm ?? '',
+						againLabel: m.signing?.confirmAgain ?? ''
+					}
+				: null;
+	}
+
 	async function onPropose() {
+		notePosture();
 		// §3.6: the proposer's own transaction goes on to its passkey (the host closes this).
 		// r5reg-5: the member shown under "As" proposes it — never another, silently.
 		if (prebuilt) {
@@ -997,6 +1042,7 @@
 
 	async function onApprove() {
 		if (!item || !actor) return;
+		notePosture();
 		phase = { kind: 'busy', what: 'approve' };
 		const error = await approveAs(actor);
 		// The machine reads the list again after it (never a read begun before it).
@@ -1010,6 +1056,7 @@
 
 	async function onExecute() {
 		if (!item || !actor || !members) return;
+		notePosture();
 		// "Approve and execute" is the machine's one press (`approve_execute`):
 		// both or nothing (r16-4, §26) — stopped before its signature, nothing
 		// is approved either, and the stop is said beside the press like any
@@ -1678,6 +1725,7 @@
 			<!-- §12: being read, or not read — said where the review goes, with Try again. -->
 			<ReviewStateNote
 				m={m.review.state}
+				blindRefused={m.review.blindRefused}
 				{door}
 				network={chainName(chainId)}
 				onRetry={retryReview}
@@ -2086,9 +2134,18 @@
 		{#if drafting}
 			<!-- The review of what the site asks: nothing is signed before this. -->
 			{#if phase.kind === 'failed' && failedReason !== null}
-				<p class="warn" role="alert" data-testid="proposal-failed">
-					{fillTemplate(m.proposal.failed, { reason: failedReason })}
-				</p>
+				{#if failedExpired && m.signing}
+					<!-- r21-1: it expired before it was submitted — the Send's words,
+					     calmly; pressing again signs anew. -->
+					<div class="calm" role="status" data-testid="proposal-expired">
+						<p class="calm-title">{m.signing.notSent}</p>
+						<p>{m.signing.expired}</p>
+					</div>
+				{:else}
+					<p class="warn" role="alert" data-testid="proposal-failed">
+						{fillTemplate(m.proposal.failed, { reason: failedReason })}
+					</p>
+				{/if}
 			{/if}
 			{#if candidates.length > 1 && item.review.action !== null && !readOnly && !signBlocked}
 				{@render actorChoice()}
@@ -2101,17 +2158,20 @@
 					>{prebuilt ? m.proposal.dontPropose : m.external.decline}</Button
 				>
 				{#if item.review.action !== null && !readOnly && !signBlocked}
-					<Button
+					<HoldConfirm
 						variant={valueVariant}
 						shape="rounded"
 						loading={busy && phase.kind === 'busy' && phase.what === 'propose'}
 						disabled={busy || signShut}
-						onclick={onPropose}
+						onconfirm={onPropose}
+						holdMs={door.hold_ms}
+						holdLabel={m.signing?.holdToConfirm ?? ''}
+						againLabel={m.signing?.confirmAgain ?? ''}
 						>{executeNow
 							? anywayLabel('approveExecute', m.proposal.approveAndExecute, fullReview, m)
 							: rejecters.length > 0
 								? anywayLabel('propose', m.send.propose, fullReview, m)
-								: m.send.proposeOnly}</Button
+								: m.send.proposeOnly}</HoldConfirm
 					>
 				{/if}
 			</div>
@@ -2163,9 +2223,18 @@
 			{/if}
 
 			{#if phase.kind === 'failed' && failedReason !== null}
-				<p class="warn" role="alert" data-testid="proposal-failed">
-					{fillTemplate(m.proposal.failed, { reason: failedReason })}
-				</p>
+				{#if failedExpired && m.signing}
+					<!-- r21-1: it expired before it was submitted — the Send's words,
+					     calmly; pressing again signs anew. -->
+					<div class="calm" role="status" data-testid="proposal-expired">
+						<p class="calm-title">{m.signing.notSent}</p>
+						<p>{m.signing.expired}</p>
+					</div>
+				{:else}
+					<p class="warn" role="alert" data-testid="proposal-failed">
+						{fillTemplate(m.proposal.failed, { reason: failedReason })}
+					</p>
+				{/if}
 			{/if}
 
 			<!-- r4D-19: in the desktop's capped dialog the actions stay in view. -->
@@ -2196,39 +2265,45 @@
 										name: names.label(actor.address),
 										symbol: nativeSymbol(chainId),
 										fee: feeCoin(actorPreview.fee.amount, nativeSymbol(chainId)),
-										balance: feeCoin(actorPreview.balance ?? 0n, nativeSymbol(chainId))
+										balance: balanceCoin(actorPreview.balance ?? 0n, nativeSymbol(chainId))
 									})}
 						</p>
 					{/if}
 					{#if blocked}
 						<!-- It cannot run by this executor: approving is the one thing left to do. -->
 						{#if approveFirst && canApproveOnly && actorPreview?.kind !== 'spent'}
-							<Button
+							<HoldConfirm
 								variant={valueVariant}
 								shape="rounded"
 								loading={busy && phase.kind === 'busy' && phase.what === 'approve'}
 								disabled={busy || signShut}
-								onclick={onApprove}
+								onconfirm={onApprove}
+								holdMs={door.hold_ms}
+								holdLabel={m.signing?.holdToConfirm ?? ''}
+								againLabel={m.signing?.confirmAgain ?? ''}
 							>
 								{anywayLabel('approve', m.proposal.approve, fullReview, m)}
-							</Button>
+							</HoldConfirm>
 						{/if}
 					{:else}
 						<div class:two={approveFirst && canApproveOnly}>
 							{#if approveFirst && canApproveOnly}
 								<!-- Executing pays the fee; approving alone does not. -->
-								<Button
+								<HoldConfirm
 									variant={anyway ? 'danger' : 'secondary'}
 									shape="rounded"
 									loading={busy && phase.kind === 'busy' && phase.what === 'approve'}
 									disabled={busy || signShut}
-									onclick={onApprove}
+									onconfirm={onApprove}
+									holdMs={door.hold_ms}
+									holdLabel={m.signing?.holdToConfirm ?? ''}
+									againLabel={m.signing?.confirmAgain ?? ''}
 								>
 									<!-- D1: approving alone goes through the same "… anyway" step. -->
 									{anywayLabel('approve', m.proposal.approve, fullReview, m)}
-								</Button>
+								</HoldConfirm>
 							{/if}
-							<Button
+							<HoldConfirm
 								variant={valueVariant}
 								shape="rounded"
 								loading={busy && phase.kind === 'busy' && phase.what === 'execute'}
@@ -2236,12 +2311,15 @@
 									signShut ||
 									actorPreview === null ||
 									(approveFirst && !oneTapOffered)}
-								onclick={onExecute}
+								onconfirm={onExecute}
+								holdMs={door.hold_ms}
+								holdLabel={m.signing?.holdToConfirm ?? ''}
+								againLabel={m.signing?.confirmAgain ?? ''}
 							>
 								{approveFirst
 									? anywayLabel('approveExecute', m.proposal.approveAndExecute, fullReview, m)
 									: anywayLabel('execute', m.proposal.execute, fullReview, m)}
-							</Button>
+							</HoldConfirm>
 						</div>
 					{/if}
 					{#if actorPreview?.kind === 'priced'}
@@ -2292,15 +2370,18 @@
 						</p>
 					{/if}
 				{:else if approvers.length > 0 && actor}
-					<Button
+					<HoldConfirm
 						variant={valueVariant}
 						shape="rounded"
 						loading={busy && phase.kind === 'busy' && phase.what === 'approve'}
 						disabled={busy || signShut}
-						onclick={onApprove}
+						onconfirm={onApprove}
+						holdMs={door.hold_ms}
+						holdLabel={m.signing?.holdToConfirm ?? ''}
+						againLabel={m.signing?.confirmAgain ?? ''}
 					>
 						{anywayLabel('approve', m.proposal.approve, fullReview, m)}
-					</Button>
+					</HoldConfirm>
 				{:else if localOwners(members?.owners ?? []).length === 0 && !watch}
 					<p class="quiet">{m.proposal.notMember}</p>
 				{/if}
@@ -2638,6 +2719,22 @@
 
 	li.done .state {
 		color: var(--color-success-text);
+	}
+
+	/* r21-1: an expired execution — nothing failed that the person did; said calmly. */
+	.calm {
+		margin: var(--space-lg) 0 0;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
+	}
+
+	.calm p {
+		margin: 0;
+	}
+
+	.calm .calm-title {
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
 	}
 
 	.quiet {

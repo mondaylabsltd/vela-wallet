@@ -159,7 +159,13 @@ export async function seedNetwork(page: Page): Promise<void> {
 				};
 			});
 		},
-		Object.entries(RPCS).map(([chainId, rpcURL]) => ({ chainId: Number(chainId), rpcURL }))
+		// R22: one local fork is honestly the person's own node ("Only use my node"):
+		// trusted alone, and said so — never a second public node it is not.
+		Object.entries(RPCS).map(([chainId, rpcURL]) => ({
+			chainId: Number(chainId),
+			rpcURL,
+			onlyMine: true
+		}))
 	);
 }
 

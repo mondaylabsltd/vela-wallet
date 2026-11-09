@@ -263,7 +263,8 @@
         "feeWouldFail": "Fallaría si se envía así.",
         "previousPending": "Esperando a que termine tu transacción anterior en esta red…",
         "simChecking": "Comprobando qué hace esta transacción…",
-        "messageUnread": "El mensaje continúa; desplázate para leerlo completo"
+        "messageUnread": "El mensaje continúa; desplázate para leerlo completo",
+        "blindRefused": "Rechazado: “Rechazar firma a ciegas” está activado y Vela no pudo revisar esta solicitud por completo. Puedes cambiarlo en Configuración."
       },
       "labelAddsToAllowance": "Se suma a la autorización",
       "certain": {
@@ -334,7 +335,12 @@
         "wrongChain": "Este inicio de sesión es para la cadena {{chain}}, pero este sitio está conectado en la cadena {{connected}}. Cambia de red y vuelve a pedirlo.",
         "incomplete": "A este inicio de sesión le falta su {{field}}, así que Vela no puede verificar a qué te da acceso.",
         "noOrigin": "Vela no puede saber qué sitio lo pide, así que no firmará este inicio de sesión."
-      }
+      },
+      "simUnconfirmed": "Solo respondió un nodo, así que Vela no pudo confirmar qué hace esta transacción. Revísala antes de firmar.",
+      "simDisagreed": "Dos nodos independientes dieron respuestas distintas sobre qué hace esta transacción. Revísala antes de firmar.",
+      "simOwnNode": "Verificado solo por tu propio nodo",
+      "ownNodeHint": "Para verificar con un nodo de confianza, agrega el tuyo y activa “Usar solo mi nodo” en esta red.",
+      "confirmAgain": "Presiona de nuevo para confirmar"
     },
     "signingApprove": {
       "resultingTotal": "Nuevo límite total",

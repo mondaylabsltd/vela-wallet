@@ -11,6 +11,7 @@ import type { MultisigAccountsEvent } from '../generated/MultisigAccountsEvent';
 import type { MultisigAccountsView } from '../generated/MultisigAccountsView';
 import type { MultisigLocalAccount } from '../generated/MultisigLocalAccount';
 import type { MultisigShellDeps } from './handler';
+import { withWitness } from './witnessed.testing';
 import { MultisigMachine } from './machine.svelte';
 
 export function memoryStorage(seed: Record<string, string> = {}) {
@@ -28,7 +29,7 @@ export function offlineDeps(
 	storage: ReturnType<typeof memoryStorage>,
 	over: Partial<MultisigShellDeps> = {}
 ): MultisigShellDeps {
-	return {
+	return withWitness({
 		fetch: (async () => {
 			throw new TypeError('offline');
 		}) as unknown as typeof fetch,
@@ -58,7 +59,7 @@ export function offlineDeps(
 		},
 		notice: () => {},
 		...over
-	};
+	});
 }
 
 export type AccountsMachineForTests = MultisigMachine<MultisigAccountsView, MultisigAccountsEvent>;

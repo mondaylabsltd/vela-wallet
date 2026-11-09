@@ -13687,6 +13687,17 @@ public struct SimOutcomeRecord: Equatable, Hashable {
      * kind: a node that spoke and did not simulate would say the same.
      */
     public var recheck: Bool
+    /**
+     * R22: who stands behind a checked answer — `corroborated` (two
+     * independent nodes agreed) or `own_node` ("Only use my node"); `None`
+     * for every other kind.
+     */
+    public var source: String?
+    /**
+     * R22: the line the sheet says about `source` (`simOwnNode` when the
+     * person's own node answered alone); `None` otherwise.
+     */
+    public var sourceKey: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -13723,7 +13734,16 @@ public struct SimOutcomeRecord: Equatable, Hashable {
          * chain answers, and offers the person "Check again"
          * (`componentsUi.signing.simRecheck`, dapp-15). `false` for every other
          * kind: a node that spoke and did not simulate would say the same.
-         */recheck: Bool = false) {
+         */recheck: Bool = false, 
+        /**
+         * R22: who stands behind a checked answer — `corroborated` (two
+         * independent nodes agreed) or `own_node` ("Only use my node"); `None`
+         * for every other kind.
+         */source: String? = nil, 
+        /**
+         * R22: the line the sheet says about `source` (`simOwnNode` when the
+         * person's own node answered alone); `None` otherwise.
+         */sourceKey: String? = nil) {
         self.kind = kind
         self.deltasJson = deltasJson
         self.revertReason = revertReason
@@ -13731,6 +13751,8 @@ public struct SimOutcomeRecord: Equatable, Hashable {
         self.noticeKey = noticeKey
         self.noChangeKey = noChangeKey
         self.recheck = recheck
+        self.source = source
+        self.sourceKey = sourceKey
     }
 
     
@@ -13755,7 +13777,9 @@ public struct FfiConverterTypeSimOutcomeRecord: FfiConverterRustBuffer {
                 noticeRisk: FfiConverterOptionString.read(from: &buf), 
                 noticeKey: FfiConverterOptionString.read(from: &buf), 
                 noChangeKey: FfiConverterOptionString.read(from: &buf), 
-                recheck: FfiConverterBool.read(from: &buf)
+                recheck: FfiConverterBool.read(from: &buf), 
+                source: FfiConverterOptionString.read(from: &buf), 
+                sourceKey: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -13767,6 +13791,8 @@ public struct FfiConverterTypeSimOutcomeRecord: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.noticeKey, into: &buf)
         FfiConverterOptionString.write(value.noChangeKey, into: &buf)
         FfiConverterBool.write(value.recheck, into: &buf)
+        FfiConverterOptionString.write(value.source, into: &buf)
+        FfiConverterOptionString.write(value.sourceKey, into: &buf)
     }
 }
 
@@ -19394,6 +19420,16 @@ public func computeWebauthnSignerAddress(x: Data, y: Data)throws  -> String  {
     )
 })
 }
+/**
+ * R22: the accessible equivalent's window — a second activation within it confirms.
+ */
+public func confirmAgainWindowMs() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_confirm_again_window_ms(uniffiCallStatus
+    )
+})
+}
 public func create2Address(deployerHex: String, salt: Data, initCodeHash: Data)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -19456,6 +19492,21 @@ public func dappIsSigningMethod(method: String) -> Bool  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_dapp_is_signing_method(
         FfiConverterString.lower(method),uniffiCallStatus
+    )
+})
+}
+/**
+ * R22 (review 1-5): a site's signature digest (before the `SafeMessage`
+ * wrap) — `original_hash` back only when it is exactly the digest the sheet
+ * read for `account` (`SignAndSubmit.review`); anything else is refused.
+ */
+public func dappMessageHash(originalHash: Data, account: String, reviewJson: String)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_dapp_message_hash(
+        FfiConverterData.lower(originalHash),
+        FfiConverterString.lower(account),
+        FfiConverterString.lower(reviewJson),uniffiCallStatus
     )
 })
 }
@@ -19718,6 +19769,22 @@ public func feeFailureReasonKey(failure: String) -> String?  {
 })
 }
 /**
+ * r21-2 (§36): a fee as the screen shows it — `units` (a decimal string) of
+ * a `decimals` coin at most `shown` places, rounded UP, so the figure is
+ * never below the charge; plain digits with a `.` mark. `None` when `units`
+ * is not a count.
+ */
+public func feeFigure(units: String, decimals: UInt32, shown: UInt32) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_fee_figure(
+        FfiConverterString.lower(units),
+        FfiConverterUInt32.lower(decimals),
+        FfiConverterUInt32.lower(shown),uniffiCallStatus
+    )
+})
+}
+/**
  * The wait before automatic fee re-quote `attempt` (1-based) after
  * `failure` (see [`fee_failure_of`]), or `None` when no retry can fix it
  * (spec 079 FR-008): 3 s, 6 s, then every 8 s (spec 082 RJ12).
@@ -19872,6 +19939,16 @@ public func hashTypedData(typedDataJson: String)throws  -> Data  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_hash_typed_data(
         FfiConverterString.lower(typedDataJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * R22: how long a "… anyway" or danger confirm is held, in ms.
+ */
+public func holdToConfirmMs() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_hold_to_confirm_ms(uniffiCallStatus
     )
 })
 }
@@ -20493,6 +20570,28 @@ public func recoverPublicKeyFromAssertions(a: WebAuthnAssertion, b: WebAuthnAsse
 })
 }
 /**
+ * R22: the stored "Refuse blind signing" (`vela.refuseBlindSigning`,
+ * `on`/`off`) as a switch — off unless it is `on`.
+ */
+public func refuseBlindSigning(raw: String?) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_refuse_blind_signing(
+        FfiConverterOptionString.lower(raw),uniffiCallStatus
+    )
+})
+}
+/**
+ * R22: the store key of "Refuse blind signing".
+ */
+public func refuseBlindSigningKey() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_refuse_blind_signing_key(uniffiCallStatus
+    )
+})
+}
+/**
  * **Backing the founding record up to Ethereum — the next step of the walk**
  * (spec 062). Server-free: every request is an `eth_call` against the
  * registry contract, on Gnosis (where the record lives) or Ethereum (where
@@ -20676,6 +20775,24 @@ public func relayErrorMessage(errorJson: String) -> String  {
 })
 }
 /**
+ * R22: the one envelope a corroborated read hands the core — the first
+ * node's JSON-RPC body (`None`: the pool gave up), the second, independent
+ * node's (`None`: none answered), and whether the pool holds the person's
+ * own node alone ("Only use my node"). Pass it to `sim_outcome`, or as a
+ * multisig `rpc_corroborated` answer's `envelope`. See
+ * `vela_core::app::corroborate`.
+ */
+public func rpcCorroboratedEnvelope(primaryJson: String?, witnessJson: String?, ownNode: Bool) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_rpc_corroborated_envelope(
+        FfiConverterOptionString.lower(primaryJson),
+        FfiConverterOptionString.lower(witnessJson),
+        FfiConverterBool.lower(ownNode),uniffiCallStatus
+    )
+})
+}
+/**
  * The Safe message hash a passkey signs for EIP-1271 verification (spec
  * 044): `SafeMessage(bytes message)` under the SAFE's own domain, so a
  * page's `personal_sign` / typed-data signature verifies on chain.
@@ -20773,8 +20890,14 @@ public func shownNetworksSettle(stored: String, evidenceJson: String) -> String 
  * control). A `ConfirmState` JSON out — `{enabled, block, key}`; `None` when
  * a view does not read, and the confirm stays disabled. See
  * `vela_core::app::sign_confirm`.
+ *
+ * R22: `sim_json` is the sheet's own simulation verdict as held (the
+ * `sim_outcome` record's JSON, `None` before it lands — a transaction
+ * without one is unread); `refuse_blind` the person's "Refuse blind
+ * signing". The state carries the confirm's friction: `anyway`, `danger`,
+ * `hold_ms`.
  */
-public func signConfirmState(signJson: String, guardJson: String, clearJson: String, feeJson: String?, speedTier: String?) -> String?  {
+public func signConfirmState(signJson: String, guardJson: String, clearJson: String, feeJson: String?, speedTier: String?, simJson: String?, refuseBlind: Bool) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_sign_confirm_state(
@@ -20782,7 +20905,9 @@ public func signConfirmState(signJson: String, guardJson: String, clearJson: Str
         FfiConverterString.lower(guardJson),
         FfiConverterString.lower(clearJson),
         FfiConverterOptionString.lower(feeJson),
-        FfiConverterOptionString.lower(speedTier),uniffiCallStatus
+        FfiConverterOptionString.lower(speedTier),
+        FfiConverterOptionString.lower(simJson),
+        FfiConverterBool.lower(refuseBlind),uniffiCallStatus
     )
 })
 }
@@ -21078,6 +21203,23 @@ public func userOpCallsToMeasure(calls: [UserOpCall])throws  -> [UInt32]  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_user_op_calls_to_measure(
         FfiConverterSequenceTypeUserOpCall.lower(calls),uniffiCallStatus
+    )
+})
+}
+/**
+ * R22 (review 1-5): the SafeOp hash for a site's transaction or
+ * `wallet_sendCalls` batch — only when the draft is exactly the request the
+ * person confirmed (`SignAndSubmit.review`, as JSON): its sender, chain and
+ * every call, then at most one fee leg to the quoted recipient. Anything
+ * else is refused and nothing is signed.
+ */
+public func userOpDappSafeOpHash(draft: UserOpDraft, chainId: UInt32, reviewJson: String)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_dapp_safe_op_hash(
+        FfiConverterTypeUserOpDraft_lower(draft),
+        FfiConverterUInt32.lower(chainId),
+        FfiConverterString.lower(reviewJson),uniffiCallStatus
     )
 })
 }
@@ -23585,6 +23727,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_compute_webauthn_signer_address() != 24174) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_confirm_again_window_ms() != 16064) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_create2_address() != 41676) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23598,6 +23743,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_dapp_is_signing_method() != 50448) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_dapp_message_hash() != 33060) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_dapp_offers_wallet() != 54718) {
@@ -23657,6 +23805,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_fee_failure_reason_key() != 39551) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_fee_figure() != 45965) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_fee_requote_delay_ms() != 15874) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23691,6 +23842,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_hash_typed_data() != 2552) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_hold_to_confirm_ms() != 33959) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_i18n_apple_localizations() != 29020) {
@@ -23834,6 +23988,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_recover_public_key_from_assertions() != 37092) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_refuse_blind_signing() != 6124) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_refuse_blind_signing_key() != 25175) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_registry_backup_step() != 53712) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23873,6 +24033,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_relay_error_message() != 61806) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_rpc_corroborated_envelope() != 9407) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_safe_message_hash() != 30627) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23894,7 +24057,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_shown_networks_settle() != 60128) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_sign_confirm_state() != 45936) {
+    if (uniffi_vela_core_uniffi_checksum_func_sign_confirm_state() != 21793) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_sign_ending_of() != 27357) {
@@ -23952,6 +24115,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_calls_to_measure() != 59686) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_dapp_safe_op_hash() != 16872) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_draft() != 31118) {

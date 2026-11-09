@@ -352,7 +352,7 @@ object SigningLive {
          * received them ([confirmState] over their JSON). A caller holding only
          * the decoded views gets the core's answer over those, re-encoded.
          */
-        confirm: ConfirmState = confirmState(sign, guard, rawClear, fee, speed),
+        confirm: ConfirmState = confirmState(sign, guard, rawClear, fee, speed, sim),
     ): SigningScreenModel {
         val s = ctx.strings
         val clear = cappedApproval(localizedTerms(rawClear, s), guard)
@@ -463,9 +463,19 @@ object SigningLive {
             signerLabel = s.s("signingAccount"),
             signerName = ctx.walletName,
             signerSeed = ctx.walletAddress,
-            confirmAction = if (refused) null else confirmLabel(clear, s),
+            // R22: "Sign anyway" exactly when the core's posture says so
+            // (`ConfirmState.anyway`) — never a shell-side rule.
+            confirmAction = when {
+                refused -> null
+                confirm.anyway -> s.t(SIGN_ANYWAY_KEY)
+                else -> confirmLabel(clear, s)
+            },
             // D4: Open is enabled only when the page's check says it opens.
             confirmEnabled = !refused && confirm.enabled && (handoff == null || handoff.line.opens),
+            confirmDanger = confirm.anyway || confirm.danger,
+            confirmHoldMs = confirm.hold_ms,
+            holdHint = s.t(HOLD_TO_CONFIRM_KEY),
+            confirmAgain = s.t(CONFIRM_AGAIN_KEY),
             // Spec 099 R7: a shut confirm says why, in the core's line for the
             // part that is shut — none under a refusal, which has no confirm.
             confirmBlockLine = confirm.key?.takeIf { !refused && !confirm.enabled }?.let { key ->
@@ -626,10 +636,24 @@ object SigningLive {
      * fee priced and its coin not short. A view that does not read keeps the
      * confirm shut — never a guess.
      */
-    fun confirmState(signJson: String?, guardJson: String?, clearJson: String?, feeJson: String?, speedTier: FeeTier?): ConfirmState {
+    fun confirmState(
+        signJson: String?,
+        guardJson: String?,
+        clearJson: String?,
+        feeJson: String?,
+        speedTier: FeeTier?,
+        /**
+         * R22: the sheet's own simulation verdict as held (the core's
+         * `SimVerdict` JSON, [SigningController.SimOutcome.verdictJson]);
+         * `null` before it lands — a transaction without one is unread.
+         */
+        simJson: String? = null,
+        /** R22: the person's "Refuse blind signing" ([app.getvela.wallet.core.data.SigningPrefs]). */
+        refuseBlind: Boolean = app.getvela.wallet.core.data.SigningPrefs.refuseBlind.value,
+    ): ConfirmState {
         if (signJson == null || guardJson == null || clearJson == null) return ConfirmState()
         val tier = speedTier?.let { app.getvela.wallet.core.crux.Wire.json.encodeToJsonElement(FeeTier.serializer(), it).jsonPrimitive.content }
-        val json = uniffi.vela_core_uniffi.signConfirmState(signJson, guardJson, clearJson, feeJson, tier) ?: return ConfirmState()
+        val json = uniffi.vela_core_uniffi.signConfirmState(signJson, guardJson, clearJson, feeJson, tier, simJson, refuseBlind) ?: return ConfirmState()
         return runCatching { app.getvela.wallet.core.crux.Wire.json.decodeFromString(ConfirmState.serializer(), json) }
             .getOrDefault(ConfirmState())
     }
@@ -640,7 +664,14 @@ object SigningLive {
      * the machines wrote them: a mirror that dropped a field the core needs
      * would keep the confirm shut, never open it.
      */
-    fun confirmState(sign: SignView, guard: GuardView, clear: ClearSigningView, fee: FeeView, speed: SendLive.SpeedInputs?): ConfirmState {
+    fun confirmState(
+        sign: SignView,
+        guard: GuardView,
+        clear: ClearSigningView,
+        fee: FeeView,
+        speed: SendLive.SpeedInputs?,
+        sim: SigningController.SimOutcome? = null,
+    ): ConfirmState {
         val wire = app.getvela.wallet.core.crux.Wire.json
         return confirmState(
             wire.encodeToString(SignView.serializer(), sign),
@@ -648,6 +679,7 @@ object SigningLive {
             wire.encodeToString(ClearSigningView.serializer(), clear),
             wire.encodeToString(FeeView.serializer(), fee),
             speed?.view?.tier,
+            simJson = sim?.verdictJson,
         )
     }
 
@@ -1573,7 +1605,9 @@ object SigningLive {
         return simBlocks(app.getvela.wallet.feature.signing.core.SimDeltas.couldNotCheck(), ctx) +
             simBlocks(app.getvela.wallet.feature.signing.core.SimDeltas.longestRevert(), ctx) +
             simBlocks(app.getvela.wallet.feature.signing.core.SimDeltas.nothingMoves(), ctx) +
-            SigningBlock.Balances(s.s("balanceChangesTitle"), List(USUAL_MOVES) { BalanceDeltaRow("0", "0", SigningTone.Neutral) })
+            SigningBlock.Balances(s.s("balanceChangesTitle"), List(USUAL_MOVES) { BalanceDeltaRow("0", "0", SigningTone.Neutral) }) +
+            // R22: one node's word — the line a chain with one public node ends on.
+            simBlocks(app.getvela.wallet.feature.signing.core.SimDeltas.oneNodeOnly(), ctx)
     }
 
     /** The balance rows a sheet keeps room for: a swap's — what leaves and what comes back. */
@@ -1597,15 +1631,20 @@ object SigningLive {
                 SigningBlock.Warning(
                     toneOf(sim.risk),
                     sim.reason?.let { reason -> s.t(sim.key, mapOf("reason" to reason)) } ?: s.t(sim.key),
+                    // R22: one node's word (or two that disagree) — and how to
+                    // check with a node the person trusts.
+                    hint = if (sim.ownNodeHint) s.t(OWN_NODE_HINT_KEY) else null,
                 ),
             )
             is SigningController.SimOutcome.Ready -> {
+                // R22: who stood behind it, when it was the person's own node alone.
+                val source = sim.sourceKey?.let { s.t(it) }
                 // "No asset changes" is the core's line, drawn exactly when
                 // the judged view carries it (`no_change_key`): which case
                 // this is, and the sentence, were this builder's own — "no
                 // judgments", then "every row came out a zero".
                 sim.noChangeKey?.let { key ->
-                    return listOf(SigningBlock.Balances(s.s("balanceChangesTitle"), emptyList(), s.t(key)))
+                    return listOf(SigningBlock.Balances(s.s("balanceChangesTitle"), emptyList(), s.t(key), source = source))
                 }
                 var unverified = false
                 // A delta the core writes as nothing (a zero) is not drawn
@@ -1635,6 +1674,7 @@ object SigningLive {
                         rows = rows,
                         note = if (unverified) s.s("unverifiedWarning") else null,
                         noteTone = if (unverified) SigningTone.Caution else SigningTone.Neutral,
+                        source = source,
                     ),
                 )
             }
@@ -1706,7 +1746,7 @@ object SigningLive {
                     mark = WalletLive.mark(ctx.chainId, option.symbol, option.contract),
                     name = option.symbol,
                     balance = "${ctx.strings.t("componentsUi.gas.rowBalance")} ${SendLive.fromBase(option.balance, option.decimals)}",
-                    fee = option.amount?.let { "~${SendLive.feeFromBase(it, option.decimals)} ${option.symbol}" } ?: "—",
+                    fee = option.amount?.let { "~${SendLive.feeFromBase(it, option.decimals, SendLive.feePlaces(option.contract))} ${option.symbol}" } ?: "—",
                     selected = option.selected,
                     disabled = option.insufficient,
                     // Issue #408: a refused coin says why — the core's numbers.
@@ -1809,6 +1849,18 @@ object SigningLive {
 
     /** The fee list's id for the chain's own coin (the web's `'native'`). */
     const val NATIVE_FEE_ID = "native"
+
+    /** R22: the "… anyway" confirm's label (`ConfirmState.anyway`). */
+    const val SIGN_ANYWAY_KEY = "componentsUi.signing.certain.signAnyway"
+
+    /** R22: under a held confirm, and its accessibility hint. */
+    const val HOLD_TO_CONFIRM_KEY = "componentsUi.signing.holdToConfirm"
+
+    /** R22: the accessible path's first activation. */
+    const val CONFIRM_AGAIN_KEY = "componentsUi.signing.confirmAgain"
+
+    /** R22: the quiet line under balance changes the person's own node alone checked. */
+    const val OWN_NODE_HINT_KEY = "componentsUi.signing.ownNodeHint"
 
     /** cs-17: a grant-all's "Allow all" chip — the deliberate tap the guard waits for. */
     const val GRANT_CHIP = "grant"

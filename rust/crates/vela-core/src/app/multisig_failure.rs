@@ -50,6 +50,12 @@ pub enum FailureKind {
     PageRefused,
     /// The relay provably never took it: nothing was sent.
     NotSent,
+    /// r21-1 (§35, §36): the operation's validity window closed before the
+    /// EntryPoint saw it (`AA22 expired or not due`) — nothing was sent, and
+    /// pressing again signs anew with a window of its own. Said calmly, in
+    /// the Send's and the signing sheet's own words
+    /// (`componentsUi.signing.expired`), never as a generic failure.
+    Expired,
     /// The executor cannot pay the fee (worded from `need` and `have`).
     CannotPay,
     /// The fee moved since the press (worded from `amount` and `executor`).
@@ -74,6 +80,26 @@ pub struct FailureSaid {
 }
 
 const REASON_KEY: &str = "home.multisig.proposal.reason.";
+
+/// r21-1: the expired operation's words — the Send's, the signing sheet's
+/// and the tracker's one sentence.
+pub const EXPIRED_KEY: &str = crate::app::tx_tracker::REFUSED_EXPIRED_KEY;
+
+/// A detail whose own words (`message`, `detail`, `reason`) are the relay's
+/// `AA22` refusal or the core's expired sentence (`user_op::is_expired_rejection`).
+fn expired_words(v: &Value) -> bool {
+    ["message", "detail", "reason"].iter().any(|k| {
+        v.get(*k)
+            .and_then(Value::as_str)
+            .is_some_and(crate::user_op::is_expired_rejection)
+    })
+}
+
+/// r21-1: the shell's own failure for an operation that expired before it
+/// was submitted.
+pub fn expired() -> String {
+    json!({ "kind": "expired" }).to_string()
+}
 
 /// The core's own: what was signed does not check out as the member's.
 pub fn passkey_check() -> String {
@@ -161,6 +187,13 @@ pub fn failure_said(detail: &str) -> FailureSaid {
             };
             said(kind, Some(format!("componentsUi.signing.{leaf}")))
         }
+        // r21-1: an expired operation, whichever kind a shell wrapped it in —
+        // its own `expired`, or the relay's AA22 carried in a `not_sent` or
+        // `unknown` detail's words.
+        "expired" => said(FailureKind::Expired, Some(EXPIRED_KEY.to_owned())),
+        "not_sent" | "unknown" if expired_words(&v) => {
+            said(FailureKind::Expired, Some(EXPIRED_KEY.to_owned()))
+        }
         "not_sent" => said(
             FailureKind::NotSent,
             Some("home.multisig.proposal.notSent".to_owned()),
@@ -185,6 +218,32 @@ pub fn failure_json(args: &Value) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// r21-1: an expired execution says it expired — from a shell's own
+    /// `expired`, or the relay's AA22 in a `not_sent` / `unknown` detail.
+    #[test]
+    fn an_expired_operation_is_said_as_expired() {
+        for detail in [
+            expired(),
+            r#"{"kind":"not_sent","message":"SUBMIT REFUSED by simulation: AA22 expired or not due"}"#
+                .to_owned(),
+            r#"{"kind":"unknown","message":"UserOperation reverted during simulation with reason: AA22 expired or not due"}"#
+                .to_owned(),
+            json!({"kind": "not_sent", "message": crate::user_op::EXPIRED_DETAIL}).to_string(),
+        ] {
+            let said = failure_said(&detail);
+            assert_eq!(said.kind, FailureKind::Expired, "{detail}");
+            assert_eq!(said.key.as_deref(), Some(EXPIRED_KEY), "{detail}");
+        }
+        assert_eq!(
+            failure_said(r#"{"kind":"not_sent"}"#).kind,
+            FailureKind::NotSent
+        );
+        assert_eq!(
+            failure_said(r#"{"kind":"unknown","message":"AA220 nope"}"#).kind,
+            FailureKind::Unknown
+        );
+    }
 
     #[test]
     fn plain_text_is_served_as_unknown_and_json_as_it_is() {

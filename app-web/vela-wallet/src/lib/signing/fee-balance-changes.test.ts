@@ -15,6 +15,7 @@
  * fee executor answers each operation with the issue's numbers.
  */
 import '$lib/i18n/wasm-init.server';
+import { witnessed } from './sim-witnessed';
 import { describe, expect, it, vi } from 'vitest';
 import type { FeeOperation } from '$lib/core/generated/FeeOperation';
 import type { FeeShellResult } from '$lib/core/generated/FeeShellResult';
@@ -291,9 +292,13 @@ const moved = (token: string, from: string, to: string, amount: bigint) => ({
 	topics: [TRANSFER, topic(from), topic(to)],
 	data: word(amount)
 });
-/** The node's envelope around one block of call results. */
+/**
+ * The nodes' envelope around one block of call results — R22: the seam hands
+ * the CORROBORATED envelope (`rpcSimulateReply`), two independent nodes that
+ * agree; one node's word alone is `unconfirmed` (`signing-truth.test.ts`).
+ */
 const answered = (...calls: object[]) =>
-	JSON.stringify({ jsonrpc: '2.0', id: 1, result: [{ calls }] });
+	witnessed(JSON.stringify({ jsonrpc: '2.0', id: 1, result: [{ calls }] }));
 /** The swap ran: pUSD out, USDC back. */
 const SWAPPED = answered({
 	status: '0x1',

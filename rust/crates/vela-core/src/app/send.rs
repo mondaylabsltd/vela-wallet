@@ -4862,7 +4862,13 @@ fn follow_max(model: &mut Model) -> Cmd {
 
 /// Put an exact Max on the field: the figure rounded as the balance line
 /// rounds, the exact amount behind it for everything that counts.
+///
+/// r21-2 (§36): the amount sent IS the figure shown — the sendable amount
+/// rounded DOWN to the places the field shows ([`max_shown_exact`]), so the
+/// charge is never more than the screen says (a remainder under the last
+/// shown place, < 0.000001 of the coin, stays in the account).
 fn set_max(model: &mut Model, exact: String) {
+    let exact = max_shown_exact(&exact);
     let figure = max_figure(&exact);
     // r5reg-3: a Max the person saw, filled again from a newer quote — the
     // reserve for the fee moved — is said, never swapped silently: the figure
@@ -5114,7 +5120,8 @@ fn hold_max_to_quote(model: &mut Model) -> bool {
             None => return false,
         }
     };
-    if *now == exact {
+    // r21-2: the Max on the field is the shown cut of the exact amount.
+    if *now == max_shown_exact(&exact) {
         return false;
     }
     set_max(model, exact);
@@ -5135,6 +5142,48 @@ fn max_with_fee(token: &SendToken, fee: &FeeEstimate) -> String {
         Some(balance) => max_native_sendable(balance, reserve, token.decimals),
         // TS `balanceToWei` would throw → catch → full balance.
         None => full_balance(token),
+    }
+}
+
+/// r21-2 (§36): the largest amount, at most `exact`, that the field writes
+/// exactly — `exact` cut (rounded DOWN) to the ladder [`max_figure`] shows (2
+/// places from 1000, 4 from 1, 6 below; two significant digits under the
+/// last place). What Max sends, so the figure on screen and the amount
+/// signed are one number. Anything that is not a plain decimal stays as it is.
+#[must_use]
+pub fn max_shown_exact(exact: &str) -> String {
+    let exact = exact.trim();
+    let (int_raw, frac_raw) = exact.split_once('.').unwrap_or((exact, ""));
+    if int_raw.is_empty() && frac_raw.is_empty()
+        || !int_raw.bytes().all(|b| b.is_ascii_digit())
+        || !frac_raw.bytes().all(|b| b.is_ascii_digit())
+    {
+        return exact.to_owned();
+    }
+    let int_digits = int_raw.trim_start_matches('0');
+    let places = match int_digits.len() {
+        0 => 6,
+        1..=3 => 4,
+        _ => 2,
+    };
+    let lead = frac_raw.bytes().take_while(|b| *b == b'0').count();
+    let keep =
+        if int_digits.is_empty() && lead >= places.min(frac_raw.len()) && lead < frac_raw.len() {
+            lead + 2
+        } else {
+            places
+        }
+        .min(frac_raw.len());
+    let frac = frac_raw[..keep].trim_end_matches('0');
+    let int_part = if int_digits.is_empty() {
+        "0"
+    } else {
+        int_digits
+    };
+    if frac.is_empty() {
+        int_part.to_owned()
+    } else {
+        format!("{int_part}.{frac}")
     }
 }
 

@@ -178,6 +178,14 @@ pub enum MultisigOperation {
         /// Absent: `false`.
         #[serde(default)]
         person: bool,
+        /// R22: a read a guard stands on (the review's checks, who can act
+        /// for the multisig, its members and nonce): the shell asks its pool
+        /// for a corroborated read (`rpc_pool::Event::CallRequested::corroborate`)
+        /// and answers [`MultisigShellResult::RpcCorroborated`] with both
+        /// nodes' answers in one envelope (`corroborate::corroborated_envelope`).
+        /// Absent: `false`.
+        #[serde(default)]
+        corroborate: bool,
     },
     /// Read these store keys (the web's `localStorage`).
     LoadStore { keys: Vec<String> },
@@ -470,8 +478,19 @@ pub enum MultisigShellResult {
         signs: bool,
     },
     /// The simulation's reply (the signing sheet's envelope), or `None`.
+    /// R22: always a corroborated read — the envelope carries the second,
+    /// independent node's answer (`witness`) or says the person's own node
+    /// answered alone (`ownNode`); without either, what moves is not believed.
     Simulated {
         reply: Option<String>,
+    },
+    /// R22: the answer to a corroborated [`MultisigOperation::Rpc`] — the
+    /// first node's answer and the second's in one envelope
+    /// (`{result | error | unreachable, witness?, ownNode?}`,
+    /// `corroborate::corroborated_envelope`). The core compares them.
+    RpcCorroborated {
+        #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
+        envelope: Value,
     },
     /// The relay's word on a user operation: `status` is one of
     /// `pending`, `included`, `failed`, `rejected`, `not_found`; `None`:
@@ -634,6 +653,46 @@ pub enum HttpAnswer {
     Refused(String),
 }
 
+/// The first node's answer in a corroborated envelope, as a result.
+fn answer_of_envelope(envelope: &Value) -> Result<Value, RpcFail> {
+    if let Some(result) = envelope.get("result") {
+        return Ok(result.clone());
+    }
+    if let Some(error) = envelope.get("error").filter(|e| !e.is_null()) {
+        return Err(RpcFail::Error {
+            code: error.get("code").and_then(Value::as_i64),
+            message: error
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            data: error.get("data").filter(|d| !d.is_null()).cloned(),
+        });
+    }
+    Err(RpcFail::Unanswered(
+        envelope
+            .get("detail")
+            .and_then(Value::as_str)
+            .unwrap_or("no node answered")
+            .to_owned(),
+    ))
+}
+
+/// A node's error as an envelope (`{error: {code, message, data?}}`).
+fn error_envelope(fail: &RpcFail) -> Value {
+    match fail {
+        RpcFail::Error {
+            code,
+            message,
+            data: Some(data),
+        } => json!({ "error": { "code": code, "message": message, "data": data } }),
+        RpcFail::Error { code, message, .. } => {
+            json!({ "error": { "code": code, "message": message } })
+        }
+        RpcFail::Unanswered(_) => json!({ "unreachable": true }),
+    }
+}
+
 /// The shell, as an async command sees it. Cheap to clone.
 pub struct Io<Ev: Send + 'static> {
     ctx: CommandContext<MultisigEffect, Ev>,
@@ -644,6 +703,8 @@ pub struct Io<Ev: Send + 'static> {
     /// r17-10: this command runs on the person's own word ([`Io::person`]):
     /// its reads are the person's asks ([`MultisigOperation::Rpc::person`]).
     person: bool,
+    /// R22: this command's reads are a guard's ([`Io::corroborating`]).
+    corroborate: bool,
 }
 
 impl<Ev: Send + 'static> Clone for Io<Ev> {
@@ -652,6 +713,7 @@ impl<Ev: Send + 'static> Clone for Io<Ev> {
             ctx: self.ctx.clone(),
             limited: self.limited.clone(),
             person: self.person,
+            corroborate: self.corroborate,
         }
     }
 }
@@ -662,6 +724,7 @@ impl<Ev: Send + 'static> Io<Ev> {
             ctx,
             limited: Arc::default(),
             person: false,
+            corroborate: false,
         }
     }
 
@@ -675,6 +738,26 @@ impl<Ev: Send + 'static> Io<Ev> {
             person: true,
             ..self.clone()
         }
+    }
+
+    /// R22 (review 1-2): this command's reads are what a guard stands on —
+    /// each is a corroborated read ([`MultisigOperation::Rpc::corroborate`]):
+    /// believed only when two independent nodes agree, or the person's own
+    /// node answered alone by their choice. [`Io::rpc`] then answers only an
+    /// agreed answer ([`crate::app::corroborate::same_answer`]); a read the
+    /// core compares by meaning takes both ([`Io::rpc_envelope_within`]).
+    #[must_use]
+    pub fn corroborating(&self) -> Self {
+        Self {
+            corroborate: true,
+            ..self.clone()
+        }
+    }
+
+    /// Whether this command's reads are corroborated ([`Io::corroborating`]).
+    #[must_use]
+    pub fn corroborates(&self) -> bool {
+        self.corroborate
     }
 
     /// r14-5: the networks that rate-limited a read of this command since
@@ -768,7 +851,10 @@ impl<Ev: Send + 'static> Io<Ev> {
         self.rpc_within(chain_id, method, params, None).await
     }
 
-    /// As [`Io::rpc`], waited for at most `bound_ms`.
+    /// As [`Io::rpc`], waited for at most `bound_ms`. On a corroborating
+    /// command ([`Io::corroborating`]) only an answer two independent nodes
+    /// gave alike (or the person's own node alone) is an answer; one node's
+    /// word, or two that differ, is no answer ("couldn't check").
     pub async fn rpc_within(
         &self,
         chain_id: u64,
@@ -776,33 +862,85 @@ impl<Ev: Send + 'static> Io<Ev> {
         params: Value,
         bound_ms: Option<u32>,
     ) -> Result<Value, RpcFail> {
-        let answer = match self
+        let (answer, envelope) = self.ask_rpc(chain_id, method, params, bound_ms).await;
+        if !self.corroborate || matches!(answer, Err(RpcFail::Unanswered(_))) {
+            return answer;
+        }
+        let standing = crate::app::corroborate::standing_exact(&envelope);
+        match standing.unread_reason() {
+            None => answer,
+            Some(reason) => Err(RpcFail::Unanswered(format!(
+                "{reason}: {method} on {chain_id}"
+            ))),
+        }
+    }
+
+    /// The read's whole envelope ([`crate::app::corroborate`]): the first
+    /// node's answer and, on a corroborating command, the second's — for the
+    /// reads the core compares by what they mean (a state diff, the state
+    /// probe). `{"unreachable": true}` when no node answered.
+    pub async fn rpc_envelope_within(
+        &self,
+        chain_id: u64,
+        method: &str,
+        params: Value,
+        bound_ms: Option<u32>,
+    ) -> Value {
+        self.ask_rpc(chain_id, method, params, bound_ms).await.1
+    }
+
+    /// One read through the shell: the first answer as a result, and the
+    /// envelope it came in.
+    async fn ask_rpc(
+        &self,
+        chain_id: u64,
+        method: &str,
+        params: Value,
+        bound_ms: Option<u32>,
+    ) -> (Result<Value, RpcFail>, Value) {
+        let reply = self
             .ask(MultisigOperation::Rpc {
                 chain_id,
                 method: method.to_owned(),
                 params,
                 bound_ms,
                 person: self.person,
+                corroborate: self.corroborate,
             })
-            .await
-        {
-            MultisigShellResult::RpcResult { result } => Ok(result),
+            .await;
+        let (answer, envelope) = match reply {
+            MultisigShellResult::RpcCorroborated { envelope } => {
+                (answer_of_envelope(&envelope), envelope)
+            }
+            MultisigShellResult::RpcResult { result } => {
+                (Ok(result.clone()), json!({ "result": result }))
+            }
             MultisigShellResult::RpcError {
                 code,
                 message,
                 data,
-            } => Err(RpcFail::Error {
-                code,
-                message,
-                data,
-            }),
-            MultisigShellResult::RpcUnanswered { detail } => Err(RpcFail::Unanswered(detail)),
-            other => Err(RpcFail::Unanswered(format!("unexpected answer {other:?}"))),
+            } => {
+                let fail = RpcFail::Error {
+                    code,
+                    message,
+                    data,
+                };
+                let envelope = error_envelope(&fail);
+                (Err(fail), envelope)
+            }
+            MultisigShellResult::RpcUnanswered { detail } => (
+                Err(RpcFail::Unanswered(detail)),
+                json!({ "unreachable": true }),
+            ),
+            other => (
+                Err(RpcFail::Unanswered(format!("unexpected answer {other:?}"))),
+                json!({ "unreachable": true }),
+            ),
         };
         if answer.as_ref().is_err_and(RpcFail::rate_limited) {
             lock(&self.limited).insert(chain_id);
         }
-        answer
+        (answer, envelope)
     }
 
     /// `eth_call` at `latest`: its return data.
@@ -1992,7 +2130,9 @@ impl Chain {
         safe: &str,
     ) -> Result<bool, ChainUnavailable> {
         let key = format!("{chain_id}:{}", safe.to_ascii_lowercase());
-        if lock(&self.deployed_seen).contains(&key) {
+        // R22: a guard's read is never served from what an uncorroborated
+        // read once saw.
+        if !io.corroborates() && lock(&self.deployed_seen).contains(&key) {
             return Ok(true);
         }
         let yes = Self::has_code(io, chain_id, safe).await?;
@@ -2061,7 +2201,11 @@ impl Chain {
             .map_err(|e| unavailable(e.message()))?;
         let nonce = quantity(&raw).ok_or_else(|| unavailable("nonce unreadable".to_owned()))?;
         let now = io.now().await;
-        if let Some((at_nonce, owners, threshold, at)) = lock(&self.members_at).get(&key).cloned() {
+        if let Some((at_nonce, owners, threshold, at)) = lock(&self.members_at)
+            .get(&key)
+            .cloned()
+            .filter(|_| !io.corroborates())
+        {
             if at_nonce == nonce && now - at < MEMBERS_FRESH_MS {
                 return Ok(ChainMembers {
                     deployed: true,

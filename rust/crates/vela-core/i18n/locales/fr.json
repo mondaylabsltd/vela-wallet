@@ -31,7 +31,8 @@
       "advanced": "Avancé",
       "community": "Communauté",
       "privacy": "Confidentialité",
-      "developer": "Développeur"
+      "developer": "Développeur",
+      "security": "Sécurité"
     },
     "account": {
       "switch": "Changer de compte",
@@ -319,6 +320,10 @@
       "title": "Service temporairement indisponible",
       "subtitle": "L’index des clés d’accès est injoignable, et la création comme la connexion en dépendent.",
       "editEndpoint": "Modifier l’adresse du service d’index"
+    },
+    "refuseBlind": {
+      "title": "Refuser la signature à l’aveugle",
+      "subtitle": "Refuse toute demande que Vela ne peut pas lire ou vérifier entièrement, au lieu de proposer « … quand même »."
     }
   },
   "time": {

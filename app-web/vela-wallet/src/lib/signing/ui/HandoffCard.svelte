@@ -22,6 +22,7 @@
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import HoldConfirm from '$lib/ui/HoldConfirm.svelte';
 	import IntegrityLine from '$lib/settings/ui/IntegrityLine.svelte';
 
 	interface Props {
@@ -74,14 +75,20 @@
 				{handoff.waiting.reopen}
 			</Button>
 		{:else}
-			<Button
-				variant="value"
+			<!-- R22 (D4): the sheet's confirm, carried here — its danger style and
+			     its hold (`hold_ms`); a plain press when it had none. -->
+			<HoldConfirm
+				variant={handoff.open.danger ? 'danger' : 'value'}
 				shape="rounded"
+				testid="handoff-open"
+				holdMs={handoff.open.holdMs ?? 0}
+				holdLabel={handoff.open.holdLabel ?? ''}
+				againLabel={handoff.open.againLabel ?? ''}
 				disabled={!handoff.open.enabled}
-				onclick={() => onopen?.()}
+				onconfirm={() => onopen?.()}
 			>
 				{handoff.open.label}
-			</Button>
+			</HoldConfirm>
 		{/if}
 	</div>
 </section>

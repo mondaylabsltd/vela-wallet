@@ -198,11 +198,14 @@ fn answer_read(sut: &mut Sut, safe: &str, answer: SafeOwnerAnswer) -> Vec<Op> {
     let safe = safe.to_owned();
     sut.resolve_matching(
         |op| matches!(op, Op::ReadSafeOwner { safe: s, .. } if *s == safe),
+        // R22: an honest chain, read of two independent nodes alike.
         SignShellResult::SafeOwnerRead {
             id: "rid-1".to_owned(),
             chain_id: chain(),
             safe: safe.clone(),
+            witness: Some(answer.clone()),
             answer,
+            own_node: None,
         },
     )
 }
@@ -428,6 +431,8 @@ fn a_read_for_another_request_changes_nothing() {
             chain_id: chain(),
             safe: stale_safe,
             answer: SafeOwnerAnswer::Returned { data: word(0) },
+            witness: None,
+            own_node: None,
         },
     );
     assert_eq!(sut.view().confirm_block, Some(ConfirmBlock::Reading));

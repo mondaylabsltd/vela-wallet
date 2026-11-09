@@ -1584,6 +1584,8 @@ mod tests {
         pool::Routed {
             answer: Ok(body),
             maybe_delivered: false,
+            witness: None,
+            own_node: false,
         }
     }
 
@@ -1594,6 +1596,8 @@ mod tests {
                 rate_limited: false,
             }),
             maybe_delivered,
+            witness: None,
+            own_node: false,
         }
     }
 
@@ -1692,6 +1696,8 @@ mod tests {
         let busy_after_a_lost_reply = pool::Routed {
             answer: busy().answer,
             maybe_delivered: true,
+            witness: None,
+            own_node: false,
         };
         let refused = answered(json!({"error": {"message": "AA25 invalid account nonce"}}));
         let (verdict, _, posts, _) = run(vec![busy_after_a_lost_reply, refused]);

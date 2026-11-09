@@ -26,6 +26,10 @@ enum MultisigShellFailure: Equatable {
     case pageSignFailed(page: String, message: String?)
     case passkey(failure: String, timedOut: Bool, message: String?)
     case notSent
+    /// r21-1: the operation's window closed before the EntryPoint saw it
+    /// (`AA22 expired or not due`) — nothing was sent; said in the Send's
+    /// words, and pressing again signs anew.
+    case expired
     case cannotPay(need: String, have: String)
     case unknown(String)
 
@@ -38,6 +42,7 @@ enum MultisigShellFailure: Equatable {
         case .passkey(let failure, let timedOut, let message):
             ["kind": "passkey", "failure": failure, "timedOut": timedOut, "message": message ?? NSNull()]
         case .notSent: ["kind": "not_sent"]
+        case .expired: ["kind": "expired"]
         case .cannotPay(let need, let have): ["kind": "cannot_pay", "need": need, "have": have]
         case .unknown(let message): ["kind": "unknown", "message": message]
         }
@@ -137,6 +142,14 @@ final class MultisigLive: MultisigPorts {
             return .unanswered(rateLimited ? "every node of \(chainId) is rate limiting" : "no node of \(chainId) answered")
         case .rangeCap: return .unanswered("the node capped the range")
         }
+    }
+
+    /// R22: a guard's read, corroborated by the app's pool — the envelope
+    /// the core compares (`rpc_corroborated_envelope`), the node's `data`
+    /// kept on an error (r8-4: the state-diff probe's answer rides there).
+    func rpcCorroborated(chainId: Int, method: String, params: Any) async -> [String: Any] {
+        let list = params as? [Any] ?? [params]
+        return await deps.pool.callCorroborated(chainId: chainId, method: method, params: list).envelope
     }
 
     /// A JSON-RPC error object's `data`, as the node sent it; `nil` when it
@@ -335,7 +348,8 @@ final class MultisigLive: MultisigPorts {
         case .nonceUsed: return .unknown("Another transaction of this account went first.")
         // §35: the window closed before the EntryPoint saw it — nothing was
         // sent, and the next press signs anew with its own window.
-        case .expired: return .unknown("The transaction expired before it was submitted; nothing was sent.")
+        // r21-1: said in the Send's own words (`componentsUi.signing.expired`).
+        case .expired: return .expired
         }
     }
 
@@ -509,7 +523,9 @@ final class MultisigLive: MultisigPorts {
             SimDeltas.Call(to: $0["to"] as? String ?? "", value: Self.decimal($0["value"]), data: $0["data"] as? String ?? "0x")
         }
         guard let payload = Self.simulatePayload(from: from, calls: legs, stateOverrides: op["state_overrides"]) else { return nil }
-        let answer = await deps.pool.call(chainId: chainId, method: "eth_simulateV1", params: payload, kind: "rpc")
+        // R22: ALWAYS a corroborated read — the envelope, as a JSON string;
+        // without a second node's word what moves is not believed.
+        let answer = await deps.pool.callCorroborated(chainId: chainId, method: "eth_simulateV1", params: payload)
         return SigningController.simReply(answer)
     }
 

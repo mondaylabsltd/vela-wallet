@@ -3683,6 +3683,56 @@ export function amountTextClean(raw, number, previous, pasted) {
 }
 
 /**
+ * R22 (review 1-5): a site's signature digest (before the `SafeMessage`
+ * wrap) — `original_hash` back only when it is exactly the digest the sheet
+ * read for `account` (`SignAndSubmit.review`); anything else is refused.
+ * @param {Uint8Array} original_hash
+ * @param {string} account
+ * @param {string} review_json
+ * @returns {Uint8Array}
+ */
+export function attestDappMessageHash(original_hash, account, review_json) {
+    const ptr0 = passArray8ToWasm0(original_hash, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(account, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(review_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.attestDappMessageHash(ptr0, len0, ptr1, len1, ptr2, len2);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v4 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v4;
+}
+
+/**
+ * R22 (review 1-5): the SafeOp hash for a site's transaction or
+ * `wallet_sendCalls` batch — only when the operation is exactly the request
+ * the person confirmed (`SignAndSubmit.review`, as JSON): its sender, chain
+ * and every call, then at most one fee leg to the quoted recipient. Anything
+ * else is refused and nothing is signed.
+ * @param {string} op_json
+ * @param {string} review_json
+ * @param {bigint} chain_id
+ * @returns {Uint8Array}
+ */
+export function attestDappSafeOpHash(op_json, review_json, chain_id) {
+    const ptr0 = passStringToWasm0(op_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(review_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.attestDappSafeOpHash(ptr0, len0, ptr1, len1, chain_id);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v3 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v3;
+}
+
+/**
  * The SafeOp hash for a send — only when the operation is exactly the
  * review the person confirmed (`SubmitUserOp.review`, as JSON): its sender,
  * chain and every call, decoded back out of its calldata. Anything else is
@@ -4279,6 +4329,15 @@ export function computeWebauthnSignerAddress(x, y) {
     } finally {
         wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
+}
+
+/**
+ * R22: the accessible equivalent's window — a second activation within it confirms.
+ * @returns {number}
+ */
+export function confirmAgainWindowMs() {
+    const ret = wasm.confirmAgainWindowMs();
+    return ret >>> 0;
 }
 
 /**
@@ -4924,6 +4983,28 @@ export function feeFailureReasonKey(failure) {
 }
 
 /**
+ * r21-2 (§36): a fee as the screen shows it — `units` (a decimal string) of
+ * a `decimals` coin at most `shown` places, rounded UP, so the figure is
+ * never below the charge; plain digits with a `.` mark (localise it as any
+ * figure). `undefined` when `units` is not a count or `decimals` > 36.
+ * @param {string} units
+ * @param {number} decimals
+ * @param {number} shown
+ * @returns {string | undefined}
+ */
+export function feeFigure(units, decimals, shown) {
+    const ptr0 = passStringToWasm0(units, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.feeFigure(ptr0, len0, decimals, shown);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
  * The bound on one whole fee quote, ms — `fee_policy::QUOTE_DEADLINE_MS`
  * (spec 094 S9). The web shell bounds the deployment read it makes before a
  * quote by the same figure.
@@ -5201,6 +5282,15 @@ export function hashTypedData(typed_data_json) {
     var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     return v2;
+}
+
+/**
+ * R22: how long a "… anyway" or danger confirm is held, in ms.
+ * @returns {number}
+ */
+export function holdToConfirmMs() {
+    const ret = wasm.holdToConfirmMs();
+    return ret >>> 0;
 }
 
 /**
@@ -6701,6 +6791,36 @@ export function recoverPublicKeyFromAssertions(a_authenticator_data, a_client_da
 }
 
 /**
+ * R22: the person's stored "Refuse blind signing" (`vela.refuseBlindSigning`,
+ * `on`/`off`) as a switch — off unless it is `on`.
+ * @param {string | null} [raw]
+ * @returns {boolean}
+ */
+export function refuseBlindSigning(raw) {
+    var ptr0 = isLikeNone(raw) ? 0 : passStringToWasm0(raw, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len0 = WASM_VECTOR_LEN;
+    const ret = wasm.refuseBlindSigning(ptr0, len0);
+    return ret !== 0;
+}
+
+/**
+ * R22: the store key of "Refuse blind signing".
+ * @returns {string}
+ */
+export function refuseBlindSigningKey() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.refuseBlindSigningKey();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
  * **Backing the founding record up to Ethereum — the next step of the walk**
  * (spec 062). Server-free: every request is an `eth_call` against the
  * registry contract, on Gnosis (where the record lives) or Ethereum (where
@@ -6988,6 +7108,34 @@ export function rpcCooldownMs(consecutive_failures) {
 }
 
 /**
+ * R22: the one envelope a corroborated read hands the core — the first
+ * node's JSON-RPC body (`undefined`: the pool gave up), the second,
+ * independent node's (`undefined`: none answered) and whether the pool holds
+ * the person's own node alone ("Only use my node"). Pass it to `simOutcome`,
+ * or as a multisig `rpc_corroborated` answer. See `vela_core::app::corroborate`.
+ * @param {string | null | undefined} primary_json
+ * @param {string | null | undefined} witness_json
+ * @param {boolean} own_node
+ * @returns {string}
+ */
+export function rpcCorroboratedEnvelope(primary_json, witness_json, own_node) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        var ptr0 = isLikeNone(primary_json) ? 0 : passStringToWasm0(primary_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(witness_json) ? 0 : passStringToWasm0(witness_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ret = wasm.rpcCorroboratedEnvelope(ptr0, len0, ptr1, len1, own_node);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * The answer a hedge's outcome may hand the caller before the pool reaches
  * that endpoint in its own order — `rpc_pool::early_verdict` — as the
  * verdict's JSON, or `""` when it must wait (an outcome the shell cannot
@@ -7232,15 +7380,22 @@ export function signAnswered(payload_json) {
  * every client reads: the four views' JSON, the speed in force, whether the
  * message on the sheet has not been read to its end yet (cs-10), a
  * `ConfirmState` JSON back (`undefined` when a view does not read).
+ *
+ * R22: `sim_json` is the sheet's own simulation verdict as held (`simOutcome`'s
+ * record; `undefined` before it lands — a transaction without one is
+ * unread), `refuse_blind` the person's "Refuse blind signing". The state
+ * says the confirm's friction: `anyway`, `danger` and `hold_ms`.
  * @param {string} sign_json
  * @param {string} guard_json
  * @param {string} clear_json
  * @param {string | null} [fee_json]
  * @param {string | null} [speed_tier]
  * @param {boolean | null} [message_unread]
+ * @param {string | null} [sim_json]
+ * @param {boolean | null} [refuse_blind]
  * @returns {string | undefined}
  */
-export function signConfirmState(sign_json, guard_json, clear_json, fee_json, speed_tier, message_unread) {
+export function signConfirmState(sign_json, guard_json, clear_json, fee_json, speed_tier, message_unread, sim_json, refuse_blind) {
     const ptr0 = passStringToWasm0(sign_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ptr1 = passStringToWasm0(guard_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
@@ -7251,13 +7406,15 @@ export function signConfirmState(sign_json, guard_json, clear_json, fee_json, sp
     var len3 = WASM_VECTOR_LEN;
     var ptr4 = isLikeNone(speed_tier) ? 0 : passStringToWasm0(speed_tier, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     var len4 = WASM_VECTOR_LEN;
-    const ret = wasm.signConfirmState(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, isLikeNone(message_unread) ? 0xFFFFFF : message_unread ? 1 : 0);
-    let v6;
+    var ptr5 = isLikeNone(sim_json) ? 0 : passStringToWasm0(sim_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len5 = WASM_VECTOR_LEN;
+    const ret = wasm.signConfirmState(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, isLikeNone(message_unread) ? 0xFFFFFF : message_unread ? 1 : 0, ptr5, len5, isLikeNone(refuse_blind) ? 0xFFFFFF : refuse_blind ? 1 : 0);
+    let v7;
     if (ret[0] !== 0) {
-        v6 = getStringFromWasm0(ret[0], ret[1]).slice();
+        v7 = getStringFromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
-    return v6;
+    return v7;
 }
 
 /**

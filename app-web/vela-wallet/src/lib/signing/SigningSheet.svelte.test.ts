@@ -1290,7 +1290,15 @@ describe('the verdict’s place: there from the first frame, and nothing moves f
 		warnSimUnavailable:
 			'Vela couldn’t check what this transaction does. Review it before you sign.',
 		warnWillFail: 'This transaction is expected to fail — you’d still pay gas.',
-		warnWillFailReason: 'Expected to fail: {{reason}} — you’d still pay gas.'
+		warnWillFailReason: 'Expected to fail: {{reason}} — you’d still pay gas.',
+		simUnconfirmed:
+			'Only one node answered, so Vela couldn’t confirm what this transaction does. Review it before you sign.',
+		simDisagreed:
+			'Two independent nodes gave different answers about what this transaction does. Review it before you sign.',
+		simOwnNode: 'Checked by your own node only',
+		ownNodeHint:
+			'To check with a node you trust, add your own and turn on “Only use my node” for this network.',
+		ownNodeAction: 'Network settings'
 	};
 	type Blocks = SigningModel['blocks'];
 	type Said = Extract<Blocks[number], { kind: 'balances' | 'warning' }>;

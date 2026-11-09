@@ -4,4 +4,18 @@
  * How a routed call ends — delivered to the shell so it can settle the
  * promise it is holding for `call_id`.
  */
-export type RpcCallVerdict = { "type": "respond", url: string, maybe_delivered: boolean, } | { "type": "range_cap", url: string, max_span: number, } | { "type": "failed", rate_limited: boolean, maybe_delivered: boolean, } | { "type": "bundler_base", base_url: string | null, } | { "type": "best_rpc_url", url: string | null, };
+export type RpcCallVerdict = { "type": "respond", url: string, maybe_delivered: boolean, 
+/**
+ * R22, a corroborated read only: the second, independent endpoint
+ * that answered the same question — its body is held for
+ * `(call_id, witness_url)` too, and the shell hands both to the
+ * core. `None`: nobody independent answered (or the read was not
+ * corroborated) — the core believes no plain verdict on it.
+ */
+witness_url?: string, 
+/**
+ * R22, a corroborated read only: the pool holds the person's own node
+ * alone ("Only use my node") and it answered — trusted alone, by
+ * their choice, and said so.
+ */
+own_node?: boolean, } | { "type": "range_cap", url: string, max_span: number, } | { "type": "failed", rate_limited: boolean, maybe_delivered: boolean, } | { "type": "bundler_base", base_url: string | null, } | { "type": "best_rpc_url", url: string | null, };

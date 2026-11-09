@@ -24,6 +24,12 @@ export type ShellFailure = (
 	/** r16-18 (the desktop's): a read before the passkey on a failing network. */
 	| { kind: 'chain_unreachable'; chain_id?: number }
 	| { kind: 'not_sent' }
+	/**
+	 * r21-1: the operation's window closed before it was submitted (the relay's
+	 * AA22) — nothing was sent; pressing again signs anew. The core says it in
+	 * the Send's words (`review.failure` → `componentsUi.signing.expired`).
+	 */
+	| { kind: 'expired' }
 	| { kind: 'cannot_pay'; need: string; have: string }
 	/** r14-9 (the core's): the fee moved since the press — nothing was signed. */
 	| { kind: 'fee_moved'; amount: string; chainId: number; executor: string }

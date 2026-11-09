@@ -16,7 +16,8 @@ import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { FeeEstimateView } from '$lib/core/generated/FeeEstimateView';
 import type { FeeView } from '$lib/core/generated/FeeView';
 import { nativeSymbol } from '$lib/services/networks';
-import { moneyText, trimBalance } from '$lib/wallet/live';
+import { feeFigure } from '$lib/core/kernels';
+import { moneyText } from '$lib/wallet/live';
 import { showsFiat } from '$lib/network-space/fiat';
 import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
 
@@ -41,40 +42,30 @@ export interface FeeParts {
 /**
  * A fee amount as text — the ONE formatter for "how much coin is this fee",
  * wherever it is printed: the fee row, the fee-coin sheet, the signing sheet's
- * fee selector.
+ * fee selector, a multisig execution's fee.
  *
- * `trimBalance` TRUNCATES, and returns the whole part alone when nothing
- * survives the cut. Issue 682 made that bite: the native fee floor on a coin
- * the relay cannot price dropped from 0.001 to $0.01 worth of it, and at
- * ~$120/coin that is 0.000083 — which the sheets' four-decimal trim printed as
- * a bare "0" while the row one tap above read "0.000083 OKB · ≈ $0.01". "0"
- * reads as free, the same answer `FEE_FIAT_MIN_USD` exists to refuse, and $0.01
- * is under four decimals of ANY coin dearer than $100.
- *
- * So the window widens until the first significant digit survives: the budget
- * is a floor on how much precision to show, never a ceiling on whether the
- * amount shows at all.
+ * r21-2 (§36): the figure is the CORE's (`fee_policy::fee_figure`, wasm
+ * `feeFigure`) — `units` base units of a `decimals` coin at `shown` places,
+ * rounded UP, so the figure on screen is never below what is charged; a fee
+ * under the last place keeps two significant digits (issue 682: never a bare
+ * "0" that reads as free). It used to be cut DOWN here through a float, so a
+ * fee of 0.0000836 read "0.000083" — less than the charge. Exact, from the
+ * base units as text: no float ever touches the figure. `—` for a count the
+ * core cannot read.
  */
-export function feeAmountText(units: number, maxDecimals: number): string {
-	// Nothing to widen for, and `toFixed` gives exponent notation at 1e21 and
-	// above: leave those to the plain trim, exactly as before.
-	if (!Number.isFinite(units) || units <= 0 || units >= 1e21) {
-		return trimBalance(String(units), maxDecimals);
+export function feeAmountText(units: string | bigint, decimals: number, shown: number): string {
+	let figure: string | null;
+	try {
+		figure = feeFigure(units, decimals, shown);
+	} catch {
+		figure = null;
 	}
-	const needed = Math.max(maxDecimals, Math.ceil(-Math.log10(units)) + 1);
-	// 18 is the widest coin there is; past it there is nothing left to show.
-	const decimals = Math.min(needed, 18);
-	const text = units.toString();
-	// The shortest round-trip spelling, truncated — the same two steps as
-	// before, and the reason `toFixed` is not used to write the figure out:
-	// 2_100_000_000_000_000 wei is 0.0021 ETH as a double prints, but
-	// "0.00209999999999999998" written out in full, which truncates to a fee
-	// that is not the one anybody quoted.
-	if (!text.includes('e')) return trimBalance(text, decimals);
-	// Under ~1e-6 that spelling turns into exponent notation ("2.5e-9"), which
-	// `trimBalance` would split into nonsense at the dot. Write those out.
-	return trimBalance(units.toFixed(20), decimals);
+	return figure ?? '—';
 }
+
+/** The fee places a row shows: 6 for the chain's own coin, 4 for a token (as before). */
+export const NATIVE_FEE_PLACES = 6;
+export const TOKEN_FEE_PLACES = 4;
 
 /**
  * The ticker a quote is denominated in.
@@ -107,7 +98,7 @@ export function feeParts(fee: FeeEstimateView, options: FeeView['options']): Fee
 	if (asset.type === 'erc20') {
 		const units = Number(asset.amount) / 10 ** asset.decimals;
 		return {
-			coin: `${feeAmountText(units, 4)} ${symbol}`.trim(),
+			coin: `${feeAmountText(asset.amount, asset.decimals, TOKEN_FEE_PLACES)} ${symbol}`.trim(),
 			symbol,
 			units: Number.isFinite(units) ? units : null,
 			contract: asset.token
@@ -115,7 +106,7 @@ export function feeParts(fee: FeeEstimateView, options: FeeView['options']): Fee
 	}
 	const units = Number(fee.total_wei) / 1e18;
 	return {
-		coin: `${feeAmountText(units, 6)} ${symbol}`.trim(),
+		coin: `${feeAmountText(fee.total_wei, 18, NATIVE_FEE_PLACES)} ${symbol}`.trim(),
 		symbol,
 		units: Number.isFinite(units) ? units : null,
 		contract: null

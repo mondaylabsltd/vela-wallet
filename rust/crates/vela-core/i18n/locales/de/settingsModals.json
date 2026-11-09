@@ -16,7 +16,8 @@
       "onlyMine": "Nur meinen Knoten verwenden",
       "onlyMineHint": "Nichts über dein Konto geht an öffentliche Knoten. Wenn dein Knoten nicht mehr antwortet, kann dieses Netzwerk erst wieder gelesen werden, wenn er zurück ist.",
       "hideBody": "Es verschwindet aus deiner Netzwerkliste. Seine Einstellungen bleiben erhalten, und „Netzwerk hinzufügen“ holt es jederzeit zurück.",
-      "moreNetworks": "Ebenfalls unterstützt, nicht in deiner Liste: {{names}}. Füge sie über „Netzwerk hinzufügen“ hinzu."
+      "moreNetworks": "Ebenfalls unterstützt, nicht in deiner Liste: {{names}}. Füge sie über „Netzwerk hinzufügen“ hinzu.",
+      "onlyMineTrust": "Ist es an, vertraut Vela bei seinen Sicherheitsprüfungen nur deinem Knoten und sagt das auch. Ist es aus, zählt eine Prüfung nur, wenn zwei unabhängige Knoten übereinstimmen."
     },
     "account": {
       "modalTitle": "Konten",

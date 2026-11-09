@@ -89,6 +89,9 @@ pub fn envelope(answer: Result<Value, RpcFail>) -> Value {
     }
 }
 
+/// One read of a review, bounded: its envelope — on a corroborating command
+/// (every review's, R22) the first node's answer with the second's beside it
+/// (`corroborate` module doc), compared by the core by what it means.
 async fn bounded<Ev: Send + 'static>(
     io: &Io<Ev>,
     chain_id: u64,
@@ -97,10 +100,10 @@ async fn bounded<Ev: Send + 'static>(
 ) -> Value {
     within(
         io,
-        io.rpc_within(chain_id, method, params, Some(REVIEW_READ_MS)),
+        io.rpc_envelope_within(chain_id, method, params, Some(REVIEW_READ_MS)),
     )
     .await
-    .map_or_else(|| json!({ "unreachable": true }), envelope)
+    .unwrap_or_else(|| json!({ "unreachable": true }))
 }
 
 /// `fut`, or `None` once [`REVIEW_ASK_MS`] has passed without its answer.
@@ -151,6 +154,9 @@ pub fn members_known(owners: &[String], names: &BTreeMap<String, String>) -> Vec
 /// sheet's simulation of its calls from the Safe, and each recipient's
 /// facts. Every question is bounded ([`REVIEW_ASK_MS`]).
 pub async fn gather_review<Ev: Send + 'static>(io: &Io<Ev>, subject: &ReviewSubject) -> Gathered {
+    // R22 (review 1-2): every read a review stands on is corroborated — two
+    // independent nodes, or the person's own node alone.
+    let io = &io.corroborating();
     let chain_id = subject.chain_id;
     let mut answers: Vec<Value> = Vec::new();
     let mut base = ReadsInput {
@@ -393,7 +399,14 @@ async fn read_codes<Ev: Send + 'static>(
 ) -> Vec<(String, Option<String>, Value)> {
     future::join_all(addresses.iter().map(|a| async move {
         let e = bounded(io, chain_id, "eth_getCode", json!([a, "latest"])).await;
-        let code = e.get("result").and_then(Value::as_str).map(str::to_owned);
+        // R22: code the state checks are built from is believed only as two
+        // independent nodes (or the person's own node) gave it.
+        let believed = !io.corroborates() || crate::app::corroborate::standing_exact(&e).believed();
+        let code = e
+            .get("result")
+            .and_then(Value::as_str)
+            .filter(|_| believed)
+            .map(str::to_owned);
         (a.clone(), code, e)
     }))
     .await

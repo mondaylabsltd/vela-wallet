@@ -6,7 +6,7 @@
  * HTTP handlers layered on top. 026's parallel-space port extends the same
  * seams with bundler stubs.
  */
-import type { Page, Route } from '@playwright/test';
+import type { Locator, Page, Route } from '@playwright/test';
 
 export type RpcHandler = (method: string, params: unknown[], url: string) => unknown | undefined;
 
@@ -39,6 +39,71 @@ export async function denyOffOrigin(page: Page): Promise<void> {
 const BACKGROUND_READS = new Set(['eth_getBalance', 'eth_getLogs']);
 
 /**
+ * R22 (review 1-2): a read a signing verdict stands on is asked of two
+ * INDEPENDENT providers (`corroborate::provider_of`), each checked for its
+ * chain id first. A stubbed network is an honest one: every `stub-rpc.test`
+ * node a registry lists has a twin at `witness-rpc.test` — another provider
+ * — answering exactly as it does. A suite that means one node's word, or two
+ * that differ, routes the twin itself.
+ */
+export const WITNESS_HOST = 'witness-rpc.test';
+
+/**
+ * R22 (review 1-3): an "… anyway" or a danger confirm is HELD for the core's
+ * `hold_ms` (1.5 s) — a pointer press held this long confirms it, and is a
+ * plain press for a confirm the core holds for nothing.
+ */
+export const HOLD_PRESS_MS = 1_900;
+
+/**
+ * The same, from a script inside a page Playwright cannot drive (the side
+ * panel): a held confirm is the assistive path — the first activation arms
+ * it, the second confirms; a plain one is one activation. Held confirms are
+ * the ones described by their hint (`aria-describedby`).
+ */
+/**
+ * Press a confirm the way a person does: held for {@link HOLD_PRESS_MS}. A
+ * window the confirm closes (a site's request window, answered) may be gone
+ * before the press is let go — the press has done its work then.
+ */
+export async function holdPress(control: Locator, timeout = 60_000): Promise<void> {
+	try {
+		await control.click({ timeout, delay: HOLD_PRESS_MS });
+	} catch (error) {
+		if (!/has been closed/.test(String(error))) throw error;
+	}
+}
+
+export const PRESS_IN_DOM =
+	'const el = panel.document.querySelector(arg); el.click(); if (el.hasAttribute("aria-describedby")) el.click();';
+const STUB_HOST = 'stub-rpc.test';
+
+/** `pattern` for the witness twin of the stub host, or `null` when it names none. */
+function witnessPattern(pattern: RegExp): RegExp | null {
+	const source = pattern.source.replaceAll('stub-rpc\\.test', 'witness-rpc\\.test');
+	return source === pattern.source ? null : new RegExp(source, pattern.flags);
+}
+
+/** A twin's URL as its stub's: a handler reads the URL it was written for. */
+function asStubUrl(url: string): string {
+	return url.replace(`://${WITNESS_HOST}/`, `://${STUB_HOST}/`);
+}
+
+/** A registry document's RPCs, each stub node with its witness twin beside it. */
+function witnessedDoc(doc: Record<string, unknown>): Record<string, unknown> {
+	const rpc = doc.rpc;
+	if (!Array.isArray(rpc)) return doc;
+	return {
+		...doc,
+		rpc: rpc.flatMap((url: unknown) =>
+			typeof url === 'string' && url.includes(`://${STUB_HOST}/`)
+				? [url, url.replace(`://${STUB_HOST}/`, `://${WITNESS_HOST}/`)]
+				: [url]
+		)
+	};
+}
+
+/**
  * Answer JSON-RPC POSTs on matching URLs; other non-matching methods 500
  * (the background reads: a JSON-RPC "method not found", see above).
  */
@@ -47,6 +112,9 @@ export async function stubJsonRpc(
 	urlPattern: RegExp,
 	handle: RpcHandler
 ): Promise<void> {
+	const twin = witnessPattern(urlPattern);
+	if (twin)
+		await stubJsonRpc(page, twin, (method, params, url) => handle(method, params, asStubUrl(url)));
 	await page.route(urlPattern, async (route: Route) => {
 		const request = route.request();
 		if (request.method() !== 'POST') return route.abort('failed');
@@ -80,6 +148,8 @@ export async function stubHttpFailure(
 	urlPattern: RegExp,
 	status: number
 ): Promise<void> {
+	const twin = witnessPattern(urlPattern);
+	if (twin) await page.route(twin, (route) => route.fulfill({ status, body: 'no' }));
 	await page.route(urlPattern, (route) => route.fulfill({ status, body: 'no' }));
 }
 
@@ -177,7 +247,7 @@ export function abiWord(n: number | bigint): string {
  */
 export async function seedNetworkOverrides(
 	page: Page,
-	entries: { chainId: number; rpcURL: string }[]
+	entries: { chainId: number; rpcURL: string; onlyMine?: boolean }[]
 ): Promise<void> {
 	await page.evaluate((rows) => {
 		return new Promise<void>((resolve, reject) => {
@@ -212,7 +282,10 @@ export async function stubChainRegistry(
 		const id = Number(/eip155-(\d+)\.json$/.exec(route.request().url())?.[1]);
 		const doc = docs[id];
 		if (!doc) return route.fulfill({ status: 404, body: 'no such chain' });
-		return route.fulfill({ contentType: 'application/json', body: JSON.stringify(doc) });
+		return route.fulfill({
+			contentType: 'application/json',
+			body: JSON.stringify(witnessedDoc(doc))
+		});
 	});
 	await page.route(/\/index\/fuse-chains\.json$/, (route) =>
 		route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) })

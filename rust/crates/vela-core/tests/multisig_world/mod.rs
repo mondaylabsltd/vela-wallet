@@ -19,6 +19,41 @@ use vela_core::multisig;
 
 use super::support::DomainDriver;
 
+/// R22: one node's answer as an honest network gives a corroborated read —
+/// a second, independent node's alike beside it (`corroborate`).
+pub fn honest_twin(answer: Res) -> Res {
+    let first = match answer {
+        Res::RpcResult { result } => json!({ "result": result }),
+        Res::RpcError {
+            code,
+            message,
+            data,
+        } => match data {
+            Some(data) => json!({ "error": { "code": code, "message": message, "data": data } }),
+            None => json!({ "error": { "code": code, "message": message } }),
+        },
+        other => return other,
+    };
+    let mut envelope = first.clone();
+    envelope["witness"] = first;
+    Res::RpcCorroborated { envelope }
+}
+
+/// R22: a simulation reply witnessed alike (`None` and silence stay as they are).
+pub fn honest_sim(reply: Option<String>) -> Option<String> {
+    let reply = reply?;
+    let Ok(mut v) = serde_json::from_str::<Value>(&reply) else {
+        return Some(reply);
+    };
+    if v.get("result").is_some() || v.get("error").is_some() {
+        if v.get("witness").is_none() {
+            v["witness"] = v.clone();
+        }
+        return Some(v.to_string());
+    }
+    Some(reply)
+}
+
 pub const SERVICE: &str = "http://service.test";
 pub const T0: f64 = 1_793_000_000_000.0;
 
@@ -938,10 +973,18 @@ impl World {
                 method,
                 params,
                 person,
+                corroborate,
                 ..
             } => {
                 self.rpc_person.push((method.clone(), *person));
-                self.rpc(*chain_id, method, params)
+                let answer = self.rpc(*chain_id, method, params);
+                // R22: an honest network — a corroborated read is answered
+                // alike by a second, independent node.
+                if *corroborate {
+                    honest_twin(answer)
+                } else {
+                    answer
+                }
             }
             Op::LoadStore { keys } => Res::StoreLoaded {
                 entries: keys
@@ -1011,10 +1054,12 @@ impl World {
                 quote: json!({"kind": "quoted", "fee": {"token": null, "amount": "0x1"}, "totalGas": "0x1", "executorDeployed": true}),
             }),
             Op::Simulate { .. } => Res::Simulated {
-                reply: self
-                    .sim_replies
-                    .pop_front()
-                    .unwrap_or_else(|| self.sim_reply.clone()),
+                // R22: the simulation is always a corroborated read.
+                reply: honest_sim(
+                    self.sim_replies
+                        .pop_front()
+                        .unwrap_or_else(|| self.sim_reply.clone()),
+                ),
             },
             Op::RecipientRisk { address, .. } => {
                 let (is_contract, first_time) = self

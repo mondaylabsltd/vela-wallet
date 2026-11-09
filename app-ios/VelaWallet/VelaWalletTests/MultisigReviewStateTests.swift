@@ -57,8 +57,10 @@ struct MultisigReviewStateTests {
             let expect = try #require(c["expect"] as? [String: Any], "\(name)")
             let state = args["state"].map { MsJSON(any: $0) }
             let review = args["review"].map { MsJSON(any: $0) }
-            let door = MsRules.reviewDoor(state: state, review: review)
+            // R22: the person's "Refuse blind signing" as the case states it.
+            let door = MsRules.reviewDoor(state: state, review: review, refuseBlind: args["refuseBlind"] as? Bool ?? false)
             #expect(door.shows.rawValue == expect["shows"] as? String, "\(name): shows \(door.shows)")
+            #expect(door.holdMs == (expect["hold_ms"] as? NSNumber)?.intValue, "\(name): hold_ms \(door.holdMs)")
             #expect(door.enabled == (expect["enabled"] as? Bool), "\(name): enabled")
             #expect(door.anyway == (expect["anyway"] as? Bool), "\(name): anyway")
             #expect(door.reasonKey == expect["reason_key"] as? String, "\(name): reason_key")

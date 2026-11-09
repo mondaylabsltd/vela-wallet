@@ -751,10 +751,14 @@ fn the_figures_signed_are_the_figures_pressed_or_nothing_is_signed() {
         assert_eq!(fee, text(&signed["fee"]), "{name}: fee signed");
         let held = to_base_units(&token.balance, token.decimals).expect("balance");
         if case["max"].as_bool() == Some(true) {
-            assert_eq!(
-                amount.parse::<u128>().expect("amount") + fee.parse::<u128>().expect("fee"),
-                held,
-                "{name}: a Max spends the balance exactly: charged = shown"
+            // r21-2 (§36): a Max sends the figure it shows — never more than
+            // the balance less the fee, the remainder under the field's last
+            // place (6 below 1) left in the account.
+            let spent = amount.parse::<u128>().expect("amount") + fee.parse::<u128>().expect("fee");
+            assert!(spent <= held, "{name}: a Max never spends more than held");
+            assert!(
+                held - spent < 10u128.pow(token.decimals - 6),
+                "{name}: a Max leaves less than its last shown place"
             );
         }
     }

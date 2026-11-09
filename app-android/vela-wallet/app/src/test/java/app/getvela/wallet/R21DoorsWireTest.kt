@@ -62,8 +62,10 @@ class R21DoorsWireTest {
     fun `the EntryPoint's AA22 is the core's Expired, and a multisig execution says it honestly`() {
         val rejection = classifyRelayRejection("AA22 expired or not due")
         assertEquals(RelayRejection.Expired, rejection)
+        // r21-1 (§36): its own kind, which the core says in the Send's words.
         val failure = MultisigShellFailure.of(UserOpSpine.Failure.Expired)
-        assertTrue(failure.toString(), failure is MultisigShellFailure.Unknown)
-        assertTrue(failure.toString(), failure.toString().contains("expired before it was submitted"))
+        assertTrue(failure.toString(), failure is MultisigShellFailure.Expired)
+        assertEquals("""{"kind":"expired"}""", failure.detail)
+        assertEquals("expired", app.getvela.wallet.feature.multisig.core.MsRules.failureSaid(failure.detail).kind)
     }
 }

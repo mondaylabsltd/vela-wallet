@@ -114,6 +114,13 @@ class RpcPool(
         method: String,
         params: List<Any?> = emptyList(),
         kind: RpcKind = RpcKind.Rpc,
+        /**
+         * R22: a read a signing verdict stands on — the pool asks a second,
+         * independent endpoint too, and the answer carries both bodies
+         * ([RpcResult.Body.witness], [RpcResult.Body.ownNode]). Hand it to
+         * the core as ONE envelope ([RpcResult.corroboratedEnvelope]).
+         */
+        corroborate: Boolean = false,
     ): RpcResult {
         val callId = "c${nextId.incrementAndGet()}"
         val waiting = Waiting(RpcPayload(method, params, chainId))
@@ -127,12 +134,19 @@ class RpcPool(
                     kind = kind,
                     method = method,
                     now_ms = System.currentTimeMillis().toDouble(),
+                    corroborate = corroborate && kind == RpcKind.Rpc,
                 ),
                 RpcEvent.serializer(),
             )
             return when (val verdict = waiting.settled.await()) {
                 is RpcCallVerdict.Respond ->
-                    RpcResult.Body(waiting.bodies[verdict.url] ?: JSONObject(), maybeDelivered = verdict.maybe_delivered)
+                    RpcResult.Body(
+                        waiting.bodies[verdict.url] ?: JSONObject(),
+                        maybeDelivered = verdict.maybe_delivered,
+                        // R22: the second node's body, kept under its own url.
+                        witness = verdict.witness_url?.let { waiting.bodies[it] },
+                        ownNode = verdict.own_node,
+                    )
                 // The endpoint's own answer rides along: a caller that judges
                 // nothing (the tracker's find-event, spec 082 T180) hands the
                 // error member to the core as it came.
@@ -204,7 +218,18 @@ sealed class RpcResult {
      * [maybeDelivered] (spec 082 RA1): an earlier endpoint of this call may
      * have acted on it too — what a submit's "may have been sent" rests on.
      */
-    data class Body(val json: JSONObject, val maybeDelivered: Boolean = false) : RpcResult()
+    data class Body(
+        val json: JSONObject,
+        val maybeDelivered: Boolean = false,
+        /**
+         * R22, a corroborated call only: the body a second, independent
+         * endpoint answered the same question with; `null` when nobody
+         * independent answered (or the call was not corroborated).
+         */
+        val witness: JSONObject? = null,
+        /** R22: the person's own node answered alone, by their choice ("Only use my node"). */
+        val ownNode: Boolean = false,
+    ) : RpcResult()
 
     /**
      * The endpoint capped the block range; ask again within `maxSpan`.
@@ -221,4 +246,22 @@ sealed class RpcResult {
      * person their wallet is broken when it is busy.
      */
     data class Failed(val rateLimited: Boolean, val maybeDelivered: Boolean = false) : RpcResult()
+
+    companion object {
+        /**
+         * R22: the ONE envelope a corroborated read hands the core —
+         * `{result | error | unreachable, witness?, ownNode?}` — built by the
+         * core's own helper (`rpc_corroborated_envelope`), never here. Nothing
+         * answered (`null`, a failure, a range cap) is the pool giving up:
+         * `{"unreachable": true}`.
+         */
+        fun corroboratedEnvelope(answer: RpcResult?): String = when (answer) {
+            is Body -> uniffi.vela_core_uniffi.rpcCorroboratedEnvelope(
+                answer.json.toString(),
+                answer.witness?.toString(),
+                answer.ownNode,
+            )
+            is RangeCapped, is Failed, null -> uniffi.vela_core_uniffi.rpcCorroboratedEnvelope(null, null, false)
+        }
+    }
 }

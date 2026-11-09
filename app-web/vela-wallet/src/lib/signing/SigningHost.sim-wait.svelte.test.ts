@@ -120,9 +120,13 @@ vi.mock('$lib/wallet/core/tracker-resident', () => ({
 }));
 // The stubbed simulation: the node's reply to the sheet's one `eth_simulateV1`.
 // `checkRequest` and the core's reading of the reply (`simOutcome`) are real.
+// R22: the reply as two independent nodes gave it alike (the corroborated
+// envelope `rpcSimulateReply` now hands over) — an honest network.
 vi.mock('$lib/services/sim/sim-engine-rpc', () => ({
 	rpcSimulateReply: (from: string, calls: unknown[], chainId: number) =>
-		node.ask({ from, calls, chainId }),
+		node
+			.ask({ from, calls, chainId })
+			.then(async (reply: string) => (await import('$lib/signing/sim-witnessed')).agreed(reply)),
 	// Send's own simulation (`tx-simulation`), which no sheet draws: not run here.
 	rpcSimulate: async () => null
 }));
@@ -415,11 +419,23 @@ const FEE = {
 const dialog = () => document.body.querySelector<HTMLElement>('[role="dialog"]');
 const confirmEl = () =>
 	document.body.querySelector<HTMLButtonElement>('[role="dialog"] [data-testid="signing-confirm"]');
-/** The line under the confirm as a person sees it: its words, or `null` when none is shown. */
+/**
+ * The gate's line under the confirm as a person sees it: its words, or `null`
+ * when none is shown. R22: an open confirm the core holds says how it acts in
+ * that same line ("Hold to confirm") — that is no gate's line ({@link holdLine}).
+ */
 function heldLine(): string | null {
 	const line = document.body.querySelector<HTMLElement>('[role="dialog"] .confirm-note');
 	if (!line || getComputedStyle(line).visibility === 'hidden') return null;
+	if (line.dataset.testid === 'signing-confirm-hint') return null;
 	return line.textContent?.trim() ?? '';
+}
+/** R22: the held confirm's words in the note's line, or `null`. */
+function holdLine(): string | null {
+	const line = document.body.querySelector<HTMLElement>(
+		'[role="dialog"] [data-testid="signing-confirm-hint"]'
+	);
+	return line ? (line.textContent?.trim() ?? '') : null;
 }
 /** The verdict's place on a site's transaction. */
 const place = () =>
@@ -647,6 +663,9 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 		await vi.waitFor(() => expect(verdictLine()).toBe(COULD_NOT_CHECK), WAIT);
 		await open();
 		expect(core.view.sim_waited_out_key).toBe('componentsUi.signing.simUnavailableWarning');
+		// R22: nothing was checked, so it signs only "… anyway" — held, and said
+		// in the confirm's own line.
+		expect(holdLine()).toBe(WORDS.holdToConfirm);
 		// A caution: the banner the phones draw for it, in the warning ink, in
 		// the verdict's place on the sheet — not a line folded into the details.
 		const line = notice()!;

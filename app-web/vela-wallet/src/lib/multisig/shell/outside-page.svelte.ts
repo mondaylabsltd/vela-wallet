@@ -98,6 +98,14 @@ export function pageDeps(input: {
 			poolRpcCall(method, (Array.isArray(params) ? params : [params]) as unknown[], chainId, 0, {
 				person: person ?? false
 			}),
+		// R22: a guard's read, two independent nodes (the core's envelope).
+		rpcCorroborated: async (chainId, method, params, person) =>
+			(await import('$lib/services/corroborated-read')).corroboratedRpc(
+				chainId,
+				method,
+				params,
+				person ?? false
+			),
 		storage: () => {
 			try {
 				return typeof localStorage === 'undefined' ? null : localStorage;

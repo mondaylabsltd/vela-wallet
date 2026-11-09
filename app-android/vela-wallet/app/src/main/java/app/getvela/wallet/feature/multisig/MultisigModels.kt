@@ -43,6 +43,8 @@ class MsProposalModel(
     private val origin: String = "https://getvela.app",
     private val locale: String = "en",
     private val nowMs: () -> Long = { System.currentTimeMillis() },
+    /** R22: the person's "Refuse blind signing" — the door refuses what would sign only "… anyway". */
+    private val refuseBlind: Boolean = app.getvela.wallet.core.data.SigningPrefs.refuseBlind.value,
 ) {
     val chainId: Int get() = item.chainId
     val hash: String get() = item.safeTxHash
@@ -151,7 +153,7 @@ class MsProposalModel(
      * "… anyway" and a second, explicit confirmation, r8-1). A missing
      * review, a missing state or a missing sign rule is never "allowed".
      */
-    val door: MsSignDoor by lazy { MsRules.reviewDoor(reviewState, review) }
+    val door: MsSignDoor by lazy { MsRules.reviewDoor(reviewState, review, refuseBlind) }
 
     val signAnyway: Boolean get() = door.anyway
 
@@ -228,7 +230,7 @@ class MsProposalModel(
      * while it works, once done, or for the person's own cancel.
      */
     val approveFailure: MsLine?
-        get() = if (staleAfter("approve", "execute")) null else words.actionFailure(approveState, chainId)?.let { MsLine(it, MsTone.Danger, "approveFailed") }
+        get() = if (staleAfter("approve", "execute")) null else words.actionFailure(approveState, chainId)?.let { MsLine(it, words.actionFailureTone(approveState), "approveFailed") }
     val executeFailure: MsLine?
         get() = if (staleAfter("execute", "approve")) null else words.actionFailure(executeState, chainId)?.let { MsLine(it, words.actionFailureTone(executeState), "executeFailed") }
 
@@ -367,7 +369,7 @@ class MsProposalModel(
         val symbol = words.symbol(chainId)
         return when (preview.kind) {
             "priced" -> {
-                val fee = "${MsRules.formatUnits(preview["fee"]["amount"].str ?: "0", MsRules.COIN_DECIMALS)} $symbol"
+                val fee = "${MsRules.feeFigure(preview["fee"]["amount"].str ?: "0")} $symbol"
                 if (preview["canPay"].bool == false) {
                     words.t(
                         "proposal.cannotPay",
@@ -406,7 +408,7 @@ class MsProposalModel(
         if (setup["executor"].bool == true) lines += words.t("proposal.setupExecutor", "name" to words.label(executor))
         if (lines.isEmpty()) return emptyList()
         val head = setup["amount"].str?.let {
-            words.t("proposal.feeSetup", "network" to words.network(chainId), "amount" to "${MsRules.formatUnits(it, MsRules.COIN_DECIMALS)} ${words.symbol(chainId)}")
+            words.t("proposal.feeSetup", "network" to words.network(chainId), "amount" to "${MsRules.feeFigure(it)} ${words.symbol(chainId)}")
         } ?: words.t("proposal.feeSetupPlain", "network" to words.network(chainId))
         return listOf(head) + lines
     }

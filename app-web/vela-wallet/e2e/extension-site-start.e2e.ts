@@ -111,7 +111,7 @@ async function hermeticNet(context: BrowserContext): Promise<void> {
 	await context.route(/^https?:\/\/(?!localhost|127\.0\.0\.1)/, (route: Route) =>
 		route.abort('failed')
 	);
-	await context.route(/stub-rpc\.test\/rpc\/(\d+)/, async (route: Route) => {
+	await context.route(/(?:stub|witness)-rpc\.test\/rpc\/(\d+)/, async (route: Route) => {
 		const request = route.request();
 		if (request.method() !== 'POST') return route.abort('failed');
 		const chainId = Number(/\/rpc\/(\d+)/.exec(request.url())?.[1]);

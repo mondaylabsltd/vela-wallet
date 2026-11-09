@@ -2115,7 +2115,8 @@ describe('the fee-coin sheet', () => {
 				}
 			)
 		);
-		expect(model.rows[0].fee).toBe('~0.000083 OKB');
+		// r21-2: the core's figure, rounded UP — never below the charge.
+		expect(model.rows[0].fee).toBe('~0.000084 OKB');
 	});
 });
 

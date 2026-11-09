@@ -309,6 +309,7 @@ export function liveNetworkDetail(
 					}
 				: undefined
 		),
+		...optional('onlyMineTrust', row.own_rpc ? m.networks.onlyMineTrust : undefined),
 		...optional(
 			'nodeCallout',
 			notice === undefined

@@ -45,6 +45,8 @@ export type SettingsPrefEvent =
 	 * only — no core: the phone and desktop apps carry no analytics).
 	 */
 	| { kind: 'analytics'; on: boolean }
+	/** R22: "Refuse blind signing" switched (the core reads it: `refuseBlindSigning`). */
+	| { kind: 'refuse-blind'; on: boolean }
 	/** Spec 103: the AI agent — on/off, the bridge's address, the wallet's token. */
 	| { kind: 'agent'; on: boolean }
 	| { kind: 'agent-url'; value: string }

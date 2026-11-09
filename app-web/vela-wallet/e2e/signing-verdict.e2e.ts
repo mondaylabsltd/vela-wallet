@@ -169,14 +169,16 @@ async function raise(
 		}
 	};
 	// Registered after `stubChain`, so it runs first.
-	await page.route(/stub-rpc\.test\/rpc\/1$/, async (route) => {
+	await page.route(/(?:stub|witness)-rpc\.test\/rpc\/1$/, async (route) => {
 		const body = route.request().postDataJSON() as {
 			method?: string;
 			id?: number;
 			params?: [{ blockStateCalls?: { calls?: { from?: string }[] }[] }];
 		} | null;
 		if (body?.method !== 'eth_simulateV1') return route.fallback();
-		node.asked += 1;
+		// R22: the witness twin asks too, once the first has answered; the
+		// count is the person's node's.
+		if (route.request().url().includes('://stub-rpc.test/')) node.asked += 1;
 		node.account = body.params?.[0]?.blockStateCalls?.[0]?.calls?.[0]?.from ?? '';
 		await gate;
 		return route.fulfill({
@@ -193,7 +195,9 @@ async function raise(
 	await page.waitForURL(/\/en\/wallet$/);
 	await seedNetworkOverrides(
 		page,
-		CHAINS.map((c) => ({ chainId: c.chainId, rpcURL: `${STUB}/${c.chainId}` }))
+		// R22: the suite's one node is the person's own ("Only use my node") — its
+		// checks believed alone, and said so; a public node it is not.
+		CHAINS.map((c) => ({ chainId: c.chainId, rpcURL: `${STUB}/${c.chainId}`, onlyMine: true }))
 	);
 	await page.goto(`/${locale}/wallet`);
 	await page.waitForFunction(

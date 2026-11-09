@@ -213,8 +213,10 @@ struct SafeOpWindowTests {
         #expect(outcome["refused"] as? Bool == true)
         #expect(!userOpExpiredDetail().isEmpty)
 
-        #expect(MultisigLive.shellFailure(.expired)
-                == .unknown("The transaction expired before it was submitted; nothing was sent."))
+        // r21-1: the multisig's execution says it in the Send's words — its
+        // own `expired` kind, which the core reads as `componentsUi.signing.expired`.
+        #expect(MultisigLive.shellFailure(.expired) == .expired)
+        #expect(MultisigLive.shellFailure(.expired).detail == #"{"kind":"expired"}"#)
     }
 
     /// The receipt of an operation that expired offers Review again, as one

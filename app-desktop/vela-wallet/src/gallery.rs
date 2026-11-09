@@ -1501,6 +1501,16 @@ impl GalleryView {
                         Some(on_open),
                         Some(on_recheck),
                         Some(on_trust),
+                        &crate::signing::trusted_signer::OpenFriction {
+                            subject: "gallery".into(),
+                            danger: false,
+                            hold_ms: 0,
+                            words: crate::ui::HoldWords {
+                                hold: self.loc.t(vela_core::app::sign_confirm::HOLD_KEY),
+                                again: self.loc.t(vela_core::app::sign_confirm::CONFIRM_AGAIN_KEY),
+                            },
+                        },
+                        cx,
                     ))
             }
             // Bare, like the ended card: a ceremony's own title on the card

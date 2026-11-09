@@ -44,6 +44,28 @@ pub fn amount_words(loc: &Loc, amount: &str, info: &TokenInfo) -> String {
     .to_owned()
 }
 
+/// r21-2 (§36): a FEE of `amount` (base units) in `info` — the core's fee
+/// figure (`fee_policy::fee_figure`), rounded UP at the native coin's six
+/// places so the line never reads below what the execution is charged.
+/// Decimals nobody said: [`amount_words`]'s raw integer.
+#[must_use]
+pub fn fee_words(loc: &Loc, amount: &str, info: &TokenInfo) -> String {
+    match info.decimals {
+        Some(decimals) => format!(
+            "{} {}",
+            crate::flows::live::fee_figure_text(
+                amount,
+                decimals,
+                crate::flows::live::FEE_NATIVE_PLACES
+            ),
+            info.symbol
+        )
+        .trim()
+        .to_owned(),
+        None => amount_words(loc, amount, info),
+    }
+}
+
 /// A `MultisigAmount` (r12-1) as its `said` words: `known` its `text`; a
 /// token whose decimals nobody could read, the corpus `key` with `{{raw}}`.
 /// `None` for a value with no `said` (an older core's base units).

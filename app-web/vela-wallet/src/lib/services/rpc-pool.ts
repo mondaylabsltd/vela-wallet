@@ -187,9 +187,30 @@ type PendingCall = {
 	method: string;
 	resolve: (body: RPCResponse) => void;
 	reject: (error: unknown) => void;
+	/**
+	 * R22: a corroborated read — resolved with BOTH bodies (`settle`), never
+	 * early: a hedge's answer would skip the witness (`answerEarly`).
+	 */
+	corroborated?: (answer: CorroboratedAnswer) => void;
 };
 
-const payloads = new Map<string, { method: string; params: unknown[]; kind: RpcKind }>();
+/**
+ * R22 (review 1-2): what a corroborated read came back with — the first
+ * node's body, the second, independent node's (`null`: nobody independent
+ * answered) and whether the pool holds the person's own node alone ("Only
+ * use my node"). What the two MEAN is the core's: hand them to
+ * `rpcCorroboratedEnvelope`, never compare them here.
+ */
+export interface CorroboratedAnswer {
+	body: RPCResponse;
+	witnessBody: RPCResponse | null;
+	ownNode: boolean;
+}
+
+const payloads = new Map<
+	string,
+	{ method: string; params: unknown[]; kind: RpcKind; corroborate?: boolean }
+>();
 const bodies = new Map<string, Map<string, RPCResponse>>();
 const pendingCalls = new Map<string, PendingCall>();
 const pendingBases = new Map<string, (baseUrl: string) => void>();
@@ -223,6 +244,10 @@ function settle(callId: string, verdict: RpcCallVerdict): void {
 
 	const call = pendingCalls.get(callId);
 	const held = verdict.type === 'failed' ? undefined : bodies.get(callId)?.get(verdict.url);
+	const witness =
+		verdict.type === 'respond' && verdict.witness_url
+			? bodies.get(callId)?.get(verdict.witness_url)
+			: undefined;
 	// A failed call's JSON-RPC `error` answers — an HTTP error's body
 	// (`refusalBody`) or an error the core routed on — the last one, for a
 	// submit to hand on (round 3, send-5). What it proves is the core's.
@@ -267,6 +292,18 @@ function settle(callId: string, verdict: RpcCallVerdict): void {
 
 	recordNet(service, 'success');
 	if (verdict.type === 'respond') deliveredMaybe.set(held, verdict.maybe_delivered);
+	if (call.corroborated) {
+		// R22: the witness's body is kept beside the first (`keepBody`, every
+		// POST); the verdict names both.
+		const witnessUrl = verdict.type === 'respond' ? (verdict.witness_url ?? null) : null;
+		const witnessBody = witnessUrl === null ? null : (witness ?? null);
+		call.corroborated({
+			body: held,
+			witnessBody,
+			ownNode: verdict.type === 'respond' && verdict.own_node === true
+		});
+		return;
+	}
 	call.resolve(held);
 }
 
@@ -279,6 +316,8 @@ function answerEarly(callId: string, url: string): void {
 	const call = pendingCalls.get(callId);
 	const held = bodies.get(callId)?.get(url);
 	if (!call || !held) return;
+	// R22: a corroborated read is settled by the core alone, with its witness.
+	if (call.corroborated || payloads.get(callId)?.corroborate === true) return;
 	pendingCalls.delete(callId);
 	recordNet('rpc', 'success');
 	// A hedged read changes nothing on any node (the core's `HEDGED_READS`).
@@ -390,18 +429,32 @@ async function route(
 	payloads.set(callId, { method, params, kind });
 	return new Promise<RPCResponse>((resolve, reject) => {
 		pendingCalls.set(callId, { kind, chainId, method, resolve, reject });
-		session?.dispatch({
-			type: 'call_requested',
-			call_id: callId,
-			chain_id: chainId,
-			kind,
-			method,
-			now_ms: Date.now(),
-			// r17-10: the person's own ask (their Try again, their press) —
-			// the core sweeps every node, past cooldowns, and marks each POST
-			// `must_send` so the skipper never answers it locally.
-			person
-		});
+		dispatchCall(callId, kind, chainId, method, person, false);
+	});
+}
+
+function dispatchCall(
+	callId: string,
+	kind: RpcKind,
+	chainId: number,
+	method: string,
+	person: boolean,
+	corroborate: boolean
+): void {
+	session?.dispatch({
+		type: 'call_requested',
+		call_id: callId,
+		chain_id: chainId,
+		kind,
+		method,
+		now_ms: Date.now(),
+		// r17-10: the person's own ask (their Try again, their press) —
+		// the core sweeps every node, past cooldowns, and marks each POST
+		// `must_send` so the skipper never answers it locally.
+		person,
+		// R22: a read a signing verdict stands on — answered by two
+		// independent endpoints, each of which said its chain first.
+		corroborate
 	});
 }
 
@@ -461,6 +514,53 @@ export async function poolRpcCall(
 	}
 
 	return route('rpc', method, params, chainId, options.person ?? false);
+}
+
+/**
+ * R22 (review 1-2): a read a signing verdict stands on — the sheet's own
+ * simulation, a multisig guard's reads, §31's isOwner. The pool asks a
+ * second, independent endpoint the same question (each one checked for its
+ * chain id first) and this resolves with both bodies; with "Only use my
+ * node", the person's node alone, said as such (`ownNode`). Never hedged,
+ * never answered early. Rejects with {@link PoolFailedError} when no node
+ * answered — the envelope's `unreachable`.
+ */
+export async function poolCorroboratedCall(
+	method: string,
+	params: unknown[],
+	chainId: number,
+	options: { person?: boolean } = {}
+): Promise<CorroboratedAnswer> {
+	const injectedLatency = rpcLatencyMs();
+	if (injectedLatency > 0) await new Promise((r) => setTimeout(r, injectedLatency));
+	if (rpcShouldFail(chainId) || rpcShouldRateLimit(chainId)) {
+		throw new PoolFailedError(`[fault] RPC forced to fail for chain ${chainId}`, {
+			maybeDelivered: false,
+			rateLimited: rpcShouldRateLimit(chainId)
+		});
+	}
+	if (poolShouldFault(chainId)) {
+		throw new PoolFailedError(`[fault] RPC pool fault for chain ${chainId}`, {
+			maybeDelivered: false,
+			rateLimited: false,
+			internal: true
+		});
+	}
+	await ensureReady();
+	const callId = `rpc:${chainId}:${(sequence += 1)}`;
+	payloads.set(callId, { method, params, kind: 'rpc', corroborate: true });
+	return new Promise<CorroboratedAnswer>((resolve, reject) => {
+		pendingCalls.set(callId, {
+			kind: 'rpc',
+			chainId,
+			method,
+			// Never reached: `settle` hands a corroborated read both bodies.
+			resolve: (body) => resolve({ body, witnessBody: null, ownNode: false }),
+			reject,
+			corroborated: resolve
+		});
+		dispatchCall(callId, 'rpc', chainId, method, options.person ?? false, true);
+	});
 }
 
 /** A bundler call. Since spec 081 the pick is never sent to the relay. */

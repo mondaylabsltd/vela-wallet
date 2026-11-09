@@ -16,6 +16,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { cancelTx, safeTxHash } from '../core/kernel';
 import type { MultisigShellDeps } from './handler';
+import { withWitness } from './witnessed.testing';
 
 const SERVICE = 'http://service.test';
 const SHOWN = '0x00000000000000000000000000000000000000a1';
@@ -79,7 +80,7 @@ function memoryStore(seed: Record<string, string> = {}) {
 }
 
 function deps(store: ReturnType<typeof memoryStore>, http: string[]): MultisigShellDeps {
-	return {
+	return withWitness({
 		fetch: vi.fn(async (url: string | URL | Request) => {
 			http.push(String(url));
 			return new Response('{}', { status: 503 });
@@ -103,7 +104,7 @@ function deps(store: ReturnType<typeof memoryStore>, http: string[]): MultisigSh
 		},
 		wallet: async () => null,
 		notice: () => {}
-	};
+	});
 }
 
 const account = (address: string) => ({

@@ -72,6 +72,7 @@ use serde_json::Value;
 use ts_rs::TS;
 
 use super::clear_signing::ClearRisk;
+use super::corroborate::{self, Standing};
 use super::name_verify::is_never_in_a_name;
 use super::token_trust::{
     TrustAssetDelta, TrustDeltaKind, TrustSimJudgment, NATIVE_LOG_ADDRESSES, TRANSFER_TOPIC,
@@ -175,6 +176,12 @@ pub enum SimOutcome {
     NotOffered,
     /// No node answered.
     Unreachable,
+    /// R22 (review 1-2): every call ran on the node that answered, and nobody
+    /// independent confirmed what it moves — one node answered, or two
+    /// independent nodes said different things (`disagreed`). What moves is
+    /// not believed: the sheet says it could not confirm, and signs only
+    /// "… anyway". A lie of "nothing moves" from one node ends here.
+    Unconfirmed { disagreed: bool },
 }
 
 /// The line the signing sheet draws for an outcome.
@@ -268,6 +275,15 @@ pub fn notice(outcome: &SimOutcome) -> Option<SimNotice> {
             key: KEY_UNAVAILABLE,
             reason: None,
         }),
+        SimOutcome::Unconfirmed { disagreed } => Some(SimNotice {
+            risk: ClearRisk::Caution,
+            key: if *disagreed {
+                KEY_DISAGREED
+            } else {
+                KEY_UNCONFIRMED
+            },
+            reason: None,
+        }),
     }
 }
 
@@ -281,7 +297,10 @@ impl SimOutcome {
             SimOutcome::Deltas { deltas } => {
                 no_change_key(deltas.iter().map(|delta| delta.delta.as_str()))
             }
-            SimOutcome::Reverts { .. } | SimOutcome::NotOffered | SimOutcome::Unreachable => None,
+            SimOutcome::Reverts { .. }
+            | SimOutcome::NotOffered
+            | SimOutcome::Unreachable
+            | SimOutcome::Unconfirmed { .. } => None,
         }
     }
 }
@@ -357,6 +376,19 @@ pub struct SimVerdict {
     /// it would say the same.
     #[serde(default)]
     pub recheck: bool,
+    /// R22: who stands behind `deltas` — `corroborated` (two independent
+    /// nodes agreed) or `own_node` (the person's own node alone, by their
+    /// choice: "Only use my node"). `None` for every kind but `deltas`, and
+    /// for a verdict another reading made.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub source: Option<String>,
+    /// R22: the line the sheet says about `source` — [`KEY_OWN_NODE`]
+    /// ("Checked by your own node only") when the person's node answered
+    /// alone; `None` otherwise. The UI says who it trusted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub source_key: Option<String>,
 }
 
 /// [`classify`] and what the sheet says for it, in one record.
@@ -377,12 +409,20 @@ pub fn verdict_of(outcome: SimOutcome) -> SimVerdict {
         SimOutcome::Reverts { .. } => "reverts",
         SimOutcome::NotOffered => "not_offered",
         SimOutcome::Unreachable => "unreachable",
+        SimOutcome::Unconfirmed { .. } => "unconfirmed",
     };
-    let recheck = outcome == SimOutcome::Unreachable;
+    // An unconfirmed answer is asked again too: the second node may answer
+    // next time, and the person's "Check again" asks both.
+    let recheck = matches!(
+        outcome,
+        SimOutcome::Unreachable | SimOutcome::Unconfirmed { .. }
+    );
     let (deltas, revert_reason) = match outcome {
         SimOutcome::Deltas { deltas } => (deltas, None),
         SimOutcome::Reverts { reason } => (Vec::new(), reason),
-        SimOutcome::NotOffered | SimOutcome::Unreachable => (Vec::new(), None),
+        SimOutcome::NotOffered | SimOutcome::Unreachable | SimOutcome::Unconfirmed { .. } => {
+            (Vec::new(), None)
+        }
     };
     SimVerdict {
         kind: kind.to_owned(),
@@ -392,6 +432,8 @@ pub fn verdict_of(outcome: SimOutcome) -> SimVerdict {
         notice_key: notice.map(|notice| notice.key.to_owned()),
         no_change_key,
         recheck,
+        source: None,
+        source_key: None,
     }
 }
 
@@ -429,13 +471,217 @@ pub fn one_line_per_balance(chain_id: u64, verdict: SimVerdict) -> SimVerdict {
     verdict
 }
 
-/// [`verdict`] over the reply's wire form ([`SimReply::from_json`]), as JSON
-/// — the wasm client's export. A record that cannot be written out is an
+// ---------------------------------------------------------------------------
+// R22: what moves, believed only when two independent nodes agree
+// ---------------------------------------------------------------------------
+
+/// "Only one node answered — Vela couldn't confirm what this does."
+pub const KEY_UNCONFIRMED: &str = "componentsUi.signing.simUnconfirmed";
+/// "Two nodes gave different answers about what this does."
+pub const KEY_DISAGREED: &str = "componentsUi.signing.simDisagreed";
+/// "Checked by your own node only" — "Only use my node" is on.
+pub const KEY_OWN_NODE: &str = "componentsUi.signing.simOwnNode";
+
+/// How far apart two honest nodes' figures for one balance may be and still
+/// agree, in basis points of the larger: two nodes a block apart price a
+/// busy pool differently. Within it the sheet shows the WORSE of the two
+/// (the larger outflow, the smaller inflow), so a node that shades a figure
+/// gains nothing by it; beyond it they disagree.
+pub const SIM_AGREE_BPS: u64 = 200;
+
+/// A signed decimal, read: (negative, magnitude). `None`: not a number.
+fn signed(delta: &str) -> Option<(bool, U256)> {
+    let t = delta.trim();
+    let (neg, digits) = match t.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, t.strip_prefix('+').unwrap_or(t)),
+    };
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let v = U256::from_str_radix(digits, 10).ok()?;
+    Some((neg && !v.is_zero(), v))
+}
+
+fn delta_key(d: &TrustAssetDelta) -> (u8, String) {
+    let kind = match d.kind {
+        TrustDeltaKind::Native => 0,
+        TrustDeltaKind::Erc20 => 1,
+    };
+    (
+        kind,
+        d.token.clone().unwrap_or_default().to_ascii_lowercase(),
+    )
+}
+
+/// The two nodes' moves agree ([`SIM_AGREE_BPS`]); `Some` with what the
+/// sheet shows — each balance's worse figure — or `None`.
+pub fn agreed_deltas(a: &[TrustAssetDelta], b: &[TrustAssetDelta]) -> Option<Vec<TrustAssetDelta>> {
+    use std::collections::BTreeMap;
+    /// Each balance once: (negative, magnitude, the delta as given).
+    type Moves = BTreeMap<(u8, String), (bool, U256, TrustAssetDelta)>;
+    let read = |list: &[TrustAssetDelta]| -> Option<Moves> {
+        let mut out = BTreeMap::new();
+        for d in list {
+            let (neg, v) = signed(&d.delta)?;
+            if v.is_zero() {
+                continue;
+            }
+            // One balance named twice: an answer nobody can read.
+            if out.insert(delta_key(d), (neg, v, d.clone())).is_some() {
+                return None;
+            }
+        }
+        Some(out)
+    };
+    let (x, y) = (read(a)?, read(b)?);
+    if x.len() != y.len() {
+        return None;
+    }
+    let mut merged = Vec::new();
+    for (key, (xn, xv, xd)) in &x {
+        let (yn, yv, yd) = y.get(key)?;
+        if xn != yn {
+            return None;
+        }
+        let (hi, lo) = if xv >= yv { (*xv, *yv) } else { (*yv, *xv) };
+        let spread = hi - lo;
+        // spread / hi ≤ bps / 10_000, without division.
+        if spread.saturating_mul(U256::from(10_000u64))
+            > hi.saturating_mul(U256::from(SIM_AGREE_BPS))
+        {
+            return None;
+        }
+        // The worse of the two: the larger outflow, the smaller inflow.
+        let worse = if *xn {
+            if xv >= yv {
+                xd
+            } else {
+                yd
+            }
+        } else if xv <= yv {
+            xd
+        } else {
+            yd
+        };
+        merged.push(worse.clone());
+    }
+    // In the first node's order.
+    let order: Vec<(u8, String)> = a.iter().map(delta_key).collect();
+    merged.sort_by_key(|d| {
+        order
+            .iter()
+            .position(|k| *k == delta_key(d))
+            .unwrap_or(usize::MAX)
+    });
+    Some(merged)
+}
+
+/// What a corroborated envelope's answer is, and who stands behind it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SimRead {
+    pub outcome: SimOutcome,
+    /// `Some` for an answer that moves something, or nothing: whether it is
+    /// believed (two nodes agreed, or the person's own node alone) or not.
+    pub standing: Option<Standing>,
+}
+
+/// The outcome of a corroborated envelope (`corroborate` module doc) for
+/// `user`: the first node's answer, believed for a checked answer only when
+/// a second, independent node's agrees ([`agreed_deltas`]) or the person's
+/// own node answered alone by their choice. A revert, a node that did not
+/// simulate and silence need no second word: none of them is a plain
+/// verdict ("… anyway" or a could-not-check stands either way).
+#[must_use]
+pub fn classify_envelope(envelope: &Value, user: &str) -> SimRead {
+    let first = classify(
+        SimReply::from_envelope(&corroborate::first_answer(envelope)),
+        user,
+    );
+    let SimOutcome::Deltas { deltas } = &first else {
+        return SimRead {
+            outcome: first,
+            standing: None,
+        };
+    };
+    if corroborate::own_node(envelope) {
+        return SimRead {
+            outcome: first.clone(),
+            standing: Some(Standing::OwnNode),
+        };
+    }
+    let Some(witness) = corroborate::witness_of(envelope) else {
+        return SimRead {
+            outcome: SimOutcome::Unconfirmed { disagreed: false },
+            standing: Some(Standing::Single),
+        };
+    };
+    match classify(SimReply::from_envelope(witness), user) {
+        SimOutcome::Deltas { deltas: theirs } => match agreed_deltas(deltas, &theirs) {
+            Some(merged) => SimRead {
+                outcome: SimOutcome::Deltas { deltas: merged },
+                standing: Some(Standing::Corroborated),
+            },
+            None => SimRead {
+                outcome: SimOutcome::Unconfirmed { disagreed: true },
+                standing: Some(Standing::Disagreed),
+            },
+        },
+        // The second node says it fails: the two disagree about what it does.
+        SimOutcome::Reverts { .. } => SimRead {
+            outcome: SimOutcome::Unconfirmed { disagreed: true },
+            standing: Some(Standing::Disagreed),
+        },
+        // The second node did not simulate: one node's word.
+        SimOutcome::NotOffered | SimOutcome::Unreachable | SimOutcome::Unconfirmed { .. } => {
+            SimRead {
+                outcome: SimOutcome::Unconfirmed { disagreed: false },
+                standing: Some(Standing::Single),
+            }
+        }
+    }
+}
+
+/// [`classify_envelope`] and what the sheet says for it, in one record —
+/// `source` and `source_key` say who stood behind a checked answer.
+#[must_use]
+pub fn verdict_of_envelope(envelope: &Value, user: &str) -> SimVerdict {
+    let read = classify_envelope(envelope, user);
+    let mut verdict = verdict_of(read.outcome);
+    if verdict.kind == "deltas" {
+        verdict.source = read.standing.map(|s| match s {
+            Standing::OwnNode => "own_node".to_owned(),
+            _ => "corroborated".to_owned(),
+        });
+        verdict.source_key =
+            (read.standing == Some(Standing::OwnNode)).then(|| KEY_OWN_NODE.to_owned());
+    }
+    verdict
+}
+
+/// [`verdict_of_envelope`] over the envelope's JSON text; text that is not
+/// JSON is an answer nobody can read.
+#[must_use]
+pub fn verdict_of_envelope_json(envelope_json: &str, user: &str) -> SimVerdict {
+    match serde_json::from_str::<Value>(envelope_json) {
+        Ok(envelope) => verdict_of_envelope(&envelope, user),
+        Err(_) => verdict(
+            SimReply::Error {
+                code: None,
+                message: None,
+            },
+            user,
+        ),
+    }
+}
+
+/// [`verdict_of_envelope`] over the reply's wire form (a corroborated
+/// envelope, R22), as JSON — the wasm client's export. A record that cannot be written out is an
 /// answer nobody can read: the could-not-check line, never an empty list
 /// that reads "nothing moves".
 #[must_use]
 pub fn verdict_json(user: &str, reply_json: &str) -> String {
-    serde_json::to_string(&verdict(SimReply::from_json(reply_json), user))
+    serde_json::to_string(&verdict_of_envelope_json(reply_json, user))
         .or_else(|_| {
             serde_json::to_string(&verdict(
                 SimReply::Error {

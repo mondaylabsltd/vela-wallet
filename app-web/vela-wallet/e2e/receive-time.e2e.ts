@@ -112,7 +112,7 @@ test('receipts stamped with the clock are put under the day their block was mine
 	const asked: { method: string; params: unknown[] }[] = [];
 	let answer: () => void = () => {};
 	const held = new Promise<void>((resolve) => (answer = resolve));
-	await page.route(/stub-rpc\.test\/rpc\/1$/, async (route) => {
+	await page.route(/(?:stub|witness)-rpc\.test\/rpc\/1$/, async (route) => {
 		const body = route.request().postDataJSON() as {
 			method?: string;
 			params?: unknown[];

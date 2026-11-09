@@ -384,6 +384,13 @@ struct SubmitVerdictTests {
             "chain_id": 100, "address": fixture.account, "credential_id": "",
             "max_fee_per_gas": NSNull(), "gas_fee_token": NSNull(),
             "quoted_fee": ["amount": "1000", "recipient": fixture.account] as [String: Any],
+            // R22 (review 1-5): what the core froze from these params at the
+            // confirm — the one request that may be signed.
+            "review": CoreJSON.string([
+                "kind": "calls", "chain_id": 100, "account": fixture.account,
+                "calls": [["to": fixture.account, "value": "1000", "data": "0x"]],
+                "fee": ["recipient": fixture.account],
+            ] as [String: Any]),
         ]
     }
 

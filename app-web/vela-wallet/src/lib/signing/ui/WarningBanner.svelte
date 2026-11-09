@@ -22,9 +22,15 @@
 		 */
 		recheck?: { label: string; checking: boolean };
 		onrecheck?: () => void;
+		/**
+		 * R22: under a simulation nobody independent confirmed — where a node
+		 * the person trusts is set, and the way to this network's RPC settings
+		 * (opened beside the sheet, so the request on it is not lost).
+		 */
+		ownNode?: { text: string; action: string; href?: string };
 	}
 
-	let { tone, text, verdict = false, room = false, recheck, onrecheck }: Props = $props();
+	let { tone, text, verdict = false, room = false, recheck, onrecheck, ownNode }: Props = $props();
 </script>
 
 <div
@@ -35,7 +41,13 @@
 >
 	<Icon icon={UTILITY_ICONS['triangle-alert']} size="base" />
 	{#if room}
-		<p data-room={text}></p>
+		<div class="words">
+			<p data-room={text}></p>
+			{#if ownNode}
+				<p class="hint" data-room={ownNode.text}></p>
+				<p class="again" data-room={ownNode.action}></p>
+			{/if}
+		</div>
 	{:else}
 		<!-- Not `.said`: that is the verdict place's own cell (`VerdictPlace`),
 		     which this banner is drawn inside — one name, one element. -->
@@ -45,6 +57,20 @@
 				<p class="again" role="status" aria-busy="true">{recheck.label}</p>
 			{:else if recheck && onrecheck}
 				<button type="button" class="again" data-tap onclick={onrecheck}>{recheck.label}</button>
+			{/if}
+			{#if ownNode}
+				<p class="hint">{ownNode.text}</p>
+				{#if ownNode.href}
+					<!-- eslint-disable svelte/no-navigation-without-resolve -- a resolve()d settings path (`ownNodeSettingsHref`), opened beside the sheet -->
+					<a
+						class="again"
+						href={ownNode.href}
+						target="_blank"
+						rel="noopener"
+						data-testid="signing-own-node-settings">{ownNode.action}</a
+					>
+					<!-- eslint-enable svelte/no-navigation-without-resolve -->
+				{/if}
 			{/if}
 		</div>
 	{/if}
@@ -95,6 +121,10 @@
 		font-weight: var(--weight-semibold);
 		text-decoration: underline;
 		cursor: pointer;
+	}
+
+	.hint {
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 	}
 
 	p.again {

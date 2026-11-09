@@ -32,7 +32,7 @@ import {
 	SIGN_IN_KEYS
 } from '$lib/i18n/engine.server';
 import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
-import { judgedByFreshMachine, simOutcome } from '$lib/core/kernels';
+import { holdToConfirmMs, judgedByFreshMachine, simOutcome } from '$lib/core/kernels';
 import type { SimVerdict } from '$lib/core/generated/SimVerdict';
 import {
 	SIM_SAID_KEYS,
@@ -42,6 +42,7 @@ import {
 } from './messages';
 import type { Block } from './model';
 import { errorString } from './sim-replies';
+import { agreed, witnessed } from './sim-witnessed';
 import { verdictRooms, type SimEnded } from './verdict';
 import { CLEAR_TERMS } from './terms';
 import { shortenAddress, type WalletIdentity } from '$lib/wallet/identity';
@@ -219,6 +220,19 @@ const DECODED: ClearSigningView = {
  */
 function requestBlocks(model: { blocks: Block[] }): Block[] {
 	return model.blocks.filter((block) => block.kind !== 'verdict');
+}
+
+/**
+ * R22: a simulation two independent nodes agreed on, under which nothing of
+ * the person's moves — a transaction Vela checked, so its confirm is plain.
+ * Without one a transaction is unread and signs only "… anyway".
+ */
+function checked(chainId = 100): SimEnded {
+	const verdict = simOutcome(
+		identity.address,
+		witnessed(JSON.stringify({ result: [{ calls: [{ status: '0x1', logs: [] }] }] }))
+	)!;
+	return { verdict, judged: judgedByFreshMachine(identity.address, chainId, verdict.deltas) };
 }
 
 function inputs(over: Partial<SigningLiveInputs> = {}): SigningLiveInputs {
@@ -1582,7 +1596,7 @@ describe('the confirm control says a phrase, never a template', () => {
 		// put its own placeholder on screen — a person read "Slide to confirm ·
 		// Slide to confirm · {{action}}" the first time a real dApp request
 		// reached the sheet (spec 027). Same class as 026's `{{bytes}}`.
-		const model = buildSigningModel(inputs())!;
+		const model = buildSigningModel(inputs({ sim: checked() }))!;
 		expect(model.confirm.action).not.toContain('{{');
 		expect(model.confirm.action).toBe(m.confirmPlain);
 	});
@@ -2171,7 +2185,9 @@ describe("the wallet's own backup, as the core reads it", () => {
 
 	it('names the network, the address and the keys in the reader’s words, and confirms with the intent', () => {
 		const zh = resolveSigningMessages('zh');
-		const model = buildSigningModel(inputs({ m: zh, sign: backup(true), clear: coreView() }))!;
+		const model = buildSigningModel(
+			inputs({ m: zh, sign: backup(true), clear: coreView(), sim: checked(1) })
+		)!;
 		// The intent is the header's headline, and is not said again below it.
 		// The core grades it safe; the headline keeps the title's ink for that.
 		expect(model.headline).toEqual({ text: zh.terms.intentBackUpPublicKeys, tone: 'success' });
@@ -2259,7 +2275,9 @@ describe('a plain send is a send (G14)', () => {
 	it('−0.001 xDAI to the recipient: "Send", the amount card, the party, "Confirm send"', () => {
 		const clear = coreView('0x38d7ea4c68000');
 		expect(clear.surface).toBe('plain_send');
-		const model = buildSigningModel(inputs({ sign: tx('0x38d7ea4c68000'), clear }))!;
+		const model = buildSigningModel(
+			inputs({ sign: tx('0x38d7ea4c68000'), clear, sim: checked() })
+		)!;
 		expect(requestBlocks(model)).toEqual([
 			{ kind: 'intent', text: m.intentSend, tone: 'neutral' },
 			{
@@ -2283,7 +2301,7 @@ describe('a plain send is a send (G14)', () => {
 	it('zero moves nothing: the card stays, no minus sign, a neutral Confirm (RC3)', () => {
 		const clear = coreView('0x0');
 		expect(clear.surface).toBe('plain_send');
-		const model = buildSigningModel(inputs({ sign: tx('0x0'), clear }))!;
+		const model = buildSigningModel(inputs({ sign: tx('0x0'), clear, sim: checked() }))!;
 		const amount = model.blocks.find((b) => b.kind === 'amount');
 		expect(amount).toMatchObject({ line: { sign: '', value: '0', symbol: 'xDAI' } });
 		expect(model.confirm.action).toBe(m.confirmPlain);
@@ -2504,7 +2522,7 @@ describe('a batch shows every call (089 S1)', () => {
 			{ to: B, value: '0xde0b6b3a7640000' }
 		]);
 		const clear = coreView(sign);
-		const model = buildSigningModel(inputs({ sign, clear }))!;
+		const model = buildSigningModel(inputs({ sign, clear, sim: checked() }))!;
 		const all = text(model.blocks).toLowerCase();
 		expect(all).toContain(A.toLowerCase());
 		expect(all).toContain(B.toLowerCase());
@@ -3370,7 +3388,7 @@ describe('the simulation’s verdict is drawn in its place (the web signing verd
 	const USDC = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
 	const topic = (address: string) => '0x' + address.slice(2).toLowerCase().padStart(64, '0');
 	const answered = (...calls: object[]) => JSON.stringify({ result: [{ calls }] });
-	const verdictOf = (reply: string) => simOutcome(USER, reply)!;
+	const verdictOf = (reply: string) => simOutcome(USER, agreed(reply))!;
 	/** A simulation that has ended, as the host holds it: a check's moves judged by the real machine. */
 	const ended = (verdict: SimVerdict | null): SimEnded => ({
 		verdict,
@@ -3464,8 +3482,10 @@ describe('the simulation’s verdict is drawn in its place (the web signing verd
 			// One block in the place, and the same rooms: the place is as tall as it was.
 			expect(placeOf(model)!.inner, sim.kind).toHaveLength(1);
 			expect(placeOf(model)!.rooms, sim.kind).toEqual(placeOf(before)!.rooms);
-			// A verdict informs; the gate is the core's and is not touched by it.
-			expect(model.confirm, sim.kind).toEqual(before.confirm);
+			// A verdict informs; the gate is the core's. R22: the verdict now
+			// says how hard the confirm is (a check plain, anything else "…
+			// anyway", held) — it never shuts or opens it.
+			expect(model.confirm.enabled, sim.kind).toBe(before.confirm.enabled);
 			expect(model.fee, sim.kind).toEqual(before.fee);
 		}
 	});
@@ -3792,25 +3812,31 @@ describe('the simulation’s verdict: waited for, and said when it could not be 
 	const NOTHING_MOVES = ended(
 		simOutcome(
 			identity.address,
-			JSON.stringify({ result: [{ calls: [{ status: '0x1', logs: [] }] }] })
+			agreed(JSON.stringify({ result: [{ calls: [{ status: '0x1', logs: [] }] }] }))
 		)!
 	);
 	const REVERTS = ended(
 		simOutcome(
 			identity.address,
-			JSON.stringify({
-				result: [{ calls: [{ status: '0x0', error: { code: 3, message: 'no' } }] }]
-			})
+			agreed(
+				JSON.stringify({
+					result: [{ calls: [{ status: '0x0', error: { code: 3, message: 'no' } }] }]
+				})
+			)
 		)!
 	);
 	/** The three answers that are no check: the node does not offer it, says what nobody can read, or nobody answered. */
 	const NOT_OFFERED = simOutcome(
 		identity.address,
-		JSON.stringify({ error: { code: -32601, message: 'the method eth_simulateV1 does not exist' } })
+		agreed(
+			JSON.stringify({
+				error: { code: -32601, message: 'the method eth_simulateV1 does not exist' }
+			})
+		)
 	)!;
 	const UNREADABLE = simOutcome(
 		identity.address,
-		JSON.stringify({ result: [{ calls: [{ status: '0x2', logs: [] }] }] })
+		agreed(JSON.stringify({ result: [{ calls: [{ status: '0x2', logs: [] }] }] }))
 	)!;
 	const UNREACHABLE = simOutcome(identity.address, JSON.stringify({ unreachable: true }))!;
 	const NOT_CHECKED = [NOT_OFFERED, UNREADABLE, UNREACHABLE];
@@ -4088,6 +4114,113 @@ describe('typed data nobody describes reads as a structured message (dapp-9)', (
 			kind: 'warning',
 			tone: 'danger',
 			text: m.warnHiddenChars
+		});
+	});
+});
+
+/**
+ * R22 (review 1-3): how hard the confirm is — the core's posture
+ * (`signConfirmState(… sim, refuseBlind)` → `anyway`, `danger`, `hold_ms`),
+ * drawn: a request Vela checked is a plain press; anything it could not read
+ * (one node's word, no verdict, a node that does not simulate, a revert) is
+ * "Sign anyway" in the danger style and HELD; "Refuse blind signing" refuses
+ * every such request with the core's line.
+ */
+describe('R22: the confirm’s friction is the core’s', () => {
+	const USER = identity.address;
+	const NOTHING = JSON.stringify({ result: [{ calls: [{ status: '0x1', logs: [] }] }] });
+	const endedOf = (reply: string): SimEnded => {
+		const verdict = simOutcome(USER, reply)!;
+		return {
+			verdict,
+			judged:
+				verdict.kind === 'deltas'
+					? judgedByFreshMachine(USER, REQUEST.chain_id, verdict.deltas)
+					: null
+		};
+	};
+	const BLIND_KEY = 'componentsUi.signing.confirmBlock.blindRefused';
+
+	it('a check two independent nodes agree on: a plain press, nothing held', () => {
+		const model = buildSigningModel(inputs({ sim: endedOf(witnessed(NOTHING)) }))!;
+		expect(model.confirm.enabled).toBe(true);
+		expect(model.confirm.action).not.toBe(m.certain.signAnyway);
+		expect(model.confirm.danger).toBeUndefined();
+		expect(model.confirm.holdMs).toBeUndefined();
+	});
+
+	it('one node’s word, a revert, a node that does not simulate, nobody: "Sign anyway", red, held', () => {
+		for (const reply of [
+			NOTHING,
+			agreed(
+				JSON.stringify({
+					result: [{ calls: [{ status: '0x0', error: { code: 3, message: 'no' } }] }]
+				})
+			),
+			JSON.stringify({ error: { code: -32601, message: 'eth_simulateV1 does not exist' } }),
+			JSON.stringify({ unreachable: true })
+		]) {
+			const model = buildSigningModel(inputs({ sim: endedOf(reply) }))!;
+			expect(model.confirm.action, reply).toBe(m.certain.signAnyway);
+			expect(model.confirm.danger, reply).toBe(true);
+			expect(model.confirm.holdMs, reply).toBe(holdToConfirmMs());
+			expect(model.confirm.holdLabel).toBe(m.holdToConfirm);
+			expect(model.confirm.againLabel).toBe(m.confirmAgain);
+		}
+		expect(holdToConfirmMs()).toBe(1500);
+		expect(m.holdToConfirm).toBe('Hold to confirm');
+		expect(m.confirmAgain).toBe('Press again to confirm');
+	});
+
+	it('no verdict at all, past the core’s wait: unread — "… anyway", held', () => {
+		const model = buildSigningModel(
+			inputs({ sign: { ...OPEN_SIGN, sim_waited_out_key: SIM_COULD_NOT_CHECK_KEY } })
+		)!;
+		expect(model.confirm.enabled).toBe(true);
+		expect(model.confirm.action).toBe(m.certain.signAnyway);
+		expect(model.confirm.holdMs).toBe(1500);
+	});
+
+	it('while the core still waits for the verdict: shut, and plain — never a red flash', () => {
+		const model = buildSigningModel(inputs({ sign: { ...OPEN_SIGN, sim_checking: true } }))!;
+		expect(model.confirm.enabled).toBe(false);
+		expect(model.confirm.action).not.toBe(m.certain.signAnyway);
+		expect(model.confirm.danger).toBeUndefined();
+		expect(model.confirm.holdMs).toBeUndefined();
+	});
+
+	it('"Refuse blind signing" on: an "… anyway" is refused, with the core’s line; a check is not', () => {
+		const refused = buildSigningModel(inputs({ sim: endedOf(NOTHING), refuseBlind: true }))!;
+		expect(refused.confirm.enabled).toBe(false);
+		expect(refused.confirm.note).toBe(m.confirmBlock[BLIND_KEY]);
+		expect(m.confirmBlock[BLIND_KEY]).toMatch(/Refuse blind signing/);
+		const checked = buildSigningModel(
+			inputs({ sim: endedOf(witnessed(NOTHING)), refuseBlind: true })
+		)!;
+		expect(checked.confirm.enabled).toBe(true);
+		// Off (the default): the same "… anyway" is offered, held.
+		const offered = buildSigningModel(inputs({ sim: endedOf(NOTHING) }))!;
+		expect(offered.confirm.enabled).toBe(true);
+	});
+
+	it('the unconfirmed verdict says where a trusted node is set, and opens that network’s settings', () => {
+		const model = buildSigningModel(
+			inputs({
+				sim: endedOf(NOTHING),
+				ownNodeHref: (chainId) => `/en/settings?network=${chainId}`
+			})
+		)!;
+		const place = model.blocks.find((b) => b.kind === 'verdict');
+		expect(place && place.kind === 'verdict' && place.inner[0]).toMatchObject({
+			kind: 'warning',
+			text: m.simUnconfirmed,
+			ownNode: {
+				text: m.ownNodeHint,
+				action: m.ownNodeAction,
+				href: `/en/settings?network=${REQUEST.chain_id}`
+			},
+			// One node may answer next time: "Check again" too.
+			recheck: { label: m.simRecheck, checking: false }
 		});
 	});
 });

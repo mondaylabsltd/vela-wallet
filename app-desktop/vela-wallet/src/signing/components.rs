@@ -1532,6 +1532,68 @@ pub fn confirm_button(
     crate::flows::panels::cta_button(CONFIRM_ID, theme, label, armed(enabled), action)
 }
 
+/// R22 (review 1-3): the confirm with the core's friction
+/// (`ConfirmState::anyway`, `danger`, `hold_ms`). Drawn in the danger fill
+/// when `danger` (the core's `anyway || danger`); held when `hold_ms > 0` —
+/// the one held confirm (`ui::hold_confirm`): press and hold, or two
+/// activations from the keyboard or assistive technology. A shut confirm,
+/// and a plain press, are [`confirm_button`] exactly as before.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the confirm, its friction and its act"
+)]
+pub fn gated_confirm_button(
+    theme: &Theme,
+    subject: SharedString,
+    label: SharedString,
+    enabled: bool,
+    danger: bool,
+    hold_ms: u32,
+    words: &crate::ui::HoldWords,
+    action: Option<crate::flows::panels::Click>,
+    cx: &gpui::App,
+) -> Div {
+    let Some(action) = action.filter(|_| enabled) else {
+        return confirm_button(theme, label, false, None);
+    };
+    if hold_ms == 0 && !danger {
+        return confirm_button(theme, label, true, Some(action));
+    }
+    let face = if danger {
+        crate::flows::components::danger_button(theme, label.clone())
+    } else {
+        crate::flows::components::accent_button(theme, label.clone())
+    };
+    if hold_ms == 0 {
+        // Danger, a plain press: the danger fill, the confirm's own hook.
+        use crate::ui::Accessible as _;
+        return div().flex().flex_col().child(
+            div()
+                .id(CONFIRM_ID)
+                .a11y_button(label)
+                .cursor_pointer()
+                .child(face)
+                .on_click(move |event, window, cx| action(event, window, cx)),
+        );
+    }
+    let action = std::rc::Rc::new(action);
+    let fire: crate::ui::hold_confirm::Fire = std::rc::Rc::new(move |window, cx| {
+        action(&gpui::ClickEvent::default(), window, cx);
+    });
+    crate::ui::held_confirm(
+        CONFIRM_ID,
+        subject,
+        theme,
+        face,
+        crate::ui::hold_fill(),
+        label,
+        hold_ms,
+        words,
+        fire,
+        cx,
+    )
+}
+
 /// The gas top-up's one action, "check again" (`treasuryBootstrap.retryBtn`):
 /// a plain button, armed on its own terms — it is not a signature, it is
 /// "I have sent it, look again", and the only way forward from a top-up.

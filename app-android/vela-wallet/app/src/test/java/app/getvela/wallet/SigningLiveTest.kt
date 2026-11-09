@@ -115,8 +115,18 @@ class SigningLiveTest {
     private fun plainModel(call: org.json.JSONObject) = run {
         val params = org.json.JSONArray().put(call).toString()
         val sign = SignView(surface = SignSurface.Sheet, request = SignRequestView("r1", "eth_sendTransaction", SignMethodKind.Transaction, params, "http://127.0.0.1:8137", null, 100, null), confirm_gate_open = true)
-        SigningLive.model(drawn, request(params), sign, clearOf(call), GuardView(), FeeView(confirm_fee_ready = true), ctx)
+        val clear = clearOf(call)
+        SigningLive.model(drawn, request(params), sign, clear, GuardView(), FeeView(confirm_fee_ready = true), ctx, confirm = checked(sign, clear))
     }
+
+    /**
+     * R22: the confirm over a simulation two independent nodes agreed on —
+     * what a test about the READING compares against ("Confirm send"); with
+     * no verdict, the core's posture is "Sign anyway" (pinned in
+     * SigningSimWaitTest / R22SigningTruthTest).
+     */
+    private fun checked(sign: SignView, clear: ClearSigningView, guard: GuardView = GuardView(), fee: FeeView = FeeView(confirm_fee_ready = true)) =
+        SigningLive.confirmState(sign, guard, clear, fee, null, app.getvela.wallet.feature.signing.core.SimDeltas.nothingMoves())
 
     /**
      * Spec 082 RC1 (G14): a dApp's plain value transfer is the CORE's verdict
@@ -407,9 +417,14 @@ class SigningLiveTest {
         assertFalse(blocked.confirmEnabled)
         val noFee = SigningLive.model(drawn, request(params), sign, clear, GuardView(), FeeView(confirm_fee_ready = false), ctx)
         assertFalse(noFee.confirmEnabled)
-        val blind = SigningLive.model(drawn, request(params), sign, clear, GuardView(), FeeView(confirm_fee_ready = true), ctx)
+        val blind = SigningLive.model(drawn, request(params), sign, clear, GuardView(), FeeView(confirm_fee_ready = true), ctx, confirm = checked(sign, clear))
         assertTrue(blind.blocks.any { it is SigningBlock.Warning })
         assertEquals(strings.t("componentsUi.signing.confirmLabel"), blind.confirmAction)
+        // R22: with no verdict of its own simulation it is "Sign anyway", held, in the danger style.
+        val unread = SigningLive.model(drawn, request(params), sign, clear, GuardView(), FeeView(confirm_fee_ready = true), ctx)
+        assertEquals(strings.t("componentsUi.signing.certain.signAnyway"), unread.confirmAction)
+        assertTrue(unread.confirmDanger)
+        assertEquals(uniffi.vela_core_uniffi.holdToConfirmMs().toInt(), unread.confirmHoldMs)
     }
 
     /**
@@ -809,9 +824,9 @@ class SigningLiveTest {
         // The room the sheet keeps for this verdict, and the board, are the
         // core's reading too (`simOutcome` over a clean run with no logs).
         val read = app.getvela.wallet.feature.signing.core.SimDeltas.nothingMoves()
-        assertEquals(SigningController.SimOutcome.Ready(emptyList(), noChangeKey = "componentsUi.signing.simResultNoChange"), read)
-        assertEquals(nothing, read)
-        assertEquals(read, SigningFixtures.verdict(SigningScreenState.CS62))
+        assertEquals(SigningController.SimOutcome.Ready(emptyList(), noChangeKey = "componentsUi.signing.simResultNoChange"), read.plain())
+        assertEquals(nothing.plain(), read.plain())
+        assertEquals(read.plain(), SigningFixtures.verdict(SigningScreenState.CS62).plain())
         // The key backup's board folds that line into its technical details.
         assertEquals(SigningRow(strings.t("componentsUi.signing.simResultLabel"), line), SigningFixtures.build(SigningScreenState.CS36, strings).tech.simResult)
     }
@@ -1009,7 +1024,11 @@ class SigningLiveTest {
         )
         assertEquals(SigningLive.simBlocks(judged(), ctx).single(), rooms[2])
         assertEquals("a swap's two rows", 2, (rooms[3] as SigningBlock.Balances).rows.size)
-        assertEquals(4, rooms.size)
+        // R22: one node's word, with how to check with a node the person trusts.
+        val oneNode = rooms[4] as SigningBlock.Warning
+        assertEquals(strings.t("componentsUi.signing.simUnconfirmed"), oneNode.text)
+        assertEquals(strings.t("componentsUi.signing.ownNodeHint"), oneNode.hint)
+        assertEquals(5, rooms.size)
 
         // Out: the place, nothing said in it.
         val waiting = sheet(request(params), SigningController.SimOutcome.Pending)
@@ -1204,6 +1223,7 @@ class SigningLiveTest {
         val sheet = SigningLive.model(
             drawn, own, sign, clear, GuardView(), FeeView(confirm_fee_ready = true),
             ctx.copy(strings = zh, chainName = "Ethereum", nativeSymbol = "ETH", chainId = 1),
+            confirm = checked(sign, clear),
         )
         fun term(leaf: String) = zh.t("componentsUi.signing.$leaf")
         val rows = sheet.blocks.filterIsInstance<SigningBlock.Rows>().single().rows
@@ -1593,7 +1613,8 @@ class SigningLiveTest {
         val params = """[{"version":"2.0.0","chainId":"0x64","calls":$calls}]"""
         val sign = SignView(surface = SignSurface.Sheet, request = SignRequestView("r1", "wallet_sendCalls", SignMethodKind.Batch, params, "http://127.0.0.1:8137", null, 100, null), confirm_gate_open = true)
         val incoming = IncomingRequest("r1", "wallet_sendCalls", params, "http://127.0.0.1:8137", "tab-1", 100)
-        SigningLive.model(drawn, incoming, sign, clear ?: clearOf("wallet_sendCalls", params), guard, FeeView(confirm_fee_ready = true), ctx)
+        val read = clear ?: clearOf("wallet_sendCalls", params)
+        SigningLive.model(drawn, incoming, sign, read, guard, FeeView(confirm_fee_ready = true), ctx, confirm = checked(sign, read, guard))
     }
 
     /**

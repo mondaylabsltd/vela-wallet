@@ -164,6 +164,28 @@ pub fn classify_owner_answer(answer: &SafeOwnerAnswer) -> OwnerReading {
     }
 }
 
+/// R22 (SEC-PARENT-3): what a corroborated read says — the first node's
+/// answer, and a second, independent node's. "Owner" and "unreadable" need no
+/// second word (a lie can only refuse). "Not an owner" and "not a Safe" clear
+/// a request, so they stand only when the second node read the same — or when
+/// the person's own node answered alone, by their choice. One node's "no",
+/// or two that differ, is unreadable: refused, "couldn't check".
+#[must_use]
+pub fn classify_corroborated(
+    answer: &SafeOwnerAnswer,
+    witness: Option<&SafeOwnerAnswer>,
+    own_node: bool,
+) -> OwnerReading {
+    let first = classify_owner_answer(answer);
+    if matches!(first, OwnerReading::Owner | OwnerReading::Unreadable) || own_node {
+        return first;
+    }
+    match witness.map(classify_owner_answer) {
+        Some(second) if second == first => first,
+        _ => OwnerReading::Unreadable,
+    }
+}
+
 /// The calldata of `isOwner(account)`.
 pub fn is_owner_calldata(account: &str) -> String {
     let body = account.trim().trim_start_matches("0x").to_ascii_lowercase();

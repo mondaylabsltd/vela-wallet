@@ -131,6 +131,16 @@ struct MsReviewBody: View {
         }
     }
 
+    /// R22 (2a): the core's line about who checked what moves
+    /// (`simulation.source_key` — the person's own node alone); `nil` for a
+    /// check two independent nodes agreed on, or none.
+    @MainActor
+    static func sourceLine(_ review: MsJSON, words: MsWords) -> String? {
+        guard let key = review["simulation"]?["source_key"]?.string, !key.isEmpty else { return nil }
+        let text = words.loc.t(key)
+        return text == key ? nil : text
+    }
+
     @ViewBuilder private var moves: some View {
         let sim = review["simulation"]
         let deltas = sim?["deltas"]?.array ?? []
@@ -154,9 +164,16 @@ struct MsReviewBody: View {
                 if review["simulationSource"]?.string == "probe" {
                     MsNote(text: words.t("review.movesProbe"))
                 }
+                // R22: checked by the person's own node alone — said quietly.
+                if let source = Self.sourceLine(review, words: words) {
+                    MsNote(text: source, identifier: "multisig.review.simSource")
+                }
             }
         case .line(let key, let reason, let tone) where tone == .neutral:
             MsNote(text: reason.map { words.loc.t(key, vars: ["reason": $0]) } ?? words.loc.t(key))
+            if let source = Self.sourceLine(review, words: words) {
+                MsNote(text: source, identifier: "multisig.review.simSource")
+            }
         case .line(let key, let reason, let tone):
             MsNote(
                 text: reason.map { words.loc.t(key, vars: ["reason": $0]) } ?? words.loc.t(key),
@@ -343,13 +360,27 @@ struct MsReviewBody: View {
                 MsNote(text: source)
             }
         case "unavailable":
-            MsNote(text: words.t("review.stateUnread", ["network": network]), tone: .warning, identifier: "multisig.review.state.unread")
+            MsNote(text: Self.unreadStateLine(verdict, network: network, words: words), tone: .warning,
+                   identifier: "multisig.review.state.unread")
         case "withheld":
             // r9-9: refused for another reason, said once above — nothing in
             // the guard's place (no "changes nothing" beside "won't sign").
             EmptyView()
         default:
             EmptyView()
+        }
+    }
+
+    /// The state guard's could-not-check line, by the core's reason (R22):
+    /// one node's word (`uncorroborated`) and two that disagree
+    /// (`disagreed`) are said as what they are; any other reason is
+    /// "couldn't read" as before.
+    @MainActor
+    static func unreadStateLine(_ verdict: MsJSON?, network: String, words: MsWords) -> String {
+        switch verdict?["reason"]?.string {
+        case "uncorroborated": words.t("review.stateUnconfirmed", ["network": network])
+        case "disagreed": words.t("review.stateDisagreed", ["network": network])
+        default: words.t("review.stateUnread", ["network": network])
         }
     }
 

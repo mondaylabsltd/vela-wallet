@@ -31,7 +31,8 @@
       "advanced": "Advanced",
       "community": "Community",
       "privacy": "Privacy",
-      "developer": "Developer"
+      "developer": "Developer",
+      "security": "Security"
     },
     "account": {
       "switch": "Switch account",
@@ -319,6 +320,10 @@
       "title": "Service temporarily unavailable",
       "subtitle": "The passkey index can’t be reached, and both creating and signing in need it.",
       "editEndpoint": "Change index service address"
+    },
+    "refuseBlind": {
+      "title": "Refuse blind signing",
+      "subtitle": "Refuse any request Vela can’t read or check in full, instead of offering “… anyway”."
     }
   },
   "time": {

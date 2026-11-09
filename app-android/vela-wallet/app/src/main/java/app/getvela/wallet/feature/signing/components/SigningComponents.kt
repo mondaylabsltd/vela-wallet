@@ -476,9 +476,35 @@ fun SigningWarning(
     /** dapp-15: "Check again" (or, while it runs, "Checking again…") under the line. */
     recheck: app.getvela.wallet.feature.signing.SigningBlock.Recheck? = null,
     onRecheck: () -> Unit = {},
+    /**
+     * R22: under a check one node answered alone — how to check with a node
+     * the person trusts (`componentsUi.signing.ownNodeHint`); a tap opens
+     * this network's RPC settings, where "Only use my node" is ([onHint]).
+     */
+    hint: String? = null,
+    onHint: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     val danger = tone == SigningTone.Danger
+    if (hint != null) {
+        Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(VelaSpacing.sm)) {
+            SigningWarning(tone, text, recheck = recheck, onRecheck = onRecheck)
+            Text(
+                text = hint,
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+                textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(VelaRadius.sm))
+                    .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onHint)
+                    .padding(vertical = VelaSpacing.xs)
+                    .testTag(app.getvela.wallet.feature.signing.OWN_NODE_HINT_TAG),
+            )
+        }
+        return
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -763,6 +789,8 @@ fun SigningBalances(
     note: String?,
     noteTone: SigningTone,
     modifier: Modifier = Modifier,
+    /** R22: the core's `source_key` line ("Checked by your own node only"), or `null`. */
+    source: String? = null,
 ) {
     val colors = VelaTheme.colors
     Column(
@@ -817,6 +845,19 @@ fun SigningBalances(
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.base,
                 modifier = Modifier.padding(top = VelaSpacing.md, bottom = VelaSpacing.md),
+            )
+        }
+        // R22: who stood behind the check, when it was the person's own node
+        // alone ("Checked by your own node only") — quiet, under the rows.
+        source?.let {
+            Text(
+                text = it,
+                color = colors.fgSubtle,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+                modifier = Modifier
+                    .padding(top = VelaSpacing.xs, bottom = VelaSpacing.md)
+                    .testTag(app.getvela.wallet.feature.signing.SIM_SOURCE_TAG),
             )
         }
     }
@@ -1161,6 +1202,11 @@ fun HandoffCard(
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
     onTrust: () -> Unit = {},
+    /** R22: the sheet's confirm friction ([app.getvela.wallet.feature.signing.SigningScreenModel.confirmHoldMs]). */
+    holdMs: Int = 0,
+    danger: Boolean = false,
+    holdHint: String = "",
+    confirmAgain: String = "",
 ) {
     val colors = VelaTheme.colors
     Column(
@@ -1221,9 +1267,15 @@ fun HandoffCard(
             }
         }
         // Opening the page is where this signature is given (web HandoffCard `value`).
-        app.getvela.wallet.core.designsystem.components.VelaValueButton(
+        // R22: Open IS the sheet's confirm (spec 102 D4) — the same friction:
+        // "… anyway" / danger in the danger style, held for `hold_ms`.
+        app.getvela.wallet.core.designsystem.components.VelaHoldToConfirmButton(
             text = model.open,
-            onClick = onOpen,
+            onConfirm = onOpen,
+            holdMs = holdMs,
+            holdHint = holdHint,
+            confirmAgain = confirmAgain,
+            danger = danger,
             enabled = enabled,
             modifier = Modifier.fillMaxWidth(),
         )

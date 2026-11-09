@@ -12,16 +12,22 @@
 	 */
 	import Button from '$lib/ui/Button.svelte';
 	import type { ReviewStateMessages } from '../messages';
-	import { reasonWords, type MultisigSignDoor } from '../core/review-door';
+	import { BLIND_REFUSED_KEY, reasonWords, type MultisigSignDoor } from '../core/review-door';
 
 	let {
 		m,
 		door,
+		blindRefused,
 		network = '',
 		onRetry
 	}: {
 		m: ReviewStateMessages;
 		door: MultisigSignDoor;
+		/**
+		 * R22: the door shut by "Refuse blind signing"
+		 * (`home.multisig.review.blindRefused`), said where the unchecked line goes.
+		 */
+		blindRefused?: string;
 		/** The review's network, by name (r14-13: "Couldn't reach {{network}}…"). */
 		network?: string;
 		/** Sends `review_again`. */
@@ -42,6 +48,10 @@
 				>{m.tryAgain}</Button
 			>
 		{/if}
+	</div>
+{:else if door.reason_key === BLIND_REFUSED_KEY && blindRefused}
+	<div class="unchecked" role="alert" data-testid="review-blind-refused">
+		<p class="why">{blindRefused}</p>
 	</div>
 {:else if door.reason_key}
 	<div class="unchecked" role="alert" data-testid="review-unchecked">

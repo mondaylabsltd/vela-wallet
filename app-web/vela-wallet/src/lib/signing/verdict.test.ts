@@ -41,6 +41,7 @@ import {
 	reverted,
 	transferLog
 } from './sim-replies';
+import { agreed, witnessed } from './sim-witnessed';
 import {
 	USUAL_MOVES,
 	balanceRows,
@@ -79,9 +80,13 @@ const ctx = (over: Partial<VerdictContext> = {}): VerdictContext => ({
 	...over
 });
 
-/** A node's reply, read by the core and — for a check — judged by a real machine. */
+/**
+ * A node's reply — R22: as two independent nodes gave it alike (the
+ * corroborated envelope) — read by the core and, for a check, judged by a
+ * real machine.
+ */
 function ended(reply: string, facts: TrustFacts = FACTS): SimEnded {
-	const verdict = simOutcome(ME, reply);
+	const verdict = simOutcome(ME, agreed(reply));
 	return {
 		verdict,
 		judged: verdict?.kind === 'deltas' ? judgedByFreshMachine(ME, 1, verdict.deltas, facts) : null
@@ -246,7 +251,7 @@ describe('an unverified token is a direction and never a figure', () => {
 		expect(balanceRows([judged('still')], ctx())).toEqual([]);
 
 		const view = (judgments: TrustSimJudgment[]) => ({
-			verdict: simOutcome(ME, ran(nativeLog(ME, SITE, 1n)))!,
+			verdict: simOutcome(ME, witnessed(ran(nativeLog(ME, SITE, 1n))))!,
 			judged: {
 				address: ME.toLowerCase(),
 				chain_id: 1,
@@ -427,6 +432,13 @@ describe('what the place holds before a verdict, and the room it keeps', () => {
 		const rooms = verdictRooms(m);
 		expect(rooms).toEqual([
 			CAUTION,
+			// R22: one node's word — the caution and where a trusted node is set.
+			{
+				kind: 'warning',
+				tone: 'caution',
+				text: m.simUnconfirmed,
+				ownNode: { text: m.ownNodeHint, action: m.ownNodeAction }
+			},
 			{
 				kind: 'warning',
 				tone: 'danger',
@@ -462,6 +474,21 @@ describe('what the place holds before a verdict, and the room it keeps', () => {
 	it('the rooms are in the reader’s language, at the sentences’ own length', () => {
 		const rooms = verdictRooms(zh);
 		expect(rooms[0]).toMatchObject({ text: zh.warnSimUnavailable });
-		expect(rooms[2]).toMatchObject({ note: '无资产变动' });
+		expect(rooms[1]).toMatchObject({ text: zh.simUnconfirmed });
+		expect(rooms[3]).toMatchObject({ note: '无资产变动' });
+	});
+});
+
+describe('R22: the room an own-node check keeps', () => {
+	it('on a network read through the person’s own node alone, the cards keep the line under them', () => {
+		const plain = verdictRooms(m);
+		const own = verdictRooms(m, true);
+		expect(own).toHaveLength(plain.length);
+		expect(own.filter((room) => room.kind === 'balances')).toEqual(
+			plain
+				.filter((room) => room.kind === 'balances')
+				.map((room) => ({ ...room, source: m.simOwnNode }))
+		);
+		expect(plain.some((room) => 'source' in room)).toBe(false);
 	});
 });

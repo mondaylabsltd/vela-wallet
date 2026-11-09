@@ -1442,9 +1442,18 @@ for (let i = 1; i < PATHS.length; i++) {
 //   testDomainNotAssociated` (R21-3: a test build's passkey domain not set
 //   up, `passkey_error_words_on`). 2301 + 14 leaves + 3 branches = 2318
 //   paths, 2195 leaves, 123 branches.
-if (PATHS.length !== 2318) fail(`expected 2318 paths (2195 leaf + 123 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2195) fail(`expected 2195 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 123) fail(`expected 123 branch paths, got ${branchSet.size}`);
+// 2329 (Round 22, signing truth, §36, 2026-11-08): +
+//   `componentsUi.signing.{simUnconfirmed, simDisagreed}` (what moves, said
+//   when one node answered or two independent ones disagree — never "No asset
+//   changes" on one node's word), `simOwnNode` ("Checked by your own node
+//   only" — "Only use my node" said), `ownNodeHint`, `confirmAgain` (the
+//   accessible second press of a held confirm), `confirmBlock.blindRefused`;
+//   `settings.refuseBlind.{title, subtitle}` (+1 branch) and
+//   `settings.sections.security`; `settingsModals.network.onlyMineTrust`.
+//   2318 (§37) + 10 leaves + 1 branch = 2329 paths, 2205 leaves, 124 branches.
+if (PATHS.length !== 2329) fail(`expected 2329 paths (2205 leaf + 124 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2205) fail(`expected 2205 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 124) fail(`expected 124 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
 // 579 (round 6, the outside owner's connect page, 2026-10-30): + 17
@@ -1572,7 +1581,12 @@ if (branchSet.size !== 123) fail(`expected 123 branch paths, got ${branchSet.siz
   //   Hide,Warning}` (the proposals no member vouches for, behind a
   //   disclosure) and `home.multisig.authority.ownerNotBound` (a contract
   //   member nothing binds to its own genesis). 693 + 4 = 697.
-  const pins = { multisig: 697 };
+  // 700 (Round 22, signing truth, §36, 2026-11-08): + `home.multisig.review.
+  //   {stateUnconfirmed, stateDisagreed}` (the state diff's could-not-check,
+  //   said as one node's word or two that disagree) and `blindRefused` ("Refuse
+  //   blind signing" on: the review that signs only "… anyway" is refused).
+  //   697 (§37) + 3 = 700.
+  const pins = { multisig: 700 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

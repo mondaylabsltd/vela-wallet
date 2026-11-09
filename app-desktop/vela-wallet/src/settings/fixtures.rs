@@ -27,6 +27,9 @@ pub enum SettingsPage {
     Account,
     Appearance,
     Localization,
+    /// R22 (review 1-3): "Refuse blind signing" — high in the column, above
+    /// the networks and services, where a person looking for it finds it.
+    Security,
     Networks,
     Endpoints,
     /// The AI agent (spec 103): whether this wallet answers one through a
@@ -50,10 +53,11 @@ pub enum SettingsPage {
 impl SettingsPage {
     /// The nav column, in order. One array so the rail and the tests can never
     /// disagree about what the section contains.
-    pub const ALL: [SettingsPage; 11] = [
+    pub const ALL: [SettingsPage; 12] = [
         SettingsPage::Account,
         SettingsPage::Appearance,
         SettingsPage::Localization,
+        SettingsPage::Security,
         SettingsPage::Networks,
         SettingsPage::Endpoints,
         SettingsPage::Agent,
@@ -72,6 +76,7 @@ impl SettingsPage {
             SettingsPage::Account => "account",
             SettingsPage::Appearance => "appearance",
             SettingsPage::Localization => "localization",
+            SettingsPage::Security => "security",
             SettingsPage::Networks => "networks",
             SettingsPage::Endpoints => "endpoints",
             SettingsPage::Agent => "agent",
@@ -88,6 +93,7 @@ impl SettingsPage {
             SettingsPage::Account => Icon::UsersRound,
             SettingsPage::Appearance => Icon::Sun,
             SettingsPage::Localization => Icon::Coins,
+            SettingsPage::Security => Icon::Lock,
             SettingsPage::Networks => Icon::Network,
             SettingsPage::Endpoints => Icon::Zap,
             SettingsPage::Agent => Icon::Link2,
@@ -104,6 +110,7 @@ impl SettingsPage {
             SettingsPage::Account => s.nav_account.clone(),
             SettingsPage::Appearance => s.nav_appearance.clone(),
             SettingsPage::Localization => s.nav_localization.clone(),
+            SettingsPage::Security => s.nav_security.clone(),
             SettingsPage::Networks => s.nav_networks.clone(),
             SettingsPage::Endpoints => s.nav_endpoints.clone(),
             SettingsPage::Agent => s.nav_agent.clone(),

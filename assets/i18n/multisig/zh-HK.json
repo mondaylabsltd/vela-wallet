@@ -729,7 +729,10 @@
      "tryAgain": "重試",
      "unchecked": "Vela 無法核對呢筆交易會改變乜嘢。",
      "chainUnread": "無法連接 {{network}}，未能讀取呢筆交易。"
-    }
+    },
+    "stateUnconfirmed": "{{network}} 上只有一個節點給出了結果，Vela 無法確認執行後多簽會發生甚麼變化。只有 Vela 對這筆交易的解讀成立。",
+    "stateDisagreed": "{{network}} 上兩個獨立節點對執行後多簽的變化給出了不同的結果。只有 Vela 對這筆交易的解讀成立。",
+    "blindRefused": "Vela 不會在這裡簽署：你開啟了「拒絕盲簽」，而這筆交易有部分內容無法檢查。可在設定中更改。"
    },
    "notify": {
     "title": "通知",

@@ -16,7 +16,8 @@
       "onlyMine": "Usar só o meu nó",
       "onlyMineHint": "Nada sobre sua conta vai para nós públicos. Se o seu nó parar de responder, esta rede não poderá ser lida até ele voltar.",
       "hideBody": "Ela sai da sua lista de redes. As configurações dela são mantidas, e Adicionar rede a traz de volta quando quiser.",
-      "moreNetworks": "Também compatíveis, fora da sua lista: {{names}}. Adicione em Adicionar rede."
+      "moreNetworks": "Também compatíveis, fora da sua lista: {{names}}. Adicione em Adicionar rede.",
+      "onlyMineTrust": "Ativado, a Vela confia só no seu nó para as verificações de segurança, e avisa. Desativado, uma verificação só vale quando dois nós independentes concordam."
     },
     "account": {
       "modalTitle": "Contas",

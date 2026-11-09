@@ -15,7 +15,7 @@ import type { Block } from '$lib/signing/model';
 import type { SimEnded } from '$lib/signing/verdict';
 import { concernBlocks, readingBlocks, readingTitle, type ReadingContext } from './reading-blocks';
 import {
-	multisigReview,
+	multisigReview as coreReview,
 	type CriticalWrite,
 	type MultisigReviewOut,
 	type ReviewInput,
@@ -35,6 +35,27 @@ import {
 	writeLine,
 	type ReviewContext
 } from './review-blocks';
+
+/**
+ * R22: the captured answers as an honest network gives a corroborated read —
+ * each witnessed alike by a second, independent node (the core's own replay,
+ * `multisig_review_vectors.rs` `honest`).
+ */
+function honest(input: ReviewInput): ReviewInput {
+	const out = { ...(input as unknown as Record<string, unknown>) };
+	for (const key of ['trace', 'probe']) {
+		const read = out[key];
+		if (read !== null && typeof read === 'object') out[key] = { ...read, witness: read };
+	}
+	if (typeof out.simReply === 'string') {
+		const reply = JSON.parse(out.simReply) as Record<string, unknown>;
+		if ('result' in reply || 'error' in reply) {
+			out.simReply = JSON.stringify({ ...reply, witness: reply });
+		}
+	}
+	return out as unknown as ReviewInput;
+}
+const multisigReview = (input: ReviewInput): MultisigReviewOut => coreReview(honest(input));
 
 const m = resolveMultisigMessages('en');
 const signing = resolveSigningMessages('en');
@@ -337,7 +358,10 @@ describe('the core reads every call itself, the same on every platform (r8-1)', 
 			const review = reviewOf(c);
 			// The review carries the very reading the shared vectors pin.
 			expect(review.reading).toEqual(c.expect.reading);
-			if (!c.expect.refused) expect(review.sign.anyway).toBe(c.expect.anyway);
+			// R22: the reading's own "… anyway" stands — and with either check
+			// unread (this input gives no state source) it signs only "… anyway".
+			const stateRead = review.state.verdict.kind !== 'unavailable';
+			if (!c.expect.refused) expect(review.sign.anyway).toBe(c.expect.anyway || !stateRead);
 			else expect(review.sign.allowed).toBe(false);
 			// Every call is drawn; none as an empty review.
 			const blocks = readingBlocks(review, readingCtx);

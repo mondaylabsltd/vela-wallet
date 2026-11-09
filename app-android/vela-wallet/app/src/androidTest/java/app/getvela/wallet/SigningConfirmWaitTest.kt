@@ -192,8 +192,10 @@ class SigningConfirmWaitTest {
         compose.waitForIdle()
         assertEquals(listOf(couldNotCheck), texts(VERDICT_SHOWN_TAG))
         assertTrue("a line under an open confirm: ${texts(FOOTER_TAG)}", texts(FOOTER_TAG).none { it == checkingLine || it == couldNotCheck })
-        // Open now: one tap confirms.
-        compose.onNodeWithTag(CONFIRM_TAG).performClick()
+        // Open now — R22: a verdict waited out is a check not read, so the
+        // confirm is "… anyway", held: a tap does nothing, the hold's
+        // accessible path (press twice) confirms once.
+        compose.onNodeWithTag(CONFIRM_TAG).confirmPress()
         compose.waitForIdle()
         assertEquals(1, taps)
         // And the test can see a sheet move: on a screen the sheet fits,
@@ -277,7 +279,13 @@ class SigningConfirmWaitTest {
         compose.waitForIdle()
         compose.onNodeWithTag(CONFIRM_TAG).assertIsEnabled()
         compose.onNodeWithText(checkingLine).assertDoesNotExist()
-        assertEquals("nothing is said under an open confirm", 1, texts(FOOTER_TAG).size)
+        // R22: a verdict waited out is a check not read — "Sign anyway", held,
+        // and the one thing said under it is how to press it.
+        assertEquals(
+            "nothing but the hold's hint is said under an open confirm",
+            listOf(words.t("componentsUi.signing.certain.signAnyway"), words.t("componentsUi.signing.holdToConfirm")),
+            texts(FOOTER_TAG),
+        )
         assertEquals(listOf(words.t("componentsUi.signing.simUnavailableWarning")), texts(VERDICT_SHOWN_TAG))
     }
 

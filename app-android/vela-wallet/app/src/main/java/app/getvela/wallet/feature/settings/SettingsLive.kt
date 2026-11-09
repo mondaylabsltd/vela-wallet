@@ -309,6 +309,9 @@ object SettingsLive {
 
     const val VENUE_ROW = "signing-venue"
 
+    /** R22: under "Only use my node" — what it means for Vela's safety checks. */
+    const val ONLY_MINE_TRUST_KEY = "settingsModals.network.onlyMineTrust"
+
     fun withCurrency(model: SettingsScreenModel, view: CurrencyView, language: String = AppLanguage.tag): SettingsScreenModel {
         // The person's own choice — on its way (`pending`) or settled — never
         // the USD placeholder standing in for it.
@@ -940,8 +943,20 @@ object SettingsLive {
             timeSheet = timeSheet,
             theme = model.theme.copy(selected = theme),
             textScale = model.textScale.copy(steps = TextScaleLevel.entries.size, index = prefs.textScale.ordinal),
-        ).let { withDebugMode(it, prefs.debugMode) }
+        ).let { withDebugMode(it, prefs.debugMode) }.let { withRefuseBlind(it, prefs.refuseBlind) }
     }
+
+    /** R22: Security's "Refuse blind signing" as the preferences hold it (default off). */
+    fun withRefuseBlind(model: SettingsScreenModel, on: Boolean): SettingsScreenModel =
+        model.copy(
+            sections = model.sections.map { section ->
+                section.copy(
+                    switches = section.switches.map { switch ->
+                        if (switch.id == SettingsFixtures.REFUSE_BLIND_SWITCH) switch.copy(on = on) else switch
+                    },
+                )
+            },
+        )
 
     /** Spec 091: About's debug-mode switch as the preferences hold it — not drawn until revealed. */
     fun withDebugMode(model: SettingsScreenModel, mode: app.getvela.wallet.core.data.DebugMode): SettingsScreenModel =
@@ -1238,6 +1253,8 @@ object SettingsLive {
                     title = strings.t(I18nKeys.SettingsUi.NETWORK_ONLY_MINE),
                     subtitle = strings.t(I18nKeys.SettingsUi.NETWORK_ONLY_MINE_HINT),
                     on = row.only_mine,
+                    // R22: a check counts on two independent nodes — or on this one alone.
+                    trust = strings.t(ONLY_MINE_TRUST_KEY),
                 )
             } else {
                 null

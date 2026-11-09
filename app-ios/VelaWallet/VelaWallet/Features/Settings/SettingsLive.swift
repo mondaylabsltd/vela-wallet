@@ -232,6 +232,19 @@ enum SettingsLive {
     /// Every row's VALUE is what is actually in force, and every sheet's
     /// selection is the same fact — a page that showed one thing in the row and
     /// another in the sheet would be two answers to one question.
+    /// R22 (review 1-3): the "Security" section — "Refuse blind signing",
+    /// as stored (off unless turned on).
+    static func withSecurity(refuseBlind: Bool, on model: SettingsScreenModel, loc: Loc) -> SettingsScreenModel {
+        var copy = model
+        copy.security = SecuritySettingModel(
+            label: loc.t("settings.sections.security"),
+            title: loc.t("settings.refuseBlind.title"),
+            detail: loc.t("settings.refuseBlind.subtitle"),
+            on: refuseBlind
+        )
+        return copy
+    }
+
     static func withPreferences(
         _ preferences: Preferences,
         on model: SettingsScreenModel,
@@ -1153,7 +1166,8 @@ enum SettingsLive {
                 ? OnlyMineSwitchModel(
                     title: loc.t("settingsModals.network.onlyMine"),
                     detail: loc.t("settingsModals.network.onlyMineHint"),
-                    on: network.onlyMine
+                    on: network.onlyMine,
+                    trust: loc.t("settingsModals.network.onlyMineTrust")
                 )
                 : nil,
             nodeCallout: ownNodeNotice(network, loc: loc, nodes: nodes)

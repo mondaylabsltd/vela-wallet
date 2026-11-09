@@ -16,7 +16,8 @@
       "onlyMine": "Chỉ dùng node của tôi",
       "onlyMineHint": "Không thông tin nào về tài khoản của bạn được gửi tới node công khai. Nếu node của bạn ngừng phản hồi, mạng này sẽ không đọc được cho đến khi node hoạt động lại.",
       "hideBody": "Mạng sẽ rời khỏi danh sách của bạn. Cài đặt của mạng được giữ lại và bạn có thể thêm lại bất cứ lúc nào từ Thêm mạng.",
-      "moreNetworks": "Cũng được hỗ trợ nhưng không có trong danh sách: {{names}}. Thêm từ Thêm mạng."
+      "moreNetworks": "Cũng được hỗ trợ nhưng không có trong danh sách: {{names}}. Thêm từ Thêm mạng.",
+      "onlyMineTrust": "Khi bật, Vela chỉ tin nút của bạn cho các bước kiểm tra an toàn và nói rõ điều đó. Khi tắt, một bước kiểm tra chỉ được tính khi hai nút độc lập trả lời giống nhau."
     },
     "account": {
       "modalTitle": "Tài khoản",

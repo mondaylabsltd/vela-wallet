@@ -17,6 +17,7 @@ import { pollUserOpStatus } from '$lib/services/tx-reconciler';
 import { resolveRecipientRisk } from '$lib/services/recipient-risk';
 import { rpcSimulateReply } from '$lib/services/sim/sim-engine-rpc';
 import { chainFailing, PoolFailedError, poolRpcCall } from '$lib/services/rpc-pool';
+import { corroboratedRpc } from '$lib/services/corroborated-read';
 import {
 	EstimateGasError,
 	keySetOf,
@@ -83,6 +84,11 @@ function classified(error: unknown): ShellFailure {
 	}
 	if (error instanceof PasskeyError) {
 		return { kind: 'passkey', failure: error.kind, timedOut: error.timedOut };
+	}
+	// r21-1: its window closed before the EntryPoint saw it (the relay's AA22,
+	// `RelayRejection::Expired`): said as the Send says it, and signed anew.
+	if (error instanceof UserOpNotSentError && error.rejection === 'expired') {
+		return { kind: 'expired' };
 	}
 	if (error instanceof UserOpNotSentError) return { kind: 'not_sent' };
 	return { kind: 'unknown', message: error instanceof Error ? error.message : String(error) };
@@ -402,6 +408,9 @@ export function liveDeps(input: {
 			poolRpcCall(method, (Array.isArray(params) ? params : [params]) as unknown[], chainId, 0, {
 				person: person ?? false
 			}),
+		// R22: a guard's read, two independent nodes (the core's envelope).
+		rpcCorroborated: (chainId, method, params, person) =>
+			corroboratedRpc(chainId, method, params, person ?? false),
 		storage: () => {
 			try {
 				return typeof localStorage === 'undefined' ? null : localStorage;

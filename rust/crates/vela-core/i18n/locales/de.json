@@ -31,7 +31,8 @@
       "advanced": "Erweitert",
       "community": "Community",
       "privacy": "Datenschutz",
-      "developer": "Entwickler"
+      "developer": "Entwickler",
+      "security": "Sicherheit"
     },
     "account": {
       "switch": "Konto wechseln",
@@ -319,6 +320,10 @@
       "title": "Dienst vorübergehend nicht verfügbar",
       "subtitle": "Der Passkey-Index ist nicht erreichbar — Erstellen und Anmelden brauchen ihn beide.",
       "editEndpoint": "Adresse des Index-Dienstes ändern"
+    },
+    "refuseBlind": {
+      "title": "Blindes Signieren ablehnen",
+      "subtitle": "Lehnt jede Anfrage ab, die Vela nicht vollständig lesen oder prüfen kann, statt „… trotzdem“ anzubieten."
     }
   },
   "time": {

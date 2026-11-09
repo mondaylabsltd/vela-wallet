@@ -356,6 +356,10 @@ const SETTINGS: Record<string, Place> = {
 	'pref.agent-wallet': { intent: 'configure_agent' },
 	'pref.signing-venue': {
 		none: 'where this account signs is the signing boundary itself (spec 102)'
+	},
+	// R22: no agent may lower the person's own guard on what they sign.
+	'pref.refuse-blind': {
+		none: '"Refuse blind signing" is the signing boundary itself (R22): the person’s alone'
 	}
 };
 

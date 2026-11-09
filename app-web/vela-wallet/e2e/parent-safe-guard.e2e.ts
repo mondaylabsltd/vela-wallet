@@ -112,7 +112,7 @@ function safeMessage(safe: string): string {
 async function slowIsOwner(
 	target: Page | BrowserContext,
 	hermetic: boolean,
-	own: RegExp = /stub-rpc\.test|vela-relay/
+	own: RegExp = /(?:stub|witness)-rpc\.test|vela-relay/
 ): Promise<{ reads: number }> {
 	const seen = { reads: 0 };
 	await target.route(/^https?:\/\/(?!localhost[:/]|127\.0\.0\.1[:/])/, async (route) => {
@@ -135,6 +135,13 @@ async function slowIsOwner(
 					String(c.params?.[0]?.to ?? '').toLowerCase() === UNKNOWN_SAFE &&
 					String(c.params?.[0]?.data ?? '').startsWith(IS_OWNER)
 			);
+			// R22: a corroborated read asks each source its chain first.
+			if (calls.length === 1 && calls[0]?.method === 'eth_chainId' && !own.test(request.url())) {
+				return route.fulfill({
+					contentType: 'application/json',
+					body: JSON.stringify({ jsonrpc: '2.0', id: calls[0].id ?? 1, result: '0x1' })
+				});
+			}
 			if (read && calls.length === 1) {
 				seen.reads += 1;
 				await new Promise((r) => setTimeout(r, READ_DELAY_MS));
@@ -354,7 +361,10 @@ test.describe('the web wallet (its requester)', () => {
 		);
 		await expect(page.getByText('Vela can’t sign this')).toBeVisible({ timeout: 30_000 });
 		await expect(page.getByText(/multisig you’re a member of \(SafeMessage on/)).toBeVisible();
-		expect(seen.reads).toBe(1);
+		// R22: a corroborated read (SEC-PARENT-3) — "an owner" refuses on one
+		// node's word; a second, independent node may be asked beside it.
+		expect(seen.reads).toBeGreaterThanOrEqual(1);
+		expect(seen.reads).toBeLessThanOrEqual(2);
 		const frames = await page.evaluate(() => (window as unknown as { __frames: Frame[] }).__frames);
 		expectNoAnywayFrame(frames);
 		await page.getByRole('button', { name: /^close$/i }).click();
@@ -487,7 +497,10 @@ test.describe('the Chrome extension (a real site, its request window)', () => {
 		const win = await requestWindow(context);
 		await expect(win.getByText('Vela can’t sign this')).toBeVisible({ timeout: 30_000 });
 		await expect(win.getByText(/multisig you’re a member of \(SafeMessage on/)).toBeVisible();
-		expect(seen.reads).toBe(1);
+		// R22: a corroborated read (SEC-PARENT-3) — "an owner" refuses on one
+		// node's word; a second, independent node may be asked beside it.
+		expect(seen.reads).toBeGreaterThanOrEqual(1);
+		expect(seen.reads).toBeLessThanOrEqual(2);
 		const frames = await win.evaluate(() => (window as unknown as { __frames: Frame[] }).__frames);
 		expectNoAnywayFrame(frames);
 		await win.getByRole('button', { name: /^close$/i }).click();

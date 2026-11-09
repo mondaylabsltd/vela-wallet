@@ -92,6 +92,8 @@ describe('storedWalletFor', () => {
 describe('one answer for an on-chain request (spec 082 RA2, RA8, RA9)', () => {
 	const LOCAL = '0x' + 'c1'.repeat(32);
 	const TX = '0x' + 'f6'.repeat(32);
+	/** R22: a review the core froze — present, so the request may be signed at all. */
+	const REVIEWED = '{"kind":"calls","chain_id":100,"account":"0x","calls":[],"fee":null}';
 	const request = {
 		id: 'req-1',
 		method: 'eth_sendTransaction',
@@ -147,7 +149,10 @@ describe('one answer for an on-chain request (spec 082 RA2, RA8, RA9)', () => {
 			null,
 			undefined,
 			'core',
-			h
+			h,
+			// R22: the review the core froze (its content is the core's check,
+			// past the mocked send pipeline here).
+			REVIEWED
 		);
 	}
 

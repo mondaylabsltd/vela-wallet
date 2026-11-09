@@ -41,6 +41,13 @@ sealed class MultisigOperation {
         val method: String,
         val params: JsonElement = JsonNull,
         val bound_ms: Long? = null,
+        /**
+         * R22: a read a guard stands on (the review's checks, who can act for
+         * the multisig, its members and nonce): asked of the pool as a
+         * corroborated read and answered [MultisigShellResult.RpcCorroborated]
+         * with both nodes' answers in one envelope. `false`: as before.
+         */
+        val corroborate: Boolean = false,
     ) : MultisigOperation()
 
     @Serializable
@@ -191,6 +198,16 @@ sealed class MultisigShellResult {
     @Serializable
     @SerialName("rpc_unanswered")
     data class RpcUnanswered(val detail: String) : MultisigShellResult()
+
+    /**
+     * R22: the answer to a corroborated [MultisigOperation.Rpc] — the first
+     * node's answer and the second's in ONE envelope, a JSON object
+     * (`{result | error | unreachable, witness?, ownNode?}`), built by the
+     * core's helper (`rpcCorroboratedEnvelope`). The core compares them.
+     */
+    @Serializable
+    @SerialName("rpc_corroborated")
+    data class RpcCorroborated(val envelope: JsonElement) : MultisigShellResult()
 
     @Serializable
     @SerialName("store_loaded")

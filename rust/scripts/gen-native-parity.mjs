@@ -373,10 +373,16 @@ for (const [label, chain] of [['own_node_unreached', 1], ['own_only', 10], ['fal
 add('rpc_node_standing/unreadable', 'rpc_node_standing', { view_json: '{', chain_id: 1 });
 // A simulation's outcome, "Check again" with it (dapp-15).
 const simUser = '0x88cCA0EeDbF2C4426110bbFc998F048689266894';
+// R22 (§36): the reply is a corroborated envelope — one node's "nothing
+// moves" is no verdict; two independent nodes agreeing, or the person's own
+// node alone ("Only use my node"), is.
+const nothing = { result: [{ calls: [{ status: '0x1', logs: [] }] }] };
 for (const [label, reply] of [
   ['unreachable', { unreachable: true }],
   ['not_offered', { error: { code: -32601, message: 'the method eth_simulateV1 does not exist' } }],
-  ['nothing_moves', { result: [{ calls: [{ status: '0x1', logs: [] }] }] }],
+  ['nothing_moves_one_node', nothing],
+  ['nothing_moves', { ...nothing, witness: nothing }],
+  ['nothing_moves_own_node', { ...nothing, ownNode: true }],
 ]) add(`sim_outcome/${label}`, 'sim_outcome', { user: simUser, reply_json: S(reply) });
 // A built-in network's name, without a core instance (the Android lane's ask).
 for (const chain of [1, 100, 8453, 5042002, 999999]) {

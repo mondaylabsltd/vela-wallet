@@ -958,6 +958,22 @@ export function amountTextCaret(raw: string, clean: string, caret: number): numb
 export function amountTextClean(raw: string, number: string, previous?: string | null, pasted?: boolean | null): string | undefined;
 
 /**
+ * R22 (review 1-5): a site's signature digest (before the `SafeMessage`
+ * wrap) — `original_hash` back only when it is exactly the digest the sheet
+ * read for `account` (`SignAndSubmit.review`); anything else is refused.
+ */
+export function attestDappMessageHash(original_hash: Uint8Array, account: string, review_json: string): Uint8Array;
+
+/**
+ * R22 (review 1-5): the SafeOp hash for a site's transaction or
+ * `wallet_sendCalls` batch — only when the operation is exactly the request
+ * the person confirmed (`SignAndSubmit.review`, as JSON): its sender, chain
+ * and every call, then at most one fee leg to the quoted recipient. Anything
+ * else is refused and nothing is signed.
+ */
+export function attestDappSafeOpHash(op_json: string, review_json: string, chain_id: bigint): Uint8Array;
+
+/**
  * The SafeOp hash for a send — only when the operation is exactly the
  * review the person confirmed (`SubmitUserOp.review`, as JSON): its sender,
  * chain and every call, decoded back out of its calldata. Anything else is
@@ -1112,6 +1128,11 @@ export function computeSelector(sig: string): string;
 export function computeSplitterAddress(treasury_hex: string): string;
 
 export function computeWebauthnSignerAddress(x: Uint8Array, y: Uint8Array): string;
+
+/**
+ * R22: the accessible equivalent's window — a second activation within it confirms.
+ */
+export function confirmAgainWindowMs(): number;
 
 export function create2Address(deployer_hex: string, salt: Uint8Array, init_code_hash: Uint8Array): string;
 
@@ -1300,6 +1321,14 @@ export function feeEstimateGasOutcome(error_json?: string | null): string;
 export function feeFailureReasonKey(failure: string): string | undefined;
 
 /**
+ * r21-2 (§36): a fee as the screen shows it — `units` (a decimal string) of
+ * a `decimals` coin at most `shown` places, rounded UP, so the figure is
+ * never below the charge; plain digits with a `.` mark (localise it as any
+ * figure). `undefined` when `units` is not a count or `decimals` > 36.
+ */
+export function feeFigure(units: string, decimals: number, shown: number): string | undefined;
+
+/**
  * The bound on one whole fee quote, ms — `fee_policy::QUOTE_DEADLINE_MS`
  * (spec 094 S9). The web shell bounds the deployment read it makes before a
  * quote by the same figure.
@@ -1382,6 +1411,11 @@ export function groupPublicKeyFromSeed(seed_hex: string): string;
 export function handoffFeeRow(fee_json?: string | null, speed_json?: string | null): string | undefined;
 
 export function hashTypedData(typed_data_json: string): Uint8Array;
+
+/**
+ * R22: how long a "… anyway" or danger confirm is held, in ms.
+ */
+export function holdToConfirmMs(): number;
 
 /**
  * Interpolate a template in isolation, without a key lookup.
@@ -1804,6 +1838,17 @@ export function receiveStanding(account_json: string): string | undefined;
 export function recoverPublicKeyFromAssertions(a_authenticator_data: Uint8Array, a_client_data_json: Uint8Array, a_signature_der: Uint8Array, b_authenticator_data: Uint8Array, b_client_data_json: Uint8Array, b_signature_der: Uint8Array): P256PublicKey | undefined;
 
 /**
+ * R22: the person's stored "Refuse blind signing" (`vela.refuseBlindSigning`,
+ * `on`/`off`) as a switch — off unless it is `on`.
+ */
+export function refuseBlindSigning(raw?: string | null): boolean;
+
+/**
+ * R22: the store key of "Refuse blind signing".
+ */
+export function refuseBlindSigningKey(): string;
+
+/**
  * **Backing the founding record up to Ethereum — the next step of the walk**
  * (spec 062). Server-free: every request is an `eth_call` against the
  * registry contract, on Gnosis (where the record lives) or Ethereum (where
@@ -1898,6 +1943,15 @@ export function resolvedNameStep(chain_id: number, registry: string, name: strin
 export function rpcCooldownMs(consecutive_failures: number): number;
 
 /**
+ * R22: the one envelope a corroborated read hands the core — the first
+ * node's JSON-RPC body (`undefined`: the pool gave up), the second,
+ * independent node's (`undefined`: none answered) and whether the pool holds
+ * the person's own node alone ("Only use my node"). Pass it to `simOutcome`,
+ * or as a multisig `rpc_corroborated` answer. See `vela_core::app::corroborate`.
+ */
+export function rpcCorroboratedEnvelope(primary_json: string | null | undefined, witness_json: string | null | undefined, own_node: boolean): string;
+
+/**
  * The answer a hedge's outcome may hand the caller before the pool reaches
  * that endpoint in its own order — `rpc_pool::early_verdict` — as the
  * verdict's JSON, or `""` when it must wait (an outcome the shell cannot
@@ -1980,8 +2034,13 @@ export function signAnswered(payload_json: string): string | undefined;
  * every client reads: the four views' JSON, the speed in force, whether the
  * message on the sheet has not been read to its end yet (cs-10), a
  * `ConfirmState` JSON back (`undefined` when a view does not read).
+ *
+ * R22: `sim_json` is the sheet's own simulation verdict as held (`simOutcome`'s
+ * record; `undefined` before it lands — a transaction without one is
+ * unread), `refuse_blind` the person's "Refuse blind signing". The state
+ * says the confirm's friction: `anyway`, `danger` and `hold_ms`.
  */
-export function signConfirmState(sign_json: string, guard_json: string, clear_json: string, fee_json?: string | null, speed_tier?: string | null, message_unread?: boolean | null): string | undefined;
+export function signConfirmState(sign_json: string, guard_json: string, clear_json: string, fee_json?: string | null, speed_tier?: string | null, message_unread?: boolean | null, sim_json?: string | null, refuse_blind?: boolean | null): string | undefined;
 
 /**
  * The ending of a request whose answer to the page was `payload_json` (the
@@ -2598,6 +2657,8 @@ export interface InitOutput {
     readonly approvalguardcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly approvalguardcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly approvalguardcore_view: (a: number) => [number, number, number, number];
+    readonly attestDappMessageHash: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly attestDappSafeOpHash: (a: number, b: number, c: number, d: number, e: bigint) => [number, number, number, number];
     readonly attestReviewedSafeOpHash: (a: number, b: number, c: number, d: number, e: bigint) => [number, number, number, number];
     readonly attestSafeMessageHash: (a: number, b: number, c: bigint, d: number, e: number) => [number, number, number, number];
     readonly attestSafeOpHash: (a: number, b: number, c: number, d: number, e: bigint) => [number, number, number, number];
@@ -2646,6 +2707,7 @@ export interface InitOutput {
     readonly computeSelector: (a: number, b: number) => [number, number, number, number];
     readonly computeSplitterAddress: (a: number, b: number) => [number, number, number, number];
     readonly computeWebauthnSignerAddress: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly confirmAgainWindowMs: () => number;
     readonly contactscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly contactscore_new: () => number;
     readonly contactscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -2705,10 +2767,10 @@ export interface InitOutput {
     readonly extractAttestationPublicKey: (a: number, b: number) => [number, number, number];
     readonly feeEstimateGasOutcome: (a: number, b: number) => [number, number];
     readonly feeFailureReasonKey: (a: number, b: number) => [number, number];
+    readonly feeFigure: (a: number, b: number, c: number, d: number) => [number, number];
     readonly feeQuoteDeadlineMs: () => number;
     readonly feeRequoteDelayMs: (a: number, b: number, c: number) => number;
     readonly feeRequoteTimeoutMs: () => number;
-    readonly feeSignalsCacheTtlMs: () => number;
     readonly feepolicycore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly feepolicycore_new: () => number;
     readonly feepolicycore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -2734,6 +2796,7 @@ export interface InitOutput {
     readonly groupPublicKeyFromSeed: (a: number, b: number) => [number, number, number, number];
     readonly handoffFeeRow: (a: number, b: number, c: number, d: number) => [number, number];
     readonly hashTypedData: (a: number, b: number) => [number, number, number, number];
+    readonly holdToConfirmMs: () => number;
     readonly i18nInterpolate: (a: number, b: number, c: number) => [number, number, number, number];
     readonly i18nPluralSuffix: (a: number, b: number, c: number) => [number, number];
     readonly i18nPluralSuffixLegacy: (a: number) => [number, number];
@@ -2865,6 +2928,8 @@ export interface InitOutput {
     readonly receivewatchcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly receivewatchcore_view: (a: number) => [number, number, number, number];
     readonly recoverPublicKeyFromAssertions: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number];
+    readonly refuseBlindSigning: (a: number, b: number) => number;
+    readonly refuseBlindSigningKey: () => [number, number];
     readonly registryBackupStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly registryChainKeyPlan: (a: number, b: number) => [number, number];
     readonly registryChainKeyStatus: (a: number, b: number, c: number, d: number) => [number, number];
@@ -2877,8 +2942,8 @@ export interface InitOutput {
     readonly relyingPartyJson: (a: number, b: number) => [number, number];
     readonly resolvedNameStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly rpcCooldownMs: (a: number) => number;
+    readonly rpcCorroboratedEnvelope: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly rpcEarlyVerdict: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
-    readonly rpcHedgeAfterMs: () => number;
     readonly rpcIsHedgedRead: (a: number, b: number, c: number, d: number) => number;
     readonly rpcNodeStanding: (a: number, b: number, c: number) => [number, number];
     readonly rpcOwnOnlyPool: (a: number, b: number, c: number) => [number, number];
@@ -2904,7 +2969,7 @@ export interface InitOutput {
     readonly sha256: (a: number, b: number) => [number, number];
     readonly shownNetworksSettle: (a: number, b: number, c: number, d: number) => [number, number];
     readonly signAnswered: (a: number, b: number) => [number, number];
-    readonly signConfirmState: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
+    readonly signConfirmState: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number) => [number, number];
     readonly signEndingOf: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly signEndingState: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly signErrorWords: (a: number, b: number, c: number, d: number) => [number, number];
@@ -2994,6 +3059,8 @@ export interface InitOutput {
     readonly walletKeysStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly webRelyingPartyId: (a: number, b: number, c: number) => [number, number];
     readonly webauthnSigningHash: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly feeSignalsCacheTtlMs: () => number;
+    readonly rpcHedgeAfterMs: () => number;
     readonly userOpWriteAheadWaitMs: () => number;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

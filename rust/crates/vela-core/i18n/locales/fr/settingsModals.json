@@ -16,7 +16,8 @@
       "onlyMine": "N'utiliser que mon nœud",
       "onlyMineHint": "Rien de votre compte n'est envoyé aux nœuds publics. Si votre nœud ne répond plus, ce réseau ne peut pas être lu jusqu'à son retour.",
       "hideBody": "Il quitte votre liste de réseaux. Ses réglages sont conservés, et Ajouter un réseau le remet à tout moment.",
-      "moreNetworks": "Également pris en charge, hors de votre liste : {{names}}. Ajoutez-les depuis Ajouter un réseau."
+      "moreNetworks": "Également pris en charge, hors de votre liste : {{names}}. Ajoutez-les depuis Ajouter un réseau.",
+      "onlyMineTrust": "Activé, Vela ne fait confiance qu’à votre nœud pour ses vérifications de sécurité, et l’indique. Désactivé, une vérification ne compte que si deux nœuds indépendants sont d’accord."
     },
     "account": {
       "modalTitle": "Comptes",

@@ -812,7 +812,10 @@
           "tryAgain": "Intentar de nuevo",
           "unchecked": "Vela no pudo verificar qué cambia esta transacción.",
           "chainUnread": "No se pudo conectar con {{network}} para leer esta transacción."
-        }
+        },
+        "stateUnconfirmed": "Solo respondió un nodo en {{network}}, así que Vela no pudo confirmar qué cambia en el multisig al ejecutarla. Solo queda la lectura de Vela de la transacción.",
+        "stateDisagreed": "Dos nodos independientes en {{network}} no coinciden en qué cambia en el multisig al ejecutarla. Solo queda la lectura de Vela de la transacción.",
+        "blindRefused": "Vela no firmará esto aquí: “Rechazar firma a ciegas” está activado y parte de esta transacción no se pudo revisar. Puedes cambiarlo en Configuración."
       },
       "notify": {
         "title": "Notificaciones",

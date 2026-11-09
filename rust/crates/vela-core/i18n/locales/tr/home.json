@@ -805,7 +805,10 @@
           "tryAgain": "Tekrar dene",
           "unchecked": "Vela bu işlemin neyi değiştirdiğini kontrol edemedi.",
           "chainUnread": "Bu işlemi okumak için {{network}} ağına ulaşılamadı."
-        }
+        },
+        "stateUnconfirmed": "{{network}} üzerinde yalnızca bir düğüm yanıt verdi, bu yüzden Vela çalıştırıldığında çoklu imzada neyin değişeceğini doğrulayamadı. Yalnızca Vela’nın işlemi okuması geçerli.",
+        "stateDisagreed": "{{network}} üzerindeki iki bağımsız düğüm, çalıştırıldığında çoklu imzada neyin değişeceği konusunda farklı yanıt verdi. Yalnızca Vela’nın işlemi okuması geçerli.",
+        "blindRefused": "Vela bunu burada imzalamayacak: “Kör imzalamayı reddet” açık ve bu işlemin bir kısmı kontrol edilemedi. Ayarlar’dan değiştirebilirsiniz."
       },
       "notify": {
         "title": "Bildirimler",

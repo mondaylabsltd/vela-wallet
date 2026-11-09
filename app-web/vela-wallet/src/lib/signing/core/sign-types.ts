@@ -202,15 +202,11 @@ export type SignRequestSessionOptions = SessionOptions<SignView> & {
 	 */
 	timer?: (ms: number) => Promise<void>;
 	/**
-	 * §31: the JSON-RPC call behind `ReadSafeOwner` (`eth_call` of
-	 * `isOwner`). Absent: the app's pool (`poolRpcCall`). A test passes a
-	 * node it answers itself.
+	 * §31: the corroborated call behind `ReadSafeOwner` (`eth_call` of
+	 * `isOwner`; R22: two independent nodes). Absent: the app's pool
+	 * (`poolCorroboratedCall`). A test passes nodes it answers itself.
 	 */
-	ownerCall?: (
-		method: string,
-		params: unknown[],
-		chainId: number
-	) => Promise<{ result?: unknown; error?: { code?: unknown; message?: unknown } }>;
+	ownerCall?: import('./sign-executor').SafeOwnerCall;
 };
 
 /**

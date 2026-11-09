@@ -6,6 +6,11 @@
 		rows: BalanceRow[];
 		note?: string;
 		noteTone?: Tone;
+		/**
+		 * R22: who checked it — "Checked by your own node only" when "Only use
+		 * my node" answered alone. A quiet line, last in the card.
+		 */
+		source?: string;
 		/** The card that lands after the sheet has opened: named, so the sheet can keep it in sight. */
 		verdict?: boolean;
 		/**
@@ -16,7 +21,15 @@
 		room?: boolean;
 	}
 
-	let { title, rows, note, noteTone = 'neutral', verdict = false, room = false }: Props = $props();
+	let {
+		title,
+		rows,
+		note,
+		noteTone = 'neutral',
+		source,
+		verdict = false,
+		room = false
+	}: Props = $props();
 </script>
 
 <!-- A room's words: in the layout, not in the text. -->
@@ -40,6 +53,11 @@
 	{#if note}
 		<p class="note" data-tone={noteTone}>{@render words(note)}</p>
 	{/if}
+	{#if source}
+		<p class="source" data-testid={room ? undefined : 'signing-sim-source'}>
+			{@render words(source)}
+		</p>
+	{/if}
 </section>
 
 <style>
@@ -47,6 +65,13 @@
 		padding: var(--space-lg) var(--space-xl);
 		border: var(--border-hairline) solid var(--color-border-base);
 		border-radius: var(--radius-xl);
+	}
+
+	.source {
+		margin: 0;
+		padding-block: var(--space-sm) var(--space-md);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-subtle);
 	}
 
 	h3 {

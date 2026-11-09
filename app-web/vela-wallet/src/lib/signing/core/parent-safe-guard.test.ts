@@ -100,6 +100,16 @@ describe('the vector, through the web’s door to the rule (parentSafeCheck)', (
 	});
 });
 
+/** R22: the read as two independent nodes answered it, alike. */
+function agreed(reply: { result?: unknown; error?: { code?: unknown; message?: unknown } }) {
+	return { body: reply, witnessBody: reply, ownNode: false };
+}
+
+/** The first node's answer of a read (`readSafeOwner`'s `answer`). */
+async function readAnswer(...args: Parameters<typeof readSafeOwner>) {
+	return (await readSafeOwner(...args)).answer;
+}
+
 describe('read_safe_owner — the node’s answer, as it came', () => {
 	const SAFE = VECTOR.unknown;
 	const DATA = VECTOR.isOwnerSelector + VECTOR.signer.slice(2).padStart(64, '0');
@@ -108,9 +118,9 @@ describe('read_safe_owner — the node’s answer, as it came', () => {
 		const asked: unknown[] = [];
 		const call: SafeOwnerCall = async (method, params, chainId) => {
 			asked.push({ method, params, chainId });
-			return { result: TRUE };
+			return agreed({ result: TRUE });
 		};
-		expect(await readSafeOwner(8453, SAFE, DATA, call, 1000)).toEqual({
+		expect(await readAnswer(8453, SAFE, DATA, call, 1000)).toEqual({
 			type: 'returned',
 			data: TRUE
 		});
@@ -121,7 +131,7 @@ describe('read_safe_owner — the node’s answer, as it came', () => {
 
 	it('returned: the result string verbatim — even an empty one, or junk', async () => {
 		for (const data of ['0x', FALSE, '0xnot-a-bool']) {
-			expect(await readSafeOwner(1, SAFE, DATA, async () => ({ result: data }), 1000)).toEqual({
+			expect(await readAnswer(1, SAFE, DATA, async () => agreed({ result: data }), 1000)).toEqual({
 				type: 'returned',
 				data
 			});
@@ -130,21 +140,27 @@ describe('read_safe_owner — the node’s answer, as it came', () => {
 
 	it('rpc_error: the node’s JSON-RPC error, its code an integer or null', async () => {
 		expect(
-			await readSafeOwner(
+			await readAnswer(
 				1,
 				SAFE,
 				DATA,
-				async () => ({ error: { code: 3, message: 'execution reverted' } }),
+				async () => agreed({ error: { code: 3, message: 'execution reverted' } }),
 				1000
 			)
 		).toEqual({ type: 'rpc_error', code: 3, message: 'execution reverted' });
 		expect(
-			await readSafeOwner(1, SAFE, DATA, async () => ({ error: { code: 'x', message: 42 } }), 1000)
+			await readAnswer(
+				1,
+				SAFE,
+				DATA,
+				async () => agreed({ error: { code: 'x', message: 42 } }),
+				1000
+			)
 		).toEqual({ type: 'rpc_error', code: null, message: '' });
 	});
 
 	it('unreachable: a throw, the pool giving up, no result, or no answer in time', async () => {
-		const thrown = await readSafeOwner(
+		const thrown = await readAnswer(
 			1,
 			SAFE,
 			DATA,
@@ -154,7 +170,7 @@ describe('read_safe_owner — the node’s answer, as it came', () => {
 			1000
 		);
 		expect(thrown).toEqual({ type: 'unreachable', detail: 'Failed to fetch' });
-		const pool = await readSafeOwner(
+		const pool = await readAnswer(
 			1,
 			SAFE,
 			DATA,
@@ -170,22 +186,64 @@ describe('read_safe_owner — the node’s answer, as it came', () => {
 			type: 'unreachable',
 			detail: 'All RPC endpoints failed for chain 1'
 		});
-		expect(await readSafeOwner(1, SAFE, DATA, async () => ({ result: null }), 1000)).toEqual({
+		expect(await readAnswer(1, SAFE, DATA, async () => agreed({ result: null }), 1000)).toEqual({
 			type: 'unreachable',
 			detail: 'the node answered no result'
 		});
 		// Never hangs: a node that never answers is "no answer" past the budget.
 		const started = Date.now();
-		const late = await readSafeOwner(1, SAFE, DATA, () => new Promise(() => {}), 30);
+		const late = await readAnswer(1, SAFE, DATA, () => new Promise(() => {}), 30);
 		expect(late).toEqual({ type: 'unreachable', detail: 'no answer in 30 ms' });
 		expect(Date.now() - started).toBeLessThan(2000);
+	});
+
+	it('R22: carries both nodes — the witness beside the first, and own node alone', async () => {
+		const SAFE2 = VECTOR.unknown;
+		const two = await readSafeOwner(
+			1,
+			SAFE2,
+			DATA,
+			async () => ({ body: { result: TRUE }, witnessBody: { result: FALSE }, ownNode: false }),
+			1000
+		);
+		expect(two).toEqual({
+			answer: { type: 'returned', data: TRUE },
+			witness: { type: 'returned', data: FALSE }
+		});
+		const own = await readSafeOwner(
+			1,
+			SAFE2,
+			DATA,
+			async () => ({ body: { result: FALSE }, witnessBody: null, ownNode: true }),
+			1000
+		);
+		expect(own).toEqual({ answer: { type: 'returned', data: FALSE }, own_node: true });
+		const alone = await readSafeOwner(
+			1,
+			SAFE2,
+			DATA,
+			async () => ({ body: { result: FALSE }, witnessBody: null, ownNode: false }),
+			1000
+		);
+		expect(alone).toEqual({ answer: { type: 'returned', data: FALSE } });
+	});
+
+	it('R22: one node saying "not an owner" does not stand — the request is refused unchecked', async () => {
+		const run = await arrive(caseParams('unknown contract: read first'), [], async () => ({
+			body: { result: FALSE },
+			witnessBody: null,
+			ownNode: false
+		}));
+		await vi.waitFor(() => expect(run.view().blocked).not.toBeNull());
+		expect(run.view().blocked).toMatchObject({ parent: VECTOR.unknown, reason: 'unchecked' });
+		await run.close();
 	});
 
 	it('the executor echoes id, chain and Safe exactly, and a failure is unreachable', async () => {
 		const executor = createSignExecutor(
 			ports([]),
 			async () => {},
-			async () => ({ error: { code: -32000, message: 'header not found' } })
+			async () => agreed({ error: { code: -32000, message: 'header not found' } })
 		);
 		const effect = {
 			operation: {
@@ -202,7 +260,9 @@ describe('read_safe_owner — the node’s answer, as it came', () => {
 			id: 'rid-31',
 			chain_id: 8453,
 			safe: '0x7777777777777777777777777777777777777777',
-			answer: { type: 'rpc_error', code: -32000, message: 'header not found' }
+			answer: { type: 'rpc_error', code: -32000, message: 'header not found' },
+			// R22: the second, independent node's answer rides beside it.
+			witness: { type: 'rpc_error', code: -32000, message: 'header not found' }
 		} satisfies SignShellResult);
 		expect(executor.toFailure(effect, new Error('boom'))).toEqual({
 			type: 'safe_owner_read',
@@ -384,7 +444,7 @@ describe('a multisig on this device’s list (multisigs_changed)', () => {
 	});
 
 	it('the same request with nothing on the list is read on chain first', async () => {
-		const run = await arrive(CASE_A.input.params, [], async () => ({ result: TRUE }));
+		const run = await arrive(CASE_A.input.params, [], async () => agreed({ result: TRUE }));
 		await vi.waitFor(() => expect(run.view().blocked).not.toBeNull());
 		expect(run.reads).toHaveLength(1);
 		expect(run.view().blocked).toMatchObject({ parent: VECTOR.parent, reason: 'owner' });
@@ -400,9 +460,10 @@ describe('a Safe not on the list: read (isOwner) before it can be signed', () =>
 		const run = await arrive(
 			caseParams('unknown Safe, isOwner true: refused'),
 			[VECTOR.parent],
-			async () => ({
-				result: TRUE
-			})
+			async () =>
+				agreed({
+					result: TRUE
+				})
 		);
 		await vi.waitFor(() => expect(run.view().blocked).not.toBeNull());
 		expect(run.reads).toEqual([
@@ -452,7 +513,7 @@ describe('a Safe not on the list: read (isOwner) before it can be signed', () =>
 	});
 
 	it('the confirm stays shut while the read is out', async () => {
-		let answer: (value: { result: string }) => void = () => {};
+		let answer: (value: Awaited<ReturnType<SafeOwnerCall>>) => void = () => {};
 		const run = await arrive(
 			caseParams('unknown contract: read first'),
 			[],
@@ -461,7 +522,7 @@ describe('a Safe not on the list: read (isOwner) before it can be signed', () =>
 		await vi.waitFor(() => expect(run.reads).toHaveLength(1));
 		expect(run.view().blocked).toBeNull();
 		expect(run.view().confirm_gate_open).toBe(false);
-		answer({ result: FALSE });
+		answer(agreed({ result: FALSE }));
 		await vi.waitFor(() => expect(run.view().confirm_block).not.toBe('reading'));
 		// Read false: not this account's Safe — no refusal.
 		expect(run.view().blocked).toBeNull();
@@ -478,7 +539,7 @@ describe('a Safe not on the list: read (isOwner) before it can be signed', () =>
 	 * "anyway" — the core may yet refuse it with no way to sign.
 	 */
 	it('while the read is out the confirm is a shut "Sign" — never "anyway", never red', async () => {
-		let answer: (value: { result: string }) => void = () => {};
+		let answer: (value: Awaited<ReturnType<SafeOwnerCall>>) => void = () => {};
 		const run = await arrive(
 			caseParams('unknown Safe, SafeMessage, isOwner true: refused'),
 			[],
@@ -509,7 +570,7 @@ describe('a Safe not on the list: read (isOwner) before it can be signed', () =>
 		expect(reading?.confirm.danger).toBeUndefined();
 		expect(reading?.confirm.note).toBe('Reading the request…');
 		// The read says owner: refused in the parent's words, no confirm to press.
-		answer({ result: TRUE });
+		answer(agreed({ result: TRUE }));
 		await vi.waitFor(() => expect(run.view().blocked).not.toBeNull());
 		const refused = sheet();
 		expect(refused?.dismissOnly).toBe(m.close);

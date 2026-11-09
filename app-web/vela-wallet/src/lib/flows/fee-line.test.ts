@@ -47,27 +47,36 @@ describe('feeLineParts', () => {
  * about a fee that is not.
  */
 describe('feeAmountText', () => {
-	it('keeps the first significant digit however small the amount is', () => {
-		// The measured XLayer fee: 83,333,333,333,334 wei of an 18-decimal coin.
-		expect(feeAmountText(83_333_333_333_334 / 1e18, 4)).toBe('0.000083');
+	it('keeps the first significant digits however small the amount is', () => {
+		// The measured XLayer fee: 83,333,333,333,334 wei of an 18-decimal coin
+		// — r21-2: two significant digits, rounded UP (it read 0.000083, less
+		// than the charge).
+		expect(feeAmountText('83333333333334', 18, 4)).toBe('0.000084');
 		// The relay's own admission floor, 0.00001 of the coin.
-		expect(feeAmountText(1e-5, 4)).toBe('0.00001');
+		expect(feeAmountText(10_000_000_000_000n, 18, 4)).toBe('0.00001');
 		// Far below any real fee, but still not "0".
-		expect(feeAmountText(2.5e-9, 4)).toBe('0.0000000025');
+		expect(feeAmountText('2500000000', 18, 4)).toBe('0.0000000025');
 	});
 
-	it('is the plain trim for anything the budget already fits', () => {
-		expect(feeAmountText(0.0021, 6)).toBe('0.0021');
-		expect(feeAmountText(0.001329, 6)).toBe('0.001329');
-		expect(feeAmountText(1.5, 4)).toBe('1.5');
-		expect(feeAmountText(2, 4)).toBe('2');
-		// Past the budget it still truncates — this widens the window, it does
-		// not start showing more of a figure that already had digits to spare.
-		expect(feeAmountText(0.123456789, 4)).toBe('0.1234');
+	it('is the figure itself when the budget already fits it', () => {
+		expect(feeAmountText('2100000000000000', 18, 6)).toBe('0.0021');
+		expect(feeAmountText('1329000000000000', 18, 6)).toBe('0.001329');
+		expect(feeAmountText('1500000000000000000', 18, 4)).toBe('1.5');
+		expect(feeAmountText('2000000000000000000', 18, 4)).toBe('2');
+		expect(feeAmountText('10000', 6, 4)).toBe('0.01');
 	});
 
-	it('says zero only when the amount really is zero', () => {
-		expect(feeAmountText(0, 4)).toBe('0');
+	// r21-2 (§36): a fee is never shown below what is charged — past the
+	// budget it rounds UP (the core's `fee_figure`), never down through a float.
+	it('rounds up past the budget: never below the charge', () => {
+		expect(feeAmountText('123456789000000000', 18, 4)).toBe('0.1235');
+		expect(feeAmountText('1000000000000001', 18, 6)).toBe('0.001001');
+		expect(feeAmountText('9999999', 6, 4)).toBe('10');
+	});
+
+	it('says zero only when the amount really is zero, and a dash for no count', () => {
+		expect(feeAmountText('0', 18, 4)).toBe('0');
+		expect(feeAmountText('not a count', 18, 4)).toBe('—');
 	});
 });
 

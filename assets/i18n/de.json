@@ -31,7 +31,8 @@
    "advanced": "Erweitert",
    "community": "Community",
    "privacy": "Datenschutz",
-   "developer": "Entwickler"
+   "developer": "Entwickler",
+   "security": "Sicherheit"
   },
   "account": {
    "switch": "Konto wechseln",
@@ -319,6 +320,10 @@
    "title": "Dienst vorübergehend nicht verfügbar",
    "subtitle": "Der Passkey-Index ist nicht erreichbar — Erstellen und Anmelden brauchen ihn beide.",
    "editEndpoint": "Adresse des Index-Dienstes ändern"
+  },
+  "refuseBlind": {
+   "title": "Blindes Signieren ablehnen",
+   "subtitle": "Lehnt jede Anfrage ab, die Vela nicht vollständig lesen oder prüfen kann, statt „… trotzdem“ anzubieten."
   }
  },
  "time": {
@@ -1622,7 +1627,8 @@
     "feeWouldFail": "So gesendet würde sie fehlschlagen.",
     "previousPending": "Warte auf deine vorige Transaktion in diesem Netzwerk…",
     "simChecking": "Es wird geprüft, was diese Transaktion bewirkt…",
-    "messageUnread": "Die Nachricht geht weiter — scrollen Sie, um sie ganz zu lesen"
+    "messageUnread": "Die Nachricht geht weiter — scrollen Sie, um sie ganz zu lesen",
+    "blindRefused": "Abgelehnt: „Blindes Signieren ablehnen“ ist an, und Vela konnte diese Anfrage nicht vollständig prüfen. Du kannst das in den Einstellungen ändern."
    },
    "labelAddsToAllowance": "Erhöht die Freigabe um",
    "certain": {
@@ -1693,7 +1699,12 @@
     "wrongChain": "Diese Anmeldung gilt für Chain {{chain}}, aber diese Website ist mit Chain {{connected}} verbunden. Wechsle das Netzwerk und frage erneut.",
     "incomplete": "Dieser Anmeldung fehlt die Angabe {{field}}, daher kann Vela nicht prüfen, wobei sie dich anmeldet.",
     "noOrigin": "Vela kann nicht erkennen, welche Website fragt, und führt diese Anmeldung daher nicht aus."
-   }
+   },
+   "simUnconfirmed": "Nur ein Knoten hat geantwortet, daher konnte Vela nicht bestätigen, was diese Transaktion bewirkt – bitte vor dem Signieren kontrollieren.",
+   "simDisagreed": "Zwei unabhängige Knoten haben unterschiedlich beantwortet, was diese Transaktion bewirkt – bitte vor dem Signieren kontrollieren.",
+   "simOwnNode": "Nur von deinem eigenen Knoten geprüft",
+   "ownNodeHint": "Um mit einem Knoten zu prüfen, dem du vertraust, füge deinen eigenen hinzu und schalte „Nur meinen Knoten verwenden“ für dieses Netzwerk ein.",
+   "confirmAgain": "Zum Bestätigen erneut drücken"
   },
   "signingApprove": {
    "resultingTotal": "Neue Gesamtfreigabe",
@@ -2047,7 +2058,8 @@
    "onlyMine": "Nur meinen Knoten verwenden",
    "onlyMineHint": "Nichts über dein Konto geht an öffentliche Knoten. Wenn dein Knoten nicht mehr antwortet, kann dieses Netzwerk erst wieder gelesen werden, wenn er zurück ist.",
    "hideBody": "Es verschwindet aus deiner Netzwerkliste. Seine Einstellungen bleiben erhalten, und „Netzwerk hinzufügen“ holt es jederzeit zurück.",
-   "moreNetworks": "Ebenfalls unterstützt, nicht in deiner Liste: {{names}}. Füge sie über „Netzwerk hinzufügen“ hinzu."
+   "moreNetworks": "Ebenfalls unterstützt, nicht in deiner Liste: {{names}}. Füge sie über „Netzwerk hinzufügen“ hinzu.",
+   "onlyMineTrust": "Ist es an, vertraut Vela bei seinen Sicherheitsprüfungen nur deinem Knoten und sagt das auch. Ist es aus, zählt eine Prüfung nur, wenn zwei unabhängige Knoten übereinstimmen."
   },
   "account": {
    "modalTitle": "Konten",

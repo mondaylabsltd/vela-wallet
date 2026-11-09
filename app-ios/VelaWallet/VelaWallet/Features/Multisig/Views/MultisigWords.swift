@@ -464,6 +464,14 @@ struct MsWords {
 
     // MARK: - Why an action did not go (`MultisigActionState`)
 
+    /// r21-1: the action failed because its operation expired before it was
+    /// submitted (`review.failure` kind `expired`) — said calmly, never as
+    /// an error.
+    static func expired(_ state: MsTagged?) -> Bool {
+        guard let state, state.kind == "failed" else { return false }
+        return MsRules.failure(state["detail"]?.string).kind == "expired"
+    }
+
     /// The action's failure in words; `nil` for one that says nothing
     /// (working, done, the person's own cancel).
     func actionFailure(_ state: MsTagged?, chainId: Int) -> String? {
@@ -604,12 +612,17 @@ struct MsWords {
         // next press is on it.
         case "fee_moved":
             let chain = (object["chainId"] as? NSNumber)?.intValue ?? chainId ?? 0
-            let fee = "\(MsRules.formatUnits(object["amount"] as? String ?? "0", decimals: Self.coinDecimals)) \(symbol(chain))"
+            let fee = "\(SendLive.feeFromBase(object["amount"] as? String ?? "0", decimals: Self.coinDecimals)) \(symbol(chain))"
             return t("proposal.failed", ["reason": t("proposal.feeLine", [
                 "fee": fee, "name": label(object["executor"] as? String ?? ""),
             ])])
         case "cannot_pay":
             return t("proposal.failed", ["reason": t("status.nobodyPays")])
+        // r21-1: an execution whose window closed before it was submitted —
+        // the Send's words, calmly: "Not sent", then why. Pressing again
+        // signs anew with a window of its own.
+        case "expired":
+            return "\(loc.t("componentsTx.receipt.statusNotSent"))\n\(loc.t(said.key ?? "componentsUi.signing.expired"))"
         case "venue_blocked":
             if let block = object["block"] as? [String: Any],
                let wire = MultisigMachine.decode(VenueBlockWire.self, from: block) {

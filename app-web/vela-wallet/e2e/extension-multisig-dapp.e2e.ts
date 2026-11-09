@@ -15,6 +15,7 @@
  *
  * Chromium only: an extension loads in no other engine.
  */
+import { holdPress } from './stub-chain';
 import { createServer, type Server } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -165,7 +166,7 @@ test.describe('a site asks a multisig', () => {
 			// The review first: nothing signed or sent before the press.
 			await expect(win.getByTestId('review-hashes')).toBeVisible();
 			expect(world.submissions).toHaveLength(0);
-			await win.getByRole('button', { name: 'Propose and approve' }).click();
+			await holdPress(win.getByRole('button', { name: 'Propose and approve' }));
 			await expect.poll(() => world.mailbox.length, { timeout: 30_000 }).toBe(1);
 			const hash = world.mailbox[0].safeTxHash;
 			await expect(win.getByText('1/2 approved').first()).toBeVisible({ timeout: 30_000 });
@@ -199,7 +200,7 @@ test.describe('a site asks a multisig', () => {
 			await expect(win.getByTestId('review-hashes')).toBeVisible();
 			// The next number: the first one ran.
 			await expect(win.getByText('#1', { exact: true }).first()).toBeVisible();
-			await win.getByRole('button', { name: 'Propose and approve' }).click();
+			await holdPress(win.getByRole('button', { name: 'Propose and approve' }));
 			const answer = await sent;
 			expect(world.mailbox).toHaveLength(2);
 			const hash = world.mailbox[1].safeTxHash;

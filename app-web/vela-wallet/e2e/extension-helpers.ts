@@ -12,6 +12,7 @@
  *   - a CDP virtual authenticator is scoped to the target it was added to, so a
  *     second page has none and any ceremony there simply hangs.
  */
+import { holdPress } from './stub-chain';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -399,5 +400,6 @@ export async function noRequestWindow(context: BrowserContext, timeoutMs = 15_00
 export async function confirmSigning(page: Page): Promise<void> {
 	const confirm = page.getByTestId('signing-confirm');
 	await confirm.waitFor({ state: 'visible', timeout: 30_000 });
-	await confirm.click({ timeout: 60_000 });
+	// R22: held when the core says so (`hold_ms`) — a held press is a plain one otherwise.
+	await holdPress(confirm);
 }

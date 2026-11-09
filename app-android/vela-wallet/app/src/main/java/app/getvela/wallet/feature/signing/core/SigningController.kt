@@ -381,13 +381,37 @@ class SigningController(
          * empty list of judgments read here, nor rows that all came out as
          * zeros: which case it is, and which sentence, are the core's.
          */
-        data class Ready(val judgments: List<TrustSimJudgment>, val noChangeKey: String? = null) : SimOutcome()
+        data class Ready(
+            val judgments: List<TrustSimJudgment>,
+            val noChangeKey: String? = null,
+            /**
+             * R22: the core's line about who stood behind the check
+             * (`source_key`: `simOwnNode`, "Checked by your own node only")
+             * — a quiet line under the balance changes; `null` when two
+             * independent nodes agreed.
+             */
+            val sourceKey: String? = null,
+            /** R22: the core's verdict JSON (`SimVerdict`) the confirm gate reads back. */
+            val verdict: String? = null,
+        ) : SimOutcome()
         /**
          * [recheck] (dapp-15): no node answered — the line is about the
          * network, not the transaction, so the check is asked again once the
-         * chain answers, and on the person's "Check again".
+         * chain answers, and on the person's "Check again". R22: also one
+         * node's word nobody independent confirmed ([ownNodeHint]: the sheet
+         * says how to check with a node the person trusts). [watchNode]: the
+         * chain is watched for coming back (only when nobody was reached).
          */
-        data class Notice(val risk: ClearRisk, val key: String, val reason: String? = null, val recheck: Boolean = false) : SimOutcome()
+        data class Notice(
+            val risk: ClearRisk,
+            val key: String,
+            val reason: String? = null,
+            val recheck: Boolean = false,
+            val ownNodeHint: Boolean = false,
+            val watchNode: Boolean = recheck,
+            /** R22: the core's verdict JSON (`SimVerdict`) the confirm gate reads back. */
+            val verdict: String? = null,
+        ) : SimOutcome()
 
         /**
          * The simulation is out and has not answered: the sheet keeps its
@@ -395,6 +419,14 @@ class SigningController(
          * lands. Never a verdict — nothing reads it as "nothing moves".
          */
         data object Pending : SimOutcome()
+
+        /** R22: the core's verdict JSON the confirm gate reads back; `null` while none has landed. */
+        val verdictJson: String?
+            get() = when (this) {
+                is Ready -> verdict
+                is Notice -> verdict
+                Pending -> null
+            }
     }
 
     private val _sim = MutableStateFlow<SimOutcome?>(null)
@@ -718,7 +750,9 @@ class SigningController(
         simFacts = requestId to SimDeltas.ended(record, judged)
         // Checked, but nothing could say what the moves are: "could not check".
         // Whether it is "no asset changes" is the judged view's to say.
-        return judged?.let { SimOutcome.Ready(it.judgments, noChangeKey = it.no_change_key) } ?: SimDeltas.couldNotCheck()
+        return judged?.let {
+            SimOutcome.Ready(it.judgments, noChangeKey = it.no_change_key, sourceKey = record.sourceKey, verdict = SimDeltas.verdictJson(record))
+        } ?: SimDeltas.couldNotCheck()
     }
 
     /**
@@ -795,6 +829,10 @@ class SigningController(
             if (simParams == null || (outcome as? SimOutcome.Notice)?.recheck != true || _request.value?.id != request.id) return@launch
             simRerun = { simulateOnSheet(request, simParams, feeCalls, again = true) }
             _simAgain.value = true
+            // R22: a check one node answered alone is offered again on the
+            // person's word only — that node answers, so watching it would
+            // ask again and again.
+            if ((outcome as? SimOutcome.Notice)?.watchNode != true) return@launch
             nodeWatch = scope.launch {
                 while (true) {
                     kotlinx.coroutines.delay(nodeBackPollMs)

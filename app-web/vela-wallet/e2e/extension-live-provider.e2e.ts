@@ -9,6 +9,7 @@
  * test here is one of those, on the real worker, against a node the test
  * serves itself so nothing leaves the machine.
  */
+import { PRESS_IN_DOM } from './stub-chain';
 import { createServer, type Server } from 'node:http';
 import { readFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
@@ -438,7 +439,8 @@ test.describe('a provider a dApp can use', () => {
 				{ timeout: 30_000 }
 			)
 			.toBe(false);
-		await inSidePanel(wallet, `panel.document.querySelector(arg).click();`, CONFIRM);
+		// R22: a held confirm is pressed twice from a script (the assistive path).
+		await inSidePanel(wallet, PRESS_IN_DOM, CONFIRM);
 
 		await page.waitForFunction(
 			() => JSON.parse(document.getElementById('out')!.textContent!).results.personal_sign,

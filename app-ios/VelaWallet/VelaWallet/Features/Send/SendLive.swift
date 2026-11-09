@@ -956,7 +956,7 @@ enum SendLive {
             let symbol = networks.meta(estimate.chainId)?.nativeSymbol ?? ""
             return "\(feeFromBase(estimate.totalWei, decimals: ChainCatalog.coinDecimals)) \(symbol)"
         case .erc20(_, let decimals, let amount, let symbol):
-            return "\(feeFromBase(amount, decimals: decimals)) \(symbol ?? "TOKEN")"
+            return "\(feeFromBase(amount, decimals: decimals, shown: tokenFeePlaces)) \(symbol ?? "TOKEN")"
         }
     }
 
@@ -1998,7 +1998,9 @@ enum SendLive {
                 // "0.000300194967818323", "~0.0001720278 BNB" — wrapped mid-
                 // number on a phone (iPhone pass 2026-10-09).
                 balanceLabel: WalletLive.tokenAmountText(fromBase(option.balance, decimals: option.decimals)),
-                fee: option.amount.map { "~\(feeFromBase($0, decimals: option.decimals)) \(option.symbol)" } ?? "—",
+                fee: option.amount.map {
+                    "~\(feeFromBase($0, decimals: option.decimals, shown: option.contract == nil ? nativeFeePlaces : tokenFeePlaces)) \(option.symbol)"
+                } ?? "—",
                 selected: option.selected,
                 // The core's verdict, passed on: every published row is drawn,
                 // and the ones that cannot pay are drawn as that.
@@ -2292,22 +2294,22 @@ enum SendLive {
     /// (founder's device, 2026-09-19). Rounded UP, because a fee that displays
     /// as less than it costs is the wrong way to be wrong; a fee below the sixth
     /// decimal keeps two significant figures instead of reading as zero.
-    static func feeFromBase(_ base: String, decimals: Int) -> String {
-        let value = NSDecimalNumber(string: base).multiplying(byPowerOf10: Int16(-decimals))
-        guard value != .notANumber else { return base }
-        if value == .zero { return "0" }
-        var scale: Int16 = 6
-        if value.compare(NSDecimalNumber(string: "0.000001")) == .orderedAscending {
-            // Two significant figures: the exponent of the leading digit, plus one.
-            let exponent = Int16(ceil(-log10(value.doubleValue)))
-            scale = exponent + 1
-        }
-        let rounding = NSDecimalNumberHandler(
-            roundingMode: .up, scale: scale, raiseOnExactness: false,
-            raiseOnOverflow: false, raiseOnUnderflow: false, raiseOnDivideByZero: false
-        )
-        return trim(value.rounding(accordingToBehavior: rounding).stringValue)
+    ///
+    /// r21-2 (§36): the figure is the core's (`fee_figure`) — exact, cut as
+    /// text, rounded UP at `shown` places (6 for a chain's own coin, 4 for a
+    /// token fee), so the screen never says less than is charged. Nothing
+    /// here rounds: the float log10 this used to take could misplace the
+    /// cut by one digit.
+    static func feeFromBase(_ base: String, decimals: Int, shown: Int = nativeFeePlaces) -> String {
+        guard decimals >= 0, shown >= 0,
+              let figure = feeFigure(units: base, decimals: UInt32(decimals), shown: UInt32(shown))
+        else { return base }
+        return figure
     }
+
+    /// The places a fee row shows (r21-2): a chain's own coin, a token.
+    static let nativeFeePlaces = 6
+    static let tokenFeePlaces = 4
 
     static func fromBase(_ base: String, decimals: Int) -> String {
         TokenReads.scaled(decimal: base, decimals: decimals) ?? base

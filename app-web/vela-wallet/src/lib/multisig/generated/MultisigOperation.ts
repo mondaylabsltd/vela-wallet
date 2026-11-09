@@ -15,7 +15,16 @@ export type MultisigOperation = { "type": "http", method: string, url: string, b
  * on the wire — never answered from a cooldown or a skip window.
  * Absent: `false`.
  */
-person: boolean, } | { "type": "load_store", keys: Array<string>, } | { "type": "write_store", key: string, value: string | null, } | { "type": "wait", ms: number, } | { "type": "now" } | { "type": "random", bytes: number, } | { "type": "passkey", owner: string, chain_id: number, challenge: string, purpose: MultisigPasskeyPurpose, } | { "type": "ask_risk", chain_id: number, safe: string, findings: unknown[], } | { "type": "send_calls", chain_id: number, from: string, calls: unknown[], fee: unknown, 
+person: boolean, 
+/**
+ * R22: a read a guard stands on (the review's checks, who can act
+ * for the multisig, its members and nonce): the shell asks its pool
+ * for a corroborated read (`rpc_pool::Event::CallRequested::corroborate`)
+ * and answers [`MultisigShellResult::RpcCorroborated`] with both
+ * nodes' answers in one envelope (`corroborate::corroborated_envelope`).
+ * Absent: `false`.
+ */
+corroborate: boolean, } | { "type": "load_store", keys: Array<string>, } | { "type": "write_store", key: string, value: string | null, } | { "type": "wait", ms: number, } | { "type": "now" } | { "type": "random", bytes: number, } | { "type": "passkey", owner: string, chain_id: number, challenge: string, purpose: MultisigPasskeyPurpose, } | { "type": "ask_risk", chain_id: number, safe: string, findings: unknown[], } | { "type": "send_calls", chain_id: number, from: string, calls: unknown[], fee: unknown, 
 /**
  * What it is for ([`SendPurpose`]); absent from an older machine.
  */

@@ -40,6 +40,9 @@ pub mod keys {
     /// The hidden developer switch (spec 091): `off` / `on` once revealed,
     /// absent until then. See [`DebugMode`](super::DebugMode).
     pub const DEBUG_MODE: &str = "vela.debugMode";
+    /// R22: "Refuse blind signing" — `on` / `off` (absent: off). See
+    /// [`refuse_blind_signing`](super::refuse_blind_signing).
+    pub const REFUSE_BLIND_SIGNING: &str = "vela.refuseBlindSigning";
 }
 
 /// `system` follows the device; the others pin it.
@@ -183,6 +186,36 @@ pub fn read(entries: &[(String, String)]) -> Prefs {
         ),
     }
 }
+
+// ---------------------------------------------------------------------------
+// Refuse blind signing (R22)
+// ---------------------------------------------------------------------------
+
+/// R22 (review 1-3): the person's "Refuse blind signing" preference, as
+/// stored under [`keys::REFUSE_BLIND_SIGNING`]. With it on, every "… anyway"
+/// — a call or message nobody reads, a check Vela could not read or confirm —
+/// is refused instead of signed through friction (`sign_confirm`'s
+/// `ConfirmBlock::BlindRefused`, the multisig door's `BLIND_REFUSED_KEY`).
+///
+/// **Off by default** ([`REFUSE_BLIND_SIGNING_DEFAULT`]; the reasoning is
+/// docs/multisig-machines.md §36): every "… anyway" is already held
+/// ([`crate::app::sign_confirm::HOLD_TO_CONFIRM_MS`]), danger-styled and says
+/// why. Since R22 "… anyway" also covers a network where only one node
+/// answered, so refusing by default would refuse ordinary transactions on
+/// many networks and teach people to turn the protection off; the switch is
+/// one tap away in Settings and named on every refusal and every "… anyway".
+/// Only `on` turns it on; anything else is off.
+#[must_use]
+pub fn refuse_blind_signing(raw: Option<&str>) -> bool {
+    match raw.map(str::trim) {
+        Some("on" | "true" | "1") => true,
+        Some(_) => false,
+        None => REFUSE_BLIND_SIGNING_DEFAULT,
+    }
+}
+
+/// R22: "Refuse blind signing" is off until the person turns it on.
+pub const REFUSE_BLIND_SIGNING_DEFAULT: bool = false;
 
 // ---------------------------------------------------------------------------
 // Debug mode — the hidden developer switch (spec 091)

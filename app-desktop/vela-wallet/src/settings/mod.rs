@@ -319,6 +319,14 @@ pub struct SettingsStrings {
     /// Spec 091: the hidden developer switch, its one line, and the notice
     /// when seven taps on the version reveal it.
     pub about_debug_mode: SharedString,
+    /// R22: Settings → Security, and its one switch — "Refuse blind
+    /// signing" (`settings.refuseBlind.*`).
+    pub nav_security: SharedString,
+    pub refuse_blind_title: SharedString,
+    pub refuse_blind_subtitle: SharedString,
+    /// R22: under "Only use my node" — what turning it on trusts
+    /// (`settingsModals.network.onlyMineTrust`).
+    pub only_mine_trust: SharedString,
     pub about_debug_mode_body: SharedString,
     pub about_debug_mode_revealed: SharedString,
     // rescue (DSR1)
@@ -360,6 +368,10 @@ impl SettingsStrings {
             nav_account: s("settings.sections.account"),
             nav_appearance: s("settings.sections.appearance"),
             nav_localization: s("settings.sections.localization"),
+            nav_security: s("settings.sections.security"),
+            refuse_blind_title: s("settings.refuseBlind.title"),
+            refuse_blind_subtitle: s("settings.refuseBlind.subtitle"),
+            only_mine_trust: s("settingsModals.network.onlyMineTrust"),
             nav_networks: s("settings.advanced.networksTitle"),
 
             nav_endpoints: s("settings.advanced.endpointsTitle"),
@@ -750,6 +762,10 @@ mod tests {
             (&s.bug_done, "componentsUi.bugReport.done"),
             (&s.bug_try_again, "common.tryAgain"),
             (&s.nav_community, "settings.sections.community"),
+            (&s.nav_security, "settings.sections.security"),
+            (&s.refuse_blind_title, "settings.refuseBlind.title"),
+            (&s.refuse_blind_subtitle, "settings.refuseBlind.subtitle"),
+            (&s.only_mine_trust, "settingsModals.network.onlyMineTrust"),
             (
                 &s.bug_remove_from_viewer,
                 "componentsUi.bugReport.removeFromViewer",

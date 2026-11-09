@@ -46,7 +46,15 @@ import { sendEstimateFailureBodyKey } from '$lib/core/kernels';
 import type { FeeFailureView } from '$lib/core/generated/FeeFailureView';
 import { failureForChain } from './fee-failure';
 import type { WalletFlowMessages } from './messages';
-import { feeAmountText, feeLine, feeLineParts, feeOptionPriceUsd, feeParts } from './fee-line';
+import {
+	feeAmountText,
+	feeLine,
+	feeLineParts,
+	feeOptionPriceUsd,
+	feeParts,
+	NATIVE_FEE_PLACES,
+	TOKEN_FEE_PLACES
+} from './fee-line';
 import { pricedIn, showsFiat } from '$lib/network-space/fiat';
 import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
 import { chainMark, tokenMarkFor } from './marks';
@@ -2267,7 +2275,7 @@ export function liveFeeTokenPick(
 			fee:
 				option.amount === null
 					? '—'
-					: `~${feeAmountText(Number(option.amount) / 10 ** option.decimals, option.contract === null ? 6 : 4)} ${option.symbol}`,
+					: `~${feeAmountText(option.amount, option.decimals, option.contract === null ? NATIVE_FEE_PLACES : TOKEN_FEE_PLACES)} ${option.symbol}`,
 			selected: option.selected,
 			// The verdict this file's own comment promised and never passed on
 			// (issue 211): the native row is always offered, balance or not,

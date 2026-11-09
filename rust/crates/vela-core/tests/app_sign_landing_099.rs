@@ -44,6 +44,8 @@ fn ready() -> ConfirmInput {
         fee: Some(fee),
         speed_tier: Some(FeeTier::Fast),
         message_unread: false,
+        sim: None,
+        refuse_blind: false,
     }
 }
 

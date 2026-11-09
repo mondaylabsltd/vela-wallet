@@ -167,10 +167,12 @@ test('a request that moves nothing says "No asset changes" — in a place that w
 	let asked = 0;
 	let answer: () => void = () => {};
 	const held = new Promise<void>((resolve) => (answer = resolve));
-	await page.route(/stub-rpc\.test\/rpc\/1$/, async (route) => {
+	await page.route(/(?:stub|witness)-rpc\.test\/rpc\/1$/, async (route) => {
 		const body = JSON.parse(route.request().postData() ?? '{}') as { method?: string; id?: number };
 		if (body.method !== 'eth_simulateV1') return route.fallback();
-		asked += 1;
+		// R22: the witness twin asks too, once the first has answered; the
+		// count is the person's node's.
+		if (route.request().url().includes('://stub-rpc.test/')) asked += 1;
 		await held;
 		return route.fulfill({
 			contentType: 'application/json',
@@ -181,7 +183,10 @@ test('a request that moves nothing says "No asset changes" — in a place that w
 			})
 		});
 	});
-	await seedNetworkOverrides(page, [{ chainId: 1, rpcURL: 'https://stub-rpc.test/rpc/1' }]);
+	// R22: the suite's one node is the person's own ("Only use my node").
+	await seedNetworkOverrides(page, [
+		{ chainId: 1, rpcURL: 'https://stub-rpc.test/rpc/1', onlyMine: true }
+	]);
 	await page.reload();
 	await page.waitForFunction(
 		() => (window as unknown as { vela?: { requester?: unknown } }).vela?.requester !== undefined,

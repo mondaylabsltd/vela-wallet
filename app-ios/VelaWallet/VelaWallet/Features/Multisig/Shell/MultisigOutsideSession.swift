@@ -135,6 +135,9 @@ final class MultisigScopedPorts: MultisigPorts {
     func rpc(chainId: Int, method: String, params: Any) async -> MultisigRpcReply {
         await base.rpc(chainId: chainId, method: method, params: params)
     }
+    func rpcCorroborated(chainId: Int, method: String, params: Any) async -> [String: Any] {
+        await base.rpcCorroborated(chainId: chainId, method: method, params: params)
+    }
     func storeRead(_ key: String) -> String?? { base.storeRead(key) }
     func storeWrite(_ key: String, _ value: String?) -> Bool { base.storeWrite(key, value) }
     func nowMs() -> Double { base.nowMs() }

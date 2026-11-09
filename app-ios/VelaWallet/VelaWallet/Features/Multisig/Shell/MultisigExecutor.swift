@@ -65,6 +65,12 @@ protocol MultisigPorts: AnyObject {
         -> (status: Int, retryAfter: String?, body: String)
     /// One call through the RPC pool.
     func rpc(chainId: Int, method: String, params: Any) async -> MultisigRpcReply
+    /// R22 (review 1-2): one corroborated call through the RPC pool — a
+    /// read a guard stands on — answered as the core's envelope
+    /// (`rpc_corroborated_envelope`: the first node's answer, a second
+    /// independent node's, or the person's own node alone). What they mean,
+    /// and whether they agree, is the core's.
+    func rpcCorroborated(chainId: Int, method: String, params: Any) async -> [String: Any]
     /// The key-value store (`nil`: none — answered `store_failed`).
     func storeRead(_ key: String) -> String??
     func storeWrite(_ key: String, _ value: String?) -> Bool
@@ -89,6 +95,23 @@ protocol MultisigPorts: AnyObject {
     func wallet(method: String, params: Any) async throws -> Any
     /// Route a notice (another machine, the activity, a screen).
     func notice(_ notice: [String: Any]) async
+}
+
+extension MultisigPorts {
+    /// A port with no corroborating pool of its own answers with ONE node's
+    /// word (`rpc`) — honestly: the core believes no plain verdict on it.
+    func rpcCorroborated(chainId: Int, method: String, params: Any) async -> [String: Any] {
+        let body: [String: Any]?
+        switch await rpc(chainId: chainId, method: method, params: params) {
+        case .result(let value): body = ["result": value ?? NSNull()]
+        case .error(let code, let message, let data):
+            var error: [String: Any] = ["code": code.map { $0 as Any } ?? NSNull(), "message": message]
+            if let data, !(data is NSNull) { error["data"] = data }
+            body = ["error": error]
+        case .unanswered: body = nil
+        }
+        return RpcCorroborated(primary: body, witness: nil, ownNode: false).envelope
+    }
 }
 
 /// Who answered first, between a read and its bound (main actor only).
@@ -143,6 +166,23 @@ struct MultisigExecutor {
             let method = op["method"] as? String ?? ""
             let params = op["params"] ?? []
             let bound = Self.int(op["bound_ms"])
+            // R22: a guard's read — both nodes' answers in one envelope
+            // (`rpc_corroborated`), the envelope as an object. Its bound
+            // passing first is no answer at all.
+            if op["corroborate"] as? Bool == true {
+                let envelope: [String: Any]?
+                if let bound {
+                    envelope = await Self.within(ms: bound) { [ports] in
+                        await ports.rpcCorroborated(chainId: chainId, method: method, params: params)
+                    }
+                } else {
+                    envelope = await ports.rpcCorroborated(chainId: chainId, method: method, params: params)
+                }
+                guard let envelope else {
+                    return ["type": "rpc_unanswered", "detail": "no answer in \(bound ?? 0) ms"]
+                }
+                return ["type": "rpc_corroborated", "envelope": envelope]
+            }
             let reply: MultisigRpcReply
             if let bound {
                 reply = await Self.within(ms: bound) { [ports] in

@@ -31,7 +31,8 @@
       "advanced": "進階",
       "community": "社群",
       "privacy": "隱私",
-      "developer": "開發者"
+      "developer": "開發者",
+      "security": "安全"
     },
     "account": {
       "switch": "切換帳戶",
@@ -319,6 +320,10 @@
       "title": "服務暫時無法使用",
       "subtitle": "無法連線到通行密鑰索引服務，建立與登入都需要它。",
       "editEndpoint": "變更索引服務網址"
+    },
+    "refuseBlind": {
+      "title": "拒絕盲簽",
+      "subtitle": "拒絕 Vela 無法完整讀取或檢查的任何請求，而不是提供「仍然…」。"
     }
   },
   "time": {

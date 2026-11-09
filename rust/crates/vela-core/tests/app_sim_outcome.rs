@@ -508,6 +508,8 @@ fn the_verdict_is_the_outcome_and_its_lines() {
             notice_key: None,
             no_change_key: Some(KEY_NO_CHANGE.to_owned()),
             recheck: false,
+            source: None,
+            source_key: None,
         }
     );
     let moves = verdict(
@@ -527,10 +529,13 @@ fn the_verdict_is_the_outcome_and_its_lines() {
     assert!(reverts.deltas.is_empty());
 
     // On the wire (the wasm client's): the envelope in, the record out —
-    // and text that is not an envelope is "could not check".
+    // and text that is not an envelope is "could not check". R22: the
+    // envelope is a corroborated one — believed as two independent nodes
+    // gave it, never on one node's word.
     let wire: Value = serde_json::from_str(&verdict_json(
         ME,
-        r#"{"result":[{"calls":[{"status":"0x1","logs":[]}]}]}"#,
+        r#"{"result":[{"calls":[{"status":"0x1","logs":[]}]}],
+            "witness":{"result":[{"calls":[{"status":"0x1","logs":[]}]}]}}"#,
     ))
     .expect("a record");
     assert_eq!(
@@ -543,7 +548,19 @@ fn the_verdict_is_the_outcome_and_its_lines() {
             "notice_key": null,
             "no_change_key": KEY_NO_CHANGE,
             "recheck": false,
+            "source": "corroborated",
         })
+    );
+    let alone: Value = serde_json::from_str(&verdict_json(
+        ME,
+        r#"{"result":[{"calls":[{"status":"0x1","logs":[]}]}]}"#,
+    ))
+    .expect("a record");
+    assert_eq!(alone["kind"], "unconfirmed");
+    assert_eq!(
+        alone["no_change_key"],
+        Value::Null,
+        "never \"No asset changes\""
     );
     let unreadable: Value = serde_json::from_str(&verdict_json(ME, "not json")).expect("a record");
     assert_eq!(unreadable["kind"], "not_offered");

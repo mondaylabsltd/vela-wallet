@@ -371,7 +371,7 @@ fn run(func: &str, i: &Value) -> Value {
         )),
         "sim_outcome" => {
             let record = crate::sim_outcome(s(i, "user"), s(i, "reply_json"));
-            json!({
+            let mut value = json!({
                 "kind": record.kind,
                 "deltas": json_text(&record.deltas_json),
                 "revert_reason": record.revert_reason,
@@ -379,7 +379,16 @@ fn run(func: &str, i: &Value) -> Value {
                 "notice_key": record.notice_key,
                 "no_change_key": record.no_change_key,
                 "recheck": record.recheck,
-            })
+            });
+            // R22: who stood behind a checked answer — absent, as the wasm
+            // writes it, when nobody.
+            if let Some(source) = record.source {
+                value["source"] = json!(source);
+            }
+            if let Some(key) = record.source_key {
+                value["source_key"] = json!(key);
+            }
+            value
         }
         "builtin_network_display_name" => {
             json!(rules::builtin_network_display_name(u32_of(i, "chain_id")))

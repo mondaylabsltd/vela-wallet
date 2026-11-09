@@ -103,8 +103,11 @@ class SigningFeeCoinTest {
         .put("topics", JSONArray().put(transferTopic).put(topic(from)).put(topic(to)))
         .put("data", "0x" + BigInteger(value).toString(16).padStart(64, '0'))
 
+    /** R22: a node's answer, and a second, independent node's the same. */
+    private fun corroborated(body: JSONObject): RpcResult = RpcResult.Body(body, witness = JSONObject(body.toString()))
+
     /** The node's answer for the swap: the coins' own `Transfer` logs. */
-    private fun swapSimulated(): RpcResult = RpcResult.Body(
+    private fun swapSimulated(): RpcResult = corroborated(
         JSONObject().put(
             "result",
             JSONArray().put(
@@ -177,9 +180,11 @@ class SigningFeeCoinTest {
     }
 
     /** A clean run with no logs: checked, and nothing of the account's moves. */
-    private fun nothingMoves(): RpcResult = RpcResult.Body(
-        JSONObject().put("result", JSONArray().put(JSONObject().put("calls", JSONArray().put(JSONObject().put("status", "0x1").put("returnData", "0x").put("logs", JSONArray()))))),
-    )
+    private fun nothingMoves(): RpcResult {
+        val body = JSONObject().put("result", JSONArray().put(JSONObject().put("calls", JSONArray().put(JSONObject().put("status", "0x1").put("returnData", "0x").put("logs", JSONArray())))))
+        // R22: a corroborated read — a second, independent node said the same.
+        return RpcResult.Body(body, witness = JSONObject(body.toString()))
+    }
 
     /**
      * The device round, item 3: the verdict the sheet draws carries the
@@ -195,7 +200,7 @@ class SigningFeeCoinTest {
         scriptRelay()
         suspend fun verdict(c: SigningController): SigningController.SimOutcome? {
             c.open(swap())
-            return withTimeout(20_000) { c.sim.first { it != null && it != SigningController.SimOutcome.Pending } }
+            return withTimeout(20_000) { c.sim.first { it != null && it != SigningController.SimOutcome.Pending } }.plain()
         }
         assertEquals(
             SigningController.SimOutcome.Ready(emptyList(), noChangeKey = "componentsUi.signing.simResultNoChange"),
@@ -209,7 +214,7 @@ class SigningFeeCoinTest {
             verdict(controller({ nothingMoves() }, judge = { named.copy(no_change_key = null) })),
         )
         // No judge to say it: could not check.
-        assertEquals(SimDeltas.couldNotCheck(), verdict(controller({ nothingMoves() })))
+        assertEquals(SimDeltas.couldNotCheck().plain(), verdict(controller({ nothingMoves() })))
     }
 
     private fun swap() = IncomingRequest(

@@ -156,7 +156,10 @@ internal fun reviewFailedReason(door: MsSignDoor, words: MultisigWords, network:
     words.raw(door.reasonKey?.takeIf { it.isNotBlank() } ?: "home.multisig.review.state.unreadable", "network" to network)
 
 /** §12: the draft's sign door — its review's state and sign rule, asked of the core. */
-internal fun draftDoor(draft: MsDraft): MsSignDoor = MsRules.reviewDoor(draft.reviewState, draft.review)
+internal fun draftDoor(
+    draft: MsDraft,
+    refuseBlind: Boolean = app.getvela.wallet.core.data.SigningPrefs.refuseBlind.value,
+): MsSignDoor = MsRules.reviewDoor(draft.reviewState, draft.review, refuseBlind)
 
 /** §12: the event the draft's "Try again" sends — its review, read again. */
 internal fun draftReviewAgain(): kotlinx.serialization.json.JsonObject = ev("review_again")
@@ -440,13 +443,19 @@ private fun Moves(review: JsonElement, chainId: Int, words: MultisigWords, token
                 MsText(text, MsType.RowTitle, Modifier.testTag("multisig.review.delta"), color = if (delta["delta"].str?.startsWith("-") == true) colors.fgBase else colors.successBase)
             }
             if (review["simulationSource"].str == "probe") MsNote(words.t("review.movesProbe"))
+            simSourceLine(review, words)?.let { MsNote(it, tag = "multisig.review.simSource") }
         }
         is MovesSaid.Line -> {
             val text = if (said.reason != null) words.raw(said.key, "reason" to said.reason) else words.raw(said.key)
             if (said.tone == null) MsNote(text) else MsNote(text, tone = said.tone, tag = "multisig.review.sim")
+            if (said.tone == null) simSourceLine(review, words)?.let { MsNote(it, tag = "multisig.review.simSource") }
         }
     }
 }
+
+/** R22: the quiet line about who stood behind the check (`simulation.source_key`: "Checked by your own node only"). */
+internal fun simSourceLine(review: JsonElement, words: MultisigWords): String? =
+    review["simulation"]["source_key"].str?.takeIf { it.isNotBlank() }?.let { words.raw(it) }
 
 internal fun deltaText(delta: JsonElement, chainId: Int, words: MultisigWords, tokens: Map<String, Pair<String, Int?>>): String {
     val raw = delta["delta"].str ?: "0"
@@ -584,9 +593,20 @@ private fun StateGuard(review: JsonElement, words: MultisigWords, network: Strin
             )
             MsNote(source)
         }
-        "unavailable" -> MsNote(words.t("review.stateUnread", "network" to network), tone = MsTone.Warning, tag = "multisig.review.state.unread")
+        "unavailable" -> MsNote(words.t(stateUnreadKey(verdict), "network" to network), tone = MsTone.Warning, tag = "multisig.review.state.unread")
         else -> Unit
     }
+}
+
+/**
+ * R22: why the state-change check stands unread (`verdict.reason`): one
+ * node's word nobody independent confirmed (`uncorroborated`), two that
+ * disagree (`disagreed`), else could not check — the leaf under `review.`.
+ */
+internal fun stateUnreadKey(verdict: JsonElement?): String = when (verdict["reason"].str) {
+    "uncorroborated" -> "review.stateUnconfirmed"
+    "disagreed" -> "review.stateDisagreed"
+    else -> "review.stateUnread"
 }
 
 /** The guard's writes, one line each, said once. */
@@ -674,7 +694,9 @@ fun MultisigDraftReviewSheet(
         // (r8-1): enabled only once it is read (`ready`) and the rule allows
         // it; `anyway` signs only through the "… anyway" friction — never a
         // plain accent press. Loading or failed: nothing is proposed.
-        val door = remember(draft.reviewState, draft.review) { draftDoor(draft) }
+        // R22: and "Refuse blind signing" — a review that signs only "… anyway" is refused.
+        val refuseBlind by app.getvela.wallet.core.data.SigningPrefs.refuseBlind.collectAsStateWithLifecycle()
+        val door = remember(draft.reviewState, draft.review, refuseBlind) { draftDoor(draft, refuseBlind) }
         MsReviewDoor(door, words, "multisig.draft", onTryAgain = { hub.sendProposal(draftReviewAgain()) }, network = words.network(item.chainId)) {
             draft.review?.takeUnless { it.isNullish }?.let { MultisigReviewBody(it, item.chainId, words, tokenInfo) }
         }
@@ -697,6 +719,8 @@ fun MultisigDraftReviewSheet(
                 else -> words.t(if (anyway) "review.proposeAnyway" else "send.propose")
             },
             anyway = anyway && signs,
+            // R22: the door's hold — proposing with no member here signs nothing.
+            holdMs = if (signs) door.holdMs else 0,
             dangerLines = draft.review?.let { r -> shownConcerns(r).mapNotNull { reviewConcern(words, it) }.filter { it.second == MsTone.Danger }.map { it.first } } ?: emptyList(),
             words = words,
             onConfirm = {
@@ -783,8 +807,28 @@ fun MsSignButton(
      * web draw it; "… anyway" keeps its danger style and second confirmation.
      */
     secondary: Boolean = false,
+    /**
+     * R22: the door's `hold_ms` — an enabled "… anyway" or danger review is
+     * held to sign (the accessible path: press twice), in the danger style.
+     * It replaces the second confirmation: the hold IS the friction.
+     */
+    holdMs: Int = 0,
 ) {
     var confirming by remember { mutableStateOf(false) }
+    if (holdMs > 0) {
+        app.getvela.wallet.core.designsystem.components.VelaHoldToConfirmButton(
+            text = text,
+            onConfirm = onConfirm,
+            holdMs = holdMs,
+            holdHint = words.raw(HOLD_TO_CONFIRM_KEY),
+            confirmAgain = words.raw(CONFIRM_AGAIN_KEY),
+            danger = true,
+            modifier = modifier,
+            enabled = enabled,
+            loading = loading,
+        )
+        return
+    }
     if (!anyway) {
         if (secondary) {
             VelaSecondaryButton(text = text, onClick = onConfirm, modifier = modifier, enabled = enabled, loading = loading)
@@ -822,6 +866,12 @@ fun MsSignButton(
         )
     }
 }
+
+/** R22: under a held sign button, and its accessibility hint. */
+internal const val HOLD_TO_CONFIRM_KEY = "componentsUi.signing.holdToConfirm"
+
+/** R22: what the accessible path's first press says. */
+internal const val CONFIRM_AGAIN_KEY = "componentsUi.signing.confirmAgain"
 
 /** What the "… anyway" confirmation says: the review's danger lines, else the core's general warning. */
 internal fun anywayLines(dangerLines: List<String>, words: MultisigWords): List<String> =

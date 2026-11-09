@@ -302,7 +302,13 @@ data class SettingsSectionModel(
      * flag says so in the data, instead of the screen counting indices.
      */
     val appearanceControls: Boolean = false,
+    /** R22: the section's switches (Security's "Refuse blind signing"), drawn under its rows. */
+    val switches: List<SettingsSwitchModel> = emptyList(),
 )
+
+/** R22: one switch row of a settings section — its id routes the change, never the component. */
+@Immutable
+data class SettingsSwitchModel(val id: String, val title: String, val subtitle: String?, val on: Boolean)
 
 /** ST1's identity block: avatar, name, address, and a trailing text action. */
 @Immutable
@@ -528,7 +534,13 @@ data class NetworkNoticeModel(val tone: SettingsTone, val text: String)
  * decision 2026-10-28): the switch, and what it costs when that node stops.
  */
 @Immutable
-data class OnlyMineModel(val title: String, val subtitle: String, val on: Boolean)
+data class OnlyMineModel(
+    val title: String,
+    val subtitle: String,
+    val on: Boolean,
+    /** R22: what it means for Vela's safety checks (`settingsModals.network.onlyMineTrust`), said under it. */
+    val trust: String? = null,
+)
 
 /**
  * Spec 105: which space the network list shows, under its heading, and the

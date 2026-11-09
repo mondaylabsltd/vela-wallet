@@ -101,6 +101,8 @@ vi.mock('$lib/signing/sign-challenge', () => ({
 }));
 
 import { handleDAppRequest } from './dapp-submit';
+import { dappRequestCalls, keccak256 } from '$lib/core/kernels';
+import { SignAttestError } from './sign-attest';
 import * as safeTransaction from './safe-transaction';
 
 const PCS_ROUTER = '0x13f4EA83D0bd40E75C8222255bc855a974568Dd4';
@@ -113,11 +115,28 @@ const VALUE_WEI = '3000000000000000';
 const VALUE_WORD = 'aa87bee538000'.padStart(64, '0');
 const FEE = { amount: 1_000_000_000_000n, recipient: '0x' + '99'.repeat(20) };
 
+/**
+ * R22 (review 1-5): what the sheet showed of the request — the core's
+ * `DappReview`, as `SignAndSubmit.review` carries it: every call the core
+ * reads from the FINAL params, and the fee's quoted recipient.
+ */
+function reviewOf(method: string, params: unknown[], chainId: number): string {
+	const calls = dappRequestCalls(method, JSON.stringify(params)) ?? [];
+	return JSON.stringify({
+		kind: 'calls',
+		chain_id: chainId,
+		account: SAFE,
+		calls: calls.map((c) => ({ to: c.to, value: c.value, data: c.data })),
+		fee: { recipient: FEE.recipient }
+	});
+}
+
 function run(
 	method: string,
 	params: unknown[],
 	chainId: number,
-	gasFeeToken: string | null = null
+	gasFeeToken: string | null = null,
+	review: string | null = reviewOf(method, params, chainId)
 ) {
 	return handleDAppRequest(
 		{ id: 'req-1', method, params, origin: 'https://pancakeswap.finance' },
@@ -128,7 +147,9 @@ function run(
 		undefined,
 		gasFeeToken,
 		FEE,
-		'core'
+		'core',
+		undefined,
+		review
 	);
 }
 
@@ -270,5 +291,78 @@ describe('a native value reaches the signature (spec 096 F1)', () => {
 		}
 		expect(vi.mocked(signChallenge)).not.toHaveBeenCalled();
 		expect(asked.get('eth_sendUserOperation')).toBeUndefined();
+	});
+});
+
+/**
+ * R22 (review 1-5, WYSIWYS): a site's operation is hashed only through the
+ * core's check against the review it froze at the confirm
+ * (`attestDappSafeOpHash`) — a drifted operation, or none reviewed at all,
+ * is refused before any passkey and nothing is sent.
+ */
+describe('what is signed is what the sheet showed (R22, review 1-5)', () => {
+	it('a drifted operation — the calldata changed after the review — is refused, nothing signed', async () => {
+		const { signChallenge } = await import('$lib/signing/sign-challenge');
+		vi.mocked(signChallenge).mockClear();
+		const shown = [
+			{ from: SAFE, to: PCS_ROUTER, value: VALUE, data: '0x3593564c' + '00'.repeat(64) }
+		];
+		const sent = [
+			{ from: SAFE, to: PCS_ROUTER, value: VALUE, data: '0x3593564c' + '11'.repeat(64) }
+		];
+		const error = await run(
+			'eth_sendTransaction',
+			sent,
+			56,
+			null,
+			reviewOf('eth_sendTransaction', shown, 56)
+		).catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(SignAttestError);
+		expect(String((error as Error).message)).toMatch(/not the request the person confirmed/);
+		expect(vi.mocked(signChallenge)).not.toHaveBeenCalled();
+		expect(asked.get('eth_sendUserOperation')).toBeUndefined();
+	});
+
+	it('a request with no review is refused at once — no passkey, no POST', async () => {
+		const { signChallenge } = await import('$lib/signing/sign-challenge');
+		vi.mocked(signChallenge).mockClear();
+		const params = [{ from: SAFE, to: PCS_ROUTER, value: VALUE, data: '0x3593564c' }];
+		await expect(run('eth_sendTransaction', params, 56, null, null)).rejects.toBeInstanceOf(
+			SignAttestError
+		);
+		expect(vi.mocked(signChallenge)).not.toHaveBeenCalled();
+		expect(asked.get('eth_sendUserOperation')).toBeUndefined();
+	});
+
+	it('a signature over another message than the one read is refused — no passkey', async () => {
+		const { signChallenge } = await import('$lib/signing/sign-challenge');
+		vi.mocked(signChallenge).mockClear();
+		const eip191 = (text: string) => {
+			const bytes = new TextEncoder().encode(text);
+			const prefix = new TextEncoder().encode(`\x19Ethereum Signed Message:\n${bytes.length}`);
+			const all = new Uint8Array(prefix.length + bytes.length);
+			all.set(prefix);
+			all.set(bytes, prefix.length);
+			return '0x' + [...keccak256(all)].map((b) => b.toString(16).padStart(2, '0')).join('');
+		};
+		const review = JSON.stringify({
+			kind: 'message',
+			chain_id: 56,
+			account: SAFE,
+			digest: eip191('the message the sheet showed')
+		});
+		await expect(
+			run('personal_sign', ['a message swapped in after the review', SAFE], 56, null, review)
+		).rejects.toBeInstanceOf(SignAttestError);
+		await expect(run('personal_sign', ['no review', SAFE], 56, null, null)).rejects.toBeInstanceOf(
+			SignAttestError
+		);
+		expect(vi.mocked(signChallenge)).not.toHaveBeenCalled();
+	});
+
+	it('the reviewed request itself signs (its fee leg to the quoted recipient)', async () => {
+		const params = [{ from: SAFE, to: PCS_ROUTER, value: VALUE, data: '0x3593564c' }];
+		await run('eth_sendTransaction', params, 56);
+		expect(asked.get('eth_sendUserOperation')).toHaveLength(1);
 	});
 });

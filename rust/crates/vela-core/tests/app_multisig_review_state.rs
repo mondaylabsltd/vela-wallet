@@ -657,10 +657,11 @@ fn a_refused_node_reads_neither_check_and_signs_only_anyway() {
     assert!(approve_anyway(&purposes), "{purposes:?}");
 }
 
-/// D1: one of the two checks read keeps today's caution — readable, one
-/// plain press, no danger line, a plain passkey.
+/// D1: one of the two checks read keeps the caution — readable, no danger
+/// line. R22 (review 1-3): but it signs only "… anyway" (held), and the
+/// passkey's page is told so.
 #[test]
-fn one_check_unread_alone_signs_plainly() {
+fn one_check_unread_alone_signs_only_anyway() {
     let (mut world, mut sut, _) = setup(&[0]);
     // This world's state guard cannot read the Safe's state; the simulation
     // answers: one check of two.
@@ -672,7 +673,11 @@ fn one_check_unread_alone_signs_plainly() {
     assert_eq!(review["state"]["verdict"]["kind"], "unavailable");
     assert_eq!(review["simulation"]["kind"], "deltas");
     let door = review_state::door(Some(&draft.review_state), draft.review.as_ref());
-    assert!(door.enabled && !door.retry && door.reason_key.is_none());
+    assert!(door.enabled && door.anyway && !door.retry && door.reason_key.is_none());
+    assert_eq!(
+        door.hold_ms,
+        vela_core::app::sign_confirm::HOLD_TO_CONFIRM_MS
+    );
     let purposes = run_purposes(
         &mut sut,
         &mut world,
@@ -682,7 +687,7 @@ fn one_check_unread_alone_signs_plainly() {
     assert!(
         purposes
             .iter()
-            .all(|p| matches!(p, PasskeyPurpose::Approve { anyway: false, .. })),
+            .all(|p| matches!(p, PasskeyPurpose::Approve { anyway: true, .. })),
         "{purposes:?}"
     );
 }
@@ -777,7 +782,18 @@ fn a_review_its_network_answered_nothing_of_fails_never_anyway() {
     );
     assert_eq!(other.view().review_states[&key], ReviewState::Ready);
     let door = door_at(&other, &key);
-    assert!(door.enabled && !door.anyway && door.reason_key.is_none());
+    // R22 (review 1-3): this world's state guard does not read the Safe's
+    // state, so the review read again is "… anyway" (held) — never the D1
+    // danger line, never shut.
+    assert!(
+        door.enabled && door.anyway && door.reason_key.is_none(),
+        "{door:?} {}",
+        other.view().reviews[&key]
+    );
+    assert_eq!(
+        door.hold_ms,
+        vela_core::app::sign_confirm::HOLD_TO_CONFIRM_MS
+    );
 }
 
 /// Round 15 (r15-13): a failed review read itself again — "Reading" at
@@ -879,9 +895,15 @@ fn a_review_coming_back_from_an_outage_never_lands_anyway_on_the_way() {
     );
     assert_eq!(other.view().review_states[&key], ReviewState::Ready);
     let door = door_at(&other, &key);
+    // R22 (review 1-3): what this world can read is read (its state guard
+    // cannot read the Safe's state): "… anyway", held — never the D1 line.
     assert!(
-        door.enabled && !door.anyway && door.reason_key.is_none(),
-        "read in full, never anyway: {door:?}"
+        door.enabled && door.anyway && door.reason_key.is_none(),
+        "read as far as it reads, never unchecked: {door:?}"
+    );
+    assert_eq!(
+        door.hold_ms,
+        vela_core::app::sign_confirm::HOLD_TO_CONFIRM_MS
     );
 }
 
@@ -984,9 +1006,15 @@ fn a_review_whose_trace_is_refused_waits_for_its_silent_checks_before_unchecked(
     );
     assert_eq!(other.view().review_states[&key], ReviewState::Ready);
     let door = door_at(&other, &key);
+    // R22 (review 1-3): what this world can read is read (its state guard
+    // cannot read the Safe's state): "… anyway", held — never the D1 line.
     assert!(
-        door.enabled && !door.anyway && door.reason_key.is_none(),
-        "read in full, never anyway: {door:?}"
+        door.enabled && door.anyway && door.reason_key.is_none(),
+        "read as far as it reads, never unchecked: {door:?}"
+    );
+    assert_eq!(
+        door.hold_ms,
+        vela_core::app::sign_confirm::HOLD_TO_CONFIRM_MS
     );
 }
 

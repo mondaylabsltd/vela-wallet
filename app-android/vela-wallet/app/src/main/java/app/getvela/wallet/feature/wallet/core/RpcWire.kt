@@ -125,6 +125,16 @@ sealed class RpcCallVerdict {
         val url: String,
         /** Spec 082 RA1: the OR, over every POST of this call, of "this one may have been acted on". */
         val maybe_delivered: Boolean = false,
+        /**
+         * R22, a corroborated read only: the second, independent endpoint
+         * that answered the same question — its body is kept for
+         * `(call_id, witness_url)` too, and both go to the core in one
+         * envelope (`rpcCorroboratedEnvelope`). `null`: nobody independent
+         * answered (or the read was not corroborated).
+         */
+        val witness_url: String? = null,
+        /** R22: the pool holds the person's own node alone ("Only use my node") and it answered. */
+        val own_node: Boolean = false,
     ) : RpcCallVerdict()
 
     /** The endpoint capped the block range; retry within `max_span`. */
@@ -255,6 +265,12 @@ sealed class RpcEvent {
         val kind: RpcKind,
         val method: String,
         val now_ms: Double,
+        /**
+         * R22: a read a signing verdict stands on — answered by two
+         * independent endpoints, each of which reported this chain's id first
+         * (`rpc_pool`, "Corroborated reads"). RPC calls only; never hedged.
+         */
+        val corroborate: Boolean = false,
     ) : RpcEvent()
 
     @Serializable

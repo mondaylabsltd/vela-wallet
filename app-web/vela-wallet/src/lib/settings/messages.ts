@@ -42,6 +42,8 @@ export interface SettingsMessages {
 		community: string;
 		/** The desktop's panel for "Share anonymous usage statistics". */
 		privacy: string;
+		/** R22: "Security" — where "Refuse blind signing" is. */
+		security: string;
 	};
 	account: {
 		switch: string;
@@ -53,6 +55,11 @@ export interface SettingsMessages {
 	feedback: { title: string; subtitle: string };
 	/** "Share anonymous usage statistics" — the web wallet's and extension's switch. */
 	analytics: { title: string; subtitle: string };
+	/**
+	 * R22 (review 1-3): "Refuse blind signing" — every request Vela can't read
+	 * or check in full is refused instead of offered "… anyway".
+	 */
+	refuseBlind: { title: string; subtitle: string };
 	/**
 	 * dapp-11: Settings › Connected sites — the sites holding a grant, beside
 	 * the AI agent row (`listLabel` is the consequence of disconnecting one).
@@ -286,6 +293,11 @@ export interface SettingsMessages {
 		ownNodeDown: string;
 		onlyMine: string;
 		onlyMineHint: string;
+		/**
+		 * R22: what the switch means for the safety checks — trusted alone, and
+		 * said; off, a check counts only when two independent nodes agree.
+		 */
+		onlyMineTrust: string;
 		/**
 		 * Owner decision 2026-10-29: removing a Vela network shown on the
 		 * person's word — it leaves the list, its settings are kept.
@@ -859,6 +871,7 @@ export const SETTINGS_KEYS = [
 	'settings.sections.advanced',
 	'settings.sections.community',
 	'settings.sections.privacy',
+	'settings.sections.security',
 	'settings.account.switch',
 	'settings.account.contactsSubtitle',
 	'settings.account.openInSafe',
@@ -866,6 +879,8 @@ export const SETTINGS_KEYS = [
 	'settings.feedback.subtitle',
 	'settings.analytics.title',
 	'settings.analytics.subtitle',
+	'settings.refuseBlind.title',
+	'settings.refuseBlind.subtitle',
 	'settings.agent.title',
 	'settings.agent.subtitle',
 	'settings.agent.description',
@@ -1029,6 +1044,7 @@ export const SETTINGS_KEYS = [
 	'settingsModals.network.fallback',
 	'settingsModals.network.onlyMine',
 	'settingsModals.network.onlyMineHint',
+	'settingsModals.network.onlyMineTrust',
 	'settingsModals.network.hideBody',
 	'settingsModals.network.moreNetworks',
 	'assets.ownNodeUnreachable',

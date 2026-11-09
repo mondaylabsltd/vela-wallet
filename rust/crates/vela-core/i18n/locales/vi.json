@@ -31,7 +31,8 @@
       "advanced": "Nâng cao",
       "community": "Cộng đồng",
       "privacy": "Quyền riêng tư",
-      "developer": "Nhà phát triển"
+      "developer": "Nhà phát triển",
+      "security": "Bảo mật"
     },
     "account": {
       "switch": "Chuyển tài khoản",
@@ -319,6 +320,10 @@
       "title": "Dịch vụ tạm thời không khả dụng",
       "subtitle": "Không kết nối được tới chỉ mục passkey — cả việc tạo ví lẫn đăng nhập đều cần nó.",
       "editEndpoint": "Đổi địa chỉ dịch vụ chỉ mục"
+    },
+    "refuseBlind": {
+      "title": "Từ chối ký mù",
+      "subtitle": "Từ chối mọi yêu cầu Vela không thể đọc hoặc kiểm tra đầy đủ, thay vì đưa ra “… vẫn tiếp tục”."
     }
   },
   "time": {

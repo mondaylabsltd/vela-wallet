@@ -716,6 +716,35 @@ export function attestReviewedSafeOpHash(
 	);
 }
 
+/**
+ * R22 (review 1-5): the SafeOp hash for a site's transaction or
+ * `wallet_sendCalls` batch, as the core computes it — only when the operation
+ * is exactly the request the person confirmed (`SignAndSubmit.review`, the
+ * core's `DappReview` JSON): its sender, chain and every call in order, then
+ * at most one fee leg to the quoted recipient. Anything else throws, and
+ * nothing is signed.
+ */
+export function attestDappSafeOpHash(
+	op: AttestOp,
+	reviewJson: string,
+	chainId: number
+): Uint8Array {
+	return translated(() => wasm.attestDappSafeOpHash(attestOpJson(op), reviewJson, BigInt(chainId)));
+}
+
+/**
+ * R22 (review 1-5): a site's signature digest (before the `SafeMessage`
+ * wrap), back only when it is exactly the digest the sheet read for
+ * `account` (`SignAndSubmit.review`); anything else throws.
+ */
+export function attestDappMessageHash(
+	originalHash: Uint8Array,
+	account: string,
+	reviewJson: string
+): Uint8Array {
+	return translated(() => wasm.attestDappMessageHash(originalHash, account, reviewJson));
+}
+
 /** The Safe message hash (EIP-1271) as the core computes it. */
 export function attestSafeMessageHash(
 	originalHash: Uint8Array,
@@ -1230,7 +1259,14 @@ export function signConfirmState(
 	clear: ClearSigningView,
 	fee: FeeView | null,
 	speedTier: FeeTier | null,
-	messageUnread = false
+	messageUnread = false,
+	/**
+	 * R22: the sheet's own simulation verdict as held (`simOutcome`'s record);
+	 * `null` before it lands — a transaction without one is unread ("… anyway").
+	 */
+	sim: SimVerdict | null = null,
+	/** R22: the person's "Refuse blind signing" ({@link refuseBlindSigning}). */
+	refuseBlind = false
 ): ConfirmState | null {
 	const out = wasm.signConfirmState(
 		JSON.stringify(sign),
@@ -1238,9 +1274,59 @@ export function signConfirmState(
 		JSON.stringify(clear),
 		fee === null ? undefined : JSON.stringify(fee),
 		speedTier ?? undefined,
-		messageUnread
+		messageUnread,
+		sim === null ? undefined : JSON.stringify(sim),
+		refuseBlind
 	);
 	return out ? (JSON.parse(out) as ConfirmState) : null;
+}
+
+/**
+ * R22: the one envelope a corroborated read hands the core — the first
+ * node's JSON-RPC body (`null`: the pool gave up), the second, independent
+ * node's (`null`: none answered) and whether the pool holds the person's own
+ * node alone ("Only use my node"). `vela_core::app::corroborate`; never built
+ * here.
+ */
+export function rpcCorroboratedEnvelope(
+	primary: unknown | null,
+	witness: unknown | null,
+	ownNode: boolean
+): string {
+	return wasm.rpcCorroboratedEnvelope(
+		primary === null || primary === undefined ? undefined : JSON.stringify(primary),
+		witness === null || witness === undefined ? undefined : JSON.stringify(witness),
+		ownNode
+	);
+}
+
+/** R22: the stored "Refuse blind signing" (`on` / `off`) as a switch — off unless `on`. */
+export function refuseBlindSigning(raw: string | null | undefined): boolean {
+	return wasm.refuseBlindSigning(raw ?? undefined);
+}
+
+/** R22: the store key of "Refuse blind signing" (`vela.refuseBlindSigning`). */
+export function refuseBlindSigningKey(): string {
+	return wasm.refuseBlindSigningKey();
+}
+
+/** R22: how long a "… anyway" or danger confirm is held, in ms. */
+export function holdToConfirmMs(): number {
+	return wasm.holdToConfirmMs();
+}
+
+/** R22: the accessible equivalent's window — a second activation within it confirms. */
+export function confirmAgainWindowMs(): number {
+	return wasm.confirmAgainWindowMs();
+}
+
+/**
+ * r21-2: a fee as the screen shows it — `units` (base units, decimal) of a
+ * `decimals` coin at most `shown` places, rounded UP: never below what is
+ * charged. Plain digits with a `.` mark. `null` when `units` is no count.
+ */
+export function feeFigure(units: string | bigint, decimals: number, shown: number): string | null {
+	return wasm.feeFigure(String(units), decimals, shown) ?? null;
 }
 
 /**

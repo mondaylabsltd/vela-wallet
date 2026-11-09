@@ -3,6 +3,7 @@
  * rejects, and drives the real core machines (wasm) end to end.
  */
 import '$lib/i18n/wasm-init.server';
+import { withWitness } from './witnessed.testing';
 import { describe, expect, it, vi } from 'vitest';
 import { MultisigAccountsCore } from '../../../../../../rust/pkg-web/vela_core.js';
 import { createJsonWasmShell } from '$lib/core/json-shell';
@@ -30,29 +31,32 @@ function memoryStore(seed: Record<string, string> = {}) {
 
 function deps(over: Partial<MultisigShellDeps> = {}): MultisigShellDeps {
 	const store = memoryStore();
-	return {
-		fetch: vi.fn(async () => new Response('{}', { status: 200 })) as unknown as typeof fetch,
-		rpc: async () => ({ result: '0x' }),
-		storage: () => store,
-		now: () => 1_000,
-		random: (n) => new Uint8Array(n).fill(0xab),
-		passkey: async () => ({ type: 'passkey_cancelled' }),
-		askRisk: async () => false,
-		sendCalls: async () => ({ type: 'calls_cancelled' }),
-		quoteCalls: async () => ({ type: 'quote_failed', detail: 'none' }),
-		simulate: async () => null,
-		recipientFacts: async () => ({ isContract: null, firstTime: null }),
-		userOpStatus: async () => null,
-		peer: {
-			open: async () => ({ room: 'r1', invite: 'inv', pairing: 'rec' }),
-			send: async () => {},
-			receive: async () => ({ closed: 'closed' }),
-			close: async () => {}
+	return withWitness(
+		{
+			fetch: vi.fn(async () => new Response('{}', { status: 200 })) as unknown as typeof fetch,
+			rpc: async () => ({ result: '0x' }),
+			storage: () => store,
+			now: () => 1_000,
+			random: (n) => new Uint8Array(n).fill(0xab),
+			passkey: async () => ({ type: 'passkey_cancelled' }),
+			askRisk: async () => false,
+			sendCalls: async () => ({ type: 'calls_cancelled' }),
+			quoteCalls: async () => ({ type: 'quote_failed', detail: 'none' }),
+			simulate: async () => null,
+			recipientFacts: async () => ({ isContract: null, firstTime: null }),
+			userOpStatus: async () => null,
+			peer: {
+				open: async () => ({ room: 'r1', invite: 'inv', pairing: 'rec' }),
+				send: async () => {},
+				receive: async () => ({ closed: 'closed' }),
+				close: async () => {}
+			},
+			wallet: async () => '0xsigned',
+			notice: () => {},
+			...over
 		},
-		wallet: async () => '0xsigned',
-		notice: () => {},
-		...over
-	};
+		over
+	);
 }
 
 const run = (d: MultisigShellDeps, operation: MultisigOperation) =>
@@ -135,6 +139,61 @@ describe('the multisig shell', () => {
 		expect(away).not.toHaveProperty('refused');
 	});
 
+	it('R22: a corroborated read answers both nodes in the core envelope, an object', async () => {
+		const op = (bound: number | null): MultisigOperation => ({
+			type: 'rpc',
+			chain_id: 100,
+			method: 'eth_getCode',
+			params: ['0x01', 'latest'],
+			bound_ms: bound,
+			person: false,
+			corroborate: true
+		});
+		const asked: unknown[] = [];
+		const answered = await run(
+			deps({
+				rpc: async () => {
+					throw new Error('a corroborated read never goes the plain way');
+				},
+				rpcCorroborated: async (chainId, method, params, person) => {
+					asked.push({ chainId, method, params, person });
+					return { result: '0x60', witness: { result: '0x60' } };
+				}
+			}),
+			op(null)
+		);
+		expect(answered).toEqual({
+			type: 'rpc_corroborated',
+			envelope: { result: '0x60', witness: { result: '0x60' } }
+		});
+		expect(asked).toEqual([
+			{ chainId: 100, method: 'eth_getCode', params: ['0x01', 'latest'], person: false }
+		]);
+		// No node answered, or not in time: unanswered, with the pool's words.
+		const limited = await run(
+			deps({
+				rpcCorroborated: async () => {
+					throw Object.assign(new Error('All RPC endpoints failed for chain 100'), {
+						rateLimited: true
+					});
+				}
+			}),
+			op(null)
+		);
+		expect(limited).toEqual({
+			type: 'rpc_unanswered',
+			detail: 'rate-limited: Error: All RPC endpoints failed for chain 100'
+		});
+		const late = await run(deps({ rpcCorroborated: () => new Promise(() => {}) }), op(10));
+		expect(late).toEqual({ type: 'rpc_unanswered', detail: 'no answer in 10 ms' });
+		// The default world's node, witnessed by itself (`withWitness`): agreed.
+		const witnessed = await run(deps({ rpc: async () => ({ result: '0x01' }) }), op(null));
+		expect(witnessed).toEqual({
+			type: 'rpc_corroborated',
+			envelope: { result: '0x01', witness: { result: '0x01' } }
+		});
+	});
+
 	it('answers JSON-RPC with the result, the node’s error, or unanswered (bounded)', async () => {
 		const op = (bound: number | null): MultisigOperation => ({
 			type: 'rpc',
@@ -142,7 +201,8 @@ describe('the multisig shell', () => {
 			method: 'eth_call',
 			params: [],
 			bound_ms: bound,
-			person: false
+			person: false,
+			corroborate: false
 		});
 		expect(await run(deps({ rpc: async () => ({ result: '0x01' }) }), op(null))).toEqual({
 			type: 'rpc_result',
@@ -274,7 +334,15 @@ describe('the multisig shell', () => {
 		// what the core is handed back must be the number, never a string or a throw.
 		const resolved: string[] = [];
 		const operations: MultisigOperation[] = [
-			{ type: 'rpc', chain_id: 100, method: 'eth_call', params: [], bound_ms: null, person: false },
+			{
+				type: 'rpc',
+				chain_id: 100,
+				method: 'eth_call',
+				params: [],
+				bound_ms: null,
+				person: false,
+				corroborate: false
+			},
 			{ type: 'wallet_request', method: 'eth_sign', params: [] }
 		];
 		let next = 0;
@@ -324,7 +392,15 @@ describe('the multisig shell', () => {
 		const cases: [MultisigOperation, MultisigShellResult['type']][] = [
 			[{ type: 'http', method: 'GET', url: 'x', body: null, timeout_ms: 1 }, 'http_unreachable'],
 			[
-				{ type: 'rpc', chain_id: 1, method: 'm', params: [], bound_ms: null, person: false },
+				{
+					type: 'rpc',
+					chain_id: 1,
+					method: 'm',
+					params: [],
+					bound_ms: null,
+					person: false,
+					corroborate: false
+				},
 				'rpc_unanswered'
 			],
 			[{ type: 'ask_risk', chain_id: 1, safe: 's', findings: [] }, 'risk_answered'],

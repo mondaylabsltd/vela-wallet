@@ -143,6 +143,13 @@ export interface WarningBlock {
 	 * so ("Checking again…").
 	 */
 	recheck?: { label: string; checking: boolean };
+	/**
+	 * R22: under a simulation nobody independent confirmed — where a node the
+	 * person trusts is set ("Only use my node"), and the way there: this
+	 * network's RPC settings (`href`, opened beside the sheet; absent where
+	 * the host offers none).
+	 */
+	ownNode?: { text: string; action: string; href?: string };
 }
 
 /**
@@ -155,6 +162,12 @@ export interface BalancesBlock {
 	rows: BalanceRow[];
 	note?: string;
 	noteTone?: Tone;
+	/**
+	 * R22: who checked it, when the core says so — "Checked by your own node
+	 * only" ("Only use my node", `SimVerdict.source_key`): a quiet line under
+	 * the card, never a figure of its own.
+	 */
+	source?: string;
 	/**
 	 * This card LANDS after the sheet has opened (the sheet's own
 	 * simulation, on the wallet's own request): drawn whole, at its own
@@ -550,8 +563,20 @@ export interface SigningModel {
 		enabled: boolean;
 		/** Spec 099 R7: why the confirm is shut, in the core's words. Live only. */
 		note?: string;
-		/** Nobody could read the request: the red "Sign anyway" (cs-8). */
+		/**
+		 * The danger style: the core's "… anyway" (something Vela checks could
+		 * not be read) or its danger (a drain's shape, an unlimited grant, a
+		 * revert, `eth_sign`) — `ConfirmState.anyway || danger` (R22).
+		 */
 		danger?: boolean;
+		/**
+		 * R22 (review 1-3): the confirm is HELD this long (`ConfirmState.hold_ms`),
+		 * or pressed twice with assistive technology; absent or 0: a plain press.
+		 */
+		holdMs?: number;
+		/** "Hold to confirm" and "Press again to confirm" — the held confirm's words. */
+		holdLabel?: string;
+		againLabel?: string;
 	};
 	/** Spec 079: the ✕'s accessible name — the sheet's one explicit close. Live only. */
 	closeLabel?: string;
@@ -608,7 +633,16 @@ export interface HandoffModel {
 	/** The one line that backs the word "trusted" (R6). */
 	integrity: import('$lib/settings/model').IntegrityLineModel;
 	/** Open — enabled only when the check says the page may open (`IntegrityLine.opens`). */
-	open: { label: string; enabled: boolean };
+	open: {
+		label: string;
+		enabled: boolean;
+		/** R22: the confirm behind the card was an "… anyway" or a danger. */
+		danger?: boolean;
+		/** R22: held this long (the confirm's `hold_ms`), and its words. */
+		holdMs?: number;
+		holdLabel?: string;
+		againLabel?: string;
+	};
 	/** After Open: the page is up, and Vela waits for its answer. */
 	waiting?: { title: string; hint: string; reopen: string };
 }

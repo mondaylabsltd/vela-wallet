@@ -179,24 +179,26 @@ struct SendPressFreezeTests {
         view = try drive.view()
         #expect(view.txStatus == "idle")
         #expect(view.feeSigningKey == nil)
-        #expect(view.confirmAmount == "0.0058875")
+        // r21-2: Max sends exactly the figure it shows — the sendable
+        // amount cut DOWN to the field's places (`send::max_shown_exact`).
+        #expect(view.confirmAmount == "0.005887")
         #expect(view.fee?.totalWei == "294112500000000000")
         #expect(view.feeMoved == SendFeeMovedWire(
-            key: "send.feeMovedMax", max: SendMaxMovedWire(from: "0.0675", to: "0.005888")
+            key: "send.feeMovedMax", max: SendMaxMovedWire(from: "0.0675", to: "0.005887")
         ))
         let stopped = try confirm(view)
         #expect(stopped.feeMovedNote == loc.t("send.feeMovedMax", vars: [
-            "from": "0.0675", "to": "0.005888", "symbol": "USDC",
+            "from": "0.0675", "to": "0.005887", "symbol": "USDC",
         ]))
         #expect(stopped.maxNote == nil, "one sentence for one move")
         #expect(view.canConfirm)
 
-        // The next press signs exactly what is drawn: 0.0058875 + 0.2941125.
+        // The next press signs exactly what is drawn: 0.005887 + 0.2941125.
         try drive.run(["type": "slide_confirm", "review": view.reviewDigest ?? NSNull()])
         let submit = try #require(drive.submits.first)
         let review = try #require(submit["review"] as? [String: Any])
         let transfers = try #require(review["transfers"] as? [[String: Any]])
-        #expect(transfers.first?["amount"] as? String == "5887500000000000")
+        #expect(transfers.first?["amount"] as? String == "5887000000000000")
         #expect((review["fee"] as? [String: Any])?["amount"] as? String == "294112500000000000")
     }
 

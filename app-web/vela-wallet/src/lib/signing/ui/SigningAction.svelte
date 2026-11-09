@@ -1,5 +1,7 @@
 <script lang="ts">
 	import Button from '$lib/ui/Button.svelte';
+	import HoldConfirm from '$lib/ui/HoldConfirm.svelte';
+	import type { HoldPhase } from '$lib/ui/hold-confirm';
 	import type { SigningModel } from '../model';
 
 	/**
@@ -27,8 +29,25 @@
 
 	let { model, onconfirm, onclose, held = false }: Props = $props();
 
-	/** Spec 099 R7: why the confirm is shut, in the core's words. */
-	const note = $derived(model.confirm.enabled ? undefined : model.confirm.note);
+	/** R22: the held confirm's phase — "Press again to confirm" once armed. */
+	let phase = $state<HoldPhase>('idle');
+	const noteId = $props.id();
+	/** R22: an open confirm the core holds (`hold_ms`): its words in the note's line. */
+	const holding = $derived(model.confirm.enabled && !held && (model.confirm.holdMs ?? 0) > 0);
+	/**
+	 * Spec 099 R7: why the confirm is shut, in the core's words — or, R22, how
+	 * an open held one acts ("Hold to confirm", "Press again to confirm"),
+	 * said in the SAME line, so the hold's arrival moves nothing.
+	 */
+	const note = $derived(
+		model.confirm.enabled
+			? holding
+				? phase === 'armed'
+					? model.confirm.againLabel
+					: model.confirm.holdLabel
+				: undefined
+			: model.confirm.note
+	);
 	/**
 	 * The note comes and goes with the gate — "Working out the network fee…"
 	 * on every re-quote, refresh and new speed — and the phone sheet is
@@ -67,15 +86,22 @@
 			dimmed by its own press.
 		-->
 		<div class="confirm">
-			<Button
+			<!-- R22: an "… anyway" or a danger is HELD (the core's `hold_ms`), or
+			     pressed twice with assistive technology; otherwise a plain press. -->
+			<HoldConfirm
 				variant={model.confirm.danger ? 'danger' : 'value'}
 				shape="rounded"
 				testid="signing-confirm"
+				holdMs={model.confirm.holdMs ?? 0}
+				holdLabel={model.confirm.holdLabel ?? ''}
+				againLabel={model.confirm.againLabel ?? ''}
 				disabled={!model.confirm.enabled || held}
-				onclick={() => onconfirm?.()}
+				describedby={noteId}
+				onphase={(next) => (phase = next)}
+				onconfirm={() => onconfirm?.()}
 			>
 				{model.confirm.action}
-			</Button>
+			</HoldConfirm>
 		</div>
 		{#if noteLine}
 			<!-- Spec 099 R7: a shut confirm says why, in the core's words. One
@@ -84,7 +110,11 @@
 			<p
 				class="confirm-note"
 				class:reserved={note === undefined}
+				class:held-note={holding}
+				id={noteId}
+				aria-live={holding ? 'polite' : undefined}
 				aria-hidden={note === undefined ? 'true' : undefined}
+				data-testid={holding ? 'signing-confirm-hint' : undefined}
 			>
 				{noteLine}
 			</p>

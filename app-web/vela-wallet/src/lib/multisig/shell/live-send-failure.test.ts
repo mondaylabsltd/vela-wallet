@@ -30,7 +30,9 @@ vi.mock('$lib/services/rpc-pool', async (original) => ({
 	chainFailing: () => failing
 }));
 
-const { EstimateGasError } = await import('$lib/services/safe-transaction');
+const { EstimateGasError, UserOpNotSentError } = await import('$lib/services/safe-transaction');
+const { failureSaid } = await import('../core/review-door');
+const { detailError, ExecutionExpiredError } = await import('./proposal-failure');
 const { PoolFailedError } = await import('$lib/services/rpc-pool');
 const { liveDeps } = await import('./live');
 const deps = liveDeps({ peer: {} as never, notice: () => {} });
@@ -113,5 +115,32 @@ describe('an execution stopped before its passkey (r17-12)', () => {
 			})
 		);
 		expect(said.kind).toBe('unknown');
+	});
+});
+
+/**
+ * r21-1: an execution the relay refused with AA22 ("expired or not due") —
+ * its window closed before the EntryPoint saw it — is said as the Send says
+ * it: "Not sent", calmly, `componentsUi.signing.expired`, and pressing again
+ * signs anew. Never "Something went wrong" or "The network didn't take it".
+ */
+describe('an expired execution (r21-1)', () => {
+	const AA22 = 'SUBMIT REFUSED by simulation: AA22 expired or not due';
+
+	it('the send pipeline’s Expired is the shell’s `expired`, said in the Send’s words', async () => {
+		const said = await executeFailing(new UserOpNotSentError('expired', AA22));
+		expect(said.kind).toBe('expired');
+		const detail = JSON.stringify(said);
+		expect(failureSaid(detail)).toEqual({ kind: 'expired', key: 'componentsUi.signing.expired' });
+		expect(detailError(detail)).toBeInstanceOf(ExecutionExpiredError);
+	});
+
+	it('the relay’s AA22 carried in a not-sent detail is the same expiry', async () => {
+		const said = await executeFailing(new UserOpNotSentError({ other: AA22 }, AA22));
+		const detail = JSON.stringify(said);
+		expect(failureSaid(detail).key).toBe('componentsUi.signing.expired');
+		expect(detailError(detail)).toBeInstanceOf(ExecutionExpiredError);
+		// …and only AA22: a plain refusal is still "not sent".
+		expect(detailError('{"kind":"not_sent"}')).not.toBeInstanceOf(ExecutionExpiredError);
 	});
 });

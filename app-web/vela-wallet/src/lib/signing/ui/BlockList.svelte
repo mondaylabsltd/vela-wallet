@@ -77,6 +77,7 @@
 			text={block.text}
 			verdict={block.verdict}
 			recheck={block.recheck}
+			ownNode={block.ownNode}
 			{onrecheck}
 		/>
 	{:else if block.kind === 'positive'}
@@ -97,6 +98,7 @@
 			rows={block.rows}
 			note={block.note}
 			noteTone={block.noteTone}
+			source={block.source}
 			verdict={block.verdict}
 		/>
 	{/if}

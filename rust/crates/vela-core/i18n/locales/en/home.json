@@ -805,7 +805,10 @@
           "tryAgain": "Try again",
           "unchecked": "Vela couldn't check what this transaction changes.",
           "chainUnread": "Couldn't reach {{network}} to read this transaction."
-        }
+        },
+        "stateUnconfirmed": "Only one node on {{network}} answered, so Vela couldn’t confirm what running it changes in the multisig. Only Vela’s reading of the transaction stands.",
+        "stateDisagreed": "Two independent nodes on {{network}} disagree about what running it changes in the multisig. Only Vela’s reading of the transaction stands.",
+        "blindRefused": "Vela won’t sign this here: “Refuse blind signing” is on, and part of this transaction couldn’t be checked. You can change it in Settings."
       },
       "notify": {
         "title": "Notifications",

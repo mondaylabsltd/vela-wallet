@@ -31,7 +31,8 @@
    "advanced": "Nâng cao",
    "community": "Cộng đồng",
    "privacy": "Quyền riêng tư",
-   "developer": "Nhà phát triển"
+   "developer": "Nhà phát triển",
+   "security": "Bảo mật"
   },
   "account": {
    "switch": "Chuyển tài khoản",
@@ -319,6 +320,10 @@
    "title": "Dịch vụ tạm thời không khả dụng",
    "subtitle": "Không kết nối được tới chỉ mục passkey — cả việc tạo ví lẫn đăng nhập đều cần nó.",
    "editEndpoint": "Đổi địa chỉ dịch vụ chỉ mục"
+  },
+  "refuseBlind": {
+   "title": "Từ chối ký mù",
+   "subtitle": "Từ chối mọi yêu cầu Vela không thể đọc hoặc kiểm tra đầy đủ, thay vì đưa ra “… vẫn tiếp tục”."
   }
  },
  "time": {
@@ -1622,7 +1627,8 @@
     "feeWouldFail": "Nếu gửi như hiện tại, giao dịch sẽ thất bại.",
     "previousPending": "Đang chờ giao dịch trước trên mạng này hoàn tất…",
     "simChecking": "Đang kiểm tra giao dịch này sẽ làm gì…",
-    "messageUnread": "Tin nhắn vẫn còn tiếp — hãy cuộn để đọc hết"
+    "messageUnread": "Tin nhắn vẫn còn tiếp — hãy cuộn để đọc hết",
+    "blindRefused": "Đã từ chối: “Từ chối ký mù” đang bật và Vela không thể kiểm tra đầy đủ yêu cầu này. Bạn có thể đổi trong Cài đặt."
    },
    "labelAddsToAllowance": "Cộng thêm vào hạn mức",
    "certain": {
@@ -1693,7 +1699,12 @@
     "wrongChain": "Lần đăng nhập này dành cho chuỗi {{chain}}, nhưng trang này đang kết nối trên chuỗi {{connected}}. Hãy đổi mạng và yêu cầu lại.",
     "incomplete": "Lần đăng nhập này thiếu {{field}}, nên Vela không thể kiểm tra nó đăng nhập bạn vào đâu.",
     "noOrigin": "Vela không biết trang nào đang yêu cầu, nên sẽ không ký lần đăng nhập này."
-   }
+   },
+   "simUnconfirmed": "Chỉ một nút trả lời nên Vela không thể xác nhận giao dịch này làm gì. Hãy kiểm tra trước khi ký.",
+   "simDisagreed": "Hai nút độc lập trả lời khác nhau về việc giao dịch này làm gì. Hãy kiểm tra trước khi ký.",
+   "simOwnNode": "Chỉ được kiểm tra bởi nút của riêng bạn",
+   "ownNodeHint": "Để kiểm tra bằng một nút bạn tin, hãy thêm nút của bạn và bật “Chỉ dùng nút của tôi” cho mạng này.",
+   "confirmAgain": "Nhấn lần nữa để xác nhận"
   },
   "signingApprove": {
    "resultingTotal": "Tổng hạn mức mới",
@@ -2047,7 +2058,8 @@
    "onlyMine": "Chỉ dùng node của tôi",
    "onlyMineHint": "Không thông tin nào về tài khoản của bạn được gửi tới node công khai. Nếu node của bạn ngừng phản hồi, mạng này sẽ không đọc được cho đến khi node hoạt động lại.",
    "hideBody": "Mạng sẽ rời khỏi danh sách của bạn. Cài đặt của mạng được giữ lại và bạn có thể thêm lại bất cứ lúc nào từ Thêm mạng.",
-   "moreNetworks": "Cũng được hỗ trợ nhưng không có trong danh sách: {{names}}. Thêm từ Thêm mạng."
+   "moreNetworks": "Cũng được hỗ trợ nhưng không có trong danh sách: {{names}}. Thêm từ Thêm mạng.",
+   "onlyMineTrust": "Khi bật, Vela chỉ tin nút của bạn cho các bước kiểm tra an toàn và nói rõ điều đó. Khi tắt, một bước kiểm tra chỉ được tính khi hai nút độc lập trả lời giống nhau."
   },
   "account": {
    "modalTitle": "Tài khoản",

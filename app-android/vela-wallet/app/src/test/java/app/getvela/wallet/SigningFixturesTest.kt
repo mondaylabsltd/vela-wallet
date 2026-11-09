@@ -360,7 +360,17 @@ class SigningFixturesTest {
                 assertEquals(place(waiting).rooms, place(model).rooms)
                 assertEquals(waiting.blocks.filterNot { it is SigningBlock.Held }, model.blocks.filterNot { it is SigningBlock.Held })
                 assertEquals(waiting.blocks.indexOfFirst { it is SigningBlock.Held }, model.blocks.indexOfFirst { it is SigningBlock.Held })
-                assertEquals(waiting.confirmAction, model.confirmAction)
+                if (model === held) {
+                    // R22 (core 100183ddd): while the verdict is still out the shut
+                    // confirm reads plain — judged when it lands.
+                    assertEquals(waiting.confirmAction, model.confirmAction)
+                    assertFalse(model.confirmDanger)
+                    assertEquals(0, model.confirmHoldMs)
+                } else {
+                    // Waited out: a check not read — the core's posture: "… anyway", held.
+                    assertEquals(words.t("componentsUi.signing.certain.signAnyway"), model.confirmAction)
+                    assertTrue(model.confirmDanger && model.confirmHoldMs > 0)
+                }
                 assertEquals(waiting.fee, model.fee)
             }
             // CS58 is the same caution, said by a node that answered: the same block.

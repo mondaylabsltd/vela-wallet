@@ -31,7 +31,8 @@
       "advanced": "Avanzate",
       "community": "Community",
       "privacy": "Privacy",
-      "developer": "Sviluppatore"
+      "developer": "Sviluppatore",
+      "security": "Sicurezza"
     },
     "account": {
       "switch": "Cambia account",
@@ -319,6 +320,10 @@
       "title": "Servizio temporaneamente non disponibile",
       "subtitle": "L’indice delle passkey non è raggiungibile, e serve sia per creare sia per accedere.",
       "editEndpoint": "Cambia l’indirizzo del servizio di indice"
+    },
+    "refuseBlind": {
+      "title": "Rifiuta la firma alla cieca",
+      "subtitle": "Rifiuta ogni richiesta che Vela non può leggere o verificare del tutto, invece di offrire “… comunque”."
     }
   },
   "time": {

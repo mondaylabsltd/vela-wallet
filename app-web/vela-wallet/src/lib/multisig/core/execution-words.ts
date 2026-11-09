@@ -13,15 +13,42 @@ import type { MultisigAmount } from '../generated/MultisigAmount';
  * r5reg-15: how many decimals a fee reads in — the wallet's own fee
  * formatter (`feeAmountText`) at its budget for a fee paid in a token. An
  * "≈" figure at six decimals ("0.035412 USDC") said more than anyone reads;
- * the formatter still widens until a tiny fee's first digit shows, so no
- * fee ever reads as "0".
+ * a tiny fee keeps its first two significant digits, so no fee ever reads
+ * as "0".
  */
 const FEE_DECIMALS = 4;
 
-/** A fee (or what pays it) in the chain's coin, 18 decimals: "0.0354 USDC". */
+/**
+ * A fee (or the setup it pays for) in the chain's coin, 18 decimals:
+ * "0.0354 USDC". r21-2: the core's figure, rounded UP — never below what the
+ * execution is charged.
+ */
 export function feeCoin(amount: bigint, symbol: string): string {
-	const text = feeAmountText(Number(amount) / 1e18, FEE_DECIMALS);
+	const text = feeAmountText(amount, 18, FEE_DECIMALS);
 	return symbol ? `${text} ${symbol}` : text;
+}
+
+/**
+ * What an executor HOLDS, beside a fee it cannot pay: the same places, cut
+ * DOWN exactly (no float), so the balance never reads as more than there is
+ * — a fee rounded up beside a balance rounded up could read alike while the
+ * one cannot pay the other. A balance under the last place keeps its first
+ * two significant digits, cut too.
+ */
+export function balanceCoin(amount: bigint, symbol: string): string {
+	const text = cutDown(amount < 0n ? 0n : amount, 18, FEE_DECIMALS);
+	return symbol ? `${text} ${symbol}` : text;
+}
+
+function cutDown(units: bigint, decimals: number, places: number): string {
+	if (units === 0n) return '0';
+	const raw = units.toString().padStart(decimals + 1, '0');
+	const whole = raw.slice(0, raw.length - decimals);
+	const fraction = raw.slice(raw.length - decimals);
+	const first = fraction.search(/[1-9]/);
+	const keep = whole === '0' && first >= places ? Math.min(first + 2, fraction.length) : places;
+	const kept = fraction.slice(0, keep).replace(/0+$/, '');
+	return kept === '' ? whole : `${whole}.${kept}`;
 }
 
 /**

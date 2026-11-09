@@ -23,9 +23,13 @@ export interface RpcPoolCallRegistry {
 	/**
 	 * The payload to POST for `callId`; `undefined` once the call concluded.
 	 * `kind` names the pool it routes through — only an `rpc` read is ever
-	 * hedged (perf-6); a payload without one is not.
+	 * hedged (perf-6); a payload without one is not. `corroborate` (R22): a
+	 * read two independent endpoints answer — never hedged, never answered
+	 * early.
 	 */
-	payload(callId: string): { method: string; params: unknown[]; kind?: RpcKind } | undefined;
+	payload(
+		callId: string
+	): { method: string; params: unknown[]; kind?: RpcKind; corroborate?: boolean } | undefined;
 	/**
 	 * The pool's latest view — where a hedge goes (`pending_urls`, the core's
 	 * own next endpoints) and what is banned. Absent: nothing is hedged.

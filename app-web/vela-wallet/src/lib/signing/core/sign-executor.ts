@@ -86,7 +86,7 @@ import {
 	userOpWriteAheadWaitMs
 } from '$lib/core/kernels';
 
-import { poolRpcCall } from '$lib/services/rpc-pool';
+import { poolCorroboratedCall } from '$lib/services/rpc-pool';
 import type { SafeOwnerAnswer } from '$lib/core/generated/SafeOwnerAnswer';
 import type { SignFundingNeeded } from '$lib/core/generated/SignFundingNeeded';
 import type { SignShellResult } from '$lib/core/generated/SignShellResult';
@@ -154,12 +154,44 @@ function parseParams(json: string): unknown[] {
 // §31: the parent-Safe guard's read
 // ---------------------------------------------------------------------------
 
-/** One JSON-RPC call through the app's pool — `poolRpcCall`'s shape (a test's stand-in). */
+/**
+ * One CORROBORATED call through the app's pool (R22, SEC-PARENT-3) —
+ * `poolCorroboratedCall`'s shape (a test's two nodes): the first node's body,
+ * the second, independent node's (`null`: nobody independent answered), and
+ * whether the person's own node answered alone.
+ */
 export type SafeOwnerCall = (
 	method: string,
 	params: unknown[],
 	chainId: number
-) => Promise<{ result?: unknown; error?: { code?: unknown; message?: unknown } }>;
+) => Promise<{ body: OwnerReply; witnessBody: OwnerReply | null; ownNode: boolean }>;
+
+/** A node's JSON-RPC reply to the isOwner read. */
+type OwnerReply = { result?: unknown; error?: { code?: unknown; message?: unknown } | null };
+
+/** §31's read, as the core is answered it: the first node, the witness, own node. */
+export interface SafeOwnerRead {
+	answer: SafeOwnerAnswer;
+	/** The second, independent node's answer; absent when none answered. */
+	witness?: SafeOwnerAnswer;
+	/** The person's own node answered alone ("Only use my node"). */
+	own_node?: boolean;
+}
+
+/** One node's reply as the vocabulary's answer — never decided here. */
+function ownerAnswer(reply: OwnerReply | null | undefined): SafeOwnerAnswer {
+	const error = reply?.error;
+	if (error !== undefined && error !== null) {
+		const code = error.code;
+		return {
+			type: 'rpc_error',
+			code: typeof code === 'number' && Number.isInteger(code) ? code : null,
+			message: typeof error.message === 'string' ? error.message : ''
+		};
+	}
+	if (typeof reply?.result === 'string') return { type: 'returned', data: reply.result };
+	return { type: 'unreachable', detail: 'the node answered no result' };
+}
 
 /**
  * `eth_call [{to: safe, data}, "latest"]` on `chainId`, answered as the node
@@ -174,9 +206,10 @@ export async function readSafeOwner(
 	chainId: number,
 	safe: string,
 	data: string,
-	call: SafeOwnerCall = poolRpcCall,
+	call: SafeOwnerCall = poolCorroboratedCall,
 	budgetMs: number = rpcReadTimeoutMs()
-): Promise<SafeOwnerAnswer> {
+): Promise<SafeOwnerRead> {
+	const alone = (answer: SafeOwnerAnswer): SafeOwnerRead => ({ answer });
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	const late = new Promise<'late'>((resolve) => {
 		timer = setTimeout(() => resolve('late'), budgetMs);
@@ -186,23 +219,21 @@ export async function readSafeOwner(
 			call('eth_call', [{ to: safe, data }, 'latest'], chainId),
 			late
 		]);
-		if (reply === 'late') return { type: 'unreachable', detail: `no answer in ${budgetMs} ms` };
-		const error = reply?.error;
-		if (error !== undefined && error !== null) {
-			const code = error.code;
-			return {
-				type: 'rpc_error',
-				code: typeof code === 'number' && Number.isInteger(code) ? code : null,
-				message: typeof error.message === 'string' ? error.message : ''
-			};
+		if (reply === 'late') {
+			return alone({ type: 'unreachable', detail: `no answer in ${budgetMs} ms` });
 		}
-		if (typeof reply?.result === 'string') return { type: 'returned', data: reply.result };
-		return { type: 'unreachable', detail: 'the node answered no result' };
-	} catch (error) {
+		// R22: both nodes' answers, as they answered; whether they agree, and
+		// whether "this account is an owner" stands, is the core's.
 		return {
+			answer: ownerAnswer(reply.body),
+			...(reply.witnessBody === null ? {} : { witness: ownerAnswer(reply.witnessBody) }),
+			...(reply.ownNode ? { own_node: true } : {})
+		};
+	} catch (error) {
+		return alone({
 			type: 'unreachable',
 			detail: (error as { message?: string } | null)?.message ?? String(error)
-		};
+		});
 	} finally {
 		clearTimeout(timer);
 	}
@@ -239,7 +270,7 @@ const wallClock: SignTimer = (ms) => new Promise<void>((resolve) => setTimeout(r
 export function createSignExecutor(
 	ports: SignShellPorts,
 	timer: SignTimer = wallClock,
-	ownerCall: SafeOwnerCall = poolRpcCall
+	ownerCall: SafeOwnerCall = poolCorroboratedCall
 ) {
 	/**
 	 * op hash → chain, for the ops this executor answered BY their op hash, so
@@ -488,7 +519,11 @@ export function createSignExecutor(
 						// nothing keeps in step. Native never reaches this `.web.ts` module and
 						// so keeps its own TS guard (Hermes has no wasm) — see SubmitGuardOwner.
 						'core',
-						hooks
+						hooks,
+						// R22 (review 1-5): the request as the person confirmed it —
+						// frozen by the core from the FINAL params the sheet showed.
+						// Every hash is attested against it; none, nothing is signed.
+						operation.review ?? null
 					);
 					const answer = typeof result === 'string' ? result : String(result ?? '');
 					// EIP-5792: a batch is answered with its id — the op hash — the moment
@@ -663,7 +698,9 @@ export function createSignExecutor(
 				// §31: the read the core asked for, answered as the node answered
 				// it. Echoes the id, chain and Safe exactly as given: the core
 				// matches the answer to its request by them.
-				const answer = await readSafeOwner(
+				// R22: corroborated — the first node's answer and an independent
+				// second's (or the person's own node alone).
+				const read = await readSafeOwner(
 					operation.chain_id,
 					operation.safe,
 					operation.data,
@@ -674,7 +711,7 @@ export function createSignExecutor(
 					id: operation.id,
 					chain_id: operation.chain_id,
 					safe: operation.safe,
-					answer
+					...read
 				};
 			}
 

@@ -27,6 +27,7 @@ import { IDENTITY } from '$lib/wallet/fixtures';
 import type { SigningMessages } from './messages';
 import type { Block, SigningModel, SigningStateId, VerdictBlock } from './model';
 import { NOT_OFFERED, nativeLog, ran, reverted, transferLog } from './sim-replies';
+import { witnessed } from './sim-witnessed';
 import { checkingCard, landedVerdict, verdictRooms, type SimEnded } from './verdict';
 
 export const VERDICT_STATES = ['sv1', 'sv2', 'sv3', 'sv4', 'sv5', 'sv6', 'sv7', 'sv8'] as const;
@@ -88,7 +89,8 @@ export function verdictBoardOver(state: VerdictStateId): SigningStateId {
 
 /** A reply as the host would hold it once the simulation has ended. */
 function ended(reply: string): SimEnded {
-	const verdict = simOutcome(ME, reply);
+	// R22: a board's node is corroborated — two independent nodes agreeing.
+	const verdict = simOutcome(ME, witnessed(reply));
 	return {
 		verdict,
 		judged: verdict?.kind === 'deltas' ? judgedByFreshMachine(ME, 1, verdict.deltas, FACTS) : null

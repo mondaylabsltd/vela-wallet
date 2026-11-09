@@ -167,6 +167,13 @@ class AppContainer(private val app: Application) {
     /** Spec 048: the add-token 原生币 tab opens the settings' add-network page. */
     val pendingSettingsPage = MutableStateFlow<SettingsPage?>(null)
 
+    /**
+     * R22: the signing sheet's own-node hint asks for this network's RPC
+     * settings (where "Only use my node" is) — Settings opens that network's
+     * detail page and consumes it. The request on the sheet stays as it was.
+     */
+    val pendingNetworkDetail = MutableStateFlow<Int?>(null)
+
     /** Spec 047 D1: the preferences that have no machine — the web's keys, applied app-wide. */
     val preferences = Preferences(
         store = VelaStore(app),
@@ -816,6 +823,8 @@ class AppContainer(private val app: Application) {
         // Spec 091: the debug-mode key went with the rest — About hides the
         // switch again, and the browser follows.
         preferences.reloadDebugMode()
+        // R22: "Refuse blind signing" too — read back (off once erased).
+        preferences.reloadRefuseBlind()
         // Spec 105: and the space with it — the device starts over in mainnet.
         networkSpace.reload()
         if (left.isEmpty()) {
@@ -1203,11 +1212,13 @@ class AppContainer(private val app: Application) {
                     // §31: the core's `isOwner` read, through the pool, its answer
                     // as it came (the executor bounds it and hands it back).
                     override suspend fun safeOwnerCall(chainId: Int, safe: String, data: String): RpcResult =
-                        pool.call(chainId, "eth_call", listOf(JSONObject().put("to", safe).put("data", data), "latest"))
+                        // R22 (SEC-PARENT-3): corroborated — a "not an owner" stands on two nodes.
+                        pool.call(chainId, "eth_call", listOf(JSONObject().put("to", safe).put("data", data), "latest"), corroborate = true)
                     override fun dataBase(): String = settings.endpointUrl(NetEndpointField.EthereumData)
                     // The pool's answer as it came; the core reads it (`simOutcome`, RG6).
+                    // R22: corroborated — both nodes' answers go to the core in one envelope.
                     override suspend fun simulate(chainId: Int, params: List<Any?>): RpcResult =
-                        pool.call(chainId, "eth_simulateV1", params)
+                        pool.call(chainId, "eth_simulateV1", params, corroborate = true)
                     // dapp-15: is the chain answering a plain read again?
                     override suspend fun nodeAnswers(chainId: Int): Boolean =
                         (pool.call(chainId, "eth_blockNumber", emptyList()) as? RpcResult.Body)

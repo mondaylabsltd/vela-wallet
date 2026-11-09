@@ -144,20 +144,60 @@ struct SignConfirmStateWire: Decodable, Equatable {
     /// The line under the shut confirm (`componentsUi.signing.confirmBlock.*`),
     /// or `nil` where the sheet already says it its own way.
     let key: String?
+    /// R22 (review 1-3, `sign_confirm::posture`): something Vela checks
+    /// could not be read — the confirm says "Sign anyway"
+    /// (`componentsUi.signing.certain.signAnyway`) in the danger style. The
+    /// core's rule; the sheet keeps none of its own.
+    var anyway: Bool = false
+    /// R22: the request is a danger (a drain's shape, an unlimited grant, a
+    /// revert, `eth_sign`): drawn in the danger style.
+    var danger: Bool = false
+    /// R22: hold the confirm this long before it acts (`hold_to_confirm_ms`),
+    /// or confirm twice through the accessible path; `0`: a plain press.
+    var holdMs: Int = 0
+
+    private enum CodingKeys: String, CodingKey { case enabled, block, key, anyway, danger, holdMs }
+
+    init(enabled: Bool, block: String?, key: String?, anyway: Bool = false, danger: Bool = false, holdMs: Int = 0) {
+        self.enabled = enabled
+        self.block = block
+        self.key = key
+        self.anyway = anyway
+        self.danger = danger
+        self.holdMs = holdMs
+    }
+
+    /// The friction fields are read when present: a state from a core
+    /// before R22 is a plain press.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try c.decode(Bool.self, forKey: .enabled)
+        block = try c.decodeIfPresent(String.self, forKey: .block)
+        key = try c.decodeIfPresent(String.self, forKey: .key)
+        anyway = try c.decodeIfPresent(Bool.self, forKey: .anyway) ?? false
+        danger = try c.decodeIfPresent(Bool.self, forKey: .danger) ?? false
+        holdMs = try c.decodeIfPresent(Int.self, forKey: .holdMs) ?? 0
+    }
+
+    /// The confirm is drawn in the danger style.
+    var dangerStyle: Bool { anyway || danger }
 
     /// Shut, with nothing to say — what a view that does not read gets.
     static let shut = SignConfirmStateWire(enabled: false, block: nil, key: nil)
 
     /// The core's verdict. `fee` is `nil` with no fee session (a message);
-    /// `speedTier` the speed in force, `nil` with no speed control. Any view
+    /// `speedTier` the speed in force, `nil` with no speed control; `sim` the
+    /// sheet's own simulation verdict (`SimVerdict` JSON, `nil` before it
+    /// lands); `refuseBlind` the person's "Refuse blind signing". Any view
     /// missing or unreadable keeps the confirm shut.
     static func of(
-        sign: String?, guard guardJson: String?, clear: String?, fee: String?, speedTier: String?
+        sign: String?, guard guardJson: String?, clear: String?, fee: String?, speedTier: String?,
+        sim: String? = nil, refuseBlind: Bool = false
     ) -> SignConfirmStateWire {
         guard let sign, let guardJson, let clear,
               let json = signConfirmState(
                   signJson: sign, guardJson: guardJson, clearJson: clear,
-                  feeJson: fee, speedTier: speedTier
+                  feeJson: fee, speedTier: speedTier, simJson: sim, refuseBlind: refuseBlind
               ),
               let state = try? CoreJSON.decoder.decode(SignConfirmStateWire.self, from: Data(json.utf8))
         else { return .shut }

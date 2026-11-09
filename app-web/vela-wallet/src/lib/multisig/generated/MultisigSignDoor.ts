@@ -23,4 +23,10 @@ reason_key: string | null,
  * `failed`: offer "Try again" (`review_again`). `review` (D1): the
  * unchecked line's Try again.
  */
-retry: boolean, };
+retry: boolean, 
+/**
+ * R22: hold the button this long before it acts — every "… anyway" and
+ * every danger (`sign_confirm::HOLD_TO_CONFIRM_MS`), or the accessible
+ * second press; `0`: a plain press.
+ */
+hold_ms: number, };
