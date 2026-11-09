@@ -2089,11 +2089,10 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	// R22: "… anyway" is the core's (`ConfirmState.anyway` — any check Vela
 	// could not read: blind, a leg nobody reads, a simulation not back, not
 	// offered, unconfirmed or failing), never a rule of this shell's.
-	// While the core still holds the confirm for the sheet's own simulation
-	// (`sim_checking`) the request is not judged yet either: the shut confirm
-	// stays the plain label — it never flashes "… anyway" in red for the
-	// verdict's few hundred ms and turns back, nothing can be pressed then.
-	const judging = ownerReading || (sign.sim_checking && !enabled);
+	// While the simulation's verdict is out (`sim_checking`) the core itself
+	// says no "… anyway" (`sign_confirm::posture`): the confirm is shut and
+	// plain, judged when the verdict lands — no rule of this shell's.
+	const judging = ownerReading;
 	const anyway = confirmState?.anyway === true && !judging;
 	const danger = (anyway || confirmState?.danger === true) && !judging;
 	const holdMs = judging ? 0 : (confirmState?.hold_ms ?? 0);

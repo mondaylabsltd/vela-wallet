@@ -9,6 +9,7 @@
  */
 import '$lib/i18n/wasm-init.server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { hashTypedData, keccak256 } from '$lib/core/kernels';
 
 /** The parallel space's fixed keys and their Safes (`golden-addresses.test.ts`). */
 const FIXTURE_PUBLIC_KEYS = vi.hoisted(() => [
@@ -129,7 +130,27 @@ describe('messageSignatureFor', () => {
 });
 
 describe('every message the dApp path signs goes through it', () => {
-	const sign = (method: string, params: unknown[]) =>
+	/**
+	 * R22 (review 1-5): the review the core froze at the confirm — the digest
+	 * the sheet read, for this account. Nothing is signed without it.
+	 */
+	const hex = (bytes: Uint8Array) =>
+		'0x' + [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+	const reviewOf = (digest: Uint8Array, chainId: number) =>
+		JSON.stringify({
+			kind: 'message',
+			chain_id: chainId,
+			account: SINGLE.address,
+			digest: hex(digest)
+		});
+	const eip191 = (bytes: Uint8Array) => {
+		const prefix = new TextEncoder().encode(`\x19Ethereum Signed Message:\n${bytes.length}`);
+		const all = new Uint8Array(prefix.length + bytes.length);
+		all.set(prefix);
+		all.set(bytes, prefix.length);
+		return keccak256(all);
+	};
+	const sign = (method: string, params: unknown[], review: string) =>
 		handleDAppRequest(
 			{ id: 'r1', method, params, origin: 'https://app.example' },
 			{ id: 'cred-1' },
@@ -139,11 +160,17 @@ describe('every message the dApp path signs goes through it', () => {
 			undefined,
 			undefined,
 			undefined,
-			'core'
+			'core',
+			undefined,
+			review
 		) as Promise<string>;
 
 	it('personal_sign (a sign-in among them) from an undeployed account: the envelope', async () => {
-		const out = await sign('personal_sign', ['0x68656c6c6f', SINGLE.address]);
+		const out = await sign(
+			'personal_sign',
+			['0x68656c6c6f', SINGLE.address],
+			reviewOf(eip191(new TextEncoder().encode('hello')), 100)
+		);
 		expect(out.endsWith(MAGIC)).toBe(true);
 		expect(rpc.calls[0]).toMatchObject({ method: 'eth_getCode', chainId: 100 });
 	});
@@ -162,7 +189,11 @@ describe('every message the dApp path signs goes through it', () => {
 			domain: { name: 'Example', chainId: 8453 },
 			message: { contents: 'hello' }
 		};
-		const out = await sign('eth_signTypedData_v4', [SINGLE.address, JSON.stringify(typed)]);
+		const out = await sign(
+			'eth_signTypedData_v4',
+			[SINGLE.address, JSON.stringify(typed)],
+			reviewOf(hashTypedData(typed as never), 8453)
+		);
 		// Deployed there: no envelope.
 		expect(out.endsWith(MAGIC)).toBe(false);
 		expect(rpc.calls[0]).toMatchObject({ method: 'eth_getCode', chainId: 8453 });
