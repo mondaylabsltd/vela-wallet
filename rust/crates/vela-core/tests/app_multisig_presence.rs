@@ -60,6 +60,7 @@ fn item(nonce: u128, status: ProposalStatus) -> ProposalItem {
         unsent: false,
         rename_undeployed: false,
         waits_for: Vec::new(),
+        from_non_member: false,
     }
 }
 
@@ -474,11 +475,16 @@ fn account_of(salt: &str) -> MultisigAccount {
     serde_json::from_value(world::stored_row(&g, &[100], true)).unwrap()
 }
 
+/// A stored proposal fixture 2 (a member, never on this device) vouches for
+/// — §37: one no member approved is a stranger's, and waits on nobody.
 fn stored(account: &MultisigAccount, chain: u64, tx: &multisig::SafeTx) -> Value {
+    let hash = multisig::safe_tx_hash(chain, &account.address, tx).unwrap();
     json!({
         "chainId": chain, "safe": account.address,
-        "safeTxHash": multisig::safe_tx_hash(chain, &account.address, tx).unwrap(),
-        "safeTx": tx, "proposer": "", "approvals": [], "createdMs": 1, "updatedMs": 1,
+        "safeTxHash": hash,
+        "safeTx": tx, "proposer": fixture(2).address,
+        "approvals": [world::member_approval(2, chain, &hash)],
+        "createdMs": 1, "updatedMs": 1,
     })
 }
 

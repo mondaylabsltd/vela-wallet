@@ -327,6 +327,15 @@
       "labelMember": "Anggota",
       "labelNewMember": "Anggota baru",
       "labelApprovalsRequired": "Persetujuan yang dibutuhkan",
+      "farAboveBalanceWarning": "Lebih dari 100× saldo Anda — kontrak ini bisa membelanjakan semua yang Anda miliki, dan lebih lagi saat masuk",
+      "signIn": {
+        "refusedTitle": "Vela tidak akan menandatangani login ini",
+        "wrongDomain": "Login ini untuk {{domain}}, tetapi {{origin}} yang meminta. Situs yang meminta Anda masuk ke situs lain sedang mencoba mengambil alih akun Anda di sana.",
+        "wrongUri": "Login ini menyebut {{uri}}, yang bukan {{origin}}, situs yang meminta.",
+        "wrongChain": "Login ini untuk chain {{chain}}, tetapi situs ini terhubung di chain {{connected}}. Ganti jaringan dan minta lagi.",
+        "incomplete": "Login ini tidak menyertakan {{field}}, jadi Vela tidak bisa memeriksa Anda masuk ke mana.",
+        "noOrigin": "Vela tidak bisa mengetahui situs mana yang meminta, jadi tidak akan menandatangani login ini."
+      },
       "simUnconfirmed": "Hanya satu node yang menjawab, jadi Vela tidak bisa memastikan apa yang dilakukan transaksi ini. Periksa sebelum menandatangani.",
       "simDisagreed": "Dua node independen memberi jawaban berbeda tentang apa yang dilakukan transaksi ini. Periksa sebelum menandatangani.",
       "simOwnNode": "Diperiksa hanya oleh node Anda sendiri",

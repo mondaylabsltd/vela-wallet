@@ -1554,6 +1554,12 @@ impl WalletPage {
         }
         let mut page = Self::with_section(section, false, window, cx);
         page.identity = Some(identity);
+        // §37: an active account the key index alone vouched for is checked
+        // on the chain at start, in the background — before its first use
+        // (whether or not a multisig is what the window shows).
+        if let Some(account) = crate::wallet::money::active_account() {
+            spawn_identity_check(account.address, cx);
+        }
         // The multisig machines' screen asks reach this page (AUDIT M1–M6).
         page.multisig_observe(cx);
         // `VELA_MULTISIG_SCRIPT` (developer builds): the live proof's driver.
@@ -2121,6 +2127,10 @@ impl WalletPage {
     fn receive_share_card(&mut self, cx: &mut Context<Self>) -> Option<ShareCardFacts> {
         self.identity.as_ref()?;
         let identity = self.identity();
+        // §37: no picture of an address the chain has not confirmed.
+        if self.receive_held(&identity.address).is_some() {
+            return None;
+        }
         let pay = resident::resident::<PaymentRequest>(cx).read(cx).view();
         // The gate: no card before the warning has been read, for the same
         // reason there is no address on screen (phase 38). A saved picture is
@@ -3304,6 +3314,8 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         let viewer = self.identicon_viewer.clone()?;
+        // §37: an account that may not be received at offers no copy.
+        let copyable = self.receive_held(&viewer.address).is_none();
         let s = &self.strings;
         let title = s.viewer_title.clone();
         let caption = s.viewer_caption.clone();
@@ -3364,14 +3376,16 @@ impl WalletPage {
                     .flex()
                     .flex_col()
                     .gap(px(12.))
-                    .child(
-                        crate::flows::components::ink_button(theme, copy)
-                            .id("identicon-viewer-copy")
-                            .cursor_pointer()
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.copy_viewer_address(cx);
-                            })),
-                    )
+                    .when(copyable, |el| {
+                        el.child(
+                            crate::flows::components::ink_button(theme, copy)
+                                .id("identicon-viewer-copy")
+                                .cursor_pointer()
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.copy_viewer_address(cx);
+                                })),
+                        )
+                    })
                     .child(
                         crate::flows::components::ghost_button(theme, close)
                             .rounded(px(12.))
@@ -5457,6 +5471,14 @@ impl WalletPage {
 
     /// "Copy address", then "Copied" for 1.5 s, as the web's viewer does.
     fn copy_viewer_address(&mut self, cx: &mut Context<Self>) {
+        // §37: not the address of an account that may not be received at.
+        if self
+            .identicon_viewer
+            .as_ref()
+            .is_some_and(|viewer| self.receive_held(&viewer.address).is_some())
+        {
+            return;
+        }
         let Some(viewer) = self.identicon_viewer.as_mut() else {
             return;
         };
@@ -7245,7 +7267,13 @@ impl WalletPage {
             && matches!(
                 self.flows.last(),
                 Some(FlowPanel::Dr1 | FlowPanel::Dr2 | FlowPanel::Dr3)
-            );
+            )
+            // §37: an account that may not be received at listens for no
+            // deposit either.
+            && self
+                .identity
+                .as_ref()
+                .is_none_or(|identity| self.receive_held(&identity.address).is_none());
         match (receiving, self.money_watch.receiving.is_some()) {
             (true, false) => {
                 // A receive visit is a request session too (spec 090): its
@@ -7367,6 +7395,37 @@ impl WalletPage {
         {
             self.receive_chain = chain_id;
         }
+        // §37: opening Receive on an account the chain has not confirmed
+        // asks the chain first — "it checks again each time you open this".
+        if matches!(entry, FlowEntry::Receive | FlowEntry::ReceiveToken) {
+            self.check_receive_identity(cx);
+        }
+    }
+
+    /// §37 (review 1-7): Receive in place of the address, when the core's
+    /// `receive_standing` says the account at `address` may not be received
+    /// at. `None` for the normal Receive — and for an address no stored
+    /// account is at (the mocks).
+    fn receive_held(&self, address: &str) -> Option<flow_fixtures::ReceiveHeld> {
+        let standing = crate::executor::receive_identity::standing_of(address)?;
+        flows_live::receive_held(
+            &standing,
+            crate::executor::receive_identity::checking(),
+            &self.loc,
+        )
+    }
+
+    /// §37: ask the chain (`registry_resolve::confirm_step`, never the
+    /// index) about the shown account, when the core says to check it first,
+    /// in the background — "Checking on-chain…" until it answers — and save
+    /// what it found; the page redraws on the answer (confirmed: the normal
+    /// Receive). Receive's open, its Check again and the launch all come
+    /// here; one check runs at a time.
+    fn check_receive_identity(&mut self, cx: &mut Context<Self>) {
+        let Some(address) = self.identity.as_ref().map(|i| i.address.clone()) else {
+            return;
+        };
+        spawn_identity_check(address, cx);
     }
 
     /// The send column goes, and its machines with it — unless its submit is
@@ -7988,6 +8047,15 @@ impl WalletPage {
             return self.mock_flow_body(panel);
         }
         let identity = self.identity();
+        // §37 (review 1-7): an account the chain has not confirmed (or has
+        // refuted) is never received at — every receive panel says so in
+        // place of the address, the code, the copy, the share and the
+        // request, and no deposit watch runs behind it (`watch_money`).
+        if matches!(panel, FlowPanel::Dr1 | FlowPanel::Dr2 | FlowPanel::Dr3)
+            && let Some(held) = self.receive_held(&identity.address)
+        {
+            return flow_fixtures::FlowBody::ReceiveHeld(held);
+        }
         match panel {
             FlowPanel::Dt1 | FlowPanel::Dt4 => {
                 let view = crate::network_space::balance_view(cx);
@@ -8316,6 +8384,10 @@ impl WalletPage {
             })) as panels::Click),
             save_image: Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                 this.save_share_card(cx);
+            })) as panels::Click),
+            // §37: Receive's Check again — the chain asked once more.
+            check_again: Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                this.check_receive_identity(cx);
             })) as panels::Click),
             // Spec 090: the switch flips what the CORE says it is — the
             // machine decides what the code then encodes.
@@ -23140,6 +23212,30 @@ struct HistoryKey {
     day_ms: f64,
 }
 
+/// §37 (review 1-7): the chain-only confirm walk for the account at
+/// `address`, on a background thread — only when the core says to check it
+/// first, and only if no check is running — and a redraw once it answered
+/// ("Checking on-chain…" until then; the identity it found is saved by
+/// `receive_identity`).
+fn spawn_identity_check(address: String, cx: &mut Context<WalletPage>) {
+    use crate::executor::receive_identity;
+    if !receive_identity::wants_check(&address) || !receive_identity::try_begin() {
+        return;
+    }
+    cx.notify();
+    let walk = cx
+        .background_executor()
+        .spawn(async move { receive_identity::run_begun(&address) });
+    cx.spawn(async move |_, cx| {
+        let _ = walk.await;
+        // Every window: the page that asked may have been rebuilt (an account
+        // switch, a multisig shown) while the chain was asked, and the one
+        // drawing now says "Checking on-chain…" until told.
+        cx.update(|cx| cx.refresh_windows());
+    })
+    .detach();
+}
+
 impl HistoryKey {
     fn same(&self, other: &Self) -> bool {
         std::rc::Rc::ptr_eq(&self.feed, &other.feed)
@@ -24370,6 +24466,7 @@ mod tests {
                     sign_in_key: None,
                     signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
                     signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+                    identity: Default::default(),
                 },
             };
         let accounts = [

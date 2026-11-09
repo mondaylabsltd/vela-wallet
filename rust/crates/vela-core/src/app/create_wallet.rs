@@ -315,6 +315,7 @@ impl Prepared {
             }),
             signing_domain: self.signing_domain.clone(),
             signing_venue: self.signing_venue.clone(),
+            identity: Default::default(),
         };
         account.stamp_page_origin();
         account

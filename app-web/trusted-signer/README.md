@@ -76,7 +76,7 @@ node samples/provenance-test.mjs # 96 项：意图的读法从哪来 —— 同�
 node samples/safeop-test.mjs    # 47 项：SafeOp / SafeMessage 对拍 vela-core，含 §35 的有效期（无期限的操作拒签）
 node samples/identicon-test.mjs #  9 项：identicon 与 vela-core 逐字节一致（含 1000 随机地址）
 node samples/takeover-test.mjs  # 67 项：自调用 / delegatecall / SafeTx 拒签 —— 与 vela-core self_call_guard 同一规则；替成员所在 Safe（多签）执行 / approveHash / 改配置、SafeMessage 一律拒签（§31，parent_safe_guard 的向量逐条重放）
-node samples/unlimited-line-test.mjs # 11 项：「无限额」从哪里开始 —— 与 vela-core approval_guard 同一条线
+node samples/unlimited-line-test.mjs # 15 项：「无限额」从哪里开始（每种金额都是 2^128，§37）—— 与 vela-core approval_guard 同一条线；Permit2 的见证转账读成转账
 ```
 
 每样东西的来源见 [PROTOCOL.md](PROTOCOL.md) 第 9 节。**意图下面一行写明它的读法从哪来**

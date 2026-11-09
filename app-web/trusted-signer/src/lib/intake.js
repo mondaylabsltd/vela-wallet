@@ -48,8 +48,10 @@ window.VelaCS = window.VelaCS || {};
     return typeof override === 'number' && override > 0 ? override : IDLE_MS;
   }
 
+  // The query — or, for a page opened from the bytes a wallet checked (a blob
+  // URL has no query), the fragment the wallet wrote (`lib/place.js`).
   function params() {
-    return new URLSearchParams(location.search);
+    return ns.place ? ns.place.params() : new URLSearchParams(location.search);
   }
 
   function b64urlToBytes(text) {

@@ -327,6 +327,15 @@
       "labelMember": "成員",
       "labelNewMember": "新成員",
       "labelApprovalsRequired": "需要的核准數",
+      "farAboveBalanceWarning": "超過你餘額的 100 倍——此合約可花掉你持有的全部，以及之後入帳的更多",
+      "signIn": {
+        "refusedTitle": "Vela 不會簽署此登入",
+        "wrongDomain": "此登入是給 {{domain}} 的，但發出請求的是 {{origin}}。要求你登入其他網站的網站，是想接管你在那裡的帳戶。",
+        "wrongUri": "此登入指定的是 {{uri}}，而不是發出請求的網站 {{origin}}。",
+        "wrongChain": "此登入針對鏈 {{chain}}，但此網站連線在鏈 {{connected}} 上。請切換網路後重新請求。",
+        "incomplete": "此登入缺少 {{field}}，Vela 無法核對它讓你登入到哪裡。",
+        "noOrigin": "Vela 無法判斷是哪個網站在請求，因此不會簽署此登入。"
+      },
       "simUnconfirmed": "只有一個節點給出了結果，Vela 無法確認這筆交易的效果，請核對後再簽署。",
       "simDisagreed": "兩個獨立節點對這筆交易的效果給出了不同的結果，請核對後再簽署。",
       "simOwnNode": "僅由你自己的節點檢查",

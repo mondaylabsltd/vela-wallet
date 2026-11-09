@@ -327,6 +327,15 @@
       "labelMember": "Mitglied",
       "labelNewMember": "Neues Mitglied",
       "labelApprovalsRequired": "Erforderliche Genehmigungen",
+      "farAboveBalanceWarning": "Über das 100-Fache deines Guthabens – dieser Vertrag könnte alles ausgeben, was du hältst, und mehr, sobald es eingeht",
+      "signIn": {
+        "refusedTitle": "Vela führt diese Anmeldung nicht aus",
+        "wrongDomain": "Diese Anmeldung gilt für {{domain}}, aber {{origin}} fragt danach. Eine Website, die dich bittet, dich bei einer anderen anzumelden, will dein Konto dort übernehmen.",
+        "wrongUri": "Diese Anmeldung nennt {{uri}} – das ist nicht {{origin}}, die anfragende Website.",
+        "wrongChain": "Diese Anmeldung gilt für Chain {{chain}}, aber diese Website ist mit Chain {{connected}} verbunden. Wechsle das Netzwerk und frage erneut.",
+        "incomplete": "Dieser Anmeldung fehlt die Angabe {{field}}, daher kann Vela nicht prüfen, wobei sie dich anmeldet.",
+        "noOrigin": "Vela kann nicht erkennen, welche Website fragt, und führt diese Anmeldung daher nicht aus."
+      },
       "simUnconfirmed": "Nur ein Knoten hat geantwortet, daher konnte Vela nicht bestätigen, was diese Transaktion bewirkt – bitte vor dem Signieren kontrollieren.",
       "simDisagreed": "Zwei unabhängige Knoten haben unterschiedlich beantwortet, was diese Transaktion bewirkt – bitte vor dem Signieren kontrollieren.",
       "simOwnNode": "Nur von deinem eigenen Knoten geprüft",

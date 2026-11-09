@@ -1387,6 +1387,27 @@ export const REFUSAL_KEYS = [
 	'componentsUi.signing.notSentBody'
 ] as const;
 
+/**
+ * §37 (review 1-12): every line `GuardView.unlimited_warning_key` can name —
+ * an amount at the unlimited line, and one far above the balance.
+ */
+export const GUARD_WARNING_KEYS = [
+	'componentsUi.signing.unlimitedWarning',
+	'componentsUi.signing.farAboveBalanceWarning'
+] as const;
+
+/**
+ * §37 (review 1-11): every sentence a refused sign-in is told by
+ * (`clear_signing::SignInMismatch::key`).
+ */
+export const SIGN_IN_KEYS = [
+	'componentsUi.signing.signIn.wrongDomain',
+	'componentsUi.signing.signIn.wrongUri',
+	'componentsUi.signing.signIn.wrongChain',
+	'componentsUi.signing.signIn.incomplete',
+	'componentsUi.signing.signIn.noOrigin'
+] as const;
+
 /** Spec 099 R7: every line `sign_confirm::ConfirmBlock::key` can name. */
 export const CONFIRM_BLOCK_KEYS = [
 	// The account's previous transaction on this network still holds the nonce
@@ -1594,6 +1615,9 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		// Spec 082 RJ13: every key `fee_policy::failure_reason_key` can name.
 		feeReasons: Object.fromEntries(FEE_REASON_KEYS.map((key) => [key, k(key)])),
 		confirmBlock: Object.fromEntries(CONFIRM_BLOCK_KEYS.map((key) => [key, k(key)])),
+		guardWarnings: Object.fromEntries(GUARD_WARNING_KEYS.map((key) => [key, k(key)])),
+		signInRefusedTitle: k('componentsUi.signing.signIn.refusedTitle'),
+		signIn: Object.fromEntries(SIGN_IN_KEYS.map((key) => [key, k(key)])),
 		passkeyNote: {
 			cancelled: k('componentsUi.signing.passkeyClosed'),
 			timed_out: k('componentsUi.signing.passkeyTimedOut')

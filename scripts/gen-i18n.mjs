@@ -1430,7 +1430,19 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `componentsUi.gas.reasonSettlementHigh{,Stopped}` (a relay billing more
 //   gas than the operation can use, `FeeFailure::SettlementGasTooHigh`).
 //   2297 + 4 = 2301 paths, 2181 leaves, 120 branches.
-// 2312 (Round 22, signing truth, §36, 2026-11-08): +
+// 2317 (Round 22, identity, standards, mailbox, §37, 2026-11-08): +
+//   `receive.unconfirmed.{title,body,checkAgain,checking}` and
+//   `receive.refuted.{title,body}` (a multi-key wallet only the key index
+//   vouched for: no address to receive at until a chain confirms it,
+//   `ReceiveStanding`), `componentsUi.signing.farAboveBalanceWarning` (an
+//   approval a hundredfold the balance, `FAR_ABOVE_BALANCE_KEY`) and
+//   `componentsUi.signing.signIn.{refusedTitle,wrongDomain,wrongUri,
+//   wrongChain,incomplete,noOrigin}` (a sign-in that does not bind,
+//   `SignInMismatch`), and `onboarding.common.passkeyError.
+//   testDomainNotAssociated` (R21-3: a test build's passkey domain not set
+//   up, `passkey_error_words_on`). 2301 + 14 leaves + 3 branches = 2318
+//   paths, 2195 leaves, 123 branches.
+// 2329 (Round 22, signing truth, §36, 2026-11-08): +
 //   `componentsUi.signing.{simUnconfirmed, simDisagreed}` (what moves, said
 //   when one node answered or two independent ones disagree — never "No asset
 //   changes" on one node's word), `simOwnNode` ("Checked by your own node
@@ -1438,10 +1450,10 @@ for (let i = 1; i < PATHS.length; i++) {
 //   accessible second press of a held confirm), `confirmBlock.blindRefused`;
 //   `settings.refuseBlind.{title, subtitle}` (+1 branch) and
 //   `settings.sections.security`; `settingsModals.network.onlyMineTrust`.
-//   2301 + 10 leaves + 1 branch = 2312 paths, 2191 leaves, 121 branches.
-if (PATHS.length !== 2312) fail(`expected 2312 paths (2191 leaf + 121 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2191) fail(`expected 2191 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 121) fail(`expected 121 branch paths, got ${branchSet.size}`);
+//   2318 (§37) + 10 leaves + 1 branch = 2329 paths, 2205 leaves, 124 branches.
+if (PATHS.length !== 2329) fail(`expected 2329 paths (2205 leaf + 124 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2205) fail(`expected 2205 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 124) fail(`expected 124 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
 // 579 (round 6, the outside owner's connect page, 2026-10-30): + 17
@@ -1565,12 +1577,16 @@ if (branchSet.size !== 121) fail(`expected 121 branch paths, got ${branchSet.siz
   // 693 (Round 19, §32, 2026-11-07): + `home.multisig.proposal.feeSigning`
   //   (the mark under a fee line a press is out on: "Signing at this fee —
   //   it stays fixed until you confirm or cancel.", r18-5). 692 + 1 = 693.
-  // 696 (Round 22, signing truth, §36, 2026-11-08): + `home.multisig.review.
+  // 697 (Round 22, §37, 2026-11-08): + `home.multisig.panel.nonMembers{Show,
+  //   Hide,Warning}` (the proposals no member vouches for, behind a
+  //   disclosure) and `home.multisig.authority.ownerNotBound` (a contract
+  //   member nothing binds to its own genesis). 693 + 4 = 697.
+  // 700 (Round 22, signing truth, §36, 2026-11-08): + `home.multisig.review.
   //   {stateUnconfirmed, stateDisagreed}` (the state diff's could-not-check,
   //   said as one node's word or two that disagree) and `blindRefused` ("Refuse
   //   blind signing" on: the review that signs only "… anyway" is refused).
-  //   693 + 3 = 696.
-  const pins = { multisig: 696 };
+  //   697 (§37) + 3 = 700.
+  const pins = { multisig: 700 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

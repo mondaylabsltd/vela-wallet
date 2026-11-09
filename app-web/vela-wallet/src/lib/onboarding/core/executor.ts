@@ -251,7 +251,14 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 
 			case 'registry_query_unit': {
 				const unit = await Registry.queryUnit(operation.unit_id);
-				return { type: 'registry_unit', metadata_hex: unit.metadataHex, members: unit.members };
+				return {
+					type: 'registry_unit',
+					metadata_hex: unit.metadataHex,
+					members: unit.members,
+					// §37: who vouched for the founding set, untouched — a multi-key
+					// group only the index vouched for signs in unconfirmed.
+					verified_by: unit.verifiedBy
+				};
 			}
 
 			case 'probe_index_health':

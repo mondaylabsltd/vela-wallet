@@ -2289,18 +2289,91 @@ pub async fn codes_of<Ev: Send + 'static>(
     futures::future::join_all(reads).await.into_iter().collect()
 }
 
-/// The code on `chain_id` of everything `genesis` depends on, read now —
-/// never kept: the executor asks right before it deploys.
+/// §37 (review 1-13 c): what the wallet can bring to say each member of a
+/// multisig is who it is on a chain it is not deployed on yet — the
+/// geneses it holds (its Vela accounts here, approvals' `ownerGenesis`) and
+/// the other networks whose code at each member it reads
+/// ([`multisig::OwnerFact`]). The default brings nothing: each member is
+/// then judged by its code on the target chain alone.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Binding {
+    pub geneses: Vec<Genesis>,
+    pub elsewhere: Vec<u64>,
+}
+
+/// The registry's own networks (`SafeGenesisRegistry` on Gnosis and
+/// Ethereum): where an old Safe a member may be is most likely to show.
+pub const REGISTRY_NETWORKS: [u64; 2] = [100, 1];
+
+impl Binding {
+    /// The binding a device can bring for `account` deployed on `target`:
+    /// its own Vela accounts' geneses and `extra` (approvals'), and the
+    /// multisig's other networks plus the registry's, where this device has
+    /// them.
+    pub fn of(
+        locals: &[LocalAccount],
+        extra: &[Genesis],
+        used: &[u64],
+        networks: &[u64],
+        target: u64,
+    ) -> Self {
+        let mut geneses: Vec<Genesis> = locals
+            .iter()
+            .filter_map(|a| multisig::vela_account_genesis(&a.wallet_keys()).ok())
+            .map(|(_, g)| g)
+            .collect();
+        for g in extra {
+            if !geneses.contains(g) {
+                geneses.push(g.clone());
+            }
+        }
+        let mut elsewhere: Vec<u64> = Vec::new();
+        for id in used.iter().chain(REGISTRY_NETWORKS.iter()) {
+            if *id != target && networks.contains(id) && !elsewhere.contains(id) {
+                elsewhere.push(*id);
+            }
+        }
+        Self { geneses, elsewhere }
+    }
+}
+
+/// The code on `chain_id` of everything `genesis` depends on, and of each of
+/// its members here and on `binding`'s other networks, read now — never
+/// kept: the executor asks right before it deploys.
 pub async fn counterfactual_facts<Ev: Send + 'static>(
     io: &Io<Ev>,
     chain_id: u64,
     safe: &str,
     genesis: &Genesis,
+    binding: &Binding,
 ) -> multisig::ChainFacts {
     let reads = multisig::counterfactual_reads(genesis, safe).unwrap_or_default();
-    multisig::ChainFacts {
-        codes: codes_of(io, chain_id, &reads).await,
-    }
+    let members = multisig::counterfactual_owners(genesis, safe).unwrap_or_default();
+    let asked = &members;
+    let elsewhere = binding
+        .elsewhere
+        .iter()
+        .map(|id| async move { (*id, codes_of(io, *id, asked).await) });
+    let (codes, elsewhere) = futures::join!(
+        codes_of(io, chain_id, &reads),
+        futures::future::join_all(elsewhere)
+    );
+    let owners = members
+        .iter()
+        .map(|m| {
+            let genesis = binding
+                .geneses
+                .iter()
+                .find(|g| multisig::genesis_address(g).is_ok_and(|a| same_address(&a, m)))
+                .cloned();
+            let elsewhere = elsewhere
+                .iter()
+                .map(|(id, codes)| (*id, codes.get(m).cloned().flatten()))
+                .collect();
+            (m.clone(), multisig::OwnerFact { genesis, elsewhere })
+        })
+        .collect();
+    multisig::ChainFacts { codes, owners }
 }
 
 /// The core's verdict on `safe`, not deployed on `chain_id`, deployed there from `genesis`.
@@ -2309,8 +2382,9 @@ pub async fn counterfactual_on<Ev: Send + 'static>(
     chain_id: u64,
     safe: &str,
     genesis: &Genesis,
+    binding: &Binding,
 ) -> Option<multisig::Authority> {
-    let facts = counterfactual_facts(io, chain_id, safe, genesis).await;
+    let facts = counterfactual_facts(io, chain_id, safe, genesis, binding).await;
     multisig::counterfactual_authority(genesis, safe, &facts).ok()
 }
 
@@ -2398,7 +2472,11 @@ pub async fn judge_on<Ev: Send + 'static>(
         );
     }
     let genesis = genesis?;
-    match counterfactual_on(io, chain_id, safe, genesis).await? {
+    // What a list or a page judges by: the members' code here (a member with
+    // code here and nothing to compare it with is not refused on sight); the
+    // deploy gates bring the full binding ([`Binding::of`]) before anything
+    // is deployed.
+    match counterfactual_on(io, chain_id, safe, genesis, &Binding::default()).await? {
         multisig::Authority::Unknown { .. } => None,
         multisig::Authority::Refused { reasons } => Some(
             reasons

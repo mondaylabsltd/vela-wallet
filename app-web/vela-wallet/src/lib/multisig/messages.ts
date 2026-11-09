@@ -84,6 +84,15 @@ export interface MultisigMessages {
 		checking: string;
 		/** r4b-2: the history on `{{network}}` could not be read. */
 		historyUnreadable: string;
+		/**
+		 * §37 (review 1-13): the list's last row while proposals no member
+		 * approved are left out — "Show proposals from non-members ({{total}})".
+		 */
+		nonMembersShow: string;
+		/** …and while they are shown. */
+		nonMembersHide: string;
+		/** On each proposal no member approved (warning tone). */
+		nonMembersWarning: string;
 	};
 	status: {
 		ready: string;
@@ -751,6 +760,12 @@ export interface MultisigMessages {
 		payment: string;
 		missingCode: string;
 		wrongCode: string;
+		/**
+		 * §37 (review 1-13): a member that is a contract nothing binds to its
+		 * own creation on `{{network}}` (`{{address}}`) — whoever can deploy
+		 * there would hold its vote.
+		 */
+		ownerNotBound: string;
 		riskTitle: string;
 		riskBody: string;
 		riskModule: string;
@@ -1064,7 +1079,10 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		invite: '',
 		lastKnown: '',
 		checking: '',
-		historyUnreadable: ''
+		historyUnreadable: '',
+		nonMembersShow: '',
+		nonMembersHide: '',
+		nonMembersWarning: ''
 	},
 	status: {
 		ready: '',
@@ -1569,6 +1587,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		payment: '',
 		missingCode: '',
 		wrongCode: '',
+		ownerNotBound: '',
 		riskTitle: '',
 		riskBody: '',
 		riskModule: '',

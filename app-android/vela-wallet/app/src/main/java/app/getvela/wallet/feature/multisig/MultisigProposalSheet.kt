@@ -245,6 +245,8 @@ fun MultisigProposalSheet(
                 MsText("${words.network(chainId)} · ${words.t("action.numberValue", "nonce" to item.nonce)}", MsType.Sub, color = colors.fgSubtle)
             }
         }
+        // §37 (review 1-13): no member vouches for it — said where it is reviewed too.
+        words.nonMemberWarning(item)?.let { MsNote(it, tone = MsTone.Warning, tag = "multisig.proposal.nonMember") }
         for (note in model.sheetNotes) MsNote(note.text, tone = note.tone, tag = "multisig.proposal.note.${note.id}")
         model.executedTx?.let { tx ->
             if (model.saysExecuted) MsNote(words.t("proposal.executed"), tone = MsTone.Positive, tag = "multisig.proposal.executed")

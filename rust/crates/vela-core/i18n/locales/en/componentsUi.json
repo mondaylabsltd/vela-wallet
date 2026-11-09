@@ -379,6 +379,15 @@
       "labelMember": "Member",
       "labelNewMember": "New member",
       "labelApprovalsRequired": "Approvals required",
+      "farAboveBalanceWarning": "Over 100× your balance — this contract could spend all you hold, and more as it arrives",
+      "signIn": {
+        "refusedTitle": "Vela won't sign this in",
+        "wrongDomain": "This sign-in is for {{domain}}, but {{origin}} is asking. A site that asks you to sign in to another site is trying to take over your account there.",
+        "wrongUri": "This sign-in names {{uri}}, which isn't {{origin}}, the site asking.",
+        "wrongChain": "This sign-in is for chain {{chain}}, but this site is connected on chain {{connected}}. Switch networks and ask again.",
+        "incomplete": "This sign-in leaves out its {{field}}, so Vela can't check what it signs you in to.",
+        "noOrigin": "Vela can't tell which site is asking, so it won't sign this sign-in."
+      },
       "simUnconfirmed": "Only one node answered, so Vela couldn’t confirm what this transaction does. Review it before you sign.",
       "simDisagreed": "Two independent nodes gave different answers about what this transaction does. Review it before you sign.",
       "simOwnNode": "Checked by your own node only",

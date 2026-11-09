@@ -207,6 +207,14 @@ pub struct ProposalItem {
     /// `#n` — the same numbers on every surface, the outside page included.
     #[serde(default)]
     pub waits_for: Vec<String>,
+    /// §37 (review 1-13): open, and no member of the multisig on this
+    /// network vouches for it — not one approval that verifies and counts
+    /// (the mailbox takes a post from anyone). It is left out of the default
+    /// list ([`ProposalsView::items`]), of every count of what waits, and of
+    /// the next free number ([`next_nonce_of`]); shown only behind
+    /// "Show proposals from non-members", with a warning on each.
+    #[serde(default)]
+    pub from_non_member: bool,
 }
 
 /// The most numbers [`ProposalItem::waits_for`] lists.
@@ -362,6 +370,7 @@ pub fn read_proposal(
         } else {
             Vec::new()
         },
+        from_non_member: status != ProposalStatus::Done && approved == 0,
         review,
         approvals,
     })
@@ -412,11 +421,19 @@ pub struct ChainState {
     pub mailbox: bool,
 }
 
-/// The nonce a new proposal takes: after every open one (`nextNonceOf`).
+/// The nonce a new proposal takes: after every open one a member vouches for
+/// (`nextNonceOf`).
+///
+/// §37 (review 1-13 a): only a proposal with at least one approval that
+/// counts — verified, by a member on this network now — holds a number. The
+/// mailbox takes a post from anyone, so a stranger's proposal at
+/// nonce + 1000 with no member's approval would otherwise make the next
+/// proposal wait behind 1000 numbers nobody can fill: the multisig stalled
+/// by one unsigned post.
 pub fn next_nonce_of(chain: &ChainState) -> u128 {
     let mut n = chain.members.nonce;
     for i in &chain.items {
-        if i.status != ProposalStatus::Done && i.nonce >= n {
+        if i.status != ProposalStatus::Done && !i.from_non_member && i.nonce >= n {
             n = i.nonce + 1;
         }
     }
@@ -556,6 +573,13 @@ pub enum Event {
     Refresh {
         #[serde(default)]
         fresh: bool,
+    },
+    /// §37 (review 1-13 b): the person opened (or closed) "Show proposals
+    /// from non-members" — the open proposals no member vouches for
+    /// ([`ProposalItem::from_non_member`]) join the list, each with its
+    /// warning. Closed again when another multisig is followed.
+    ShowNonMembers {
+        show: bool,
     },
     /// The person's Retry, or back online: ask the service now.
     Retry,
@@ -1012,6 +1036,18 @@ pub struct ProposalsView {
     pub standings: BTreeMap<String, super::multisig_presence::Standing>,
     /// What the waiting group says of the list.
     pub waiting_note: Option<super::multisig_presence::WaitingNote>,
+    /// §37 (review 1-13 b): how many open proposals no member of the
+    /// multisig vouches for are left out of [`Self::items`] (and of every
+    /// count). Non-zero: the list ends with the disclosure
+    /// `home.multisig.panel.nonMembersShow` (`{{total}}`) — once opened,
+    /// `home.multisig.panel.nonMembersHide`; opened
+    /// ([`Event::ShowNonMembers`]), they are in `items`, each one flagged
+    /// [`ProposalItem::from_non_member`] and drawn under
+    /// `home.multisig.panel.nonMembersWarning`.
+    #[cfg_attr(feature = "bindings", ts(type = "number"))]
+    pub non_members: u64,
+    /// The disclosure is open: the non-members' proposals are in `items`.
+    pub showing_non_members: bool,
     /// Each proposal's story, per `<chainId>:<safeTxHash>`.
     pub timelines: BTreeMap<String, Vec<super::multisig_presence::TimelineStep>>,
     /// The dApp requests held here, by request id.
@@ -1106,6 +1142,8 @@ struct Draft {
 
 #[derive(Default)]
 pub struct State {
+    /// §37: the person asked to see the proposals no member vouches for.
+    show_non_members: bool,
     service: Service,
     chain: Chain,
     locals: Vec<LocalAccount>,
@@ -1505,6 +1543,7 @@ impl App for MultisigProposals {
                         s.previews.clear();
                         s.signers_asked.clear();
                         s.signer_reads.clear();
+                        s.show_non_members = false;
                     }
                     s.account = account.clone();
                     if account.is_some() && s.chains.is_empty() {
@@ -1557,6 +1596,10 @@ impl App for MultisigProposals {
             }
             Event::Service { url } => {
                 lock(&model.state).service.set_url(&url);
+                render()
+            }
+            Event::ShowNonMembers { show } => {
+                lock(&model.state).show_non_members = show;
                 render()
             }
             Event::Tick => flow(model, |io, st| async move {
@@ -1877,10 +1920,18 @@ impl App for MultisigProposals {
     fn view(&self, model: &Model) -> ProposalsView {
         let mut s = lock(&model.state);
         let more = flows::view_more(&mut s);
-        let items = s.items();
+        let all = s.items();
+        let non_members = all.iter().filter(|i| i.from_non_member).count() as u64;
+        let showing_non_members = s.show_non_members;
+        // §37: the default list is what a member vouches for; the rest only
+        // behind the disclosure.
+        let items: Vec<ProposalItem> = all
+            .into_iter()
+            .filter(|i| showing_non_members || !i.from_non_member)
+            .collect();
         let open: Vec<&ProposalItem> = items
             .iter()
-            .filter(|i| i.status != ProposalStatus::Done)
+            .filter(|i| i.status != ProposalStatus::Done && !i.from_non_member)
             .collect();
         let (down, limited) = {
             let outage = lock(&s.service.outage);
@@ -1971,6 +2022,8 @@ impl App for MultisigProposals {
                 .unwrap_or_default(),
             standings: more.standings,
             waiting_note: more.waiting_note,
+            non_members,
+            showing_non_members,
             timelines: more.timelines,
             dapp: more.dapp,
             calls_status: more.calls_status,
@@ -3840,6 +3893,9 @@ pub struct ExecutionInput {
     pub item: ProposalItem,
     pub approvals: Vec<Approval>,
     pub executor: LocalAccount,
+    /// §37: what binds each member where the multisig is deployed by this
+    /// execution ([`shell::Binding::of`]).
+    pub binding: shell::Binding,
 }
 
 fn execution_input(
@@ -3855,18 +3911,35 @@ fn execution_input(
         .iter()
         .find(|a| same_address(&a.address, executor))?
         .clone();
+    let account = s.account.clone()?;
+    let approvals: Vec<Approval> = item
+        .approvals
+        .iter()
+        .filter(|a| a.counts)
+        .map(|a| a.approval.clone())
+        .collect();
+    let geneses: Vec<multisig::Genesis> = approvals
+        .iter()
+        .filter_map(|a| match a {
+            Approval::Passkey(k) => Some(k.owner_genesis.clone()),
+            _ => None,
+        })
+        .collect();
+    let binding = shell::Binding::of(
+        &s.locals,
+        &geneses,
+        &account.chain_ids,
+        &s.networks,
+        chain_id,
+    );
     Some(ExecutionInput {
         chain_id,
-        account: s.account.clone()?,
-        approvals: item
-            .approvals
-            .iter()
-            .filter(|a| a.counts)
-            .map(|a| a.approval.clone())
-            .collect(),
+        account,
+        approvals,
         members,
         item,
         executor,
+        binding,
     })
 }
 
@@ -4014,6 +4087,7 @@ async fn verified_deploy_facts(
         input.chain_id,
         &input.account.address,
         &input.account.genesis,
+        &input.binding,
     )
     .await;
     match multisig::counterfactual_authority(&input.account.genesis, &input.account.address, &facts)

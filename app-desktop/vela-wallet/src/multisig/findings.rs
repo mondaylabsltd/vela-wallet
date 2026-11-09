@@ -120,6 +120,46 @@ mod tests {
 
     use super::*;
 
+    /// §37 (review 1-13 c): a member that is a contract nothing ties to its
+    /// own creation on the target network — the core's `ownerNotBound` —
+    /// is said in its own words, with the member and the network, in every
+    /// language, wherever the other refusals are (the deploy refusal too).
+    #[test]
+    fn an_owner_nothing_binds_is_said_with_its_address_and_network() {
+        let reason = json!({"kind": "ownerNotBound", "address": "0x00000000000000000000000000000000000000Ab"});
+        for (tag, loc) in Loc::every_language() {
+            let line = finding_words(
+                &loc,
+                &json!({"from": "genesis", "chainId": 100, "reason": reason}),
+                "",
+            );
+            let want = words::tv(
+                &loc,
+                "authority.ownerNotBound",
+                &[
+                    ("address", "0x00000000000000000000000000000000000000Ab"),
+                    ("network", &network(100)),
+                ],
+            );
+            assert_eq!(line, want, "{tag}");
+            assert!(
+                line.contains("0x00000000000000000000000000000000000000Ab"),
+                "{tag}: {line}"
+            );
+            assert!(
+                !line.contains("home.multisig") && !line.contains("{{"),
+                "{tag}: {line}"
+            );
+            let deploy = deploy_words(
+                &loc,
+                &json!({"kind": "refused", "authority": {"kind": "refused", "reasons": [reason]}}),
+                100,
+            )
+            .unwrap_or_default();
+            assert!(deploy.contains(&want), "{tag}: {deploy}");
+        }
+    }
+
     #[test]
     fn a_chain_risk_names_its_address_and_network() {
         let loc = Loc::for_tag("en");

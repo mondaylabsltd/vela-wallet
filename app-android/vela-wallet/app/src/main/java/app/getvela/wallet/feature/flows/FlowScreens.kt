@@ -190,6 +190,71 @@ private fun rememberCopyTick(): Pair<Int, (Int) -> Unit> {
 // ------------------------------------------------------------------ receive
 
 /**
+ * §37 (review 1-7): Receive for an account the chain has not confirmed — NO
+ * address, QR, request, copy or share; the core's sentence instead, the line
+ * while the chain is asked, and Check again. A refuted one says so in the
+ * danger tone and offers nothing to ask again.
+ */
+@Composable
+fun ReceiveStandingBody(
+    model: ReceiveStandingModel,
+    modifier: Modifier = Modifier,
+    onCheckAgain: () -> Unit = {},
+) {
+    val colors = VelaTheme.colors
+    val (fill, ink) = if (model.refuted) colors.errorSoft to colors.errorBase else colors.warningSoft to colors.fgBase
+    Column(modifier = modifier.fillMaxWidth().testTag(RECEIVE_STANDING_TAG)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(fill, RoundedCornerShape(VelaRadius.xl))
+                .padding(VelaSpacing.lg)
+                .semantics(mergeDescendants = true) {},
+        ) {
+            Text(
+                text = model.title,
+                color = ink,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.lg,
+                fontWeight = VelaFontWeight.semibold,
+            )
+            Spacer(modifier = Modifier.height(VelaSpacing.sm))
+            Text(
+                text = model.body,
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.base,
+            )
+        }
+        model.checking?.let { line ->
+            Spacer(modifier = Modifier.height(VelaSpacing.lg))
+            Text(
+                text = line,
+                color = colors.fgSubtle,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.base,
+                modifier = Modifier.testTag(RECEIVE_STANDING_CHECKING_TAG),
+            )
+        }
+        model.checkAgain?.let { label ->
+            Spacer(modifier = Modifier.height(VelaSpacing.lg))
+            FlowCta(
+                label = label,
+                onClick = onCheckAgain,
+                kind = FlowCtaKind.Secondary,
+                enabled = model.checking == null,
+                modifier = Modifier.fillMaxWidth().testTag(RECEIVE_STANDING_CHECK_TAG),
+            )
+        }
+    }
+}
+
+/** §37: stable hooks for the unconfirmed Receive's tests. */
+const val RECEIVE_STANDING_TAG = "receive-standing"
+const val RECEIVE_STANDING_CHECK_TAG = "receive-standing-check"
+const val RECEIVE_STANDING_CHECKING_TAG = "receive-standing-checking"
+
+/**
  * R1 — the receive network list.
  *
  * The subtitle is the whole idea: one address, every network. The list under it

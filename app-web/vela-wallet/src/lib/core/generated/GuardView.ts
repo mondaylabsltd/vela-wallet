@@ -30,6 +30,15 @@ rewritten_params_json: string | null,
  */
 unlimited_consented: boolean, 
 /**
+ * §37 (review 1-12): the batch legs (0-based) whose unbounded approval
+ * this surface showed and the person kept on Requested — each waives
+ * the submit guard for THAT leg's one approval and no other. The shell
+ * copies it to `SignApproveOpts::unlimited_approved_legs`; a batch is
+ * never waived by [`Self::unlimited_consented`] alone. Empty for a
+ * single request.
+ */
+unlimited_consented_legs: Array<number>, 
+/**
  * The request grants an unbounded allowance as it stands, and the
  * person is told so in the danger tone — the ONE place every shell reads
  * that sentence from (spec 094 S8): the single approval kept on its
@@ -40,7 +49,15 @@ unlimited_consented: boolean,
  * ([`GuardBlockReason::OffChainPermit`]) — which is why, before this, an
  * unlimited Permit2 drew a red hero and no warning at all (089 F22).
  */
-unlimited_warning: boolean, increase_total: GuardIncreaseTotalView | null, 
+unlimited_warning: boolean, 
+/**
+ * §37: the sentence [`Self::unlimited_warning`] says —
+ * [`UNLIMITED_WARNING_KEY`], or [`FAR_ABOVE_BALANCE_KEY`] for a finite
+ * amount at least [`FAR_ABOVE_BALANCE_TIMES`] times the balance read
+ * (unlimited-like: it is a number, and the sheet shows it). Every shell
+ * draws this key, never one of its own.
+ */
+unlimited_warning_key: string, increase_total: GuardIncreaseTotalView | null, 
 /**
  * Unverified decimals must be explicitly flagged
  * (`EditableApproveCard.tsx:200-202`; `PermitSignView.tsx:103-105`).

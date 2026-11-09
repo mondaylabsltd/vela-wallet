@@ -33,7 +33,10 @@ vi.mock('./proposals.svelte', () => ({
 		historyUnreadable: [],
 		cached: null,
 		loading: false,
-		readAt: null
+		readAt: null,
+		// §37: no proposal from a non-member left out.
+		nonMembers: 0,
+		showingNonMembers: false
 	}
 }));
 vi.mock('./names.svelte', () => ({ names: { label: (a: string) => shortenAddress(a) } }));

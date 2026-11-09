@@ -26,4 +26,9 @@ struct RegistryResolver: Sendable {
     var unitStep: @Sendable (_ unitId: UInt32, _ source: String, _ answersJson: String) -> String = {
         registryResolveUnitStep(unitId: $0, source: $1, answersJson: $2)
     }
+    /// §37 (review 1-7): re-checking an unconfirmed account on the chain
+    /// alone — `{type:"ask", requests}` | `{type:"done", identity, verified_by}`.
+    var confirmStep: @Sendable (_ publicKeyHex: String, _ address: String, _ answersJson: String) -> String = {
+        registryResolveConfirmStep(publicKeyHex: $0, address: $1, answersJson: $2)
+    }
 }

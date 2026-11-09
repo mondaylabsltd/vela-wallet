@@ -126,6 +126,8 @@ data class GuardDetectedApproval(
     val block_reason: GuardBlockReason? = null,
     val deadline: String? = null,
     val locus: GuardLocus,
+    /** §37 (review 1-12): an approval carried inside a multicall/MultiSend — the leg's position there. */
+    val nested_at: Int? = null,
 )
 
 @Serializable
@@ -168,6 +170,9 @@ data class GuardBatchView(
     val all_settled: Boolean = false,
 )
 
+/** The core's default for `GuardView.unlimited_warning_key` (a view from before §37 carries none). */
+const val UNLIMITED_WARNING_KEY = "componentsUi.signing.unlimitedWarning"
+
 @Serializable
 data class GuardView(
     val surface: GuardSurface = GuardSurface.None,
@@ -179,11 +184,24 @@ data class GuardView(
     /** Shown and kept as asked — copied into `SignApproveOpts.unlimited_approved`,
      *  the submit guard's only waiver. */
     val unlimited_consented: Boolean = false,
+    /**
+     * §37 (review 1-12): a `wallet_sendCalls`'s legs (0-based) whose one
+     * unbounded approval the sheet showed and the person kept — copied into
+     * `SignApproveOpts.unlimited_approved_legs`. Without it the core refuses a
+     * batch whose kept-unlimited leg is not named.
+     */
+    val unlimited_consented_legs: List<Int> = emptyList(),
     /** The request grants an unbounded allowance as it stands, said in the
      *  danger tone — the ONE place every shell reads it from (spec 094 S8): the
      *  approval kept as asked, a batch leg left so, or an unbounded off-chain
      *  permit. */
     val unlimited_warning: Boolean = false,
+    /**
+     * §37: the sentence [unlimited_warning] says — the core's key
+     * (`componentsUi.signing.unlimitedWarning`, or `…farAboveBalanceWarning`
+     * for a finite amount far past the balance), drawn as given.
+     */
+    val unlimited_warning_key: String = UNLIMITED_WARNING_KEY,
     val increase_total: GuardIncreaseTotalView? = null,
     val decimals_unverified: Boolean = false,
     val expired: Boolean = false,

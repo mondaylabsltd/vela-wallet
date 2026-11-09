@@ -28,6 +28,9 @@ import app.getvela.wallet.core.net.NetHealth
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.feature.send.core.SendReceiptOutcomes
 import app.getvela.wallet.feature.wallet.core.TrackerWorker
+import app.getvela.wallet.feature.wallet.core.AccountIdentityCheck
+import app.getvela.wallet.feature.wallet.core.ReceiveStanding
+import app.getvela.wallet.feature.onboarding.core.RegistryResolver
 import app.getvela.wallet.feature.wallet.core.TrackerNotifier
 import app.getvela.wallet.feature.send.core.TrustedSignerLabels
 import app.getvela.wallet.feature.send.core.UserOpSigner
@@ -1024,6 +1027,37 @@ class AppContainer(private val app: Application) {
             ?.json?.takeIf { it.has("result") && !it.isNull("result") }?.optString("result")
             ?.takeIf { it.startsWith("0x") }
 
+    /**
+     * §37 (review 1-7): the chain's re-check of an account only the key index
+     * vouched for — the registry walk's own reader ([rawEthCall]), never the
+     * index; what it finds is saved through the session.
+     */
+    val identityCheck: AccountIdentityCheck by lazy {
+        val client = RegistryClient(resolver = RegistryResolver(::rawEthCall))
+        AccountIdentityCheck(
+            confirm = { key, address -> client.confirmIdentity(key, address) },
+            save = { updated -> session.saveIdentity(updated) },
+        )
+    }
+
+    /**
+     * §37: once, at the app's start — an unconfirmed account in front is asked
+     * about again before it is first used. Waits for the session's boot; a
+     * device with no wallet gives up quietly.
+     */
+    private fun recheckIdentityAtStart() {
+        CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
+            val settled = kotlinx.coroutines.withTimeoutOrNull(60_000) {
+                session.view.first { !it.loading && it.hasWallet }
+            } ?: return@launch
+            val record = settled.activeRow?.accountJson.orEmpty()
+            if (ReceiveStanding.of(record)?.check_first == true) {
+                runCatching { identityCheck.check(record) }
+                    .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it; VelaLog.failure("receive", "identity at start", it) }
+            }
+        }
+    }
+
     /** Where the active wallet's founding record stands on Ethereum (spec 062). */
     val registryBackup: RegistryBackup by lazy {
         RegistryBackup(
@@ -1359,6 +1393,7 @@ class AppContainer(private val app: Application) {
             session.boot()
             startAgent()
         }
+        recheckIdentityAtStart()
     }
 
     /**

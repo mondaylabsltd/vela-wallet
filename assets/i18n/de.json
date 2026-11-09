@@ -646,7 +646,17 @@
   "shareCardNetworkNote": "Nur Zahlungen über {{network}}",
   "tokenContract": "Token-Vertrag",
   "includeNetwork": "Netzwerk mitsenden",
-  "includeNetworkHint": "Manche Wallets können diesen Code nicht lesen. Klappt es beim Gegenüber nicht, schalten Sie es aus."
+  "includeNetworkHint": "Manche Wallets können diesen Code nicht lesen. Klappt es beim Gegenüber nicht, schalten Sie es aus.",
+  "unconfirmed": {
+   "title": "Noch nicht onchain bestätigt",
+   "body": "Die Schlüssel dieser Wallet stammen aus dem Schlüsselindex, und das Register onchain bestätigt sie noch nicht. Bis dahin zeigt Vela keine Empfangsadresse – jedes Mal, wenn du dies öffnest, wird erneut geprüft.",
+   "checkAgain": "Erneut prüfen",
+   "checking": "Onchain wird geprüft …"
+  },
+  "refuted": {
+   "title": "Das ist nicht deine registrierte Wallet",
+   "body": "Das Register onchain enthält für deinen Passkey andere Schlüssel, als der Schlüsselindex geliefert hat. Empfange hier nichts – entferne diese Wallet und melde dich erneut an."
+  }
  },
  "assets": {
   "sectionTitle": "Assets",
@@ -910,7 +920,8 @@
     "noNetwork": "Der Passkey braucht eine Netzwerkverbindung. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
     "alreadyRegistered": "Dieser Authenticator enthält bereits einen der Schlüssel dieser Wallet. Verwenden Sie einen anderen.",
     "timedOut": "Die Passkey-Abfrage ist abgelaufen. Versuchen Sie es erneut.",
-    "other": "Der Passkey konnte nicht verwendet werden. Versuchen Sie es erneut."
+    "other": "Der Passkey konnte nicht verwendet werden. Versuchen Sie es erneut.",
+    "testDomainNotAssociated": "Die Passkey-Domain dieses Test-Builds ist auf diesem Gerät nicht eingerichtet (TEST_RP_DOMAIN bzw. localhost im Simulator oder Emulator), daher erlaubt das System keinen Passkey. Release-Builds sind nicht betroffen."
    }
   },
   "create": {
@@ -1680,6 +1691,15 @@
    "labelMember": "Mitglied",
    "labelNewMember": "Neues Mitglied",
    "labelApprovalsRequired": "Erforderliche Genehmigungen",
+   "farAboveBalanceWarning": "Über das 100-Fache deines Guthabens – dieser Vertrag könnte alles ausgeben, was du hältst, und mehr, sobald es eingeht",
+   "signIn": {
+    "refusedTitle": "Vela führt diese Anmeldung nicht aus",
+    "wrongDomain": "Diese Anmeldung gilt für {{domain}}, aber {{origin}} fragt danach. Eine Website, die dich bittet, dich bei einer anderen anzumelden, will dein Konto dort übernehmen.",
+    "wrongUri": "Diese Anmeldung nennt {{uri}} – das ist nicht {{origin}}, die anfragende Website.",
+    "wrongChain": "Diese Anmeldung gilt für Chain {{chain}}, aber diese Website ist mit Chain {{connected}} verbunden. Wechsle das Netzwerk und frage erneut.",
+    "incomplete": "Dieser Anmeldung fehlt die Angabe {{field}}, daher kann Vela nicht prüfen, wobei sie dich anmeldet.",
+    "noOrigin": "Vela kann nicht erkennen, welche Website fragt, und führt diese Anmeldung daher nicht aus."
+   },
    "simUnconfirmed": "Nur ein Knoten hat geantwortet, daher konnte Vela nicht bestätigen, was diese Transaktion bewirkt – bitte vor dem Signieren kontrollieren.",
    "simDisagreed": "Zwei unabhängige Knoten haben unterschiedlich beantwortet, was diese Transaktion bewirkt – bitte vor dem Signieren kontrollieren.",
    "simOwnNode": "Nur von deinem eigenen Knoten geprüft",

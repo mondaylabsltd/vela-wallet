@@ -106,7 +106,10 @@
         "invite": "멤버 초대",
         "lastKnown": "{{time}} 기준 마지막으로 확인한 목록입니다. 변경 사항을 확인하는 중입니다.",
         "checking": "승인을 기다리는 거래를 확인하는 중…",
-        "historyUnreadable": "{{network}}에서 이 멀티시그의 기록을 읽지 못했습니다. 다른 곳에서 실행된 거래가 여기에 없을 수 있습니다."
+        "historyUnreadable": "{{network}}에서 이 멀티시그의 기록을 읽지 못했습니다. 다른 곳에서 실행된 거래가 여기에 없을 수 있습니다.",
+        "nonMembersShow": "멤버가 아닌 사람의 제안 보기 ({{total}})",
+        "nonMembersHide": "멤버가 아닌 사람의 제안 숨기기",
+        "nonMembersWarning": "이 멀티시그의 멤버 중 누구도 이것을 승인하지 않았습니다. 누구나 메일박스에 올릴 수 있으니, 모르는 것은 승인하지 마세요."
       },
       "status": {
         "ready": "실행 가능",
@@ -433,7 +436,8 @@
         "signRiskBody": "{{network}}에서는 멤버 외에도 이 멀티시그를 움직일 수 있는 것이 있습니다. 그것을 제어하는 쪽은 무엇에 서명하든 자금을 옮기거나 막을 수 있습니다. 그 이유를 정확히 알 때만 서명하세요.",
         "signRiskConfirm": "위험을 이해했습니다. 서명하기",
         "signRiskCancel": "서명하지 않기",
-        "signUnchecked": "{{network}}에서 이 멀티시그를 움직일 수 있는 대상을 확인하지 못해 Vela는 아직 그곳에서 서명하지 않습니다. 잠시 후 다시 시도하세요."
+        "signUnchecked": "{{network}}에서 이 멀티시그를 움직일 수 있는 대상을 확인하지 못해 Vela는 아직 그곳에서 서명하지 않습니다. 잠시 후 다시 시도하세요.",
+        "ownerNotBound": "{{network}}에서 멤버 {{address}}는 그곳에서의 생성과 묶여 있지 않은 컨트랙트입니다. 그 주소에 배포할 수 있는 사람이 그 표를 갖게 됩니다."
       },
       "external": {
         "pageTitle": "지갑으로 Vela 거래 승인",

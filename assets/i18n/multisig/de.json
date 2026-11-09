@@ -30,7 +30,10 @@
     "invite": "Mitglieder einladen",
     "lastKnown": "Letzter bekannter Stand von {{time}} – es wird nach Änderungen gesucht.",
     "checking": "Es wird nach Transaktionen gesucht, die auf Freigabe warten…",
-    "historyUnreadable": "Der Verlauf dieses Multisigs auf {{network}} konnte nicht gelesen werden: Anderswo ausgeführte Transaktionen fehlen hier eventuell."
+    "historyUnreadable": "Der Verlauf dieses Multisigs auf {{network}} konnte nicht gelesen werden: Anderswo ausgeführte Transaktionen fehlen hier eventuell.",
+    "nonMembersShow": "Vorschläge von Nicht-Mitgliedern anzeigen ({{total}})",
+    "nonMembersHide": "Vorschläge von Nicht-Mitgliedern ausblenden",
+    "nonMembersWarning": "Kein Mitglied dieses Multisigs hat dies genehmigt. Jeder kann in das Postfach schreiben – genehmige nichts, das du nicht erkennst."
    },
    "status": {
     "ready": "Bereit zur Ausführung",
@@ -357,7 +360,8 @@
     "signRiskBody": "Auf {{network}} können nicht nur seine Mitglieder für dieses Multisig handeln. Wer das kontrolliert, kann sein Guthaben bewegen oder es blockieren – egal, was du signierst. Signiere nur, wenn du genau weißt, warum es das hat.",
     "signRiskConfirm": "Risiko verstanden – signieren",
     "signRiskCancel": "Nicht signieren",
-    "signUnchecked": "Vela konnte nicht prüfen, wer auf {{network}} für dieses Multisig handeln kann, und signiert dort deshalb noch nicht. Versuche es gleich noch einmal."
+    "signUnchecked": "Vela konnte nicht prüfen, wer auf {{network}} für dieses Multisig handeln kann, und signiert dort deshalb noch nicht. Versuche es gleich noch einmal.",
+    "ownerNotBound": "Auf {{network}} ist Mitglied {{address}} ein Vertrag, den nichts an seine eigene Erstellung dort bindet – wer an dieser Adresse bereitstellen kann, hätte seine Stimme."
    },
    "external": {
     "pageTitle": "Für Vela genehmigen",

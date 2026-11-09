@@ -390,15 +390,17 @@ export function createSignExecutor(
 					// the kinds the TS provider already named — `signErrorMessage`
 					// reproduces the exact string it sent for each (a `submit_failed`
 					// detail IS `err.message`, verbatim) — and the core's own for a
-					// refusal it introduced: spec 102's `venue_blocked` and §31's
-					// `parent_safe_blocked` are `dapp_rpc::sign_error_words`, not a
-					// copy kept here.
+					// refusal it introduced: spec 102's `venue_blocked`, §31's
+					// `parent_safe_blocked` and §37's `sign_in_refused` are
+					// `dapp_rpc::sign_error_words`, not a copy kept here.
 					const notice = { kind: operation.payload.kind, detail: operation.payload.message };
 					transport?.sendResponse(operation.id, undefined, {
 						code: operation.payload.code,
 						kind: operation.payload.kind,
 						message:
-							(notice.kind === 'venue_blocked' || notice.kind === 'parent_safe_blocked'
+							(notice.kind === 'venue_blocked' ||
+							notice.kind === 'parent_safe_blocked' ||
+							notice.kind === 'sign_in_refused'
 								? signErrorWords(notice.kind, notice.detail)
 								: null) ?? signErrorMessage(notice)
 					});

@@ -1077,6 +1077,8 @@ class SigningController(
             // The guard showed an unbounded amount and it was kept as the site
             // asked — the submit guard's only waiver, copied, never decided.
             unlimited_approved = guard.unlimited_consented,
+            // §37: a batch's kept-unlimited legs, by position — copied, never decided.
+            unlimited_approved_legs = guard.unlimited_consented_legs,
             balance_changes = approvedChanges(sim),
             // Spec 093: the approval surface's token as it resolved — what lets
             // the record say "100 USDC"; the core reads it only once verified.

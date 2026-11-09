@@ -149,6 +149,9 @@ struct GuardDetectedApprovalWire: Decodable, Equatable {
     /// Unix seconds as a decimal string, when the shape carries a deadline.
     let deadline: String?
     let locus: GuardLocusWire
+    /// §37 (review 1-12): an approval carried inside a multicall / MultiSend —
+    /// the byte offset of its call in the calldata. Absent: the top-level call.
+    var nestedAt: Int? = nil
 }
 
 struct GuardTokenMetaViewWire: Decodable, Equatable {
@@ -240,11 +243,21 @@ struct GuardViewWire: Decodable, Equatable {
     /// showed it and it was kept as asked. Copied verbatim into the approve
     /// opts as `unlimited_approved` — the submit guard's only waiver.
     let unlimitedConsented: Bool
+    /// §37 (review 1-12): for a batch, the legs (0-based) whose one unbounded
+    /// approval the sheet showed and the person kept — copied verbatim into
+    /// the approve opts as `unlimited_approved_legs`. Without it the core
+    /// refuses a batch whose kept-unlimited leg is not named. Absent: none.
+    var unlimitedConsentedLegs: [Int]? = nil
     /// The request grants an unbounded allowance as it stands, and the sheet
     /// says so in the danger tone — the ONE place every shell reads that
     /// sentence from (spec 094 S8): the approval kept on its Requested chip, a
     /// batch leg left so, or an off-chain permit for an unbounded amount.
     var unlimitedWarning: Bool = false
+    /// §37 (review 1-12): the key `unlimitedWarning`'s sentence is drawn from
+    /// — `componentsUi.signing.unlimitedWarning`, or
+    /// `componentsUi.signing.farAboveBalanceWarning` for a finite cap far
+    /// above the balance. Absent (an older core): the unlimited sentence.
+    var unlimitedWarningKey: String? = nil
     let increaseTotal: GuardIncreaseTotalViewWire?
     /// Unverified decimals must be flagged explicitly on screen.
     let decimalsUnverified: Bool

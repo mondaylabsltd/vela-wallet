@@ -79,6 +79,16 @@
     "shareCardNetworkNote": "Paiements {{network}} uniquement",
     "tokenContract": "Contrat du jeton",
     "includeNetwork": "Inclure le réseau",
-    "includeNetworkHint": "Certains portefeuilles ne lisent pas ce code. Si votre interlocuteur n'y arrive pas, désactivez-le."
+    "includeNetworkHint": "Certains portefeuilles ne lisent pas ce code. Si votre interlocuteur n'y arrive pas, désactivez-le.",
+    "unconfirmed": {
+      "title": "Pas encore confirmé sur la chaîne",
+      "body": "Les clés de ce portefeuille viennent de l'index des clés, et le registre sur la chaîne ne les confirme pas encore. Vela n'affiche aucune adresse de réception tant que ce n'est pas le cas — il vérifie à nouveau chaque fois que vous ouvrez ceci.",
+      "checkAgain": "Vérifier à nouveau",
+      "checking": "Vérification sur la chaîne…"
+    },
+    "refuted": {
+      "title": "Ce n'est pas votre portefeuille enregistré",
+      "body": "Le registre sur la chaîne détient pour votre clé d'accès d'autres clés que celles données par l'index. Ne recevez rien ici — supprimez ce portefeuille et reconnectez-vous."
+    }
   }
 }

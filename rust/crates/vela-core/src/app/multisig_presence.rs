@@ -195,9 +195,13 @@ pub fn waiting_of(
     items: &[ProposalItem],
     blocked_of: impl Fn(&ProposalItem) -> Option<ReadyBlock>,
 ) -> Waiting {
+    // §37 (review 1-13 b): what no member vouches for waits on nobody — a
+    // stranger's post never reads as "needs your approval".
     let open: Vec<&ProposalItem> = items
         .iter()
-        .filter(|i| i.status != ProposalStatus::Done && i.cancelled_by.is_none())
+        .filter(|i| {
+            i.status != ProposalStatus::Done && i.cancelled_by.is_none() && !i.from_non_member
+        })
         .collect();
     let needs: Vec<&&ProposalItem> = open
         .iter()

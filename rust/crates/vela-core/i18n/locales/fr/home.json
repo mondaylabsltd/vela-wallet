@@ -107,7 +107,10 @@
         "invite": "Inviter des membres",
         "lastKnown": "Dernière liste connue, de {{time}} : recherche de changements.",
         "checking": "Recherche des transactions en attente d’approbation…",
-        "historyUnreadable": "Impossible de lire l’historique de ce multisig sur {{network}} : des transactions exécutées ailleurs peuvent manquer ici."
+        "historyUnreadable": "Impossible de lire l’historique de ce multisig sur {{network}} : des transactions exécutées ailleurs peuvent manquer ici.",
+        "nonMembersShow": "Afficher les propositions de non-membres ({{total}})",
+        "nonMembersHide": "Masquer les propositions de non-membres",
+        "nonMembersWarning": "Aucun membre de ce multisig ne l'a approuvé. N'importe qui peut écrire dans la boîte aux lettres — n'approuvez rien que vous ne reconnaissez pas."
       },
       "status": {
         "ready": "Prête à exécuter",
@@ -440,7 +443,8 @@
         "signRiskBody": "Sur {{network}}, d’autres que ses membres peuvent agir pour ce multisig. Qui le contrôle peut déplacer ses fonds ou le bloquer, quoi que vous signiez. Ne signez que si vous savez exactement pourquoi il l’a.",
         "signRiskConfirm": "Je comprends le risque, signer",
         "signRiskCancel": "Ne pas signer",
-        "signUnchecked": "Vela n’a pas pu vérifier qui peut agir pour ce multisig sur {{network}}, donc il n’y signera pas encore. Réessayez dans un instant."
+        "signUnchecked": "Vela n’a pas pu vérifier qui peut agir pour ce multisig sur {{network}}, donc il n’y signera pas encore. Réessayez dans un instant.",
+        "ownerNotBound": "Sur {{network}}, le membre {{address}} est un contrat que rien ne lie à sa propre création là-bas — quiconque peut déployer à cette adresse détiendrait sa voix."
       },
       "external": {
         "pageTitle": "Approuver pour Vela",

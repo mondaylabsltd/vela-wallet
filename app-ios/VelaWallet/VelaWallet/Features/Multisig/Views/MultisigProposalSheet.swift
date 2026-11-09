@@ -992,6 +992,11 @@ struct MultisigProposalSheet: View {
 
     @ViewBuilder private func content(_ model: MsProposalModel) -> some View {
         if let siteNote { MsNote(text: siteNote, identifier: "multisig.proposal.site") }
+        // §37 (review 1-13): no member of this multisig vouches for it.
+        if model.item.fromNonMember {
+            MsNote(text: words.t("panel.nonMembersWarning"), tone: .warning,
+                   identifier: "multisig.proposal.nonMember")
+        }
         VStack(alignment: .leading, spacing: Tokens.Space.s8) {
             Text(prose: model.title)
                 .typeRole(Typography.title.scaled(textScale))

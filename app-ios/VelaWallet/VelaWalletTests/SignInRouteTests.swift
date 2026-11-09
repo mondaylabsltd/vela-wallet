@@ -302,7 +302,7 @@ struct SignInRouteTests {
         let passkey = CountingSigner()
         let page = OfferedKeysPage(answering: founding)
         let spine = UserOpSpine(
-            relay: RelayClient(port: ScriptedRelayPort(), now: { 0 }, retryDelayMs: 0),
+            relay: RelayClient(port: ScriptedRelayPort.deployedAccount(), now: { 0 }, retryDelayMs: 0),
             accounts: accounts, signer: { passkey }
         )
         spine.trustedSigner = page
@@ -335,7 +335,7 @@ struct SignInRouteTests {
         ))
         let page = OfferedKeysPage(answering: other)
         let spine = UserOpSpine(
-            relay: RelayClient(port: ScriptedRelayPort(), now: { 0 }, retryDelayMs: 0),
+            relay: RelayClient(port: ScriptedRelayPort.deployedAccount(), now: { 0 }, retryDelayMs: 0),
             accounts: accounts, signer: { CountingSigner() }
         )
         spine.trustedSigner = page

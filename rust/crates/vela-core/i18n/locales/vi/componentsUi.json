@@ -327,6 +327,15 @@
       "labelMember": "Thành viên",
       "labelNewMember": "Thành viên mới",
       "labelApprovalsRequired": "Số lượt duyệt cần thiết",
+      "farAboveBalanceWarning": "Hơn 100× số dư của bạn — hợp đồng này có thể tiêu toàn bộ số bạn đang có, và cả số sẽ đến sau",
+      "signIn": {
+        "refusedTitle": "Vela sẽ không ký lần đăng nhập này",
+        "wrongDomain": "Lần đăng nhập này dành cho {{domain}}, nhưng {{origin}} đang yêu cầu. Một trang yêu cầu bạn đăng nhập vào trang khác đang cố chiếm tài khoản của bạn ở đó.",
+        "wrongUri": "Lần đăng nhập này ghi {{uri}}, không phải {{origin}} — trang đang yêu cầu.",
+        "wrongChain": "Lần đăng nhập này dành cho chuỗi {{chain}}, nhưng trang này đang kết nối trên chuỗi {{connected}}. Hãy đổi mạng và yêu cầu lại.",
+        "incomplete": "Lần đăng nhập này thiếu {{field}}, nên Vela không thể kiểm tra nó đăng nhập bạn vào đâu.",
+        "noOrigin": "Vela không biết trang nào đang yêu cầu, nên sẽ không ký lần đăng nhập này."
+      },
       "simUnconfirmed": "Chỉ một nút trả lời nên Vela không thể xác nhận giao dịch này làm gì. Hãy kiểm tra trước khi ký.",
       "simDisagreed": "Hai nút độc lập trả lời khác nhau về việc giao dịch này làm gì. Hãy kiểm tra trước khi ký.",
       "simOwnNode": "Chỉ được kiểm tra bởi nút của riêng bạn",

@@ -30,7 +30,10 @@
     "invite": "Undang anggota",
     "lastKnown": "Daftar terakhir yang diketahui, dari {{time}} — memeriksa perubahan.",
     "checking": "Memeriksa transaksi yang menunggu persetujuan…",
-    "historyUnreadable": "Riwayat multisig ini di {{network}} tidak bisa dibaca: transaksi yang dieksekusi di tempat lain mungkin tidak tampil di sini."
+    "historyUnreadable": "Riwayat multisig ini di {{network}} tidak bisa dibaca: transaksi yang dieksekusi di tempat lain mungkin tidak tampil di sini.",
+    "nonMembersShow": "Tampilkan usulan dari non-anggota ({{total}})",
+    "nonMembersHide": "Sembunyikan usulan dari non-anggota",
+    "nonMembersWarning": "Belum ada anggota multisig ini yang menyetujuinya. Siapa pun bisa mengirim ke kotak surat — jangan menyetujui sesuatu yang tidak Anda kenali."
    },
    "status": {
     "ready": "Siap dieksekusi",
@@ -357,7 +360,8 @@
     "signRiskBody": "Di {{network}}, bukan hanya anggotanya yang bisa bertindak atas multisig ini. Siapa pun yang mengendalikannya bisa memindahkan dana atau memblokirnya, apa pun yang kamu tanda tangani. Tanda tangani hanya jika kamu tahu persis mengapa ia memilikinya.",
     "signRiskConfirm": "Saya mengerti risikonya, tanda tangani",
     "signRiskCancel": "Jangan tanda tangani",
-    "signUnchecked": "Vela tidak bisa memeriksa siapa yang bisa bertindak atas multisig ini di {{network}}, jadi belum akan menandatangani di sana. Coba lagi sebentar lagi."
+    "signUnchecked": "Vela tidak bisa memeriksa siapa yang bisa bertindak atas multisig ini di {{network}}, jadi belum akan menandatangani di sana. Coba lagi sebentar lagi.",
+    "ownerNotBound": "Di {{network}}, anggota {{address}} adalah kontrak yang tidak terikat pada pembuatannya sendiri di sana — siapa pun yang bisa men-deploy di alamat itu akan memegang suaranya."
    },
    "external": {
     "pageTitle": "Setujui untuk Vela",

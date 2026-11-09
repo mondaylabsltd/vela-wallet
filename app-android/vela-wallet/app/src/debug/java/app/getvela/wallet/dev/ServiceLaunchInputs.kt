@@ -18,7 +18,8 @@ import org.json.JSONObject
  *   adb shell am start -n app.getvela.wallet/.MainActivity \
  *     --es vela.serviceEndpoints '{"bundlerServiceURL":"http://127.0.0.1:8990","genesisServiceURL":"http://127.0.0.1:8987"}' \
  *     --es vela.rpcOverrides '{"100":"http://127.0.0.1:8945","8453":"http://127.0.0.1:8946"}' \
- *     --es vela.peerconnectRelay ws://127.0.0.1:8992
+ *     --es vela.peerconnectRelay ws://127.0.0.1:8992 \
+ *     --es vela.pageLaunch 674b7333…   # §38: the signing page version (VELA_PAGE_LAUNCH)
  *
  * Each is written to the store under the key every shell reads
  * (`vela.serviceEndpoints`, `vela.networkConfig`, `vela.peerconnectRelay`),
@@ -35,6 +36,16 @@ object ServiceLaunchInputs {
     const val SERVICE_ENDPOINTS = "vela.serviceEndpoints"
     const val RPC_OVERRIDES = "vela.rpcOverrides"
     const val PEERCONNECT_RELAY = "vela.peerconnectRelay"
+
+    /**
+     * §38 (`VELA_PAGE_LAUNCH` on the other shells): the signing page version
+     * this debug build opens, a sha256 from the core's `BUILD_ALLOWED`
+     * (refused otherwise), whatever the page's index lists — so an emulator
+     * can run the page this tree builds before it is deployed. The core's
+     * `signerPageSetTestLaunch`; still fetched, hashed and ruled on. Read on
+     * every launch, never stored.
+     */
+    const val PAGE_LAUNCH = "vela.pageLaunch"
 
     /**
      * §28: `1` lets this test build write to production services
@@ -127,6 +138,11 @@ object ServiceLaunchInputs {
     fun apply(activity: Activity): Boolean {
         val intent = activity.intent ?: return false
         ProductionWriteGuard.optIn(intent.getStringExtra(ALLOW_PRODUCTION_WRITES))
+        intent.getStringExtra(PAGE_LAUNCH)?.let { version ->
+            val refused = uniffi.vela_core_uniffi.signerPageSetTestLaunch(version, true)
+            check(refused == null) { "$PAGE_LAUNCH=$version: $refused" }
+            VelaLog.event("debug.launchInputs", "pageLaunch", "version" to version.take(8))
+        }
         if (listOf(SERVICE_ENDPOINTS, RPC_OVERRIDES, PEERCONNECT_RELAY).none { intent.hasExtra(it) }) return false
         val store = VelaStore(activity.applicationContext)
         val changed = runBlocking {

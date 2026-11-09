@@ -79,6 +79,16 @@
     "shareCardNetworkNote": "Solo pagos en {{network}}",
     "tokenContract": "Contrato del token",
     "includeNetwork": "Incluir red",
-    "includeNetworkHint": "Algunas billeteras no pueden leer este código. Si la otra persona no puede, desactívalo."
+    "includeNetworkHint": "Algunas billeteras no pueden leer este código. Si la otra persona no puede, desactívalo.",
+    "unconfirmed": {
+      "title": "Aún no confirmada en la cadena",
+      "body": "Las llaves de esta billetera vienen del índice de llaves, y el registro en la cadena aún no las confirma. Vela no muestra una dirección para recibir hasta que lo haga; vuelve a verificar cada vez que abres esto.",
+      "checkAgain": "Verificar de nuevo",
+      "checking": "Verificando en la cadena…"
+    },
+    "refuted": {
+      "title": "Esta no es tu billetera registrada",
+      "body": "El registro en la cadena guarda para tu llave de acceso un conjunto de llaves distinto del que dio el índice. No recibas nada aquí: elimina esta billetera y vuelve a iniciar sesión."
+    }
   }
 }

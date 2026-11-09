@@ -35,6 +35,7 @@ fn acct(name: &str, address: &str) -> Account {
         sign_in_key: None,
         signing_domain: "getvela.app".to_owned(),
         signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+        identity: Default::default(),
     }
 }
 

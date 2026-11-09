@@ -20,13 +20,13 @@ window.VelaCS = window.VelaCS || {};
   var abi = ns.abi;
   var reg = ns.registry;
 
-  // Where "unlimited" starts — the wallet's own two lines
-  // (vela-core `approval_guard::UNLIMITED_CAP_256` / `_160`), so this page and
-  // the app call the same amount unlimited. 2^200 for a uint256 amount: past
-  // every real supply (about 2^128) and below every "max" sentinel (2^255,
-  // 2^256-1). 2^152 for a Permit2 uint160 amount, whose own max is 2^160-1.
-  var UNLIMITED_256 = 1n << 200n;
-  var UNLIMITED_160 = 1n << 152n;
+  // Where "unlimited" starts — the wallet's own line (vela-core
+  // `approval_guard::UNLIMITED_CAP_256` / `_160`, §37), so this page and the
+  // app call the same amount unlimited: 2^128 for every amount field, uint256
+  // and Permit2's uint160 alike — beyond any real supply (3.4e20 whole tokens
+  // at 18 decimals), so no amount at or above it is about this transaction.
+  var UNLIMITED_256 = 1n << 128n;
+  var UNLIMITED_160 = 1n << 128n;
 
 
   var UNREADABLE = new RegExp('[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f\\ufffd]');
@@ -1348,7 +1348,12 @@ window.VelaCS = window.VelaCS || {};
       return view;
     }
 
-    if (primary === 'PermitSingle' || primary === 'PermitTransferFrom') {
+    // §37 (review 1-12): Permit2's witness transfer — the transfer with the
+    // dApp's own struct (an order, an intent) bound in — reads as the
+    // transfer it is: spender, token, amount, deadline. It read blind.
+    var witnessTransfer = primary === 'PermitWitnessTransferFrom' &&
+      message.permitted && typeof message.permitted === 'object' && !Array.isArray(message.permitted);
+    if (primary === 'PermitSingle' || primary === 'PermitTransferFrom' || witnessTransfer) {
       var details = message.details || message.permitted || {};
       // PermitSingle's amount is a uint160; PermitTransferFrom's is a uint256.
       var pAmount = tokenAmount(BigInt(details.amount), details.token, ctx, primary === 'PermitSingle' ? 160 : 256);
@@ -1709,7 +1714,7 @@ window.VelaCS = window.VelaCS || {};
   function isExtension(origin) {
     if (typeof origin !== 'string') return false;
     if (EXTENSIONS.indexOf(origin) >= 0) return true;
-    var here = typeof location === 'object' && location ? String(location.hostname || '') : '';
+    var here = ns.place ? ns.place.host() : typeof location === 'object' && location ? String(location.hostname || '') : '';
     return LOOPBACK_HOST.test(here) && /^chrome-extension:\/\/[a-p]{32}$/.test(origin);
   }
 
@@ -1732,7 +1737,7 @@ window.VelaCS = window.VelaCS || {};
   function isWebWallet(origin) {
     if (typeof origin !== 'string') return false;
     if (WEB_WALLETS.indexOf(origin) >= 0) return true;
-    var here = typeof location === 'object' && location ? String(location.hostname || '') : '';
+    var here = ns.place ? ns.place.host() : typeof location === 'object' && location ? String(location.hostname || '') : '';
     var parsed = null;
     try { parsed = new URL(origin); } catch (e) { return false; }
     return LOOPBACK_HOST.test(here) && parsed.protocol === 'http:' && LOOPBACK_HOST.test(parsed.hostname) &&

@@ -1,5 +1,11 @@
 # 交接：可信签名器页面
 
+> **§37（2026-11-08，第二十二轮）：「无限额」只有一条线；Permit2 的见证转账读得出来。** 新版本 **e7ee3925**（`BUILD_ALLOWED` 第一位，LAUNCH 不变）。
+> 「无限额」从 2^128 开始，uint256 与 Permit2 的 uint160 一样（以前是 2^200 / 2^152），与 vela-core `approval_guard` 同一条线（`lib/resolve.js`）。
+> `PermitWitnessTransferFrom`（UniswapX、意图协议）按它本来的样子读成 Permit2 转账 —— 授权对象、代币、金额、截止时间 —— 以前是盲签的 typed data。
+> **仍未读出**：`PermitBatchTransferFrom`、`PermitBatchWitnessTransferFrom`（`permitted` 是数组）和 `PermitBatch`（批量授权）在本页仍落到「未知 typed data」（caution，逐字段列出），不是 Permit2 的卡。
+> 测试：`unlimited-line-test` 15/15（新增 2^128 两侧与见证转账四项）；其余套件全过。部署顺序同上：`dist/` 先上线（含 `/b/e7ee3925…/sign`），**部署之后**才移 LAUNCH。
+
 > **§35（2026-11-08，第二十一轮）：每一笔操作都会过期。** 新版本 **7ec6e9a3**（`BUILD_ALLOWED` 第一位，LAUNCH 不变）。
 > vela-core 现在给每一笔要签的 SafeOp 盖上有效期（`validAfter = 0`、`validUntil = 现在 + 1800` 秒，`user_op::stamp_validity`），
 > 请求里的 `context.operation.userOp` 带上 `validAfter` / `validUntil`（十进制字符串，`trusted_signer::user_op_json`）。
@@ -166,7 +172,7 @@ bun samples/single-file-test.mjs   # 15/15 发布出去的单文件页：CSP 实
 bun samples/desktop-demo.mjs --auto #  8/8 桌面应用全流程 + 自验签（开测试页 samples/loopback-sign.html：只有它接受回环答复）
 bun samples/takeover-test.mjs      # 67/67 自调用 / delegatecall / SafeTx 拒签（与 vela-core self_call_guard 同一规则）；替其他 Safe 执行 / approveHash / 改配置、SafeMessage 拒签（§31）
 node samples/multisig-test.mjs     # 355/355 多签批准与多签执行（第七轮）：哈希、批准字节、读法与发布的 wasm 逐例对拍；执行者的操作逐腿读、部署从 setup 核实；敌意输入；十五种语言；第十轮：多签的钱写多签的、成员变更前后、执行卡的嵌套批量、嵌套层数与核心逐层一致
-bun samples/unlimited-line-test.mjs # 11/11 「无限额」的线：uint256 2^200、uint160 2^152（与 vela-core approval_guard 同一条线）
+bun samples/unlimited-line-test.mjs # 15/15 「无限额」的线：每种金额都是 2^128（§37，与 vela-core approval_guard 同一条线）；PermitWitnessTransferFrom 读成 Permit2
 node samples/origin-line-test.mjs   # 31/31 站点名就是主机时页头只写一次（082 L-HOST，与 vela-core site_label 同一规则）；不是主机的名字只作它的自称，不作页头（`source: 'vela_browser'` 不算证明）；仪式副标题只说一次钱包；网络旁「App 提供」只标 App 给的链名，本页不认识的链总显示链 ID
 node samples/plain-send-test.mjs    # 183/183 没有 calldata 的调用就是发送，金额 0 也是；金额精确到 wei 且整串装得进卡片；站点的 value 按钱包组装时的读法去对（"0X…"、带空格、JSON 数字，同桌面 wei_of），对得上就不能说「组装时被改过」；真读不懂的不出数、在操作里拒签（082 G14/RC4/RC5，与 vela-core is_empty_calldata、exact_native_amount 同一规则）；带 calldata 的调用附带的原生币是一行粗体金额加一条提示，批量每一腿都有；解不开的腿列出合约、函数选择器、金额（0 也写）和 calldata（2026-10-28）
 bun samples/plain-send-test.mjs     # 183/183 同一套件在 JavaScriptCore（Safari 的引擎）上再跑一遍：JSC 的 BigInt 把 "0x " 读成 0，V8 会抛错，所以页面用自己的读法，BigInt 只见到规整的数字

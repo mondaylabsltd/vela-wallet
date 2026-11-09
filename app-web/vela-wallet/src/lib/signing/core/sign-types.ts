@@ -260,6 +260,10 @@ export function signErrorMessage(notice: SignErrorNotice): string {
 			// Spec 081: refused by the wallet, not by the person. The sheet
 			// explains it in the reader's language; this is the dApp's copy.
 			return `Blocked: this request would change who controls the wallet (${detail ?? ''}).`;
+		case 'sign_in_refused':
+			// §37 (review 1-11): a sign-in not bound to the site asking or its
+			// network. The sheet says which; this is the dApp's copy.
+			return `Blocked: the wallet refused a sign-in that is not for this site or this network (${detail ?? ''}).`;
 		case 'funding_cancelled':
 			return 'Gas account funding cancelled';
 		case 'stale_fee_quote':

@@ -2955,6 +2955,12 @@ pub enum Refusal {
     MissingCode { name: String, address: String },
     /// On this chain, a contract it depends on holds code that is not Safe's.
     WrongCode { name: String, address: String },
+    /// §37 (review 1-13 c; the registry README's "Expanding to a new chain",
+    /// step 3): a member at `address` is a contract — on another network
+    /// this multisig is used on, or here — that nothing binds to its own
+    /// genesis, and whose code here is not its code there. Whoever can put
+    /// code at that address on this chain would hold a vote.
+    OwnerNotBound { address: String },
 }
 
 /// Who can act for a Safe that is not deployed on a chain yet — the one
@@ -2979,6 +2985,65 @@ pub enum Authority {
 #[serde(rename_all = "camelCase", default)]
 pub struct ChainFacts {
     pub codes: BTreeMap<String, Option<String>>,
+    /// §37: what binds each member to who it is, by member address (any
+    /// case). Its code on the target chain is in `codes`
+    /// ([`counterfactual_reads`] names every member).
+    pub owners: BTreeMap<String, OwnerFact>,
+}
+
+/// §37 (review 1-13 c): what the wallet knows of one member of a multisig it
+/// would deploy on a chain, beyond its code there.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct OwnerFact {
+    /// The member's own creation parameters, when the wallet holds them (a
+    /// Vela account on this device, an approval's `ownerGenesis`). One that
+    /// deploys exactly this address through a canonical Safe factory BINDS
+    /// it: CREATE2 lets nothing else be put there, on any chain.
+    pub genesis: Option<Genesis>,
+    /// `eth_getCode` of the member on each other network the multisig is
+    /// used on (and the registry's own networks this device has), by chain
+    /// id; `null` where the chain did not answer.
+    pub elsewhere: BTreeMap<u64, Option<String>>,
+}
+
+impl ChainFacts {
+    fn owner(&self, a: Address) -> OwnerFact {
+        self.owners
+            .iter()
+            .find(|(k, _)| k.parse::<Address>().ok() == Some(a))
+            .map(|(_, v)| v.clone())
+            .unwrap_or_default()
+    }
+
+    /// The chain answered for `a`: `Some(true)` when it holds contract code
+    /// there (an EIP-7702 delegation is a key holder's, not a contract's).
+    fn has_contract(&self, a: Address) -> Option<bool> {
+        Some(holds_contract(self.code(a)?))
+    }
+}
+
+/// Code an `eth_getCode` answer says is a contract's: not empty, not zeros,
+/// not an EIP-7702 delegation designator (`0xef0100 ‖ address`).
+fn holds_contract(code: &str) -> bool {
+    let body = code.trim().strip_prefix("0x").unwrap_or(code.trim());
+    if body.trim_start_matches('0').is_empty() {
+        return false;
+    }
+    let lower = body.to_ascii_lowercase();
+    !(lower.len() == 6 + 40 && lower.starts_with("ef0100"))
+}
+
+/// `g` binds `owner`: it deploys exactly that address through a canonical
+/// Safe factory and singleton (CREATE2 — the address commits to the
+/// initializer, so whoever deploys there makes this very account).
+fn genesis_binds(g: &Genesis, owner: Address) -> Option<&'static Canonical> {
+    let factory = canonical_as(g.factory.parse().ok()?, &[Role::Factory])?;
+    canonical_as(
+        g.singleton.parse().ok()?,
+        &[Role::Singleton, Role::SingletonL2],
+    )?;
+    (genesis_address(g).ok()?.parse::<Address>().ok()? == owner).then_some(factory)
 }
 
 impl ChainFacts {
@@ -3180,11 +3245,90 @@ pub fn counterfactual_reads(g: &Genesis, safe: &str) -> Result<Vec<String>, Core
     let Ok(vetted) = vet_genesis(g, addr(safe)?) else {
         return Ok(Vec::new());
     };
-    vetted
+    let mut out: Vec<String> = vetted
         .depends
         .iter()
         .map(|c| addr(c.address).map(|a| a.to_checksum(None)))
-        .collect()
+        .collect::<Result<_, _>>()?;
+    // §37: every member too — whether it holds a contract here is half of
+    // whether it is bound (`counterfactual_authority`).
+    for o in &vetted.owners {
+        let a = o.to_checksum(None);
+        if !out.contains(&a) {
+            out.push(a);
+        }
+    }
+    Ok(out)
+}
+
+/// §37: the members of `g`'s multisig, for the shell to gather each one's
+/// [`OwnerFact`] — its genesis where it holds one, its code elsewhere.
+/// Empty for a genesis refused on every chain.
+pub fn counterfactual_owners(g: &Genesis, safe: &str) -> Result<Vec<String>, CoreError> {
+    let Ok(vetted) = vet_genesis(g, addr(safe)?) else {
+        return Ok(Vec::new());
+    };
+    Ok(vetted.owners.iter().map(|o| o.to_checksum(None)).collect())
+}
+
+/// §37 (review 1-13 c): the registry README's step 3 for one member of a
+/// multisig deployed from its genesis on the chain `facts` describe —
+/// "owners that are contracts must be bound to their own genesis (or hold
+/// the same code on both chains); otherwise whoever can deploy at that
+/// address on the target chain holds a vote" (the Optimism replay of 2022:
+/// a Safe made by a CREATE factory, re-made by somebody else on another
+/// chain). `Ok(None)`: bound, or a key holder everywhere it was read.
+/// `Ok(Some(read))`: a chain did not answer for it. `Err`: refused.
+fn owner_bound(o: Address, facts: &ChainFacts) -> Result<Option<String>, Refusal> {
+    let fact = facts.owner(o);
+    let here = o.to_checksum(None);
+    if let Some(factory) = fact.genesis.as_ref().and_then(|g| genesis_binds(g, o)) {
+        // Bound — as long as the factory that address commits to is Safe's
+        // own here too (a different contract at the factory's address could
+        // make the same salt into something else).
+        let at = addr(factory.address).map_err(|_| Refusal::OwnerNotBound {
+            address: here.clone(),
+        })?;
+        return match code_is(facts.code(at), factory) {
+            CodeIs::Canonical => Ok(None),
+            CodeIs::Unread => Ok(Some(at.to_checksum(None))),
+            CodeIs::Missing | CodeIs::Wrong => Err(Refusal::OwnerNotBound { address: here }),
+        };
+    }
+    let Some(contract_here) = facts.has_contract(o) else {
+        return Ok(Some(here));
+    };
+    let mut contract_elsewhere = false;
+    for code in fact.elsewhere.values() {
+        let Some(code) = code else {
+            return Ok(Some(here));
+        };
+        if holds_contract(code) {
+            contract_elsewhere = true;
+            // Code here that is not its code there is another contract at
+            // the same address.
+            if contract_here && facts.code(o).map(code_hash) != Some(code_hash(code)) {
+                return Err(Refusal::OwnerNotBound { address: here });
+            }
+        }
+    }
+    match (contract_elsewhere, contract_here) {
+        // A contract elsewhere, nothing here, nothing binding it: whoever
+        // can deploy at that address here would hold its vote.
+        (true, false) => Err(Refusal::OwnerNotBound { address: here }),
+        // Code here where the multisig's other networks have none (the
+        // replay rule's "code on the target only"), when there are others.
+        (false, true) if !fact.elsewhere.is_empty() => {
+            Err(Refusal::OwnerNotBound { address: here })
+        }
+        _ => Ok(None),
+    }
+}
+
+fn code_hash(code: &str) -> Vec<u8> {
+    unhex(code)
+        .map(|bytes| keccak256(&bytes).to_vec())
+        .unwrap_or_default()
 }
 
 /// Who can act for `safe`, not deployed on a chain yet, once deployed there
@@ -3213,6 +3357,17 @@ pub fn counterfactual_authority(
             CodeIs::Unread => unread.push(address),
             CodeIs::Missing => reasons.push(Refusal::MissingCode { name, address }),
             CodeIs::Wrong => reasons.push(Refusal::WrongCode { name, address }),
+        }
+    }
+    for o in &vetted.owners {
+        match owner_bound(*o, facts) {
+            Ok(None) => {}
+            Ok(Some(read)) => {
+                if !unread.contains(&read) {
+                    unread.push(read);
+                }
+            }
+            Err(refusal) => reasons.push(refusal),
         }
     }
     Ok(if !reasons.is_empty() {
@@ -3325,6 +3480,7 @@ pub fn deployed_check(f: &DeployedFacts) -> DeployedCheck {
     let mut out = DeployedCheck::default();
     let codes = ChainFacts {
         codes: f.codes.clone(),
+        ..ChainFacts::default()
     };
     match f.modules.as_deref().map(read_modules) {
         None | Some(None) => out.unread = true,
@@ -4265,7 +4421,7 @@ mod tests {
             tx: tx.clone(),
             approvals: vec![Approval::Passkey(Box::new(approval))],
             executor: Some(fx::account(0).unwrap().address),
-            deploy_facts: Some(safe_141_facts()),
+            deploy_facts: Some(owned(&ms.genesis, &ms.address, safe_141_facts())),
         };
         let calls = execution_calls(&plan).unwrap();
         assert_eq!(calls.len(), 2);
@@ -5067,6 +5223,18 @@ mod tests {
     const HANDLER_130: &str = "0xf48f2B2d2a534e402487b3ee7C18c33Aec0Fe5e4";
 
     /// Gnosis's answers for every Safe v1.4.1 contract a multisig may depend on.
+    /// §37: `facts` with every member of `g` answered as a key holder (no
+    /// code) where nothing else was said of it.
+    fn owned(g: &Genesis, safe: &str, mut facts: ChainFacts) -> ChainFacts {
+        for o in counterfactual_owners(g, safe).unwrap_or_default() {
+            facts
+                .codes
+                .entry(o.to_lowercase())
+                .or_insert_with(|| Some("0x".into()));
+        }
+        facts
+    }
+
     fn safe_141_facts() -> ChainFacts {
         ChainFacts {
             codes: [
@@ -5082,6 +5250,7 @@ mod tests {
             .into_iter()
             .map(|(a, n)| (a.to_lowercase(), Some(safe_code(n))))
             .collect(),
+            ..ChainFacts::default()
         }
     }
 
@@ -5111,7 +5280,7 @@ mod tests {
     }
 
     fn refusals(g: &Genesis, safe: &str) -> Vec<Refusal> {
-        match counterfactual_authority(g, safe, &safe_141_facts()).unwrap() {
+        match counterfactual_authority(g, safe, &owned(g, safe, safe_141_facts())).unwrap() {
             Authority::Refused { reasons } => reasons,
             other => panic!("not refused: {other:?}"),
         }
@@ -5184,7 +5353,12 @@ mod tests {
     fn a_vela_genesis_is_verified_where_safe_code_is() {
         let ms = multisig_genesis(&[A.into(), B.into()], 2, "Team fund", "0x7").unwrap();
         assert_eq!(
-            counterfactual_authority(&ms.genesis, &ms.address, &safe_141_facts()).unwrap(),
+            counterfactual_authority(
+                &ms.genesis,
+                &ms.address,
+                &owned(&ms.genesis, &ms.address, safe_141_facts())
+            )
+            .unwrap(),
             Authority::Verified {
                 owners: ms.owners.clone(),
                 threshold: 2
@@ -5195,7 +5369,10 @@ mod tests {
             vec![
                 safe::SAFE_PROXY_FACTORY.to_owned(),
                 safe::SAFE_SINGLETON.to_owned(),
-                COMPATIBILITY_FALLBACK_HANDLER.to_owned()
+                COMPATIBILITY_FALLBACK_HANDLER.to_owned(),
+                // §37: and every member.
+                addr(A).unwrap().to_checksum(None),
+                addr(B).unwrap().to_checksum(None)
             ]
         );
         // No handler at all is a plain Safe too.
@@ -5207,11 +5384,87 @@ mod tests {
             },
         );
         assert!(matches!(
-            counterfactual_authority(&g, &address, &safe_141_facts()).unwrap(),
+            counterfactual_authority(&g, &address, &owned(&g, &address, safe_141_facts())).unwrap(),
             Authority::Verified { .. }
         ));
         // Another address for the same genesis: refused before anything else.
         assert_eq!(refusals(&ms.genesis, B), vec![Refusal::WrongAddress]);
+    }
+
+    /// §37 (review 1-13 c; the registry README's step 3): a member that is a
+    /// contract on another network the multisig is used on, with nothing here
+    /// and nothing binding it to its own genesis, would let whoever deploys
+    /// at that address here hold its vote — refused. Bound by its own genesis
+    /// (CREATE2 through Safe's factory), it is Verified; code here that is not
+    /// its code there is refused; a network that did not answer is Unknown.
+    #[test]
+    fn a_contract_member_must_be_bound_to_its_own_genesis() {
+        let member = multisig_genesis(&[A.into(), B.into()], 1, "Member", "0x9").unwrap();
+        let ms = multisig_genesis(&[member.address.clone(), B.into()], 2, "Team", "0x7").unwrap();
+        let proxy = safe::safe_proxy_runtime_code().unwrap();
+        let base = owned(&ms.genesis, &ms.address, safe_141_facts());
+        let with = |genesis: Option<Genesis>, here: &str, there: Option<&str>| {
+            let mut facts = base.clone();
+            facts
+                .codes
+                .insert(member.address.to_lowercase(), Some(here.to_owned()));
+            facts.owners.insert(
+                member.address.clone(),
+                OwnerFact {
+                    genesis,
+                    elsewhere: [(1u64, there.map(str::to_owned))].into_iter().collect(),
+                },
+            );
+            counterfactual_authority(&ms.genesis, &ms.address, &facts).unwrap()
+        };
+        let not_bound = Authority::Refused {
+            reasons: vec![Refusal::OwnerNotBound {
+                address: addr(&member.address).unwrap().to_checksum(None),
+            }],
+        };
+        // A Safe on Ethereum, nothing here, nothing binds it: refused.
+        assert_eq!(with(None, "0x", Some(&proxy)), not_bound);
+        // Its own genesis binds it: whoever deploys there makes exactly it.
+        assert!(matches!(
+            with(Some(member.genesis.clone()), "0x", Some(&proxy)),
+            Authority::Verified { .. }
+        ));
+        // A genesis for ANOTHER address binds nothing.
+        let other = multisig_genesis(&[A.into()], 1, "Other", "0x1").unwrap();
+        assert_eq!(with(Some(other.genesis), "0x", Some(&proxy)), not_bound);
+        // The same code here as there: the same contract.
+        assert!(matches!(
+            with(None, &proxy, Some(&proxy)),
+            Authority::Verified { .. }
+        ));
+        // Other code here than there: someone else's contract at its address.
+        assert_eq!(with(None, "0x6080", Some(&proxy)), not_bound);
+        // Code here, none on its other network: not the same member.
+        assert_eq!(with(None, &proxy, Some("0x")), not_bound);
+        // An EIP-7702 delegation is a key holder's.
+        let delegated = format!("0xef0100{}", "11".repeat(20));
+        assert!(matches!(
+            with(None, "0x", Some(&delegated)),
+            Authority::Verified { .. }
+        ));
+        // A key holder everywhere it was read.
+        assert!(matches!(
+            with(None, "0x", Some("0x")),
+            Authority::Verified { .. }
+        ));
+        // Its other network did not answer: never Verified.
+        assert!(matches!(with(None, "0x", None), Authority::Unknown { .. }));
+        // Its code here was not read: never Verified.
+        let mut unread = base.clone();
+        unread.codes.remove(&member.address.to_lowercase());
+        assert!(matches!(
+            counterfactual_authority(&ms.genesis, &ms.address, &unread).unwrap(),
+            Authority::Unknown { .. }
+        ));
+        // The reads name every member.
+        assert!(counterfactual_reads(&ms.genesis, &ms.address)
+            .unwrap()
+            .contains(&addr(&member.address).unwrap().to_checksum(None)));
     }
 
     /// The chain decides the code: none there, code that is not Safe's, or no
@@ -5223,7 +5476,12 @@ mod tests {
         let mut facts = safe_141_facts();
         facts.codes.insert(handler.clone(), Some("0x".into()));
         assert_eq!(
-            counterfactual_authority(&ms.genesis, &ms.address, &facts).unwrap(),
+            counterfactual_authority(
+                &ms.genesis,
+                &ms.address,
+                &owned(&ms.genesis, &ms.address, facts.clone())
+            )
+            .unwrap(),
             Authority::Refused {
                 reasons: vec![Refusal::MissingCode {
                     name: "Compatibility Fallback Handler 1.4.1".into(),
@@ -5235,7 +5493,12 @@ mod tests {
             .codes
             .insert(handler.clone(), Some("0x6080604052".into()));
         assert_eq!(
-            counterfactual_authority(&ms.genesis, &ms.address, &facts).unwrap(),
+            counterfactual_authority(
+                &ms.genesis,
+                &ms.address,
+                &owned(&ms.genesis, &ms.address, facts.clone())
+            )
+            .unwrap(),
             Authority::Refused {
                 reasons: vec![Refusal::WrongCode {
                     name: "Compatibility Fallback Handler 1.4.1".into(),
@@ -5246,14 +5509,20 @@ mod tests {
         // Unanswered, or never asked: it cannot be verified yet.
         facts.codes.insert(handler.clone(), None);
         assert_eq!(
-            counterfactual_authority(&ms.genesis, &ms.address, &facts).unwrap(),
+            counterfactual_authority(
+                &ms.genesis,
+                &ms.address,
+                &owned(&ms.genesis, &ms.address, facts.clone())
+            )
+            .unwrap(),
             Authority::Unknown {
                 unread: vec![COMPATIBILITY_FALLBACK_HANDLER.into()]
             }
         );
         assert!(matches!(
             counterfactual_authority(&ms.genesis, &ms.address, &ChainFacts::default()).unwrap(),
-            Authority::Unknown { unread } if unread.len() == 3
+            // The three Safe contracts, and (§37) each member.
+            Authority::Unknown { unread } if unread.len() == 5
         ));
     }
 
@@ -5299,7 +5568,7 @@ mod tests {
         };
         let (address, g) = setup_genesis(SAFE_141, &hooked);
         assert_eq!(
-            counterfactual_authority(&g, &address, &safe_141_facts()).unwrap(),
+            counterfactual_authority(&g, &address, &owned(&g, &address, safe_141_facts())).unwrap(),
             Authority::Verified {
                 owners: vec![
                     addr(A).unwrap().to_checksum(None),
@@ -5315,14 +5584,16 @@ mod tests {
                 SAFE_141.to_owned(),
                 TO_L2_SETUP_141.to_owned(),
                 safe::SAFE_SINGLETON.to_owned(),
-                COMPATIBILITY_FALLBACK_HANDLER.to_owned()
+                COMPATIBILITY_FALLBACK_HANDLER.to_owned(),
+                addr(A).unwrap().to_checksum(None),
+                addr(B).unwrap().to_checksum(None)
             ]
         );
         // Its own code is checked on the chain too.
         let mut facts = safe_141_facts();
         facts.codes.remove(&TO_L2_SETUP_141.to_lowercase());
         assert_eq!(
-            counterfactual_authority(&g, &address, &facts).unwrap(),
+            counterfactual_authority(&g, &address, &owned(&g, &address, facts.clone())).unwrap(),
             Authority::Unknown {
                 unread: vec![TO_L2_SETUP_141.into()]
             }
@@ -5548,7 +5819,7 @@ mod tests {
             if let Some(a) = row["address"].as_str() {
                 assert_eq!(address, a);
             }
-            counterfactual_authority(&g, &address, &safe_141_facts()).unwrap()
+            counterfactual_authority(&g, &address, &owned(&g, &address, safe_141_facts())).unwrap()
         };
         assert!(matches!(
             verdict("CLEAN"),
@@ -5608,8 +5879,12 @@ mod tests {
             executor: Some(A.into()),
             deploy_facts: facts,
         };
-        let calls =
-            execution_calls(&plan(&ms.address, &ms.genesis, Some(safe_141_facts()))).unwrap();
+        let calls = execution_calls(&plan(
+            &ms.address,
+            &ms.genesis,
+            Some(owned(&ms.genesis, &ms.address, safe_141_facts())),
+        ))
+        .unwrap();
         assert_eq!(calls[0], deploy_call(&ms.genesis).unwrap());
         assert!(execution_calls(&plan(&ms.address, &ms.genesis, None)).is_err());
         assert!(
@@ -5753,7 +6028,8 @@ mod tests {
             )
         );
         let ms = multisig_genesis(&[A.into(), B.into()], 2, "Team fund", "0x7").unwrap();
-        let facts = serde_json::json!({"codes": safe_141_facts().codes});
+        let facts =
+            serde_json::json!({"codes": owned(&ms.genesis, &ms.address, safe_141_facts()).codes});
         let answer: serde_json::Value = serde_json::from_str(
             &call_json(
                 "counterfactualAuthority",

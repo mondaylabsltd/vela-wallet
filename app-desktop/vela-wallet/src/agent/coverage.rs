@@ -589,6 +589,10 @@ const EVENTS: &[(&str, Place)] = &[
         Machine("the one review, gathered"),
     ),
     (
+        "ms_proposals::Event::ShowNonMembers",
+        View("proposals no member vouches for, shown or hidden"),
+    ),
+    (
         "ms_proposals::Event::Timeline",
         Machine("a transaction's history"),
     ),

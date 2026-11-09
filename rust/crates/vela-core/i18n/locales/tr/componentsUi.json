@@ -327,6 +327,15 @@
       "labelMember": "Üye",
       "labelNewMember": "Yeni üye",
       "labelApprovalsRequired": "Gereken onay",
+      "farAboveBalanceWarning": "Bakiyenizin 100 katından fazla — bu sözleşme elinizdekinin tamamını ve geldikçe fazlasını harcayabilir",
+      "signIn": {
+        "refusedTitle": "Vela bu girişi imzalamayacak",
+        "wrongDomain": "Bu giriş {{domain}} için, ama isteyen {{origin}}. Başka bir siteye giriş yapmanızı isteyen bir site, oradaki hesabınızı ele geçirmeye çalışıyordur.",
+        "wrongUri": "Bu giriş {{uri}} adresini belirtiyor; bu, isteyen site olan {{origin}} değil.",
+        "wrongChain": "Bu giriş {{chain}} zinciri için, ama bu site {{connected}} zincirinde bağlı. Ağı değiştirip yeniden isteyin.",
+        "incomplete": "Bu girişte {{field}} eksik, bu yüzden Vela sizi nereye giriş yaptırdığını kontrol edemiyor.",
+        "noOrigin": "Vela hangi sitenin istediğini anlayamıyor, bu yüzden bu girişi imzalamayacak."
+      },
       "simUnconfirmed": "Yalnızca bir düğüm yanıt verdi, bu yüzden Vela bu işlemin ne yaptığını doğrulayamadı. İmzalamadan önce kontrol edin.",
       "simDisagreed": "İki bağımsız düğüm bu işlemin ne yaptığı konusunda farklı yanıtlar verdi. İmzalamadan önce kontrol edin.",
       "simOwnNode": "Yalnızca kendi düğümünüzle kontrol edildi",

@@ -148,6 +148,18 @@ export interface ActivityRowModel {
 	 * controls it, or that sends a token posing as another (r4a-1, r4a-2).
 	 */
 	caution?: string;
+	/**
+	 * The caution's tone: `danger` (absent) for what changes who controls it
+	 * or poses as another token; `warning` for a multisig proposal no member
+	 * approved (§37, review 1-13 — anyone can post to the mailbox).
+	 */
+	cautionTone?: 'danger' | 'warning';
+	/**
+	 * §37: a row that is a control, not a transaction — the multisig list's
+	 * "Show proposals from non-members (2)": no badge, no figure, its title
+	 * is the control's words.
+	 */
+	disclosure?: boolean;
 }
 
 export interface ActivityGroupModel {

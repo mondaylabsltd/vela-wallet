@@ -165,6 +165,10 @@ pub struct SigningStrings {
     pub balances_blind_simulated: SharedString,
     pub balances_best_effort: SharedString,
     pub warn_unlimited: SharedString,
+    /// §37 (review 1-12): a finite allowance far above what the account
+    /// holds (`componentsUi.signing.farAboveBalanceWarning`) — the guard's
+    /// `unlimited_warning_key` names which of the two sentences it is.
+    pub warn_far_above_balance: SharedString,
     pub warn_expired: SharedString,
     pub warn_will_fail: SharedString,
     /// Spec 082 RG8: "Expected to fail: {{reason}} — …", with the core's
@@ -216,6 +220,13 @@ pub struct SigningStrings {
     /// §31: whether this account owns that Safe could not be read — refused
     /// all the same (`componentsUi.signing.parentSafeUnchecked`).
     pub parent_unchecked: String,
+    /// §37 (review 1-11): the title over a refused sign-in (EIP-4361),
+    /// `componentsUi.signing.signIn.refusedTitle`.
+    pub sign_in_refused_title: SharedString,
+    /// Each refusal's sentence by its key (`SignInMismatch::key`), raw —
+    /// its `{{domain}}`/`{{origin}}`/`{{uri}}`/`{{chain}}`/`{{connected}}`/
+    /// `{{field}}` are the refusal's own params.
+    pub sign_in_sentences: Vec<(&'static str, String)>,
     pub funding_lead: SharedString,
     /// Non-refundable, and it goes to the bundler operator rather than Vela.
     /// The surface had no such sentence at all.
@@ -530,7 +541,8 @@ impl SigningStrings {
             balances_match_hero: s("balanceMatchesHero"),
             balances_blind_simulated: s("blindButSimulated"),
             balances_best_effort: s("bestEffortSimulated"),
-            warn_unlimited: s("unlimitedWarning"),
+            warn_unlimited: loc.t(vela_core::app::approval_guard::UNLIMITED_WARNING_KEY),
+            warn_far_above_balance: loc.t(vela_core::app::approval_guard::FAR_ABOVE_BALANCE_KEY),
             warn_expired: s("expiredWarning"),
             warn_will_fail: s("simWillFail"),
             warn_will_fail_reason: s("simWillFailReason"),
@@ -563,6 +575,20 @@ impl SigningStrings {
             blocked_safe_tx: s("selfCallBlockedSafeTx"),
             parent_blocked: raw("parentSafeBlocked"),
             parent_unchecked: raw("parentSafeUnchecked"),
+            sign_in_refused_title: loc.t(vela_core::app::clear_signing::SIGN_IN_REFUSED_TITLE_KEY),
+            sign_in_sentences: {
+                use vela_core::app::clear_signing::SignInMismatch;
+                [
+                    SignInMismatch::Domain,
+                    SignInMismatch::Uri,
+                    SignInMismatch::Chain,
+                    SignInMismatch::Incomplete,
+                    SignInMismatch::Origin,
+                ]
+                .into_iter()
+                .map(|reason| (reason.key(), loc.t(reason.key()).to_string()))
+                .collect()
+            },
             // Founder, 2026-09-22: this surface means THE RELAY HAS NO GAS ON
             // THIS CHAIN — not "your wallet needs a fee reserve". The
             // `componentsUi.funding.*` vocabulary it used to wear describes

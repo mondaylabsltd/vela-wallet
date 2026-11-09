@@ -80,6 +80,10 @@ enum SignErrorKind: String, Decodable {
     /// whether it owns that Safe could not be read. Refused by the wallet,
     /// never 4001, and there is no "anyway".
     case parentSafeBlocked = "parent_safe_blocked"
+    /// -32603 — a sign-in (EIP-4361) whose domain, URI or chain does not
+    /// bind to the site asking and its network (§37, review 1-11). Refused
+    /// by the wallet, never 4001, and there is no "anyway".
+    case signInRefused = "sign_in_refused"
     case fundingCancelled = "funding_cancelled"
     case submitFailed = "submit_failed"
     /// **No response is sent for this one.** The displayed fee quote went
@@ -387,6 +391,34 @@ struct SignBlockedViewWire: Decodable, Equatable {
     var parent: String? = nil
     /// §31: why `parent` refused it; `nil` with no `parent`.
     var reason: SignParentReasonWire? = nil
+    /// §37 (review 1-11): a sign-in (EIP-4361) refused for not binding to
+    /// the site asking or its network (`function` is `signIn`) — the sheet
+    /// says `key` with `params`, never the self-call text.
+    var signIn: SignInRefusalWire? = nil
+}
+
+/// §37: the core's `SignInRefusal` — why, and the sentence (`key`, with its
+/// named params: domain, origin, uri, chain, connected, field).
+struct SignInRefusalWire: Decodable, Equatable {
+    /// `SignInMismatch`, as the core names it — for the record, not drawn.
+    let reason: String
+    let key: String
+    var params: [String: String] = [:]
+
+    private enum CodingKeys: String, CodingKey { case reason, key, params }
+
+    init(reason: String, key: String, params: [String: String] = [:]) {
+        self.reason = reason
+        self.key = key
+        self.params = params
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        reason = (try? values.decode(String.self, forKey: .reason)) ?? ""
+        key = try values.decode(String.self, forKey: .key)
+        params = (try? values.decodeIfPresent([String: String].self, forKey: .params)) ?? [:]
+    }
 }
 
 /// §31 `ParentReason`: why a request that would act for a Safe this account

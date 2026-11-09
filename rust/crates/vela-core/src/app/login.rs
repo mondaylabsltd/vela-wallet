@@ -534,12 +534,19 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
             ShellResult::RegistryUnit {
                 metadata_hex,
                 members,
+                verified_by,
             },
         ) => {
             let Some(assertion) = model.assertion.clone() else {
                 return Command::done();
             };
-            match reconstruct_account(&assertion, &metadata_hex, &members, &model.observed_at) {
+            match reconstruct_account(
+                &assertion,
+                &metadata_hex,
+                &members,
+                &model.observed_at,
+                verified_by,
+            ) {
                 // The group is already on-chain — no publish, just enter.
                 Some(account) => resolve_name_then(model, account, AfterName::Save),
                 // The fetched members do not recompute to the recorded
@@ -691,6 +698,7 @@ fn account_from_key(assertion: &Assertion, public_key_hex: &str, now_iso: &str) 
         sign_in_key: None,
         signing_domain: crate::signing_venue::APP_DOMAIN.to_owned(),
         signing_venue: crate::signing_venue::SigningVenue::InVela,
+        identity: crate::registry_resolve::Identity::Confirmed,
     })
 }
 
@@ -936,14 +944,30 @@ fn reconstruct_account(
     metadata_hex: &str,
     members: &[super::RegistryUnitMember],
     now_iso: &str,
+    verified_by: VerifiedBy,
 ) -> Option<Account> {
+    // §37 (review 1-7): the signing member is matched by its PUBLIC KEY, not
+    // its credential id alone. The id is a label the index hands back; the
+    // key is what the signature just made recoverable — one of the two
+    // candidates it yields. A group whose member under this id holds another
+    // key is not this wallet, whatever the query said: its address would be
+    // one this passkey cannot sign for.
+    let candidates: Vec<String> = assertion
+        .to_core()
+        .ok()
+        .and_then(|core| webauthn::recover_candidates(&core).ok())
+        .unwrap_or_default()
+        .iter()
+        .map(|key| normalized_key(key))
+        .collect();
     if members.is_empty()
-        || !members
-            .iter()
-            .any(|member| member.credential_id == assertion.credential_id)
+        || !members.iter().any(|member| {
+            member.credential_id == assertion.credential_id
+                && candidates.contains(&normalized_key(&member.public_key_hex))
+        })
     {
-        // A group that does not even contain the signing credential is not
-        // this wallet, whatever the query said.
+        // A group that does not even contain the signing key is not this
+        // wallet, whatever the query said.
         return None;
     }
     let metadata = RegistryMetadata::decode_hex(metadata_hex).ok()?;
@@ -1008,7 +1032,19 @@ fn reconstruct_account(
         sign_in_key: None,
         signing_domain: crate::signing_venue::APP_DOMAIN.to_owned(),
         signing_venue: crate::signing_venue::SigningVenue::InVela,
+        // §37: a multi-key group nobody but the index vouched for.
+        identity: crate::registry_resolve::identity_of(members.len(), verified_by),
     })
+}
+
+/// A P-256 key as one string: lowercase hex, uncompressed `04‖x‖y`, no `0x`.
+fn normalized_key(hex: &str) -> String {
+    let body = hex.trim().trim_start_matches("0x").to_ascii_lowercase();
+    if body.len() == 128 {
+        format!("04{body}")
+    } else {
+        body
+    }
 }
 
 /// The founding order whose derivation equals `address`, or `None`. Tries the

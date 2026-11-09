@@ -2552,7 +2552,7 @@ Three undeployed, which `multisig.onchain.ts` deploys).
 The P1 code items of the 2026-11-07 core-dev security review that make the defences true:
 1-2 (with KNOWN-BUGS SEC-PARENT-3), 1-3, 1-4 and 1-5. They are decided by best practice
 under the core principle. **Every decision, with its reasons and proofs, is in
-`docs/security/hardening.md` §7–§10**; this is the summary. The parallel lanes are
+`docs/security/hardening.md` §12–§15**; this is the summary. The parallel lanes are
 `r22-identity` and `r22-supply`.
 
 **The rule.** A plain verdict (no "… anyway") needs two independent sources to agree: two
@@ -2562,11 +2562,11 @@ or two that disagree, is a check Vela could not read.
 | Item | Decision (one core rule) | Proof |
 | --- | --- | --- |
 | **One RPC decides** (1-2, SEC-PARENT-3) | corroborated reads (`rpc_pool` `corroborate`, a witness from another provider, `WITNESS_MAX_ASKS` 2, never hedged); each source checks its chain id first, and a wrong-chain node is never asked again; the core compares meaning (`app::corroborate`, `sim_outcome::classify_envelope`, `multisig_review` `StateRead`), and a refusal from either node stands; simulation, the review's every read, the multisig gate's authority reads, §31 `isOwner`; "Only use my node" = trusted alone, and said (`simOwnNode`, `onlyMineTrust`, `ownNodeHint`) | vector `signing-truth.json` (13 sim + 8 owner + 12 provider cases, every shell); `r22_signing_truth.rs`; fork: `signing_truth_fork.rs` (a WXDAI drain behind a lying proxy) and `multisig_fork.rs` `a_lying_node_never_gives_a_member_change_a_plain_review` |
-| **Fail-open paths** (1-3) | `sign_confirm::posture`: any unread check — blind, a batch leg nobody reads, a simulation not back / not offered / unconfirmed / **reverting** — is "… anyway"; the multisig review is anyway on either check unread; danger and every anyway are held 1.5 s (`HOLD_TO_CONFIRM_MS`), or two presses within 5 s with assistive tech; "Refuse blind signing" (`vela.refuseBlindSigning`, **off** by default, hardening §8) refuses every anyway (`BlindRefused`, `home.multisig.review.blindRefused`) | red on old code (batch leg, one unread of two); posture and door tests; `review-state.json` + `hold_ms`, `refuseBlind` cases |
+| **Fail-open paths** (1-3) | `sign_confirm::posture`: any unread check — blind, a batch leg nobody reads, a simulation not back / not offered / unconfirmed / **reverting** — is "… anyway"; the multisig review is anyway on either check unread; danger and every anyway are held 1.5 s (`HOLD_TO_CONFIRM_MS`), or two presses within 5 s with assistive tech; "Refuse blind signing" (`vela.refuseBlindSigning`, **off** by default, hardening §13) refuses every anyway (`BlindRefused`, `home.multisig.review.blindRefused`) | red on old code (batch leg, one unread of two); posture and door tests; `review-state.json` + `hold_ms`, `refuseBlind` cases |
 | **Descriptor trust** (1-4) | `project_result`: an unverified provenance (Fetched, SelectorDb, Standard, None) is never Safe — floored at Normal | `a_fetched_descriptor_saying_claim_is_never_graded_safe` (red on old code) |
 | **WYSIWYS for dApps** (1-5) | `SignAndSubmit.review` = `DappReview` frozen at the confirm; shells hash only `dapp_safe_op_hash` (the calls in order + one fee leg to the quoted recipient) and wrap only `dapp_message_hash` | `r22_signing_truth.rs` `attest`; a shell test per platform that a drifted op prompts no passkey |
 
-**Two Round 21 test findings, folded in** (hardening §11–§12):
+**Two Round 21 test findings, folded in** (hardening §16–§17):
 
 | Finding | Decision | Proof |
 | --- | --- | --- |
@@ -2582,3 +2582,106 @@ or two that disagree, is a check Vela could not read.
 - Recipient facts and the clear-signing `no_code` probe are one node's word, and only add
   cautions.
 - The signing page is unchanged; it draws "… anyway" as the app's word.
+
+## 37. Round 22: identity, standards, mailbox
+
+Four items of the 2026-11-07 core-dev security review — 1-7 (the key index
+trusted when the chain does not know the group yet), 1-11 (ERC-6492 and
+SIWE), 1-12 (approvals) and 1-13 (mailbox griefing, wallet side) — decided by
+best practice under the core principle. **Every decision, its reasons, the
+proofs and what is left open are in `docs/security/hardening.md` §7–§10**;
+this is the summary. The parallel R22 lanes (`r22-signing-truth`,
+`r22-supply`) carry the review's other P1 items.
+
+| Item | Decision (one core rule) | Proof |
+| --- | --- | --- |
+| **Key index, unverified group** (1-7) | `ShellResult::RegistryUnit.verified_by` (absent = `none`); the sign-in matches the signing member by its PUBLIC KEY (one of the two the assertion recovers), not its credential id; a multi-key group only the index vouched for is saved `Account.identity = unconfirmed` (`registry_resolve::identity_of`); `app::receive_standing` — no address, QR, share, payment request or deposit watch until `registry_resolve::confirm_step` (chain only: every group the key founded on Gnosis, then the Ethereum backup) finds one that makes the address (`confirmed`), or proves the index wrong (`refuted`); re-checked when Receive opens and at start | vector `rules/lying-index.json` (8 cases, replayed by core and shells); `app_login` (unconfirmed save, verified save, a credential id under another key refused); fork `lying_index_fork.rs` |
+| **ERC-6492** (1-11) | `user_op::message_signature`: the bare EIP-1271 signature where the account holds code on the request's chain, else `erc6492_wrap` (`abi.encode(factory, createProxyWithNonce(…), sig) ‖ 0x6492×16`, refused when the keys do not make the account); code unread wraps | `tests/erc6492.rs`; fork `erc6492_fork.rs` + `scripts/onchain/erc6492/verify.mjs` (viem `verifyMessage` / `verifyTypedData`, universal validation): personal_sign, typed data and SIWE from a counterfactual and a deployed account verify, tampered and bare-undeployed do not |
+| **SIWE refused** (1-11) | `clear_signing::sign_in_refusal`: a `personal_sign` that is an EIP-4361 sign-in is refused at arrival — never "Sign anyway" — unless its domain is the requesting origin's host (and port when named), its `URI` is on that host and its `Chain ID` is the request's chain (`SignInMismatch`: domain, uri, chain, incomplete, origin); `SignBlockedView.sign_in`, `SignErrorKind::SignInRefused` (-32603) | `app_sign_request` (6 refusals, a binding one signable, a plain message untouched) |
+| **Approvals** (1-12) | "unlimited" from 2^128 for every amount (was 2^200 / 2^152); ≥ 100 × a read, non-zero balance is unlimited-like (`FAR_ABOVE_BALANCE_TIMES`, said with `farAboveBalanceWarning` — `GuardView.unlimited_warning_key`); approvals carried by `multicall` / Multicall3 / `multiSend` detected to depth 4 (`calldata_approvals`, capped in place via `nested_at`) and judged at submit; consent waives ONE approval per call, per leg (`GuardView.unlimited_consented_legs` → `SignApproveOpts.unlimited_approved_legs`; the request-wide flag waives no batch leg); Permit2 `Permit(Batch)WitnessTransferFrom` read as the transfer (guard + built-in descriptor + the page) | `app_approval_guard` (caps, carriers, in-place cap, one-per-call waiver, per-leg view, far-above-balance, witness), `app_sign_request` (per-leg waiver), `app_clear_signing`; page `unlimited-line-test.mjs` 15/15 |
+| **Mailbox** (1-13) | next nonce only from proposals with ≥ 1 counting (member) approval; a proposal with none is `fromNonMember`: out of `items`, `open_count`, `waiting_on_me` and every presence count, behind `home.multisig.panel.nonMembersShow` (`Event::ShowNonMembers`) with a warning each; the counterfactual rule binds contract members to their own genesis (`multisig::OwnerFact`, `Refusal::OwnerNotBound`, the registry README's step 3) | `app_multisig_proposals` (nonce + 1000 stranger, the disclosure), `multisig.rs` (`a_contract_member_must_be_bound_to_its_own_genesis`, 11 cases); fork `multisig_fork.rs` `a_strangers_far_proposal_does_not_stall_the_multisig` |
+
+| **r21-3** (R21 finding, S4) | a test build's passkey association failure (`localhost` on a simulator or emulator, `TEST_RP_DOMAIN` on a device) says the test build's domain is not set up (`onboarding.common.passkeyError.testDomainNotAssociated`) — `PasskeyErrorFacts.test_build`, `passkey_error_words_on`; release words unchanged | `passkey_error.rs` (iOS 1004, Android 50152, both builds), a shell test on iOS, Android and the macOS desktop |
+
+**Every surface.**
+
+| Surface | Identity (1-7) | 6492 + SIWE (1-11) | Approvals (1-12) | Mailbox (1-13) |
+| --- | --- | --- | --- | --- |
+| Core | `registry_resolve::{identity_of, confirm_step}`, `login::reconstruct_account`, `app::receive_standing` | `user_op::message_signature`, `clear_signing::sign_in_refusal` | `approval_guard::{calldata_approvals, enforce_within_consent}`, witness descriptor | `next_nonce_of`, `from_non_member`, `counterfactual_authority` + `OwnerFact` |
+| Signing page | — | — | **e7ee3925** (first in `BUILD_ALLOWED`; `LAUNCH` unchanged): witness transfer read, 2^128 line | — |
+| Web, Chrome, Safari | `registry.ts` `confirmIdentity`, `receive-identity.svelte.ts`, `ReceiveHeld` | `dapp-submit.ts` `messageSignatureFor`, the refused sheet | `live.ts` (legs, warning key) | `activity.svelte.ts` disclosure, `ownerNotBound` |
+| Android | `RegistryClient.confirmIdentity`, `ReceiveIdentity.kt` | `UserOpSpine.signMessage`, `SigningLive` | `SigningController`, `GuardWire` | `MultisigHomeCard`, `MultisigWords` |
+| iOS | `RegistryClient` confirm walk, `ReceiveStanding.swift` | `UserOpSpine.signMessage`, `SigningLive` | `SigningController.approveOpts`, `GuardWire` | `MultisigHomeCard`, `MultisigWords` |
+| Desktop | `executor/registry.rs` `confirm_identity`, `executor/receive_identity.rs` | `executor/user_op.rs` `sign_message`, the refused sheet | `signing_host.rs` | `wallet/page/multisig.rs` disclosure |
+
+**Server** (`sgr-mailbox`): a proposal more than 100 numbers ahead is refused
+`nonceTooFar`; strangers' proposals share one allowance and are pushed out
+first; open proposals are listed before done ones; the replay check reads an
+unread owner as unverified, never a key holder. Left uncommitted in that
+repository for the owner (branch `mailbox-r22`): this session's tools could
+not run its version control (`hardening.md` §10).
+
+**Allowance / revoke screen** — a feature, out of this frozen round: recorded
+as planned in `docs/KNOWN-BUGS.md` (R22-PLAN-1).
+
+**Left open** (each in `hardening.md`): an unconfirmed account can still sign
+and be a multisig member; the session copy of an account confirmed on iOS can
+re-save it unconfirmed (fail-safe: Receive checks again); an older build drops
+`identity` on re-save; the signing page still reads `PermitBatch`,
+`PermitBatchTransferFrom` and its witness form as generic typed data (the
+wallet's sheet reads the witness forms); batch legs are judged by 2^128 alone
+(no balance is read per leg); a member that is a contract only on a network
+neither the multisig nor the registry uses is not seen; `safe_op_window_fork`'s
+relay case passes only on a fresh harness (the relay's bundler nonce is not in
+the fork's snapshot).
+
+## 38. Round 22: supply chain and the signing page's integrity
+
+Review items 1-10 (dependency hygiene), 1-9 (reproducibility) and 0-5 (the
+signing page's check-then-open), with 0-4's honest account of what the page
+guarantees, decided by best practice under the core principle. **Every
+decision, its evidence, every gate finding and the owner's list are in
+`docs/security/hardening.md` "Round 22"**; how a reader checks it all is
+`docs/security/verify.md`. This is the summary.
+
+| Item | Decision | Proof |
+| --- | --- | --- |
+| **cargo-deny** (1-10) | one reasoned `deny.toml` over `rust/` and the desktop: advisories (vuln, unmaintained, unsound, yanked all fail), an explicit licence list, crates.io + four commit-pinned git repos, openssl/native-tls banned; every exception says why it is safe and what removes it | both graphs `advisories ok, bans ok, licenses ok, sources ok`; CI `supply-chain` |
+| **Advisories found** | core: crypto-bigint 0.7.5 (0387) and ctutils 0.4.2 (0385) — timing, reachable in CTAP/caBLE on the phones — **fixed** with ruint, tokio, wnaf in `rust/Cargo.lock` (shipped with this round's wasm); desktop: rustls, webpki, zip, calamine, pulldown-cmark, tokio and more fixed in its lock; the rest allowlisted with exits | `hardening.md` R22-1 table |
+| **GPL-3.0 in gpui** | `zlog`/`ztracing`/`ztracing_macro` are GPL-3.0 at the pinned zed rev and linked into the desktop: a version-pinned exception, **a desktop release blocker** until the pin moves to zed `ac5af8b9`+ (relicensed Apache-2.0) | owner item |
+| **JS audits** | `pnpm audit --prod` high + whole tree critical (kit bundles devDependencies), `bun audit --prod` for getvela.app, npm audit for `scripts/`; kit 2.70.4 / devalue 5.9.4 bumped | all exit 0 |
+| **Dependabot** | cargo, npm, bun, gradle, swift, actions; weekly, grouped, 7-day cooldown; uniffi and pinned git deps by hand; a `rust/Cargo.lock` bump rebuilds the wasm in the same PR | `.github/dependabot.yml` |
+| **gpui pinned** | `rev = c97b7c0e…` — the commit the lock already had, so nothing built changed | `cargo check --locked` both ways |
+| **PeerConnect** | provenance in `VENDOR.json` (commit `977ec1e` — the README's `f3148cb` was wrong, and the module matched no commit), rebuilt from it with paths mapped out; `check-peerconnect-vendor.mjs` checks the hashes (CI `app`) and rebuilds byte for byte (CI `supply-chain`) | two clean rebuilds identical |
+| **build-single --check blocking** (1-9) | CI `signing-page` on every PR, Bun and Node | — |
+| **Web wasm reproducible** (1-9) | the builder's paths mapped out (the 0.9.8 module shipped a developer's home directory in 27 strings), the `producers` section dropped; a pinned container (`web-build.Dockerfile`) and `reproduce-web.sh` compare the committed module byte for byte; CI `web-core-reproducible`, which attests the CI-built module on `main` | two clean macOS builds byte-identical; 0 builder paths (was 27). Linux not measured locally (the Docker VM ran out of memory under emulation), so CI's first run is the cross-host proof; if it differs, commit the container's build |
+| **Open the bytes that were hashed** (0-5) | the web wallet opens the official page from the checked bytes (a `blob:` URL), never the address — the core decides (`integrity::FROM_BYTES`, `CheckedPage::opens_from_bytes`: the opener's origin must be able to use the page's RP ID); the page `674b7333` reads its host from its origin and its query from the fragment; the wallet's CSP admits exactly that page's script hash, read from the core and the committed bytes | `e2e/page-from-bytes.e2e.ts` (a message signed end to end from a blob; a host that swaps the page after the check changes nothing); `sign-challenge.test.ts`; core `signing_venue_102` |
+| **Where it cannot** | extensions (no getvela.app passkeys, no inline script), a self-hosted page's own domain, the natives' system browser: the **Service Worker pin** (FR-008) — `b/<h>/` is served only as bytes hashing to `h`; opening needs a check **≤10 min** old (was 24 h; the line still stands a day); check requests carry a navigation's `Sec-Fetch-*` and `Upgrade-Insecure-Requests` | `samples/sw-pin-test.mjs` 10/10; core + iOS + Android tests |
+| **Natives: no in-app WebView** | considered and not built: a WebView cannot use a custom domain's passkeys (no association), adds nothing for getvela.app keys the app can call natively, and puts the page under the app's control — the opposite of what the page-scoped RP needs | `hardening.md` R22-3 |
+| **A test build names its page** (R21 finding) | `integrity::LAUNCH` was a constant and the deployed index lists only what is deployed, so a phone could not open a page built here (and R21 refuses what `6d7172b4` signs). `launch::set_test_launch(version, test_build)`: refused in a release build and for any version not in `BUILD_ALLOWED`; `target()` then picks it whatever the index lists, still checked. iOS `VELA_PAGE_LAUNCH` (Dev/), Android `--es vela.pageLaunch` (debug source set), desktop `dev_env::var!` | core `test_launch_input.rs`; Android `SignerPageChecksTest`; iOS Release passes `check-ios-store-binary.sh` (0 × `VELA_PAGE_LAUNCH`), Android release passes `check-release-apk.sh`. **Not done:** a page-signed send and multisig approval on an emulator or simulator, which needs a phone harness that does not exist yet (`hardening.md`) |
+| **Honest guarantees** | per account type: getvela.app — display assurance, not authority (the wallet, extension and apps can call the passkey directly); own domain — display assurance and authority | `hardening.md` table |
+| **Page-scoped RP ID** | recorded as the real fix, with its trade-offs, for the owner — not built | `hardening.md` |
+
+**Every surface.** Core: `integrity::FROM_BYTES`, `launch::{opens_from_bytes,
+bytes_launch, MAX_CHECK_AGE_MS = 10 min, LINE_MAX_AGE_MS, CHECK_HEADERS}`.
+Page: `674b7333` (`lib/place.js`, `sw.js`, `worker-src 'self'`). Web: `page-handoff`
+(bytes kept, object URL at the tap), `vite.config.ts` CSP. Chrome/Safari
+extensions: unchanged path (address + pin). iOS, Android, desktop: the core's
+shorter window and headers through their existing re-check at the tap; tests
+updated.
+
+**Go-live (the owner)** — `hardening.md` "Round 22 go-live": deploy
+`trusted-signer/dist/` with `sw.js`; add the three new checks to branch
+protection; switch on Dependabot alerts and security updates; move the gpui pin
+past the GPL relicence before a desktop release; bump getvela.app's Worker
+kit/svelte/devalue; decide on the page-scoped RP ID.
+
+**Left open:** the pin's first visit is trust on first use and its own updates
+come from the host; WebAuthn from a blob verified on Chromium only (WebKit and
+Firefox expose the API and the origin, but have no virtual authenticator to
+drive); the rest of the web wallet's JavaScript (Vite on Cloudflare) is not
+compared byte for byte; native release builds are attested, not reproducible;
+`publish = false` / `license` in our manifests and `wildcards = "deny"` are R23;
+the phones' page path end to end (a page-signed send and a multisig approval
+on an emulator or simulator) still needs its harness — the launch input that
+makes it possible is in.

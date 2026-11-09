@@ -107,7 +107,8 @@ async function signAndRefuse() {
 			fee_collector: null,
 			params_override_json: null,
 			intent: null,
-			unlimited_approved: false
+			unlimited_approved: false,
+			unlimited_approved_legs: []
 		}
 	});
 	await vi.waitFor(() => expect((view as SignView | null)?.error).not.toBeNull());

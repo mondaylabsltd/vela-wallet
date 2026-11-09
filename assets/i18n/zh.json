@@ -646,7 +646,17 @@
   "shareCardNetworkNote": "仅支持 {{network}} 网络付款",
   "tokenContract": "代币合约",
   "includeNetwork": "附带网络信息",
-  "includeNetworkHint": "部分钱包无法识别。对方扫不出来时请关掉。"
+  "includeNetworkHint": "部分钱包无法识别。对方扫不出来时请关掉。",
+  "unconfirmed": {
+   "title": "尚未在链上确认",
+   "body": "此钱包的密钥来自密钥索引，链上注册表尚未确认。确认之前 Vela 不会显示收款地址——每次打开时都会重新检查。",
+   "checkAgain": "重新检查",
+   "checking": "正在链上检查…"
+  },
+  "refuted": {
+   "title": "这不是你登记的钱包",
+   "body": "链上注册表为你的通行密钥记录的密钥与密钥索引给出的不同。请勿在此收款——请移除此钱包并重新登录。"
+  }
  },
  "assets": {
   "sectionTitle": "资产",
@@ -910,7 +920,8 @@
     "noNetwork": "使用通行密钥需要联网。请检查网络后重试。",
     "alreadyRegistered": "这个验证器里已经有这个钱包的一把密钥。请换一个。",
     "timedOut": "通行密钥窗口已超时。请重试。",
-    "other": "无法使用通行密钥。请重试。"
+    "other": "无法使用通行密钥。请重试。",
+    "testDomainNotAssociated": "此测试版的通行密钥域名未在本设备上设置（TEST_RP_DOMAIN，模拟器上为 localhost），系统因此不允许它使用通行密钥。正式版不受影响。"
    }
   },
   "create": {
@@ -1680,6 +1691,15 @@
    "labelMember": "成员",
    "labelNewMember": "新成员",
    "labelApprovalsRequired": "需要的批准数",
+   "farAboveBalanceWarning": "超过你余额的 100 倍——此合约可花掉你持有的全部，以及之后到账的更多",
+   "signIn": {
+    "refusedTitle": "Vela 不会签署此登录",
+    "wrongDomain": "此登录是给 {{domain}} 的，但发起请求的是 {{origin}}。要求你登录其他网站的网站，是想接管你在那里的账户。",
+    "wrongUri": "此登录指定的是 {{uri}}，而不是发起请求的网站 {{origin}}。",
+    "wrongChain": "此登录针对链 {{chain}}，但此网站连接在链 {{connected}} 上。请切换网络后重新请求。",
+    "incomplete": "此登录缺少 {{field}}，Vela 无法核对它让你登录到哪里。",
+    "noOrigin": "Vela 无法判断是哪个网站在请求，因此不会签署此登录。"
+   },
    "simUnconfirmed": "只有一个节点给出了结果，Vela 无法确认这笔交易的效果，请核对后再签名。",
    "simDisagreed": "两个独立节点对这笔交易的效果给出了不同的结果，请核对后再签名。",
    "simOwnNode": "仅由你自己的节点检查",

@@ -92,6 +92,9 @@ final class AppGraph {
     let space: NetworkSpace
     let batch: BatchStore
     let deposits: ReceiveWatchStore
+    /// §37 (review 1-7): may the account in front be received at — the
+    /// Receive screen's gate, and its on-chain re-check.
+    let receiveStanding: ReceiveStandingStore
     let welcome: WelcomeModel
     /// The camera behind the scanner (spec 055): its capture session survives
     /// the surface's rebuilds.
@@ -142,19 +145,20 @@ final class AppGraph {
         pool.boot()
         // Through the three layers (067): the index's answers are PROVED against
         // the registry contract, and the contract answers when the index cannot.
-        let onboarding = OnboardingModel(
-            session: session, store: store,
-            registry: RegistryClient(resolver: RegistryResolver(ethCall: { [pool] chainId, to, data in
-                let outcome = await pool.call(
-                    chainId: chainId, method: "eth_call",
-                    params: [["to": to, "data": data], "latest"]
-                )
-                guard case .ok(let value) = outcome, let hex = value as? String, hex.hasPrefix("0x")
-                else { return nil }
-                return hex
-            }))
-        )
+        let registry = RegistryClient(resolver: RegistryResolver(ethCall: { [pool] chainId, to, data in
+            let outcome = await pool.call(
+                chainId: chainId, method: "eth_call",
+                params: [["to": to, "data": data], "latest"]
+            )
+            guard case .ok(let value) = outcome, let hex = value as? String, hex.hasPrefix("0x")
+            else { return nil }
+            return hex
+        }))
+        let onboarding = OnboardingModel(session: session, store: store, registry: registry)
         self.onboarding = onboarding
+        // §37: the unconfirmed account's re-check asks the chain through the
+        // SAME client — its `eth_call`s are the sign-in walks' executor.
+        self.receiveStanding = ReceiveStandingStore(accounts: store, registry: registry)
         // ONE name resolver for the whole app: the address book and the
         // activity feed ask the same question about the same addresses, and two
         // resolvers would mean two caches and two names for one person.
@@ -564,6 +568,9 @@ final class AppGraph {
         // the founder's real wallet.
         await ParallelSpaceHook.applyIfRequested(store: shelf, accounts: accounts)
         session.boot()
+        // §37: an unconfirmed active account is re-checked on the chain before
+        // first use — quietly; Receive shows no address until it is confirmed.
+        Task { [receiveStanding] in await receiveStanding.recheckActive() }
         // At LAUNCH, not with a screen: what the tracker follows outlives every
         // screen. The pending set is derived from the transaction store, so a
         // force-quit mid-send loses nothing — the next launch picks it up here.

@@ -71,6 +71,12 @@ enum class SignErrorKind {
      */
     @SerialName("parent_safe_blocked") ParentSafeBlocked,
 
+    /**
+     * §37 (review 1-11): a sign-in (EIP-4361) that does not bind to the site
+     * asking or its network — refused, never signed; `-32603` to the site.
+     */
+    @SerialName("sign_in_refused") SignInRefused,
+
     @SerialName("funding_cancelled") FundingCancelled,
 
     @SerialName("submit_failed") SubmitFailed,
@@ -294,7 +300,26 @@ data class SignBlockedView(
     val parent: String? = null,
     /** §31: why — `member`, `owner` or `unchecked`; `null` with [parent]. */
     val reason: ParentReason? = null,
+    /**
+     * §37 (review 1-11): a refused sign-in ([function] is `signIn`) — the
+     * sheet says [SignInRefusal.key] with its params under
+     * `componentsUi.signing.signIn.refusedTitle`, never the self-call text.
+     */
+    val sign_in: SignInRefusal? = null,
 )
+
+/** §37: why a sign-in was refused, in the core's words — a corpus key and its named params. */
+@Serializable
+data class SignInRefusal(
+    /** `domain` / `uri` / `chain` / `incomplete` / `origin` (`SignInMismatch`). */
+    val reason: String,
+    val key: String,
+    /** Named strings: `domain`, `origin`, `uri`, `chain`, `connected`, `field`. */
+    val params: Map<String, String> = emptyMap(),
+)
+
+/** §37: the title over every sign-in refusal (`clear_signing::SIGN_IN_REFUSED_TITLE_KEY`). */
+const val SIGN_IN_REFUSED_TITLE_KEY = "componentsUi.signing.signIn.refusedTitle"
 
 /** §31: why a request that would act for a Safe this account owns was refused. */
 @Serializable
@@ -360,6 +385,8 @@ data class SignApproveOpts(
     /** Spec 093: `ClearSigningView.record_intent`, copied — never decided here. */
     val intent: String? = null,
     val unlimited_approved: Boolean = false,
+    /** §37 (review 1-12): `GuardView.unlimited_consented_legs`, copied — each waives the submit guard for that batch leg alone. */
+    val unlimited_approved_legs: List<Int> = emptyList(),
     /** 083 F1: the sheet's simulation judgments, exactly as drawn under "Balance changes". */
     val balance_changes: List<app.getvela.wallet.feature.wallet.core.TrustSimJudgment>? = null,
     /** Spec 093: the approval surface's token (`GuardView.meta`), copied verbatim. */

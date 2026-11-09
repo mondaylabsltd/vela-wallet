@@ -197,14 +197,14 @@ const PERMIT2_BATCH_ENCODE_TYPE: &str = "PermitBatch(PermitDetails[] details,add
 /// than described in part.
 const PERMIT2_BATCH_MAX_TOKENS: usize = 5;
 
-/// "Unlimited" for a Permit2 `uint160` amount: the same 2^152 the approval
-/// guard caps at (`approval_guard::UNLIMITED_CAP_160`), so the sheet and the
-/// cap editor call the same number unlimited.
-const UNLIMITED_160: &str = "0x100000000000000000000000000000000000000";
+/// "Unlimited" for a Permit2 `uint160` amount: the approval guard's own line
+/// (`approval_guard::UNLIMITED_CAP_160`, 2^128 since §37), so the sheet and
+/// the cap editor call the same number unlimited.
+const UNLIMITED_160: &str = "0x100000000000000000000000000000000";
 /// The ERC-7730 registry's usual threshold for a `uint256` amount (2^255),
 /// kept as the descriptors write it. It is never the line the sheet draws:
-/// [`unlimited_line`] lowers it to the guard's 2^200, as it lowers every
-/// threshold a descriptor declares.
+/// [`unlimited_line`] lowers it to the guard's 2^128 (§37), as it lowers
+/// every threshold a descriptor declares.
 const UNLIMITED_256: &str = "0x8000000000000000000000000000000000000000000000000000000000000000";
 
 /// USD-pegged stablecoins valued at ~$1 with no price lookup
@@ -5610,14 +5610,13 @@ fn js_slice(s: &str, start: i64, end: Option<i64>) -> String {
 /// that asks for consent and offers a cap (`approval_guard::is_unbounded_amount`),
 /// so an amount it calls unlimited must never reach the screen as a
 /// seventy-digit number — the registry's usual 2^255, or 2^256-2, would leave
-/// everything from 2^200 up drawn as a figure beside the guard's warning, and
-/// a cap chosen there would not replace it (the shells swap only the field
-/// that reads "Unlimited").
+/// everything from the guard's line up drawn as a figure beside the guard's
+/// warning, and a cap chosen there would not replace it (the shells swap only
+/// the field that reads "Unlimited").
 ///
-/// Which of the guard's two lines applies is read off the declared threshold:
-/// one at or past 2^200 is a `uint256` sentinel (2^255, 2^256-1), one below
-/// it a `uint160` sentinel (Permit2's 2^160-1). A threshold already below the
-/// guard's line is kept — lowering is the only direction this goes.
+/// Since §37 the guard draws one line for both widths (2^128: `uint256`
+/// sentinels and Permit2's `uint160` alike). A threshold already below it is
+/// kept — lowering is the only direction this goes.
 fn unlimited_line(declared: &str) -> String {
     use super::approval_guard::{UNLIMITED_CAP_160, UNLIMITED_CAP_256};
     let cap_256 = UNLIMITED_CAP_256.to_string();
@@ -7140,6 +7139,153 @@ fn split_scheme(value: &str) -> Option<&str> {
     value.get(idx + 3..)
 }
 
+/// §37 (review 1-11): why a sign-in (EIP-4361) is refused — never only
+/// warned about. `None` from [`sign_in_refusal`]: the message is no sign-in,
+/// or every check holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "SignInMismatch"))]
+pub enum SignInMismatch {
+    /// The message's `domain` is not the site asking — signing in to one
+    /// site from another is how sessions are stolen (EIP-4361: the wallet
+    /// MUST match it to the origin).
+    Domain,
+    /// Its `URI` names another site than the one asking.
+    Uri,
+    /// Its `Chain ID` is not the network the site is connected on here — a
+    /// smart account's signature is bound to one network, so it would not
+    /// even verify there.
+    Chain,
+    /// It leaves out a field EIP-4361 requires and these checks need (`URI`,
+    /// `Chain ID`).
+    Incomplete,
+    /// Which site is asking is not known, so nothing can be matched.
+    Origin,
+}
+
+impl SignInMismatch {
+    /// The sentence a refusal says (`componentsUi.signing.signIn.*`).
+    #[must_use]
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Domain => "componentsUi.signing.signIn.wrongDomain",
+            Self::Uri => "componentsUi.signing.signIn.wrongUri",
+            Self::Chain => "componentsUi.signing.signIn.wrongChain",
+            Self::Incomplete => "componentsUi.signing.signIn.incomplete",
+            Self::Origin => "componentsUi.signing.signIn.noOrigin",
+        }
+    }
+
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Domain => "domain",
+            Self::Uri => "uri",
+            Self::Chain => "chain",
+            Self::Incomplete => "incomplete",
+            Self::Origin => "origin",
+        }
+    }
+}
+
+/// The title over every sign-in refusal.
+pub const SIGN_IN_REFUSED_TITLE_KEY: &str = "componentsUi.signing.signIn.refusedTitle";
+
+/// A refused sign-in, as the sheet says it: [`SignInMismatch::key`] with
+/// these `params` (`domain`, `origin`, `uri`, `chain`, `connected`, `field`
+/// — the ones its sentence names), under [`SIGN_IN_REFUSED_TITLE_KEY`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SignInRefusal {
+    pub reason: SignInMismatch,
+    pub key: String,
+    pub params: std::collections::BTreeMap<String, String>,
+}
+
+/// An authority's port, when it names one.
+fn explicit_port(authority: &str) -> Option<u16> {
+    let host_port = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
+    let after = match host_port.rfind(']') {
+        Some(end) => host_port.get(end + 1..)?,
+        None => host_port,
+    };
+    after.rsplit_once(':')?.1.parse().ok()
+}
+
+/// The port `origin` is served on: its own, or its scheme's.
+fn origin_port(origin: &str) -> Option<u16> {
+    let rest = split_scheme(origin)?;
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    explicit_port(authority).or_else(|| {
+        let scheme = origin.get(..origin.find("://")?)?.to_ascii_lowercase();
+        match scheme.as_str() {
+            "https" | "wss" => Some(443),
+            "http" | "ws" => Some(80),
+            _ => None,
+        }
+    })
+}
+
+/// §37 (review 1-11, EIP-4361 "Verifying a message"): a `personal_sign`
+/// payload that is a sign-in is refused unless it binds to the site asking
+/// and the network it is connected on —
+///
+/// - its `domain` is the requesting origin's host (and its port, when the
+///   domain names one);
+/// - its `URI` is present and on that host;
+/// - its `Chain ID` is present and is `chain_id`, the request's network.
+///
+/// A mismatch was a red warning with "Sign anyway"; a sign-in has no honest
+/// reason to name another site or network, so there is nothing to sign
+/// anyway. `None`: no sign-in, or one that binds.
+#[must_use]
+pub fn sign_in_refusal(
+    payload: &str,
+    origin: Option<&str>,
+    chain_id: u32,
+) -> Option<SignInRefusal> {
+    let Decoded::Text(text) = decode_personal_message(payload) else {
+        return None;
+    };
+    let siwe = parse_siwe(&text)?;
+    let mut params = std::collections::BTreeMap::new();
+    params.insert("domain".to_owned(), siwe.domain.clone());
+    let refuse = |reason: SignInMismatch, params: std::collections::BTreeMap<String, String>| {
+        Some(SignInRefusal {
+            reason,
+            key: reason.key().to_owned(),
+            params,
+        })
+    };
+    let Some(asking) = origin.and_then(|o| siwe_host(Some(o))) else {
+        return refuse(SignInMismatch::Origin, params);
+    };
+    params.insert("origin".to_owned(), asking.clone());
+    let port_differs =
+        explicit_port(&siwe.domain).is_some_and(|port| origin.and_then(origin_port) != Some(port));
+    if siwe.domain_host.as_deref() != Some(asking.as_str()) || port_differs {
+        return refuse(SignInMismatch::Domain, params);
+    }
+    let Some(uri) = siwe.uri.as_deref() else {
+        params.insert("field".to_owned(), "URI".to_owned());
+        return refuse(SignInMismatch::Incomplete, params);
+    };
+    params.insert("uri".to_owned(), uri.to_owned());
+    if siwe_host(Some(uri)).as_deref() != Some(asking.as_str()) {
+        return refuse(SignInMismatch::Uri, params);
+    }
+    let Some(named) = siwe.chain_id else {
+        params.insert("field".to_owned(), "Chain ID".to_owned());
+        return refuse(SignInMismatch::Incomplete, params);
+    };
+    if named != chain_id {
+        params.insert("chain".to_owned(), named.to_string());
+        params.insert("connected".to_owned(), chain_id.to_string());
+        return refuse(SignInMismatch::Chain, params);
+    }
+    None
+}
+
 /// `checkSiweDomainBinding` (siwe.ts:104-113).
 fn check_siwe_domain_binding(
     siwe_domain: Option<&str>,
@@ -8192,6 +8338,12 @@ fn local_typed_descriptor(req: &Req) -> Option<(Value, DescriptorSource)> {
             PERMIT2_SINGLE_ENCODE_TYPE => permit2_single_descriptor(),
             PERMIT2_TRANSFER_ENCODE_TYPE => permit2_transfer_descriptor(),
             PERMIT2_BATCH_ENCODE_TYPE => permit2_batch_descriptor(typed)?,
+            // §37 (review 1-12): the witness forms — the transfer with the
+            // dApp's own struct bound in — read as the transfer they are.
+            _ if permit2_witness_shape(typed, false) => permit2_witness_descriptor(&encode_type),
+            _ if permit2_witness_shape(typed, true) => {
+                permit2_batch_witness_descriptor(&encode_type, typed)?
+            }
             _ => return None,
         };
         descriptor["metadata"]["contractName"] = json!(permit2.name);
@@ -8394,6 +8546,101 @@ fn permit2_transfer_descriptor() -> Value {
             },
         } },
     })
+}
+
+/// §37 (review 1-12): `typed` is Permit2's `PermitWitnessTransferFrom`
+/// (`batch`: `PermitBatchWitnessTransferFrom`) — exactly
+/// `(TokenPermissions permitted | TokenPermissions[] permitted, address
+/// spender, uint256 nonce, uint256 deadline, <W> <name>)` with
+/// `TokenPermissions(address token,uint256 amount)`, the shape Permit2's
+/// `SignatureTransfer` hashes with the integrator's witness type appended.
+/// The witness is whatever the dApp binds in (UniswapX's order, an
+/// intent): its type and name are the dApp's, so only the four fields
+/// Permit2 defines are read — the same four the plain transfer has.
+fn permit2_witness_shape(typed: &Value, batch: bool) -> bool {
+    let primary = if batch {
+        "PermitBatchWitnessTransferFrom"
+    } else {
+        "PermitWitnessTransferFrom"
+    };
+    if typed.get("primaryType").and_then(Value::as_str) != Some(primary) {
+        return false;
+    }
+    let types = typed.get("types");
+    let fields = |name: &str| -> Option<Vec<(String, String)>> {
+        types?
+            .get(name)?
+            .as_array()?
+            .iter()
+            .map(|f| {
+                Some((
+                    f.get("name")?.as_str()?.to_owned(),
+                    f.get("type")?.as_str()?.to_owned(),
+                ))
+            })
+            .collect()
+    };
+    let permitted = if batch {
+        "TokenPermissions[]"
+    } else {
+        "TokenPermissions"
+    };
+    let pair = |n: &str, t: &str| (n.to_owned(), t.to_owned());
+    let Some(own) = fields(primary) else {
+        return false;
+    };
+    own.len() == 5
+        && own[..4]
+            == [
+                pair("permitted", permitted),
+                pair("spender", "address"),
+                pair("nonce", "uint256"),
+                pair("deadline", "uint256"),
+            ]
+        && fields("TokenPermissions")
+            == Some(vec![pair("token", "address"), pair("amount", "uint256")])
+}
+
+/// `PermitWitnessTransferFrom` — [`permit2_transfer_descriptor`]'s reading,
+/// keyed by the message's own `encodeType` (its witness type is the dApp's).
+fn permit2_witness_descriptor(encode_type: &str) -> Value {
+    json!({
+        "metadata": { "contractName": "Permit2", "owner": "Uniswap" },
+        "display": { "formats": {
+            encode_type: {
+                "intent": "Approve",
+                "fields": [
+                    { "path": "permitted.amount", "label": "Amount to spend", "format": "tokenAmount", "params": { "tokenPath": "permitted.token" } },
+                    { "path": "spender", "label": "Spender", "format": "addressName" },
+                    { "path": "deadline", "label": "Valid until", "format": "date", "params": { "encoding": "timestamp" } },
+                ],
+            },
+        } },
+    })
+}
+
+/// `PermitBatchWitnessTransferFrom` — every token's amount on its own rows,
+/// then the spender and the deadline; a batch longer than
+/// [`PERMIT2_BATCH_MAX_TOKENS`] is not described (it reads blind).
+fn permit2_batch_witness_descriptor(encode_type: &str, typed: &Value) -> Option<Value> {
+    let count = typed.get("message")?.get("permitted")?.as_array()?.len();
+    if count == 0 || count > PERMIT2_BATCH_MAX_TOKENS {
+        return None;
+    }
+    let mut fields: Vec<Value> = (0..count)
+        .map(|index| json!({ "path": format!("permitted.{index}.amount"), "label": "Amount to spend", "format": "tokenAmount", "params": { "tokenPath": format!("permitted.{index}.token") } }))
+        .collect();
+    fields.push(json!({ "path": "spender", "label": "Spender", "format": "addressName" }));
+    fields.push(json!({ "path": "deadline", "label": "Valid until", "format": "date", "params": { "encoding": "timestamp" } }));
+    Some(json!({
+        "metadata": { "contractName": "Permit2", "owner": "Uniswap" },
+        "display": { "formats": {
+            encode_type: {
+                "intent": "Approve",
+                "fields": fields,
+            },
+        } },
+    }))
 }
 
 /// The ERC-2612 `Permit` descriptor this build ships — the same reading the

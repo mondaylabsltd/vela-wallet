@@ -45,4 +45,13 @@ renameUndeployed: boolean,
  * `proposal.queuedNoteMany` with `{{nonces}}` = the platform's list of
  * `#n` — the same numbers on every surface, the outside page included.
  */
-waitsFor: Array<string>, };
+waitsFor: Array<string>, 
+/**
+ * §37 (review 1-13): open, and no member of the multisig on this
+ * network vouches for it — not one approval that verifies and counts
+ * (the mailbox takes a post from anyone). It is left out of the default
+ * list ([`ProposalsView::items`]), of every count of what waits, and of
+ * the next free number ([`next_nonce_of`]); shown only behind
+ * "Show proposals from non-members", with a warning on each.
+ */
+fromNonMember: boolean, };

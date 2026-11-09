@@ -9,6 +9,7 @@
 	 */
 	import SearchField from '../ui/SearchField.svelte';
 	import NetworkRow from '../ui/NetworkRow.svelte';
+	import ReceiveHeld from '../ui/ReceiveHeld.svelte';
 	import type { ReceiveListModel } from '../model';
 	import { fill } from '$lib/wallet/messages';
 	import { copyText } from '$lib/services/clipboard';
@@ -19,9 +20,11 @@
 		/** Desktop drops the big title — the panel header already carries it. */
 		chrome?: boolean;
 		onqr?: (index: number) => void;
+		/** §37: Receive's Check again, while the address is held back. */
+		oncheckagain?: () => void;
 	}
 
-	let { model, chrome = true, onqr }: Props = $props();
+	let { model, chrome = true, onqr, oncheckagain }: Props = $props();
 
 	let query = $state('');
 	let copiedIndex = $state(-1);
@@ -53,6 +56,15 @@
 </script>
 
 <div class="list" class:chrome>
+	{#if model.held !== undefined}
+		<!-- §37: no address, no row, no copy, no code — the core held it back. -->
+		<ReceiveHeld held={model.held} {oncheckagain} />
+	{:else}
+		{@render rows()}
+	{/if}
+</div>
+
+{#snippet rows()}
 	<p class="subtitle">{model.subtitle}</p>
 	<SearchField placeholder={model.searchPlaceholder} bind:value={query} />
 
@@ -72,7 +84,7 @@
 			{/each}
 		</ul>
 	{/if}
-</div>
+{/snippet}
 
 <style>
 	.list {

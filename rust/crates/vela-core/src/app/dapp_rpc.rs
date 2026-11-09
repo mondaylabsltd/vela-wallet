@@ -1034,6 +1034,11 @@ pub fn sign_error_message(kind: SignErrorKind) -> &'static str {
         SignErrorKind::ParentSafeBlocked => {
             "The wallet refused a request to act for a multisig this account is a member of"
         }
+        // §37: a sign-in (EIP-4361) whose domain, URI or chain does not bind
+        // to the site asking and its network.
+        SignErrorKind::SignInRefused => {
+            "The wallet refused a sign-in that is not for this site or this network"
+        }
         SignErrorKind::FundingCancelled => "Gas account funding cancelled",
         SignErrorKind::SubmitFailed => "The transaction could not be submitted",
         SignErrorKind::StaleFeeQuote => "The fee quote expired",

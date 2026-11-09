@@ -38,6 +38,12 @@ class MultisigWords(
     private val nativeSymbol: (Int) -> String? = { null },
     /** r8-2: the core's facts of a token (`tokens` in the proposals view): symbol and decimals, `null` decimals unknown. */
     private val tokenFacts: (Int, String) -> JsonElement? = { _, _ -> null },
+    /**
+     * R21-3 (§37): this is a test build — the flag this build hands
+     * `relying_party_id` ([app.getvela.wallet.feature.onboarding.core.RelyingParty]);
+     * a passkey association failure is then said as the test domain's.
+     */
+    private val testBuild: Boolean = app.getvela.wallet.core.net.ProductionWriteGuard.testBuild,
 ) {
     fun t(key: String, vararg vars: Pair<String, String>): String =
         if (vars.isEmpty()) strings.t("home.multisig.$key") else strings.t("home.multisig.$key", vars.toMap())
@@ -105,6 +111,20 @@ class MultisigWords(
     fun ruleChip(m: Int, n: Int): String = if (n == 1) t("panel.chipSolo") else t("panel.chip", "m" to "$m", "n" to "$n")
 
     fun ruleText(m: Int, n: Int): String = t("create.thresholdValue", "m" to "$m", "n" to "$n")
+
+    /**
+     * §37 (review 1-13): the row that ends the proposal list when the core
+     * left out proposals no member vouches for — "Show … ({{total}})", or
+     * "Hide …" once open; `null` when there are none.
+     */
+    fun nonMembersDisclosure(view: app.getvela.wallet.feature.multisig.core.MsProposalsView): String? = when {
+        view.nonMembers <= 0 -> null
+        view.showingNonMembers -> t("panel.nonMembersHide")
+        else -> t("panel.nonMembersShow", "total" to view.nonMembers.toString())
+    }
+
+    /** §37: the warning each proposal from a non-member carries (`fromNonMember`); `null` on any other. */
+    fun nonMemberWarning(item: MsProposalItem): String? = if (item.fromNonMember) t("panel.nonMembersWarning") else null
 
     // -- networks ---------------------------------------------------------------
 
@@ -521,7 +541,8 @@ class MultisigWords(
     /** The core's sentence for a passkey error's own words; `null` when it names nothing more than "it failed". */
     private fun passkeyWords(message: String?): String? {
         if (message.isNullOrBlank()) return null
-        val words = runCatching { uniffi.vela_core_uniffi.passkeyErrorWords("android", "", null, message) }.getOrNull() ?: return null
+        // R21-3 (§37): said for the build it runs in — the flag `relying_party_id` is handed.
+        val words = runCatching { uniffi.vela_core_uniffi.passkeyErrorWordsOn("android", "", null, message, testBuild) }.getOrNull() ?: return null
         return if (words.kind == uniffi.vela_core_uniffi.PasskeyErrorKind.OTHER) null else raw(words.key)
     }
 
@@ -604,6 +625,8 @@ class MultisigWords(
             "handler" -> t("authority.handler", "address" to address)
             "missingCode" -> t("authority.missingCode", "network" to chain, "address" to address)
             "wrongCode" -> t("authority.wrongCode", "network" to chain, "address" to address)
+            // §37 (review 1-13): a member that is a contract nothing ties to its own creation here.
+            "ownerNotBound" -> t("authority.ownerNotBound", "network" to chain, "address" to address)
             "unknownFactory" -> t("authority.unknownFactory", "address" to address)
             "unknownSingleton" -> t("authority.unknownSingleton", "address" to address)
             "setupCode" -> t("authority.setupCode", "address" to address)

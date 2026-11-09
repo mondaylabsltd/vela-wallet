@@ -556,6 +556,27 @@ scenarios:
         - { file: app-web/trusted-signer/samples/takeover-test.mjs, test: 'execTransaction(swapOwner) on another Safe is refused', ci: nightly }
         - { file: app-web/trusted-signer/samples/takeover-test.mjs, test: 'approveHash on another Safe, one multiSend down, is refused', ci: nightly }
 
+  - id: stranger-proposals
+    title: "A stranger's post to the mailbox neither stalls nor phishes a multisig — the next nonce comes only from member-approved proposals; what no member vouches for is out of the list and every count, behind a disclosure with a warning (§37, review 1-13)"
+    covers:
+      core:
+        - { file: rust/crates/vela-core/tests/app_multisig_proposals.rs, test: a_strangers_proposal_far_ahead_does_not_stall_the_multisig, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_proposals.rs, test: a_strangers_proposal_is_shown_only_behind_the_disclosure, ci: required }
+        - { file: rust/crates/vela-core/tests/multisig_fork.rs, test: a_strangers_far_proposal_does_not_stall_the_multisig, ci: opt-in, note: 'against the fork harness and its mailbox; #[ignore] without VELA_MULTISIG_FORK' }
+      web-unit:
+        - { file: app-web/vela-wallet/src/lib/multisig/core/activity-non-members.test.ts, test: 'left out: the list ends with "Show proposals from non-members (2)"', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/core/activity-non-members.test.ts, test: 'shown: each carries the warning in the warning tone, and the last row hides them', ci: required }
+      web-e2e: { gap: 'the disclosure needs a stranger''s post in a seeded mailbox; the unit tests drive the core''s view' }
+      android-jvm:
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R22IdentityShellTest.kt, test: "the non-members' proposals sit behind their disclosure, each with its warning", ci: required }
+      android-instrumented: { gap: 'no device test seeds a stranger''s post' }
+      ios-unit:
+        - { file: app-ios/VelaWallet/VelaWalletTests/R22IdentityTests.swift, test: theDisclosureAndTheWarningAreTheCoresKeys, suite: R22MailboxWordsTests, ci: required }
+      ios-ui: { gap: 'no UI suite seeds a stranger''s post' }
+      desktop:
+        - { file: app-desktop/vela-wallet/src/wallet/page/multisig.rs, test: proposals_no_member_vouches_for_are_behind_a_disclosure, ci: required }
+      trusted-signer: { gap: 'the mailbox list is the wallet''s, not the signing page''s' }
+
 # The suites that replay the core's shared vectors
 # (rust/crates/vela-core/tests/vectors). Each must exist, and on the three
 # shells with a machine-readable report (android, ios, web) each must RUN in

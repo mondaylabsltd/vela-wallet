@@ -26,11 +26,16 @@
 //!
 //! **What this does not claim.** It catches a replaced build — a hijacked
 //! bucket, a bad CDN config, a poisoned release — which is the realistic
-//! attack and hits everyone at once. It does NOT catch a server that serves
-//! bad bytes only to the real navigation or only to one victim; only the
-//! page's own Service Worker (FR-008) answers that. So the words a shell puts
-//! on [`Verdict::Refused`] are "this page does not match the published list",
-//! never "a distribution attack was prevented" (spec 076, threat model).
+//! attack and hits everyone at once. A check alone does NOT catch a server
+//! that serves bad bytes only to the real navigation or only to one victim
+//! (check-then-open, review 0-5). Two things answer that, where they can
+//! (§38, docs/security/hardening.md): the web wallet opens the very bytes it
+//! hashed ([`FROM_BYTES`], `launch::CheckedPage::opens_from_bytes`), and a
+//! page opened at its address pins itself with a Service Worker (FR-008:
+//! after the first visit, `b/<h>/` is served only as bytes hashing to `h`).
+//! So the words a shell puts on [`Verdict::Refused`] are "this page does not
+//! match the published list", never "a distribution attack was prevented"
+//! (spec 076, threat model).
 //!
 //! # Checking, and refusing
 //!
@@ -61,6 +66,29 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // §37 + §38 merged: 674b7333's opening from the hashed bytes and its
+    // Service Worker pin, with e7ee3925's Permit2 witness reading and 2^128
+    // unlimited line — one page carrying both. Not LAUNCH.
+    "e95fb59d2eefffeea361786616ee719eb4db6f7df8e0737dd7278200b8dd79fb",
+    // §38 (review 0-5): the page can be opened FROM THE BYTES THE WALLET
+    // HASHED. Opened as a blob URL by the web wallet ([`FROM_BYTES`]), it reads
+    // its host from its origin (the passkey's relying party, the loopback
+    // rules), its channel and language from the fragment a blob URL can carry,
+    // and its version label from the `b=` the wallet names — so the host gets
+    // no second request in which to serve other bytes. At its own address it
+    // registers the deployment's `sw.js` (spec 076 FR-008): every later
+    // navigation to `b/<h>/` is served only as bytes hashing to `h`. Its CSP
+    // gains `worker-src 'self'` for that worker and nothing else. Otherwise
+    // 7ec6e9a3's page. Not LAUNCH.
+    "674b73334dda36410fd5cecdaddd462a8193398328743ba2263d419d6be53b56",
+    // §37 (review 1-12): the unlimited line is the wallet's one line, 2^128
+    // for every amount (uint256 and Permit2's uint160 alike — it was 2^200 /
+    // 2^152), and Permit2's `PermitWitnessTransferFrom` (UniswapX, intent
+    // protocols) reads as the transfer it is — spender, token, amount,
+    // deadline — where it read as blind typed data. Not LAUNCH: until
+    // LAUNCH moves here (after dist/ is deployed), the older page draws the
+    // old line; the core's own guard is the line either way.
+    "e7ee3925440c7f68d818cfb2bb77a04e8d7999b18a40341250ab3d50d0b2e2ab",
     // §35 (review 1-6): every SafeOp expires. The page hashes the operation's
     // own validAfter / validUntil (the core's `calculate_safe_op_hash`, read
     // from the request's decimal strings) instead of a zero window, refuses an
@@ -339,6 +367,24 @@ pub const BUILD_ALLOWED: &[&str] = &[
     // served, and a wallet that ships knowing only this hash has to go on
     // working after the newer page appears.
     "810db7c5dbb461897287ae6e8a8c863e9075779e96a07af06efff98fbd925178",
+];
+
+/// The published pages that can be opened from the bytes their check read
+/// (§38, review 0-5) — a subset of [`BUILD_ALLOWED`], newest first.
+///
+/// The check fetches `/b/<h>/sign` and hashes it; a browser opening that URL
+/// would ask the host again, and a host that answers the check and the
+/// navigation differently is not caught by any check (attack B, spec 076). A
+/// wallet whose own origin can use the account's keys therefore opens the
+/// bytes it hashed instead — the web wallet as a `blob:` URL
+/// ([`super::launch::CheckedPage::opens_from_bytes`]) — and a version can be
+/// opened that way only if it reads where it is from its origin and its
+/// fragment, which pages before 674b7333 did not (they would ask the passkey
+/// for an empty relying party). Every other version opens at its address, as
+/// before.
+pub const FROM_BYTES: &[&str] = &[
+    "e95fb59d2eefffeea361786616ee719eb4db6f7df8e0737dd7278200b8dd79fb",
+    "674b73334dda36410fd5cecdaddd462a8193398328743ba2263d419d6be53b56",
 ];
 
 /// Whether a shell may REFUSE on this module's verdict, as opposed to merely
@@ -912,6 +958,22 @@ mod tests {
                 path.display()
             );
         }
+    }
+
+    #[test]
+    fn every_page_opened_from_bytes_is_a_shipped_page() {
+        // A version opened from its bytes is still a version this build
+        // accepts: `FROM_BYTES` narrows how, never what.
+        assert!(!FROM_BYTES.is_empty());
+        for hash in FROM_BYTES {
+            assert!(
+                BUILD_ALLOWED.contains(hash),
+                "{hash} is not in BUILD_ALLOWED"
+            );
+        }
+        // And the newest page is one: a page that can only be opened at its
+        // address would put the web wallet back on check-then-open.
+        assert_eq!(FROM_BYTES[0], BUILD_ALLOWED[0]);
     }
 
     #[test]

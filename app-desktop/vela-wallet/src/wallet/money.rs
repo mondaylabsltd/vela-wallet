@@ -2597,6 +2597,7 @@ mod tests {
             sign_in_key: None,
             signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
             signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+            identity: Default::default(),
         };
         storage::save_account(&account).unwrap_or_else(|e| unreachable!("{e}"));
         storage::save_active_index(0).unwrap_or_else(|e| unreachable!("{e}"));
@@ -3499,6 +3500,7 @@ mod tests {
                 sign_in_key: None,
                 signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
                 signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+                identity: Default::default(),
             };
             let _ = storage::save_account(&account);
             account.id = "cred1".to_owned();

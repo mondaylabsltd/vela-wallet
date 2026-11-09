@@ -681,6 +681,9 @@ struct MsWords {
         case "handler": return t("authority.handler", ["address": address])
         case "missingCode": return t("authority.missingCode", ["network": chain, "address": address])
         case "wrongCode": return t("authority.wrongCode", ["network": chain, "address": address])
+        // §37 (review 1-13): a member that is a contract nothing ties to its
+        // own creation on that network.
+        case "ownerNotBound": return t("authority.ownerNotBound", ["network": chain, "address": address])
         case "unknownFactory": return t("authority.unknownFactory", ["address": address])
         case "unknownSingleton": return t("authority.unknownSingleton", ["address": address])
         case "setupCode": return t("authority.setupCode", ["address": address])

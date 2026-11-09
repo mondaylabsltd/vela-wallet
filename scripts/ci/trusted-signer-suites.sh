@@ -40,6 +40,7 @@ SUITES=(
   "bun  gen-catalog.mjs --check"
   "node gen-fonts.mjs --check"
   "bun  single-file-test.mjs"
+  "node sw-pin-test.mjs"
   "bun  desktop-demo.mjs --auto"
   "bun  takeover-test.mjs"
   "node multisig-test.mjs"

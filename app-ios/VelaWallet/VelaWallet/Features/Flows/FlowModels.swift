@@ -217,6 +217,23 @@ struct ReceiveListModel {
     /// `FlowsLive.receiveList`): the fixture leaves it empty, so a drawn
     /// board copies nothing rather than somebody else's address.
     var address = ""
+    /// §37 (review 1-7): the account may not be received at — the core's
+    /// `receive_standing` said so (or has not been read yet). Drawn INSTEAD
+    /// of the subtitle, the search and every row: no address, nothing to copy.
+    var blocked: ReceiveBlockedModel? = nil
+}
+
+/// §37: what Receive says in place of an address — `receive.unconfirmed.*`
+/// or `receive.refuted.*`, the core's keys.
+struct ReceiveBlockedModel: Equatable {
+    /// `nil` while the standing has not been read: only `checking` is said.
+    let title: String?
+    let body: String?
+    /// "Check again" — offered only where the core says to check first, and
+    /// not while a check is out.
+    let checkAgain: String?
+    /// "Checking on-chain…" while the chain walk is out.
+    let checking: String?
 }
 
 /// The account card that sits above every QR: whose address this is.

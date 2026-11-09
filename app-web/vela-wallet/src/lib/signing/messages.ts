@@ -432,6 +432,19 @@ export interface SigningMessages {
 	 */
 	confirmBlock: Record<string, string>;
 	/**
+	 * §37 (review 1-12): the guard's danger line under an approval, by the
+	 * corpus key the core names (`GuardView.unlimited_warning_key`) —
+	 * "Unlimited — …" or "Over 100× your balance — …".
+	 */
+	guardWarnings: Record<string, string>;
+	/**
+	 * §37 (review 1-11): a sign-in the wallet refuses — the title over it,
+	 * and its sentence by the core's key (`SignBlockedView.sign_in.key`,
+	 * `componentsUi.signing.signIn.*`), filled with the core's named params.
+	 */
+	signInRefusedTitle: string;
+	signIn: Record<string, string>;
+	/**
 	 * signer-11: the line by the confirm when the last passkey prompt signed
 	 * nothing (`SignView.passkey_note`) — closed (or no passkey here), or out
 	 * of time.

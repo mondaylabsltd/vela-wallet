@@ -172,6 +172,9 @@ import app.getvela.wallet.feature.settings.gallery.SettingsGalleryScreen
 import app.getvela.wallet.feature.flows.FlowBase
 import app.getvela.wallet.feature.flows.FlowState
 import app.getvela.wallet.feature.flows.FlowLive
+import app.getvela.wallet.feature.flows.ReceiveStandingBody
+import app.getvela.wallet.feature.flows.components.FlowScaffold
+import app.getvela.wallet.feature.wallet.core.ReceiveStanding
 import app.getvela.wallet.feature.flows.FlowScreenModel
 import app.getvela.wallet.feature.flows.FlowSheet
 import app.getvela.wallet.feature.settings.core.NetView
@@ -1571,7 +1574,29 @@ fun VelaNavHost(
                 }
 
                 val flowState = flows.top
-                if (flowState != null && flowState in SEND_STATES) {
+                // §37 (review 1-7): may the account in front be received at —
+                // the core's word on its record. A multisig in front is its own
+                // Safe's address, not a key group's: nothing to judge there.
+                val identityCheck = application.container.identityCheck
+                val checkingIdentity by identityCheck.checking.collectAsStateWithLifecycle()
+                val ownRecord = if (shownMultisig == null) session.activeRow?.accountJson.orEmpty() else ""
+                val receiveStanding = remember(ownRecord) { ReceiveStanding.of(ownRecord) }
+                val receiveBlocked = remember(receiveStanding, checkingIdentity, strings, session.address) {
+                    FlowLive.receiveStanding(receiveStanding, session.address.lowercase() in checkingIdentity, strings)
+                }
+                val inReceive = flowState != null && flowState in RECEIVE_FLOW_STATES
+                // Opening Receive on an unconfirmed account asks the chain first.
+                LaunchedEffect(inReceive, ownRecord) {
+                    if (inReceive && receiveStanding?.check_first == true) identityCheck.check(ownRecord)
+                }
+                if (inReceive && receiveBlocked != null) {
+                    FlowScaffold(header = receiveBlocked.header, onBack = { flows.close() }) {
+                        ReceiveStandingBody(
+                            model = receiveBlocked,
+                            onCheckAgain = { scope.launch { identityCheck.check(ownRecord) } },
+                        )
+                    }
+                } else if (flowState != null && flowState in SEND_STATES) {
                     val liveState = SendLive.flowState(sendView, feeSheetOpen)
                     // The review the confirm is drawn on, read here, at the
                     // composition: a tap handled after another review took
@@ -2418,7 +2443,8 @@ fun VelaNavHost(
                                 homeModel.assetsSection.mode != app.getvela.wallet.feature.wallet.SectionMode.Loading
                         }
                         WalletScreen(
-                            model = homeModel,
+                            // §37: no copy of an address the core says not to receive at.
+                            model = if (receiveStanding?.receivable == false) homeModel.copy(header = homeModel.header.copy(receivable = false)) else homeModel,
                             onSyncRetry = { application.container.session.syncPending() },
                             // r13-7: a multisig's history not read, read again (the
                             // proposals machine's `retry`, as the card's note does).
@@ -3724,6 +3750,12 @@ private const val TERMS_URL = "https://getvela.app/terms"
 
 /** The flow states that show somebody their own address. */
 private val RECEIVE_STATES = setOf(FlowState.R1, FlowState.R2)
+
+/**
+ * §37: every screen of the receive flow — the list, the code, the request and
+ * the share card — none of which shows an address the core says not to.
+ */
+private val RECEIVE_FLOW_STATES = setOf(FlowState.R1, FlowState.R2, FlowState.R2X, FlowState.R3, FlowState.R4)
 
 /** Spec 043: the drawn send states; the flow stack holds SD1 while the send is live. */
 private val SEND_STATES = setOf(

@@ -1238,6 +1238,40 @@ pub fn receive_list(address: &str, s: &FlowStrings) -> ReceiveList {
     }
 }
 
+/// §37 (review 1-7): what Receive draws instead of an address, by the
+/// core's `receive_standing` — `None` when the account may be received at
+/// (the normal Receive). Its words are the core's keys (`title_key`,
+/// `body_key`); "Check again" only where the core says to check
+/// (`check_first`), and never while a check is running.
+#[must_use]
+pub fn receive_held(
+    standing: &vela_core::app::ReceiveStanding,
+    checking: bool,
+    loc: &crate::loc::Loc,
+) -> Option<crate::flows::fixtures::ReceiveHeld> {
+    if standing.receivable {
+        return None;
+    }
+    // A standing that refuses without naming its words still refuses: the
+    // unconfirmed sentence, never the address.
+    let title = standing
+        .title_key
+        .as_deref()
+        .unwrap_or("receive.unconfirmed.title");
+    let body = standing
+        .body_key
+        .as_deref()
+        .unwrap_or("receive.unconfirmed.body");
+    let ask = standing.check_first;
+    Some(crate::flows::fixtures::ReceiveHeld {
+        title: loc.t(title),
+        body: loc.t(body),
+        checking: (ask && checking).then(|| loc.t("receive.unconfirmed.checking")),
+        check_again: (ask && !checking).then(|| loc.t("receive.unconfirmed.checkAgain")),
+        refuted: standing.identity == vela_core::registry_resolve::Identity::Refuted,
+    })
+}
+
 /// One network's QR, with the person's real address under it.
 #[must_use]
 // A builder over the screen's inputs, each a different source; a struct of
@@ -6613,6 +6647,73 @@ mod tests {
     /// until spec 032 phase 38: the code is REPLACED by the warning (a cover
     /// somebody can read around is one they will read around), and the copy
     /// affordance is withheld — `can_copy`, not "is there a payload".
+    #[test]
+    fn an_account_the_chain_has_not_confirmed_shows_no_address() {
+        use vela_core::app::ReceiveStanding;
+        use vela_core::registry_resolve::Identity;
+        let standing = |identity| {
+            let mut account = vela_core::app::Account {
+                id: "c".to_owned(),
+                name: "W".to_owned(),
+                address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+                public_key_hex: "04aa".to_owned(),
+                created_at_iso: String::new(),
+                keys: Vec::new(),
+                sign_in_key: None,
+                signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
+                signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+                identity: Identity::Confirmed,
+            };
+            account.identity = identity;
+            vela_core::app::receive_standing(&account)
+        };
+        for (tag, loc) in crate::loc::Loc::every_language() {
+            // Confirmed: the normal Receive.
+            assert_eq!(
+                receive_held(&standing(Identity::Confirmed), false, &loc),
+                None
+            );
+
+            // Unconfirmed: the core's words, and Check again — or, while the
+            // chain is asked, "Checking on-chain…" and no button.
+            let held = receive_held(&standing(Identity::Unconfirmed), false, &loc)
+                .unwrap_or_else(|| unreachable!("an unconfirmed account shows an address"));
+            assert_eq!(held.title, loc.t("receive.unconfirmed.title"), "{tag}");
+            assert_eq!(held.body, loc.t("receive.unconfirmed.body"), "{tag}");
+            assert_eq!(
+                held.check_again,
+                Some(loc.t("receive.unconfirmed.checkAgain"))
+            );
+            assert_eq!(held.checking, None);
+            assert!(!held.refuted);
+            let asking = receive_held(&standing(Identity::Unconfirmed), true, &loc)
+                .unwrap_or_else(|| unreachable!("held"));
+            assert_eq!(asking.checking, Some(loc.t("receive.unconfirmed.checking")));
+            assert_eq!(asking.check_again, None, "no second check while one runs");
+
+            // Refuted: never received at, never asked again.
+            let refuted = receive_held(&standing(Identity::Refuted), false, &loc)
+                .unwrap_or_else(|| unreachable!("a refuted account shows an address"));
+            assert_eq!(refuted.title, loc.t("receive.refuted.title"), "{tag}");
+            assert_eq!(refuted.body, loc.t("receive.refuted.body"), "{tag}");
+            assert_eq!((refuted.check_again, refuted.checking), (None, None));
+            assert!(refuted.refuted);
+            for text in [&held.title, &held.body, &refuted.title, &refuted.body] {
+                assert!(!text.contains("receive."), "{tag}: a key echoed: {text}");
+            }
+        }
+        // A standing that refuses without words still refuses.
+        let bare = ReceiveStanding {
+            receivable: false,
+            identity: Identity::Unconfirmed,
+            title_key: None,
+            body_key: None,
+            check_first: false,
+        };
+        let en = crate::loc::Loc::for_language("en");
+        assert!(receive_held(&bare, false, &en).is_some());
+    }
+
     #[test]
     fn the_receive_screen_asks_before_it_hands_the_address_over() {
         let s = FlowStrings::resolve(&crate::loc::Loc::from_env());

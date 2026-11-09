@@ -327,6 +327,15 @@
       "labelMember": "Membro",
       "labelNewMember": "Nuovo membro",
       "labelApprovalsRequired": "Approvazioni richieste",
+      "farAboveBalanceWarning": "Oltre 100 volte il tuo saldo: questo contratto potrebbe spendere tutto ciò che hai, e altro ancora man mano che arriva",
+      "signIn": {
+        "refusedTitle": "Vela non firmerà questo accesso",
+        "wrongDomain": "Questo accesso è per {{domain}}, ma lo chiede {{origin}}. Un sito che ti chiede di accedere a un altro sito sta cercando di prendere il controllo del tuo account lì.",
+        "wrongUri": "Questo accesso indica {{uri}}, che non è {{origin}}, il sito che lo chiede.",
+        "wrongChain": "Questo accesso è per la chain {{chain}}, ma questo sito è connesso sulla chain {{connected}}. Cambia rete e richiedi di nuovo.",
+        "incomplete": "A questo accesso manca il campo {{field}}, quindi Vela non può verificare a cosa ti fa accedere.",
+        "noOrigin": "Vela non riesce a capire quale sito lo chiede, quindi non firmerà questo accesso."
+      },
       "simUnconfirmed": "Ha risposto un solo nodo, quindi Vela non ha potuto confermare cosa fa questa transazione. Controllala prima di firmare.",
       "simDisagreed": "Due nodi indipendenti hanno dato risposte diverse su cosa fa questa transazione. Controllala prima di firmare.",
       "simOwnNode": "Verificato solo dal tuo nodo",

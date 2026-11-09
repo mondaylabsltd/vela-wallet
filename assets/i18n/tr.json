@@ -646,7 +646,17 @@
   "shareCardNetworkNote": "Yalnızca {{network}} ödemeleri",
   "tokenContract": "Token sözleşmesi",
   "includeNetwork": "Ağ bilgisini ekle",
-  "includeNetworkHint": "Bazı cüzdanlar bu kodu okuyamaz. Karşı taraf okutamazsa kapatın."
+  "includeNetworkHint": "Bazı cüzdanlar bu kodu okuyamaz. Karşı taraf okutamazsa kapatın.",
+  "unconfirmed": {
+   "title": "Henüz zincirde doğrulanmadı",
+   "body": "Bu cüzdanın anahtarları anahtar dizininden geldi ve zincirdeki kayıt bunları henüz doğrulamıyor. Doğrulanana kadar Vela alma adresi göstermez — bunu her açtığınızda yeniden kontrol eder.",
+   "checkAgain": "Tekrar kontrol et",
+   "checking": "Zincirde kontrol ediliyor…"
+  },
+  "refuted": {
+   "title": "Bu kayıtlı cüzdanınız değil",
+   "body": "Zincirdeki kayıt, geçiş anahtarınız için anahtar dizininin verdiğinden farklı anahtarlar tutuyor. Buraya hiçbir şey almayın — bu cüzdanı kaldırıp yeniden giriş yapın."
+  }
  },
  "assets": {
   "sectionTitle": "Varlıklar",
@@ -910,7 +920,8 @@
     "noNetwork": "Passkey için ağ bağlantısı gerekiyor. Bağlantınızı kontrol edip tekrar deneyin.",
     "alreadyRegistered": "Bu doğrulayıcı zaten bu cüzdanın anahtarlarından birini taşıyor. Başka birini kullanın.",
     "timedOut": "Passkey penceresinin süresi doldu. Tekrar deneyin.",
-    "other": "Passkey kullanılamadı. Tekrar deneyin."
+    "other": "Passkey kullanılamadı. Tekrar deneyin.",
+    "testDomainNotAssociated": "Bu test derlemesinin geçiş anahtarı alan adı bu cihazda ayarlı değil (TEST_RP_DOMAIN ya da simülatör veya emülatörde localhost), bu yüzden sistem geçiş anahtarı kullanmasına izin vermiyor. Sürüm derlemeleri etkilenmez."
    }
   },
   "create": {
@@ -1680,6 +1691,15 @@
    "labelMember": "Üye",
    "labelNewMember": "Yeni üye",
    "labelApprovalsRequired": "Gereken onay",
+   "farAboveBalanceWarning": "Bakiyenizin 100 katından fazla — bu sözleşme elinizdekinin tamamını ve geldikçe fazlasını harcayabilir",
+   "signIn": {
+    "refusedTitle": "Vela bu girişi imzalamayacak",
+    "wrongDomain": "Bu giriş {{domain}} için, ama isteyen {{origin}}. Başka bir siteye giriş yapmanızı isteyen bir site, oradaki hesabınızı ele geçirmeye çalışıyordur.",
+    "wrongUri": "Bu giriş {{uri}} adresini belirtiyor; bu, isteyen site olan {{origin}} değil.",
+    "wrongChain": "Bu giriş {{chain}} zinciri için, ama bu site {{connected}} zincirinde bağlı. Ağı değiştirip yeniden isteyin.",
+    "incomplete": "Bu girişte {{field}} eksik, bu yüzden Vela sizi nereye giriş yaptırdığını kontrol edemiyor.",
+    "noOrigin": "Vela hangi sitenin istediğini anlayamıyor, bu yüzden bu girişi imzalamayacak."
+   },
    "simUnconfirmed": "Yalnızca bir düğüm yanıt verdi, bu yüzden Vela bu işlemin ne yaptığını doğrulayamadı. İmzalamadan önce kontrol edin.",
    "simDisagreed": "İki bağımsız düğüm bu işlemin ne yaptığı konusunda farklı yanıtlar verdi. İmzalamadan önce kontrol edin.",
    "simOwnNode": "Yalnızca kendi düğümünüzle kontrol edildi",

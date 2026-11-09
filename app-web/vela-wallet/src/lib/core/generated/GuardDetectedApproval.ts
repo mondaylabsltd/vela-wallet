@@ -48,4 +48,13 @@ editable: boolean, block_reason: GuardBlockReason | null,
  * Expiry/deadline (unix seconds, decimal string), when the shape carries
  * one.
  */
-deadline: string | null, locus: GuardLocus, };
+deadline: string | null, locus: GuardLocus, 
+/**
+ * §37 (review 1-12): the approval is a call CARRIED by the one sent — a
+ * `multicall(bytes[])`, a Multicall3 `aggregate*`, a Safe `multiSend` —
+ * whose own calldata starts this many bytes into the request's data.
+ * [`GuardLocus::CalldataWord`]'s word counts from there, so a cap
+ * re-encodes exactly that word in place (the length never changes).
+ * `None`: the call itself. Absent on the wire reads `None`.
+ */
+nested_at?: number, };

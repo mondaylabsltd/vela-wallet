@@ -11,7 +11,12 @@
  * "the service said no" from "the service was not there".
  */
 
-import { loadCore, registryResolveKeyStep, registryResolveUnitStep } from '$lib/core/client';
+import {
+	loadCore,
+	registryResolveConfirmStep,
+	registryResolveKeyStep,
+	registryResolveUnitStep
+} from '$lib/core/client';
 import { SERVICE_DEFAULTS } from '$lib/core/generated/serviceDefaults';
 import { getPasskeyIndexURL } from '$lib/services/endpoints';
 import { isProductionWriteRefused } from '$lib/services/production-guard';
@@ -19,6 +24,7 @@ import { publicRpcs } from '$lib/services/rpc-pool-endpoints';
 import type { RegistryProof } from '../generated/RegistryProof';
 import type { RegistryUnitMember } from '../generated/RegistryUnitMember';
 import type { VerifiedBy } from '../generated/VerifiedBy';
+import type { Identity } from '../generated/Identity';
 
 /**
  * The v2 registry: the core's default (`service_defaults`, §28 — generated,
@@ -80,7 +86,16 @@ export type GroupChallenge = {
  */
 export type KeyStatus = { registered: boolean; unitIds: number[]; verifiedBy: VerifiedBy };
 
-export type UnitDetail = { metadataHex: string; members: RegistryUnitMember[] };
+/**
+ * `verifiedBy`: who vouched for the founding set — the unit walk's
+ * `Done.verified_by`, passed to the sign-in machine untouched (§37): a
+ * multi-key group only the index vouched for (`none`) signs in unconfirmed.
+ */
+export type UnitDetail = {
+	metadataHex: string;
+	members: RegistryUnitMember[];
+	verifiedBy: VerifiedBy;
+};
 
 /** A vela wallet's founding set is capped at 7 keys; a larger group is not
  *  ours and must never be reconstructed into an account. */
@@ -264,6 +279,10 @@ type ResolveStep =
 			index_discarded: boolean;
 	  };
 
+type ConfirmStep =
+	| { type: 'ask'; requests: ResolveRequest[] }
+	| { type: 'done'; identity: Identity; verified_by: VerifiedBy };
+
 /** How many rounds a walk may take; it only stops a contract bug from spinning. */
 const MAX_RESOLVE_ROUNDS = 16;
 
@@ -368,15 +387,50 @@ function readKeyProfile(publicKey: string): Promise<{ body: KeyProfile; verified
 	);
 }
 
-async function readUnit(unitId: number): Promise<UnitResponse> {
+function readUnit(unitId: number): Promise<{ body: UnitResponse; verifiedBy: VerifiedBy }> {
 	// The token is read NOW: the listing that set it is the one these ids belong to.
 	const source = unitSource;
-	const { body } = await resolve<UnitResponse>(
+	return resolve<UnitResponse>(
 		'Query',
 		(answers) => registryResolveUnitStep(unitId, source, answers),
 		false
 	);
-	return body;
+}
+
+/**
+ * §37 (review 1-7): ask the CHAIN alone whether `address` is the wallet the
+ * key `publicKeyHex` founds — `vela_core::registry_resolve::confirm_step`,
+ * driven to its end. Its requests are `eth_call`s only, answered by the same
+ * public RPCs the key and unit walks use (ids echo back; a chain that did
+ * not answer is `failed`). What it found is the core's: `confirmed`,
+ * `refuted`, or still `unconfirmed` (no chain answered, or none holds the
+ * group yet) — which changes nothing.
+ */
+export async function confirmIdentity(
+	publicKeyHex: string,
+	address: string
+): Promise<{ identity: Identity; verifiedBy: VerifiedBy }> {
+	await loadCore();
+	const answers: ResolveAnswer[] = [];
+	for (let round = 0; round < MAX_RESOLVE_ROUNDS; round++) {
+		const next = JSON.parse(
+			registryResolveConfirmStep(publicKeyHex, address, JSON.stringify(answers))
+		) as ConfirmStep;
+		if (next.type === 'done') return { identity: next.identity, verifiedBy: next.verified_by };
+		answers.push(
+			...(await Promise.all(
+				next.requests.map(async (request): Promise<ResolveAnswer> => {
+					if (request.type !== 'eth_call') return { id: request.id, outcome: 'failed', body: null };
+					const result = await ethCall(request.chain_id, request.to, request.data);
+					return result === null
+						? { id: request.id, outcome: 'failed', body: null }
+						: { id: request.id, outcome: 'ok', body: result };
+				})
+			))
+		);
+	}
+	// A walk that never ended proved nothing.
+	return { identity: 'unconfirmed', verifiedBy: 'none' };
 }
 
 /** Test seam: forget which source listed the last key's units. */
@@ -411,7 +465,7 @@ export async function queryByPublicKey(publicKey: string): Promise<KeyStatus> {
  * founding set — a different, wrong, fundable address.
  */
 export async function queryUnit(unitId: number): Promise<UnitDetail> {
-	const detail = await readUnit(unitId);
+	const { body: detail, verifiedBy } = await readUnit(unitId);
 	const total = detail.members?.total ?? 0;
 	const items = detail.members?.items ?? [];
 	if (total > MAX_UNIT_MEMBERS) {
@@ -433,7 +487,8 @@ export async function queryUnit(unitId: number): Promise<UnitDetail> {
 			public_key_hex: member.publicKey,
 			authenticator_attachment: member.authenticatorAttachment ?? '',
 			transports: member.transports ?? ''
-		}))
+		})),
+		verifiedBy
 	};
 }
 

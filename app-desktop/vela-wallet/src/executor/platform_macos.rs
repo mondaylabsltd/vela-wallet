@@ -490,6 +490,7 @@ declare_class!(
                 domain: error.domain().to_string(),
                 code: i32::try_from(error.code()).ok(),
                 message: error.localizedDescription().to_string(),
+                test_build: Some(crate::executor::production_guard::TEST_BUILD),
             };
             // ASAuthorizationErrorCanceled = 1001: the person closed the sheet.
             let mut failure = if error.code() == 1001 {

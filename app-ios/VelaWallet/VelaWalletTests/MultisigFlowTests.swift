@@ -1540,4 +1540,59 @@ extension MultisigFlowTests {
         }
     }
 }
+
+// MARK: - §37 (review 1-13): what no member vouches for
+
+extension MultisigFlowTests {
+
+    /// Anyone can post to the mailbox. A proposal no member of the multisig
+    /// has approved is left out of the list and every count — the list ends
+    /// with "Show proposals from non-members (n)" — and, once shown, carries
+    /// its warning (`fromNonMember`). Hidden again, it is out again.
+    @Test func aProposalNoMemberVouchesForIsADisclosureWithItsWarning() async throws {
+        let world = try MsSimWorld()
+        world.locals = try MsSimWorld.fixtures([0, 1])
+        let (record, safe, owners) = try Self.twoOfThree("0x37", chains: [100])
+        world.deploy(100, safe, SimSafe(owners: owners, threshold: 2))
+        let machine = await Self.following(world, record, networks: [100])
+        defer { machine.dispose() }
+
+        let proposed = await Self.propose(machine, chainId: 100, [
+            "kind": "transfers", "transfers": [["token": NSNull(), "to": Self.bo, "amount": "1"]],
+        ], as: owners[0])
+        #expect(proposed?.kind == "done", "proposing ended \(String(describing: proposed?.raw))")
+        let hash = try #require(proposed?["safe_tx_hash"]?.string)
+        await Wait.until({ machine.proposalsView.items.contains { $0.safeTxHash == hash } }, orIdle: { machine.isIdle })
+        // A member's own: listed, counted, no warning.
+        #expect(machine.proposalsView.nonMembers == 0)
+        #expect(machine.proposalsView.items.first { $0.safeTxHash == hash }?.fromNonMember == false)
+
+        // The mailbox now holds it with no member's approval at all — what a
+        // stranger's post looks like.
+        world.mailbox = world.mailbox.map { proposal in
+            var stranger = proposal
+            stranger["approvals"] = [[String: Any]]()
+            stranger["proposer"] = Self.bo
+            return stranger
+        }
+        machine.dispatch(["type": "refresh", "fresh": true])
+        await Wait.until({ machine.proposalsView.nonMembers == 1 }, orIdle: { machine.isIdle })
+        var view = machine.proposalsView
+        #expect(view.nonMembers == 1)
+        #expect(!view.showingNonMembers)
+        #expect(!view.items.contains { $0.safeTxHash == hash }, "left out until asked for")
+        #expect(view.openCount == 0 && view.waitingOnMe == 0, "and out of every count")
+
+        machine.dispatch(["type": "show_non_members", "show": true])
+        await Wait.until({ machine.proposalsView.showingNonMembers }, orIdle: { machine.isIdle })
+        view = machine.proposalsView
+        let shown = try #require(view.items.first { $0.safeTxHash == hash })
+        #expect(shown.fromNonMember)
+        #expect(view.openCount == 0, "shown, still never counted")
+
+        machine.dispatch(["type": "show_non_members", "show": false])
+        await Wait.until({ !machine.proposalsView.showingNonMembers }, orIdle: { machine.isIdle })
+        #expect(!machine.proposalsView.items.contains { $0.safeTxHash == hash })
+    }
+}
 #endif

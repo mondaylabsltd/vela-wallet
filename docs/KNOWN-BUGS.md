@@ -1,5 +1,19 @@
 # Known bugs
 
+## R22-PLAN-1 (planned, feature, every surface; from review 1-12, 2026-11-07) — no allowance list, no revoke screen
+
+**Platform:** every surface. **Gap:** Vela shows and caps an approval when a site asks
+for one (§37: carried approvals, witness permits, a waiver per leg, unlimited from
+2^128), but nowhere lists the allowances an account has already granted, or offers to
+revoke one. A reviewer expects one: a standing unlimited approval from months ago is
+still a drainer's way in. **Status:** a feature, so out of the frozen Round 22; planned
+— one core machine that reads `Approval` / `ApprovalForAll` logs and Permit2's
+`allowance` per token and spender, through the wallet's own RPC (never a service's
+word), and builds the revoke as an ordinary send (`approve(spender, 0)`,
+`setApprovalForAll(operator, false)`, Permit2 `lockdown`), with a row per platform.
+**Workaround:** revoke from the token's own site, or a block explorer's token-approval
+page.
+
 ## R20-S1 (✅ FIXED 2026-11-08, §34; found 2026-11-07, iOS, Arc Testnet) — a deploying account's Max charged a fee larger than shown
 
 **Platform:** found on iOS (the rule was the core's, so every shell). **Symptom:**
@@ -169,7 +183,7 @@ fork harness (`multisig_fork.rs` `parent::…`).
 ## SEC-PARENT-3 (✅ FIXED 2026-11-08, §36; found 2026-11-07, every platform; §31 left open) — an unlisted Safe's ownership answer comes from one RPC
 
 **Platform:** every wallet surface. **Symptom:** for a Safe that is not on this device's multisig list, whether the account owns it is one `isOwner(account)` `eth_call` answered by the request chain's RPC pool; a lying or compromised node answering `false` would clear the request (a Safe on the list never depends on the read; a node that fails or answers junk refuses "couldn't check"). The signing page stays stricter (it refuses these shapes on any Safe but the account). **Severity:** S4 (recorded in §31 "Left open").
-**Fix (§36, `docs/security/hardening.md` §7):** the read is corroborated — the pool asks a second, independent provider (each checked for its chain id), and "not an owner" / "not a Safe" clears the request only when both agree (`parent_safe_guard::classify_corroborated`), or when the person's own node answered alone ("Only use my node"). One node's "no", or two that differ, refuses "couldn't check". The same holds for a multisig's dApp flow. Vector `signing-truth.json` `owner` (8 cases).
+**Fix (§36, `docs/security/hardening.md` §12):** the read is corroborated — the pool asks a second, independent provider (each checked for its chain id), and "not an owner" / "not a Safe" clears the request only when both agree (`parent_safe_guard::classify_corroborated`), or when the person's own node answered alone ("Only use my node"). One node's "no", or two that differ, refuses "couldn't check". The same holds for a multisig's dApp flow. Vector `signing-truth.json` `owner` (8 cases).
 
 ## ANDROID-1 (open, 2026-09-12, spec 047) — the parallel-space flag was found off at 047's first launch
 

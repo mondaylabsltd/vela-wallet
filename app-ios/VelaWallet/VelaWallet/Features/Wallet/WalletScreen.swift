@@ -84,6 +84,9 @@ struct WalletScreen: View {
     /// r13-7: Activity's Try again — a multisig's history that could not be
     /// read, read again. Absent in the gallery.
     var onActivityRetry: (() -> Void)?
+    /// §37: the identicon viewer's "Copy address" — off for an account the
+    /// core says may not be received at (`receive_standing`).
+    var addressCopyable = true
     @State private var sheetShown = false
     @State private var viewingIdenticon = false
 
@@ -137,7 +140,8 @@ struct WalletScreen: View {
             IdenticonViewerSheet(
                 loc: loc,
                 address: model.header.identiconSeed,
-                onClose: { viewingIdenticon = false }
+                onClose: { viewingIdenticon = false },
+                copyable: addressCopyable
             )
             // `.large`, not `.medium`: the content is a big circle, a
             // title, three lines of caption, a wrapped 42-character address

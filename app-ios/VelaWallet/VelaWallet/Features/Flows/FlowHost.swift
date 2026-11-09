@@ -75,6 +75,8 @@ struct FlowHost: View {
     /// draws its mark, and it can only name the RIGHT one if the row that was
     /// tapped travels with the navigation.
     var onReceiveNetwork: ((Int) -> Void)?
+    /// §37: Receive's Check again, on an account not yet confirmed on-chain.
+    var onReceiveCheckAgain: (() -> Void)?
     /// Which history row opened the transaction sheet, as (group, row).
     var onSelectActivity: ((Int, Int) -> Void)?
     /// The record behind the tapped history row, by id (never by position).
@@ -357,7 +359,7 @@ struct FlowHost: View {
                 ReceiveListBody(model: m, onQr: { index in
                     onReceiveNetwork?(index)
                     onNavigate(.receiveQr)
-                })
+                }, onCheckAgain: { onReceiveCheckAgain?() })
             }
         case .history(let m):
             FlowScaffold(header: m.header, onBack: onBack, onPill: { openChainPicker() }) {

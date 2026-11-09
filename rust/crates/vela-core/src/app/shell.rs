@@ -383,6 +383,12 @@ pub enum ShellResult {
     RegistryUnit {
         metadata_hex: String,
         members: Vec<RegistryUnitMember>,
+        /// §37 (review 1-7): who vouched for these members — the resolver's
+        /// `Done.verified_by` (`registry_resolve::unit_step`), passed through
+        /// untouched. Absent reads `none`: a multi-key group nobody checked
+        /// is saved unconfirmed (no receive address until a chain says so).
+        #[serde(default)]
+        verified_by: crate::registry_resolve::VerifiedBy,
     },
     IndexFailed {
         message: String,
