@@ -83,6 +83,16 @@ enum class SignErrorKind {
 
     @SerialName("stale_fee_quote") StaleFeeQuote,
 
+    /**
+     * §39 (r22-3 / A1): the fee quote at the approve
+     * ([SignApproveOpts.current_fee]) ROSE above the figure the sheet drew
+     * when the confirm began ([SignApproveOpts.quoted_fee]): nothing was
+     * signed and no response goes to the site. The sheet stays, draws the
+     * new figure, says why (`componentsUi.signing.feeRose`) and disarms; the
+     * next confirm pays the new figure.
+     */
+    @SerialName("fee_rose") FeeRose,
+
     /** Spec 099 R8: no passkey can be used here (`FailureKind.NotSupported`). Nothing was signed. */
     @SerialName("signer_unavailable") SignerUnavailable,
 
@@ -379,7 +389,19 @@ data class SignApproveOpts(
     val max_fee_per_gas: String? = null,
     val bundler_cost_wei: String? = null,
     val gas_fee_token: String? = null,
+    /**
+     * §39 (A1): the fee the sheet DREW when the confirm began — the hold's
+     * start, or the assistive path's first press (the row is held still
+     * while a hold runs or the confirm is armed). At or under it the core
+     * signs exactly this figure.
+     */
     val quoted_fee: SignQuotedFee? = null,
+    /**
+     * §39 (r22-3 / A1): the fee machine's live quote at the approve handler.
+     * Above [quoted_fee] (or to another recipient): nothing is signed
+     * ([SignErrorKind.FeeRose]).
+     */
+    val current_fee: SignQuotedFee? = null,
     val fee_collector: String? = null,
     val params_override_json: String? = null,
     /** Spec 093: `ClearSigningView.record_intent`, copied — never decided here. */

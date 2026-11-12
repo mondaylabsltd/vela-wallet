@@ -102,7 +102,7 @@ class MultisigShellTest {
                 is MultisigRpcReply.Unanswered -> null
             }
             return app.getvela.wallet.core.crux.Wire.json.parseToJsonElement(
-                uniffi.vela_core_uniffi.rpcCorroboratedEnvelope(body, body?.takeUnless { singleNode }, false),
+                uniffi.vela_core_uniffi.rpcCorroboratedEnvelope(body, body?.takeUnless { singleNode }, false, false),
             )
         }
         override suspend fun storeRead(key: String): StoreRead = if (unreadable) StoreRead.Unreadable else StoreRead.Value(store[key])

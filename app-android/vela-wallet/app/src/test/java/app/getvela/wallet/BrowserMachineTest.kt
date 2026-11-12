@@ -329,6 +329,31 @@ class BrowserMachineTest {
         assertTrue("and it names what was refused: $message", message.contains("addOwnerWithThreshold"))
     }
 
+    /**
+     * §39 (r22-9): a request to act for a Safe this account owns — or whose
+     * `isOwner` could not be read — is told to the site as what it is, never
+     * as a membership the wallet could not check.
+     */
+    @Test
+    fun `r22-9 a parent-Safe refusal tells the site it acted for a Safe, claiming no membership`() = runBlocking<Unit> {
+        val store = FakeStore(mapOf(BrowserExecutor.grantKey(origin) to """{"origin":"$origin","address":"$safe","chain_id":100,"granted_at_ms":1.0e12}"""))
+        val h = host(store)
+        withTimeout(10_000) { h.view.first { it.ready } }
+        hello(h, "tab-1", "d1")
+        ask(h, "tab-1", "d1", "s1", "eth_sendTransaction", JSONArray().put(JSONObject().put("to", safe)))
+        withTimeout(10_000) { while (forwarded.isEmpty()) delay(10) }
+        h.dispatch(
+            DbrEvent.SigningAnswered("tab-1", "s1", SignResponsePayload.Err(-32603, SignErrorKind.ParentSafeBlocked, null), null),
+            DbrEvent.serializer(),
+        )
+        val error = answerFor("s1").second.getJSONObject("error")
+        assertEquals("parent_safe_blocked", error.getString("kind"))
+        assertEquals(
+            "The wallet refused a request to act for a multisig (Safe) on this account's behalf",
+            error.getString("message"),
+        )
+    }
+
     @Test
     fun `a navigation mid-signature settles the page and closes the sheet`() = runBlocking<Unit> {
         val store = FakeStore(mapOf(BrowserExecutor.grantKey(origin) to """{"origin":"$origin","address":"$safe","chain_id":100,"granted_at_ms":1.0e12}"""))

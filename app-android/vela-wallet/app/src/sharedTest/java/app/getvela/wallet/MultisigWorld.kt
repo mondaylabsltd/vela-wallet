@@ -250,6 +250,20 @@ class MultisigWorld(private val canonicalCode: (String) -> String) : MultisigShe
      */
     @Volatile var singleNode: Boolean = false
 
+    /**
+     * §39 (r22-2): the network's pool holds one provider only — every
+     * corroborated read is one node's answer, said `soleProvider` (Arc with
+     * its default RPC): the member's own flows go on as "… anyway".
+     */
+    @Volatile var soleProvider: Boolean = false
+
+    /**
+     * §39: the second, independent node answers every corroborated
+     * `eth_call` / `eth_getCode` differently from the first (a lying node):
+     * nothing is signed (`signingDisagreed`).
+     */
+    @Volatile var disagreeing: Boolean = false
+
     override suspend fun rpcCorroborated(chainId: Int, method: String, params: JsonElement): JsonElement {
         val body = when (val reply = rpc(chainId, method, params)) {
             is MultisigRpcReply.Result -> kotlinx.serialization.json.buildJsonObject { put("result", reply.value) }.toString()
@@ -265,8 +279,20 @@ class MultisigWorld(private val canonicalCode: (String) -> String) : MultisigShe
             }.toString()
             is MultisigRpcReply.Unanswered -> null
         }
-        val envelope = uniffi.vela_core_uniffi.rpcCorroboratedEnvelope(body, body?.takeUnless { singleNode }, false)
+        val witness = when {
+            singleNode || soleProvider -> null
+            disagreeing && (method == "eth_call" || method == "eth_getCode") -> body?.let(::lie)
+            else -> body
+        }
+        val envelope = uniffi.vela_core_uniffi.rpcCorroboratedEnvelope(body, witness, false, soleProvider)
         return app.getvela.wallet.core.crux.Wire.json.parseToJsonElement(envelope)
+    }
+
+    /** §39: [body]'s result with its last digit changed — another node's different answer. */
+    private fun lie(body: String): String {
+        val result = (app.getvela.wallet.core.crux.Wire.json.parseToJsonElement(body) as? JsonObject)?.get("result")?.str ?: return body
+        val lie = if (result == "0x") "0x6080" else result.dropLast(1) + (if (result.endsWith('0')) '1' else '0')
+        return kotlinx.serialization.json.buildJsonObject { put("result", JsonPrimitive(lie)) }.toString()
     }
 
     private fun answer(chainId: Int, method: String, params: JsonElement): MultisigRpcReply = synchronized(this) {

@@ -36,6 +36,8 @@ fun MultisigAppLayer(
     accountsKey: List<String>,
     onAddNetwork: (Int) -> Unit,
     onFund: () -> Unit,
+    /** §39 (r22-2): a network's RPC settings, for "Add your own node". */
+    onOwnNode: (Int) -> Unit = {},
 ) {
     val hub = container.multisig
     val strings = LocalVelaStrings.current
@@ -208,8 +210,11 @@ fun MultisigAppLayer(
         onAddNetwork = onAddNetwork,
         onFund = onFund,
         askNotifications = askNotifications,
+        onOwnNode = onOwnNode,
     )
-    MultisigHost(hub, hostContext)
+    androidx.compose.runtime.CompositionLocalProvider(LocalMsOwnNode provides hostContext.onOwnNode) {
+        MultisigHost(hub, hostContext)
+    }
 }
 
 private val ADDRESS = Regex("^0x[0-9a-fA-F]{40}$")

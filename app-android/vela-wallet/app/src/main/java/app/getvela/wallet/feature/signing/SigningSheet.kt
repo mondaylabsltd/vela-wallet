@@ -152,6 +152,12 @@ fun SigningSheet(
     onRecheck: () -> Unit = {},
     /** R22: the own-node hint's action — this network's RPC settings ("Only use my node"). */
     onOwnNode: () -> Unit = {},
+    /**
+     * §39 (A1): the confirm began (a hold's start, the assistive path's first
+     * press) or was let go — the fee row is held at the figure drawn while
+     * it runs, and that figure is the one signed.
+     */
+    onConfirmEngage: (Boolean) -> Unit = {},
 ) {
     VelaModalSheet(
         onDismissRequest = onDismiss,
@@ -180,6 +186,7 @@ fun SigningSheet(
             onRetry = onRetry,
             onRecheck = onRecheck,
             onOwnNode = onOwnNode,
+            onConfirmEngage = onConfirmEngage,
         )
     }
 }
@@ -240,6 +247,12 @@ fun SigningSheetContent(
     onRecheck: () -> Unit = {},
     /** R22: the own-node hint's action — this network's RPC settings ("Only use my node"). */
     onOwnNode: () -> Unit = {},
+    /**
+     * §39 (A1): the confirm began (a hold's start, the assistive path's first
+     * press) or was let go — the fee row is held at the figure drawn while
+     * it runs, and that figure is the one signed.
+     */
+    onConfirmEngage: (Boolean) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     var techOverride by remember(model.state) { mutableStateOf<Boolean?>(null) }
@@ -503,6 +516,7 @@ fun SigningSheetContent(
                     enabled = model.confirmEnabled,
                     keepHintRoom = true,
                     hintTag = CONFIRM_HOLD_HINT_TAG,
+                    onEngage = onConfirmEngage,
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag(CONFIRM_TAG),

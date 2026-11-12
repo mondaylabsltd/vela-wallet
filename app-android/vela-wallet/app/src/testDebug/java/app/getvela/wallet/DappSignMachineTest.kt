@@ -48,8 +48,9 @@ class DappSignMachineTest {
     private val safe = fixtureMultiAddress()
     private val founder = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141"
     private val origin = "http://127.0.0.1:8137"
-    private val events = java.util.Collections.synchronizedList(ArrayList<String>())
-    private val answers = java.util.Collections.synchronizedList(ArrayList<Pair<String, JSONObject>>())
+    // Iterated by the test while the machines' threads add: never a synchronizedList (a flake, R22 follow-ups).
+    private val events = java.util.concurrent.CopyOnWriteArrayList<String>()
+    private val answers = java.util.concurrent.CopyOnWriteArrayList<Pair<String, JSONObject>>()
     private var signs = 0
 
     @After

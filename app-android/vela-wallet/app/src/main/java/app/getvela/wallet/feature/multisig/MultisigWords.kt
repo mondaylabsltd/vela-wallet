@@ -372,6 +372,9 @@ class MultisigWords(
             "signingRefused" -> t("authority.refusedOn", "network" to network(chainId))
             "signingBlocked" -> t("review.blocked")
             "signingUnchecked" -> t("authority.signUnchecked", "network" to network(chainId))
+            // §39: two independent nodes answered who can act differently —
+            // nothing signed, not even "… anyway"; never "can't reach".
+            "signingDisagreed" -> t("authority.signDisagreed", "network" to network(chainId))
             "refused" -> refusedText(state["reason"].str)
             "mailboxRefused" -> t("proposal.reason.serviceRefused")
             // r11-9: what stopped it is its look's own kind — "would fail" only
@@ -569,12 +572,14 @@ class MultisigWords(
                 VenueWords.block(org.json.JSONObject(block.toString())) { key, vars -> strings.t(key, vars) }.ifEmpty { null }
             } ?: unknown
             "cannot_pay" -> t("proposal.failed", "reason" to t("status.nobodyPays"))
-            // r14-9: nothing signed — the fee moved since the press; said with the
-            // new figure (its own fee line's words), so the next press is on it.
+            // r14-9 / §39 (r22-4): nothing signed — the fee went UP since the
+            // press; said as that, with the new figure as the fee line formats
+            // it (its coin's symbol), so the next press is on it. The core's
+            // key (`home.multisig.proposal.feeRose`), never "That didn't go through".
             "fee_moved" -> {
                 val chain = failure?.get("chainId").int ?: chainId ?: 0
                 val fee = "${MsRules.feeFigure(failure?.get("amount").str ?: "0")} ${symbol(chain)}"
-                t("proposal.failed", "reason" to t("proposal.feeLine", "fee" to fee, "name" to label(failure?.get("executor").str.orEmpty())))
+                raw(said.key ?: FEE_ROSE_KEY, "fee" to fee)
             }
             "chain_unreachable" -> {
                 val chain = failure?.get("chain_id").int ?: failure?.get("chainId").int ?: chainId
@@ -644,6 +649,9 @@ class MultisigWords(
 
         /** r21-1: `review.failure`'s kind for an operation that expired before it was submitted. */
         const val EXPIRED_KIND = "expired"
+
+        /** §39 (r22-4): a `fee_moved` stop's words when the core names none (it does: `review.failure`). */
+        const val FEE_ROSE_KEY = "home.multisig.proposal.feeRose"
 
         /** "0xd9c79C…a20432": short, in its EIP-55 case. */
         fun short(address: String): String =

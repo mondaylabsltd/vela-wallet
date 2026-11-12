@@ -56,10 +56,17 @@ class HoldToConfirmDeviceTest {
     private var confirms = 0
     private var enabled by mutableStateOf(true)
 
+    /** §39 (A1): what the button said of the confirm beginning (`true`) and being let go (`false`), in order. */
+    private val engaged = mutableListOf<Boolean>()
+
+    /** r22-6: a redraw of the sheet that changes nothing of the door (a re-check landing the same verdict). */
+    private var redraws by mutableStateOf(0)
+
     private fun show(holdMs: Int = hold) {
         compose.setContent {
             CompositionLocalProvider(LocalVelaStrings provides strings) {
                 VelaTheme(darkTheme = false) {
+                    redraws // read: a redraw recomposes the button with the same door
                     VelaHoldToConfirmButton(
                         text = strings.t("componentsUi.signing.certain.signAnyway"),
                         onConfirm = { confirms++ },
@@ -69,6 +76,7 @@ class HoldToConfirmDeviceTest {
                         danger = true,
                         enabled = enabled,
                         modifier = Modifier.testTag(BUTTON),
+                        onEngage = { engaged += it },
                     )
                 }
             }
@@ -154,6 +162,70 @@ class HoldToConfirmDeviceTest {
         compose.onNodeWithTag(BUTTON).performClick()
         compose.waitForIdle()
         assertEquals("hold_ms 0: one tap, exactly as before", 1, confirms)
+    }
+
+    /**
+     * §39 (A1): the signing sheet holds its fee row still from the moment a
+     * confirm BEGINS — a hold's start — and signs that figure; a hold let go
+     * early lets the row follow the quote again. A hold that completes
+     * confirms, and is not "let go".
+     */
+    @Test
+    fun aHoldSaysWhenItBeganAndWhenItWasLetGo() {
+        show()
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag(BUTTON).performTouchInput { down(center) }
+        compose.mainClock.advanceTimeBy(hold / 3L)
+        assertEquals("began at the press", listOf(true), engaged.toList())
+        compose.onNodeWithTag(BUTTON).performTouchInput { up() }
+        compose.mainClock.advanceTimeBy(hold.toLong())
+        assertEquals("let go early", listOf(true, false), engaged.toList())
+        engaged.clear()
+        compose.onNodeWithTag(BUTTON).performTouchInput { down(center) }
+        compose.mainClock.advanceTimeBy(hold + 200L)
+        compose.onNodeWithTag(BUTTON).performTouchInput { up() }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        assertEquals("held to the end: began, never let go", listOf(true), engaged.toList())
+        assertEquals(1, confirms)
+    }
+
+    /** §39 (A1): the assistive path's FIRST press begins the confirm; the window running out lets it go. */
+    @Test
+    fun theFirstAssistivePressBeginsAndTheWindowLetsGo() {
+        show()
+        val button = compose.onNodeWithTag(BUTTON)
+        compose.mainClock.autoAdvance = false
+        button.performSemanticsAction(SemanticsActions.OnClick)
+        compose.mainClock.advanceTimeBy(100L)
+        assertEquals(listOf(true), engaged.toList())
+        compose.mainClock.advanceTimeBy(window + 500L)
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        assertEquals(listOf(true, false), engaged.toList())
+        assertEquals(0, confirms)
+    }
+
+    /**
+     * r22-6: a re-check that lands the same verdict redraws the sheet with
+     * the same door — an arm made on it survives, and the second press
+     * confirms.
+     */
+    @Test
+    fun anArmSurvivesARedrawWithTheSameDoor() {
+        show()
+        val button = compose.onNodeWithTag(BUTTON)
+        button.performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+        redraws++
+        compose.waitForIdle()
+        redraws++
+        compose.waitForIdle()
+        button.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, again))
+        assertEquals("still armed: never let go", listOf(true), engaged.toList())
+        button.performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+        assertEquals("the second press confirms", 1, confirms)
     }
 
     private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertExistsCompat() = assertExists()

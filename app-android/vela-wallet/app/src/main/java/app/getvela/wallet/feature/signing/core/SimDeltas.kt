@@ -61,8 +61,36 @@ object SimDeltas {
      */
     fun replyJson(answer: RpcResult?): String = RpcResult.corroboratedEnvelope(answer)
 
-    /** The core's reading of the answer for [user] (`simOutcome`). */
-    fun outcome(user: String, answer: RpcResult?): SimOutcomeRecord = simOutcome(user, replyJson(answer))
+    /**
+     * The core's reading of the answer for [user] (`simOutcome`). [valueWei]
+     * (§39): the native value the request sends from the account, as the
+     * wallet decoded it ([nativeValue]) — a node's "No asset changes" never
+     * erases it (`sim_outcome::with_decoded_value`); `null` when zero.
+     */
+    fun outcome(user: String, answer: RpcResult?, valueWei: String? = null): SimOutcomeRecord =
+        simOutcome(user, replyJson(answer), valueWei)
+
+    /**
+     * §39: the native value [calls] send from the account, as the wallet
+     * decoded them — each call's `value` (decimal or `0x`-hex), summed for a
+     * batch; `null` when it is zero, or a value cannot be read (unknown is
+     * never a figure).
+     */
+    fun nativeValue(calls: List<Call>): String? {
+        var sum = java.math.BigInteger.ZERO
+        for (call in calls) {
+            val raw = call.value.orEmpty().trim()
+            if (raw.isEmpty()) continue
+            val value = if (raw.startsWith("0x") || raw.startsWith("0X")) {
+                raw.drop(2).ifEmpty { "0" }.toBigIntegerOrNull(16)
+            } else {
+                raw.toBigIntegerOrNull()
+            } ?: return null
+            if (value.signum() < 0) return null
+            sum += value
+        }
+        return sum.takeIf { it.signum() > 0 }?.toString()
+    }
 
     /** The core's notice, drawn in the core's tone; `null` for a clean run (its deltas are judged instead). */
     fun notice(record: SimOutcomeRecord): SigningController.SimOutcome.Notice? {
@@ -152,7 +180,7 @@ object SimDeltas {
         // Not about the network (moves nobody could read or judge, a reading
         // that threw): asking the node again would say the same — no recheck.
         // R22: the gate reads it as the could-not-check it is (unread, "… anyway").
-        notice(simOutcome("", UNREACHABLE))?.copy(recheck = false, watchNode = false)
+        notice(simOutcome("", UNREACHABLE, null))?.copy(recheck = false, watchNode = false)
             ?: SigningController.SimOutcome.Notice(ClearRisk.Caution, "componentsUi.signing.simUnavailableWarning")
 
     /**
@@ -167,7 +195,7 @@ object SimDeltas {
     private val NOTHING_MOVES: SigningController.SimOutcome by lazy {
         // R22: a check two independent nodes agreed on (the witness beside it).
         val clean = JSONObject().put("result", JSONArray().put(JSONObject().put("calls", JSONArray().put(JSONObject().put("status", "0x1").put("logs", JSONArray())))))
-        val record = simOutcome("", JSONObject(clean.toString()).put("witness", clean).toString())
+        val record = simOutcome("", JSONObject(clean.toString()).put("witness", clean).toString(), null)
         notice(record) ?: SigningController.SimOutcome.Ready(emptyList(), noChangeKey = record.noChangeKey, verdict = verdictJson(record))
     }
 
@@ -180,7 +208,7 @@ object SimDeltas {
 
     private val ONE_NODE: SigningController.SimOutcome? by lazy {
         val clean = JSONObject().put("result", JSONArray().put(JSONObject().put("calls", JSONArray().put(JSONObject().put("status", "0x1").put("logs", JSONArray())))))
-        notice(simOutcome("", clean.toString()))
+        notice(simOutcome("", clean.toString(), null))
     }
 
     /**
@@ -211,7 +239,7 @@ object SimDeltas {
             "result",
             JSONArray().put(JSONObject().put("calls", JSONArray().put(JSONObject().put("status", "0x0").put("returnData", data)))),
         ).toString()
-        return notice(simOutcome("", reply))
+        return notice(simOutcome("", reply, null))
     }
 
     /** A value as the node wants it: `0x`-hex; decimal input converted; empty → `0x0`. */

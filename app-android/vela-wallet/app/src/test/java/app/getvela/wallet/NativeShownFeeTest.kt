@@ -170,11 +170,16 @@ class NativeShownFeeTest {
         assertTrue("$stopped", stopped["detail"].str.orEmpty().contains("fee_moved"))
         assertTrue("nothing signed at a fee nobody was shown: ${s.world.sentFees}", s.world.sentFees.isEmpty())
 
-        // Said beside Execute, once, in the core's words, with the new figure.
+        // Said beside Execute, once, in the core's words, with the new figure:
+        // §39 (r22-4) why it stopped — the fee went up — never "That didn't go through".
         val now = painted(s)
         val said = now.executeFailure!!.text
-        assertEquals(1, said.split("That didn't go through").size - 1)
-        assertTrue(said, said.contains("Network fee ≈"))
+        val fee = "${app.getvela.wallet.feature.multisig.core.MsRules.feeFigure("2")} XDAI"
+        assertEquals(
+            "The network fee went up to ≈ $fee since you pressed; nothing was signed. Press again to pay $fee.",
+            said,
+        )
+        assertTrue(said, !said.contains("That didn't go through"))
         assertTrue("never at the head too", now.sheetNotes.none { it.text == said })
         assertEquals("the next press carries the figure now drawn", "0x2", now.shownFee(executor))
 

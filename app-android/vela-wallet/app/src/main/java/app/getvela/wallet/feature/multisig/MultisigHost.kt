@@ -48,6 +48,8 @@ data class MultisigHostContext(
     val onFund: () -> Unit,
     /** The first time there is something to say (M6): ask once for notifications. */
     val askNotifications: () -> Unit,
+    /** §39 (r22-2): "Add your own node" under a review one node alone could check — that network's RPC settings. */
+    val onOwnNode: (Int) -> Unit = {},
 )
 
 /**

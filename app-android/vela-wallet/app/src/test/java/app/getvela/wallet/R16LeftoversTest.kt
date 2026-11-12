@@ -236,7 +236,10 @@ class R16LeftoversTest {
             // The key the core named is the words (fee_moved, cannot_pay and
             // venue_blocked are worded from their own facts).
             val key = case.jsonObject["expect"]!!.jsonObject["key"]?.takeUnless { it is JsonNull }?.jsonPrimitive?.content
-            if (key != null) assertEquals(name, words.raw(key, "network" to "Gnosis"), text)
+            // §39 (r22-4): a fee that rose is said with the new figure, as the fee line formats it.
+            val amount = runCatching { json(detail).jsonObject["amount"]?.jsonPrimitive?.content }.getOrNull()
+            val fee = amount?.let { "${MsRules.feeFigure(it)} XDAI" }.orEmpty()
+            if (key != null) assertEquals(name, words.raw(key, "network" to "Gnosis", "fee" to fee), text)
         }
         // Plain text, an older core's English, a shell's message: never drawn.
         assertEquals(unknown, words.failureText("boom"))

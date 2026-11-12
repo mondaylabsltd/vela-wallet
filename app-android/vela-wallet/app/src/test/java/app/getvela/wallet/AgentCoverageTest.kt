@@ -117,6 +117,9 @@ class AgentCoverageTest {
             "container.signInCredentialOf" to Place.Machine(READ),
             "container.walletIfBuilt" to Place.Machine("a list's scroll: the incoming scan's quiet period (core §9.4)"),
             "controller.approve" to Place.Later(SIGN),
+            // §39 (A1): the confirm's hold began / was let go — the fee row held still under the finger.
+            "controller.confirmBegan" to Place.Later(SIGN),
+            "controller.confirmLetGo" to Place.Later(SIGN),
             "controller.feeTapped" to Place.Later(SIGN),
             "controller.guardCustomAmount" to Place.Later(GUARD),
             "controller.guardChip" to Place.Later(GUARD),
