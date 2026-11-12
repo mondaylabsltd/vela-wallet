@@ -2611,6 +2611,28 @@ fn swipe_action(model: &Model) -> SignSwipeAction {
     if model.blocked.is_some() {
         return SignSwipeAction::Reject;
     }
+    // §39 (R22 follow-up): the same for an error that sent the site nothing
+    // and holds no answer for it — a fee that rose under the confirm
+    // (`FeeRose`), a stale Tempo quote: the sheet stays for the person to
+    // confirm again, and a swipe is their "no". Answered 4001, never a
+    // `Dismiss` that leaves the site waiting for ever.
+    let in_flight = model.pending_op_hash.is_some()
+        || (model.inflight_matches_pending()
+            && matches!(
+                model.inflight.as_ref().map(|f| &f.stage),
+                Some(
+                    Stage::Submitting
+                        | Stage::PersistingResult { .. }
+                        | Stage::ReactiveSponsoring { .. }
+                )
+            ));
+    let owed_and_unheld = model
+        .pending
+        .as_ref()
+        .is_some_and(|p| !p.responded && p.held.is_none());
+    if model.sign_error.is_some() && owed_and_unheld && !in_flight {
+        return SignSwipeAction::Reject;
+    }
     if model.sign_error.is_some() || model.pending_op_hash.is_some() || {
         model.inflight_matches_pending()
             && matches!(

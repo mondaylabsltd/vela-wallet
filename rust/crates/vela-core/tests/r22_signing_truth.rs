@@ -370,6 +370,18 @@ fn the_signing_truth_vectors_hold() {
             assert_eq!(json!(got), case[flow], "{name} ({flow})");
         }
     }
+    // §39: a site's fee shown vs the quote at the approve.
+    for case in v["fee_rose"].as_array().expect("fee_rose") {
+        let name = case["name"].as_str().expect("name");
+        let quoted = |k: &str| -> Option<vela_core::app::sign_request::SignQuotedFee> {
+            serde_json::from_value(case[k].clone()).expect("fee")
+        };
+        let got = vela_core::app::sign_request::fee_rose(
+            quoted("shown").as_ref(),
+            quoted("now").as_ref(),
+        );
+        assert_eq!(json!(got), case["rose"], "{name}");
+    }
     for case in v["provider"].as_array().expect("provider") {
         let url = case["url"].as_str().expect("url");
         assert_eq!(json!(provider_of(url)), case["provider"], "{url}");

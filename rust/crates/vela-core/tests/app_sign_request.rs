@@ -1921,6 +1921,24 @@ fn a_site_send_signs_the_fee_shown_or_nothing_when_the_quote_rose() {
         SignSurface::Sheet,
         "the next confirm pays the new figure"
     );
+    // The site was sent nothing, and holds no answer: a swipe is the
+    // person's "no" — answered 4001, never a dismissal that leaves the site
+    // waiting for ever (spec 081).
+    assert_eq!(view.swipe_action, SignSwipeAction::Reject);
+    let mut swiped = boot();
+    swiped
+        .dispatch(Arrive::global("rid-swipe", "eth_sendTransaction", &plain_send_params()).event());
+    swiped.dispatch(approve(SignApproveOpts {
+        quoted_fee: Some(fee("120000000000000000")),
+        current_fee: Some(fee("138000000000000000")),
+        ..SignApproveOpts::default()
+    }));
+    let ops = swiped.dispatch(Event::SwipeDismissed);
+    let (code, kind, _) = ops
+        .iter()
+        .find_map(response_error)
+        .unwrap_or_else(|| panic!("the site is answered: {ops:?}"));
+    assert_eq!((code, kind), (4001, SignErrorKind::UserRejected));
     // Another recipient is no figure the person saw either.
     let mut moved = fee("120000000000000000");
     moved.recipient = "0x6666666666666666666666666666666666666666".to_owned();

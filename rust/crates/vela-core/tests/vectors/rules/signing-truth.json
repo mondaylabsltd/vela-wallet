@@ -1,5 +1,5 @@
 {
-  "about": "R22 (docs/multisig-machines.md \u00a736): a plain verdict stands on two independent sources. `sim`: a corroborated envelope (`corroborate` module) read by `sim_outcome::verdict_of_envelope` for user 0x88cCA0EeDbF2C4426110bbFc998F048689266894; `owner`: an unlisted Safe's isOwner read (`parent_safe_guard::classify_corroborated`); `provider`: who runs an RPC URL (`corroborate::provider_of`). Replayed by the core and every shell. `authority` (\u00a739, R22 follow-up r22-2): an exact authority read (owners, threshold, modules, guard, nonce) read by `corroborate::authority_read` \u2014 `own` for the member's own multisig flow, `site` for a guard against a site (\u00a731's isOwner): one provider on a network whose pool holds no other (`soleProvider`) goes on in the own flow as \"\u2026 anyway\" (`one_node`) and stays refused for a site; two that agree are believed; two that disagree are refused in both.",
+  "about": "R22 (docs/multisig-machines.md \u00a736): a plain verdict stands on two independent sources. `sim`: a corroborated envelope (`corroborate` module) read by `sim_outcome::verdict_of_envelope` for user 0x88cCA0EeDbF2C4426110bbFc998F048689266894; `owner`: an unlisted Safe's isOwner read (`parent_safe_guard::classify_corroborated`); `provider`: who runs an RPC URL (`corroborate::provider_of`). Replayed by the core and every shell. `authority` (\u00a739, R22 follow-up r22-2): an exact authority read (owners, threshold, modules, guard, nonce) read by `corroborate::authority_read` \u2014 `own` for the member's own multisig flow, `site` for a guard against a site (\u00a731's isOwner): one provider on a network whose pool holds no other (`soleProvider`) goes on in the own flow as \"\u2026 anyway\" (`one_node`) and stays refused for a site; two that agree are believed; two that disagree are refused in both. `fee_rose` (\u00a739, r22-3 / A1): a site's request \u2014 the fee the sheet showed when the confirm began (`shown`, `SignApproveOpts.quoted_fee`) against the quote at the approve (`now`, `current_fee`), read by `sign_request::fee_rose`: `rose` true signs nothing (`SignErrorKind::FeeRose`; a swipe then answers the site 4001); false signs `shown`.",
   "user": "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
   "sim": [
     {
@@ -750,6 +750,102 @@
       },
       "own": "unchecked",
       "site": "unchecked"
+    }
+  ],
+  "fee_rose": [
+    {
+      "name": "the quote rose under the confirm: nothing signed",
+      "shown": {
+        "amount": "120000000000000000",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "now": {
+        "amount": "138000000000000000",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "rose": true
+    },
+    {
+      "name": "the quote fell under the confirm: the figure shown is signed",
+      "shown": {
+        "amount": "120000000000000000",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "now": {
+        "amount": "110000000000000000",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "rose": false
+    },
+    {
+      "name": "the quote unchanged: the figure shown is signed",
+      "shown": {
+        "amount": "120000000000000000",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "now": {
+        "amount": "120000000000000000",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "rose": false
+    },
+    {
+      "name": "another recipient: no figure the person saw",
+      "shown": {
+        "amount": "120000000000000000",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "now": {
+        "amount": "120000000000000000",
+        "recipient": "0x6666666666666666666666666666666666666666",
+        "tier": null
+      },
+      "rose": true
+    },
+    {
+      "name": "recipient case differs only: the same recipient",
+      "shown": {
+        "amount": "1",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "now": {
+        "amount": "1",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "rose": false
+    },
+    {
+      "name": "an unreadable figure: refused (fail closed)",
+      "shown": {
+        "amount": "0.12",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "now": {
+        "amount": "1",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "rose": true
+    },
+    {
+      "name": "no live quote handed (an older shell): the figure shown is signed",
+      "shown": {
+        "amount": "120000000000000000",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "now": null,
+      "rose": false
     }
   ]
 }
