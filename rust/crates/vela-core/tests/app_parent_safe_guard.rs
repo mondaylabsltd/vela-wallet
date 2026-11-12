@@ -15,7 +15,7 @@ mod support;
 use serde_json::{json, Value};
 use support::DomainDriver;
 use vela_core::app::parent_safe_guard::{
-    check, check_json, CheckInput, ParentReason, ParentVerdict, SafeOwnerAnswer, IS_OWNER,
+    check, check_json, CheckInput, CheckVerdict, ParentReason, SafeOwnerAnswer, IS_OWNER,
 };
 use vela_core::app::sign_confirm::ConfirmBlock;
 use vela_core::app::sign_request::{
@@ -325,6 +325,62 @@ fn the_appendix_poc_is_refused_both_ways() {
     assert_refused_as(&mut sut, "SafeTx", ParentReason::Member, &parent());
 }
 
+/// §41 (P1-1): every arrival vector's refusal, through the machine — a
+/// non-canonical `to`, batch leg or `verifyingContract` is answered -32602
+/// before any sheet, in the vector's words; a canonical mixed-case `to`
+/// reaches the guard and is refused there.
+#[test]
+fn a_non_canonical_address_is_refused_at_arrival_by_the_machine() {
+    let v = vector();
+    let arrivals: Vec<&Value> = v["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c["input"]["at_arrival"] == json!(true))
+        .collect();
+    assert!(arrivals.len() >= 5, "the arrival cases");
+    for case in arrivals {
+        let mut sut = boot(&[
+            parent(),
+            "0x00005afe5afe5afe5afe5afe5afe5afe5afe5afe".into(),
+        ]);
+        let method = case["input"]["method"].as_str().unwrap();
+        let ops = arrive(&mut sut, method, &case["input"]["params"]);
+        let answered = ops.iter().find_map(|op| match op {
+            Op::SendResponse {
+                payload: SignResponsePayload::Err { code, message, .. },
+                ..
+            } => Some((*code, message.clone())),
+            _ => None,
+        });
+        if case["expect"]["verdict"] == "invalid" {
+            let (code, message) = answered.unwrap_or_else(|| panic!("{}: {ops:?}", case["name"]));
+            assert_eq!(code, CODE_INVALID_PARAMS, "{}", case["name"]);
+            assert_eq!(
+                message.as_deref(),
+                case["expect"]["message"].as_str(),
+                "{}",
+                case["name"]
+            );
+            assert_eq!(sut.view().surface, SignSurface::Hidden, "{}", case["name"]);
+        } else {
+            assert!(answered.is_none(), "{}: {ops:?}", case["name"]);
+            assert!(sut.view().blocked.is_some(), "{}", case["name"]);
+        }
+    }
+}
+
+/// §41 (P1-2): a site's `SafeOp` for a multisig on the list — this account's
+/// approval of its user operation under Safe v1.5.0 — opens refused.
+#[test]
+fn a_safe_op_for_a_parent_is_refused_by_the_machine() {
+    let mut sut = boot(&[parent()]);
+    let (method, params) =
+        params_of("c: SafeOp for a multisig on the list, under the 4337 module's domain");
+    arrive(&mut sut, &method, &params);
+    assert_refused_as(&mut sut, "SafeOp", ParentReason::Member, &parent());
+}
+
 #[test]
 fn an_unknown_target_is_read_before_it_can_be_signed() {
     let mut sut = boot(&[]);
@@ -553,7 +609,7 @@ fn the_answer_names_the_call_and_the_safe() {
 #[test]
 fn every_vector_verdict_round_trips() {
     for case in vector()["cases"].as_array().unwrap() {
-        let verdict: ParentVerdict = serde_json::from_value(case["expect"].clone()).unwrap();
+        let verdict: CheckVerdict = serde_json::from_value(case["expect"].clone()).unwrap();
         assert_eq!(serde_json::to_value(&verdict).unwrap(), case["expect"]);
     }
 }

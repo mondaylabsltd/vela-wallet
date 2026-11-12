@@ -17,8 +17,19 @@
 //!   `SafeMessage(keccak256(txHashData))` — i.e. `SafeMessage(safeTxHash)` —
 //!   under the OWNER's domain, which is what the owner's passkey signs. NOT
 //!   [`crate::user_op::compute_safe_message_hash`], whose extra keccak is the
-//!   dApp path (`isValidSignature(bytes32, …)`): a dApp signature can never
-//!   pass for an approval.
+//!   dApp path (`isValidSignature(bytes32, …)`): under a v1.4.1 Safe a dApp
+//!   signature never passes for an approval.
+//!
+//!   **A Safe v1.5.0 is weaker** (§41, P1-2; read from safe-smart-account
+//!   v1.5.0 `Safe.sol`, `checkContractSignature`): it calls the owner's
+//!   `isValidSignature(bytes32 dataHash, …)` — the dApp path's own form. So
+//!   a site's typed data whose digest is a v1.5.0 Safe's hash — its `SafeTx`,
+//!   its `SafeMessage`, or its `SafeOp` under the 4337 module — signed by a
+//!   Vela owner IS that owner's approval. The parent-Safe guard
+//!   (`app::parent_safe_guard`) refuses all three for every Safe the account
+//!   owns, whatever its version; nothing relies on the version. (Vela creates
+//!   v1.4.1 multisigs; a v1.5.0 one would not accept [`approval_challenge`]'s
+//!   signature either, which is the v1.4.1 form.)
 //! - **Execution** ([`execution_calls`]): the executor — an owner that is a
 //!   Vela account on this device — sends ONE user operation: deploy the
 //!   multisig and any approving owner that has no code there yet (both are

@@ -58,6 +58,10 @@ pub enum SelfCallFunction {
     /// Not a call: an EIP-712 `SafeMessage` under a Safe's own domain — a
     /// nested EIP-1271 approval for that Safe (§31).
     SafeMessageTypedData,
+    /// Not a call: an EIP-712 `SafeOp` (Safe4337Module) for a Safe other
+    /// than the account — under a Safe v1.5.0, this owner's approval of that
+    /// Safe's user operation (§41, `parent_safe_guard`).
+    SafeOpTypedData,
 }
 
 impl SelfCallFunction {
@@ -80,6 +84,7 @@ impl SelfCallFunction {
             Self::DelegateCall => "delegatecall",
             Self::ApproveHash => "approveHash",
             Self::SafeMessageTypedData => "SafeMessage",
+            Self::SafeOpTypedData => "SafeOp",
         }
     }
 }
@@ -125,10 +130,37 @@ pub(super) fn blocked_function(selector: &str) -> Option<SelfCallFunction> {
         .map(|(_, f)| *f)
 }
 
+/// §41 (P1-1): an address as the encoders read it — `primitives::from_hex` /
+/// `parse_address` take it with or without `0x`, the EIP-712 hasher takes it
+/// bare (alloy's serde) or under-width and left-pads it (`eip712::pad_scalar`)
+/// — as one lowercase `0x` + 40 hex. A guard reads every form the signer
+/// would sign, wider rather than narrower: surrounding whitespace and an
+/// upper-case `0X` are read too. `None` for text no encoder reads as an
+/// address (empty, not hex, more than 20 bytes).
+///
+/// Arrival refuses every non-canonical form before a guard runs
+/// (`tx_request::is_canonical_address`); this is the guards' own floor.
+#[must_use]
+pub fn normalise_address(text: &str) -> Option<String> {
+    let t = text.trim();
+    let body = t
+        .strip_prefix("0x")
+        .or_else(|| t.strip_prefix("0X"))
+        .unwrap_or(t);
+    if body.is_empty() || body.len() > 40 || !body.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some(format!("0x{:0>40}", body.to_ascii_lowercase()))
+}
+
 pub(super) fn same_address(a: &str, b: &str) -> bool {
-    a.trim()
-        .trim_start_matches("0x")
-        .eq_ignore_ascii_case(b.trim().trim_start_matches("0x"))
+    match (normalise_address(a), normalise_address(b)) {
+        (Some(a), Some(b)) => a == b,
+        _ => a
+            .trim()
+            .trim_start_matches("0x")
+            .eq_ignore_ascii_case(b.trim().trim_start_matches("0x")),
+    }
 }
 
 /// Raw bytes of a `0x…` string; odd or non-hex input yields what parsed, which
