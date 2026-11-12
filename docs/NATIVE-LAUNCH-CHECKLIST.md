@@ -88,7 +88,15 @@ who install from Play **cannot create a wallet or sign in**.
    [Statement List Tester](https://developers.google.com/digital-asset-links/tools/generator)
    or `adb shell pm get-app-links app.getvela.wallet`.
 
-> Keep the debug fingerprint (`24:EA:D0:…`) for local dev builds — that one is fine.
+> **Release keys only.** Never add the debug keystore's fingerprint (`24:EA:D0:…`), or any
+> other development, device-test or demo key, to getvela.app's `assetlinks.json`: anyone can
+> sign an app with a debug key, and listing one lets that app ask for every user's
+> `getvela.app` passkeys. That is exactly
+> [VELA-2026-003](security/advisories/VELA-2026-003-passkey-app-association.md), and
+> `assetlinks.test.ts` fails on it. Debug and device-test builds use their own passkey domain,
+> `TEST_RP_DOMAIN` (`service_defaults::relying_party_id`; see
+> [hardening §6](security/hardening.md#6-test-builds-have-their-own-passkey-domain-review-0-1-follow-up)),
+> whose own association files list the test keys.
 
 ### A2. iOS — sign with Team ID `F9W689P9NE` (already configured correctly)
 The Apple App Site Association is **already correct**:

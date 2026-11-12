@@ -1,6 +1,6 @@
 # How to verify Vela's web core and signing page yourself
 
-*Last verified against commit `fa6083c87` (2026-11-09). A one-page summary of every check, with what each proves and does not, is [How to verify Vela yourself](review-pack.md#how-to-verify-vela-yourself); the threat model is [`SECURITY-MODEL.md`](../SECURITY-MODEL.md).*
+*Last verified against commit `dff291256` (2026-11-12), with the final review's docs and CI fixes. A one-page summary of every check, with what each proves and does not, is [How to verify Vela yourself](review-pack.md#how-to-verify-vela-yourself); the threat model is [`SECURITY-MODEL.md`](../SECURITY-MODEL.md).*
 
 Two things Vela ships to browsers are built bytes committed to this repository, not code a
 browser compiles from source:
@@ -15,7 +15,9 @@ browser compiles from source:
 This page says how to rebuild both from a commit and check them against what is committed and
 what is served, what each check proves, and what it does not. Each step here is also a CI job
 (`.github/workflows/ci.yml`: `web-core-reproducible`, `signing-page`, `supply-chain`), so
-"the committed bytes are what this commit builds" is checked on every pull request. The
+"the committed bytes are what this commit builds" is checked on every pull request. A red job
+stops a merge only if branch protection requires it; that is an owner setting this repository
+cannot show ([hardening go-live](hardening.md#round-22-go-live-the-owner), item 2). The
 decisions behind this are in [`hardening.md`](hardening.md), Round 22.
 
 You need `git`, Docker (or Podman) for the web core, and Bun 1.4.2 or Node 22 for the page.
@@ -107,12 +109,21 @@ itself.
 
 ### Check that GitHub built it (attestation)
 
-On every push to `main`, the `web-core-reproducible` job attests the module it built in the
-container (GitHub build provenance, Sigstore-signed, bound to the workflow run and commit):
+On a push to `main`, the `web-core-reproducible` job attests the module it built in the
+container (GitHub build provenance, Sigstore-signed, bound to the workflow run and commit),
+**but only when that rebuild matched the committed bytes**: the attest step runs after the
+compare, so a run whose container build differs attests nothing.
 
 ```sh
 gh attestation verify "assets/wasm/$name" --repo mondaylabsltd/vela-wallet
 ```
+
+**This does not work yet.** `main` is v0.9.8, which predates the job, so no module served by
+wallet.getvela.app has an attestation, and the command above fails for it. It can succeed only
+for a module built from a commit on `main` after this branch is merged, and only if that run's
+Linux container build is byte-identical to the committed module. That has not been measured
+(Linux reproducibility is open, SECURITY-MODEL G5; see "Measured" above). Until then, the
+rebuild-and-compare above is the check you can run.
 
 An attestation shows that this repository's CI built these exact bytes from the named commit.
 It does not show that the source is benign. Reading the source is still your job; the

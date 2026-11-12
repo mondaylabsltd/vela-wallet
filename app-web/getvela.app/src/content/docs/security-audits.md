@@ -11,8 +11,9 @@ Last verified on 8 November 2026, against commit `eebc246f4` (the development br
 includes the unreleased multisig feature) and release v0.9.8. Each audit date and finding below
 was checked against the cited report. If you find an error, tell us and we will fix it. To
 report a vulnerability, see the [security policy](https://github.com/mondaylabsltd/vela-wallet/blob/main/SECURITY.md).
-The "Gaps in Vela's own defences" list was re-checked on 9 November 2026 against commit
-`fa6083c87`. The threat model, with a code location for every claim, is
+The "Gaps in Vela's own defences" list and the advisories table were re-checked on 12 November
+2026 against commit `dff291256`. The threat model, which cites the code and tests for each claim
+and lists every known gap, is
 [SECURITY-MODEL.md](https://github.com/mondaylabsltd/vela-wallet/blob/main/docs/SECURITY-MODEL.md).
 
 ## The funds path
@@ -204,9 +205,21 @@ trade-off:
   versions it ships with. But the apps can ask a getvela.app passkey directly,
   so a fully compromised app does not need the page; only a wallet made on a
   self-hosted page has the page as its one way to sign.
+- **A site's request that names a Safe you own in an unusual spelling is not yet
+  checked by the parent-Safe guard** (development branch only; the multisig feature
+  is not released). The guard that refuses a site's request to act for a Safe your
+  account owns (VELA-2026-002) recognises that Safe's address only when it is written
+  in the usual form, `0x` and 40 hex digits. A request that writes it another way,
+  which other parts of the wallet still read as the same address, is not refused by
+  that guard. A fix is in progress.
 - **The website loads a third-party analytics script** on the same domain as the
-  passkeys. The site forbids its pages from using passkeys (a Permissions-Policy
-  header), and keeps the script off the page that holds a key.
+  passkeys, from its host, without a pinned hash, and the site has no
+  Content-Security-Policy that limits scripts. The site forbids its pages from using
+  passkeys (a Permissions-Policy header), so the script cannot ask for a signature.
+  But whoever controls it could change any page it runs on, including the download
+  links. It is left off the chain-setup page, which keeps a deployer key in the
+  browser; that does not keep it from the key, which any page of the site can read.
+  Removing it, or serving a pinned copy, is planned.
 
 ## What is not audited
 
@@ -259,7 +272,7 @@ Once published, they also appear under the repository's
 | ID            | Issue                                                                                                                                                         | Severity | Status                                                                                                                                                                                                                      |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | VELA-2026-001 | A typed-data request could preview one EIP-712 message and sign another. Reported externally on 29 September 2026.                                            | High     | Fixed in v0.9.6 (3 October 2026)                                                                                                                                                                                            |
-| VELA-2026-002 | A site connected to a Vela account could make it approve or execute for a Safe that account owns (a "parent" Safe). Reported externally on 29 September 2026. | High     | Fixed before release: the multisig feature never shipped with it. Released versions up to v0.9.8 are exposed only if your Vela account is an owner of a Safe created elsewhere; the fix reaches them with the next release. |
+| VELA-2026-002 | A site connected to a Vela account could make it approve or execute for a Safe that account owns (a "parent" Safe). Reported externally on 29 September 2026. | High     | Fixed before release: the multisig feature never shipped with it. Released versions up to v0.9.8 are exposed only if your Vela account is an owner of a Safe created elsewhere; the fix reaches them with the next release. The fix does not yet cover a Safe address written in an unusual spelling (see the gaps above); that fix is in progress. |
 | VELA-2026-003 | getvela.app's app-association files let development and demo Android and iOS apps request getvela.app passkeys. Found by an internal review.                  | Medium   | Fixed and deployed on 7 November 2026; no known exploitation                                                                                                                                                                |
 
 Internal incidents that put no user's keys or funds at risk are recorded in

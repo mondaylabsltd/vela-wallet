@@ -7,8 +7,9 @@ mechanically on every pull request (`scripts/ci/check-doc-claims.mjs`): a path o
 here that does not exist fails CI. That check proves the citation exists. It does not prove the
 code does what the sentence says; that is the reader's job, and the reason the citations exist.
 
-**Verified against commit `fa6083c87`** (branch `feat/multisig-account`, 2026-11-09). Where this
-document and the code disagree, the code is right and this document has a bug. Please
+**Verified against commit `dff291256`** (branch `feat/multisig-account`, 2026-11-12), with the
+final review's CI and documentation fixes on top of it (branch `final-docs-ci`; [§15](#15-document-changelog)).
+Where this document and the code disagree, the code is right and this document has a bug. Please
 [report it](../SECURITY.md).
 
 ---
@@ -49,7 +50,7 @@ document makes no claim about their internals.
 | | State at this commit |
 | --- | --- |
 | Latest release | v0.9.8 (`main`). It predates every Round 21 and Round 22 change below: no SafeOp expiry, no `settlementGas` cap, no two-provider corroboration, no hold-to-confirm, no parent-Safe guard, no ERC-6492. A Vela account that owns another Safe is exposed to [VELA-2026-002](security/advisories/VELA-2026-002-parent-safe-authority.md) in v0.9.8. |
-| This branch | 1,483 commits ahead of `main`, including the multisig feature. **Not released.** |
+| This branch | 1,514 commits ahead of `main` at `dff291256`, including the multisig feature. **Not released.** Several links in the published pages (security.txt's `Policy`, the audits page, the whitepaper) point at files under `main` that exist only on this branch, so they 404 until it is merged ([hardening go-live](security/hardening.md#round-22-go-live-the-owner)). |
 | Multisig services | The genesis service's and mailbox's Round 22 changes are uncommitted in their own repository and not deployed ([hardening §10](security/hardening.md#10-the-mailbox-cannot-stall-or-phish-a-multisig-review-1-13-wallet-side)); `docs/multisig-vault-design.md` still lists deploying the service and mailbox, and a small mainnet run with real passkeys, as pending. No mainnet end-to-end multisig run is on record. |
 | Signing page | The newest pages are built and committed here; deploying them is an owner go-live step, and `integrity::LAUNCH` (the version the phones open) is still an older page that is to move after that deployment. See [§6.7](#67-the-signing-page) and the go-live lists in [hardening.md](security/hardening.md#go-live-checklist-the-owner). |
 | Audits | Vela's own code is not audited, and no audit is scheduled. The contracts it uses are; see [Audits & known issues](https://getvela.app/docs/security-audits). |
@@ -137,18 +138,18 @@ hostile. "Not trusted for" is what the wallet checks itself.
 | **The key index's registry contract** (Gnosis, with an Ethereum backup copy) | a durable public record of which keys found which address | it holds no funds; the wallet recomputes addresses from it |
 | **Authenticators and sync providers** (iCloud Keychain, Google Password Manager, password managers, security keys) | keeping the private key secret; performing user verification on every signature | the content of the signature: the OS prompt names the RP ID only, never the transaction |
 | **The domain `getvela.app`** (registrar, DNS, TLS) | deciding which pages and apps can use `getvela.app` passkeys | — (it is a single point of control; [§5](#5-adversaries-and-outcomes), [§8](#8-keys-and-accounts)) |
-| **App associations** (`app-web/getvela.app/src/routes/.well-known/assetlinks.json/+server.ts`, `app-web/getvela.app/src/routes/.well-known/apple-app-site-association/+server.ts`) | which native apps may use `getvela.app` passkeys. **Exactly two identities**: Android `app.getvela.wallet` with release-key SHA-256 `A3:8E:36:FE:5A:99:AE:30:73:F7:91:4C:3D:43:58:32:AE:BD:D9:7D:C1:A4:DF:EF:9E:4B:3A:6E:10:31:9D:53` (`get_login_creds` and `handle_all_urls`), and iOS `F9W689P9NE.app.getvela.VelaWallet` (`webcredentials`; app links for `/sign`, `/pay`, `/pay/`). No `/.well-known/webauthn` related-origins file is served. | pinned by `assetlinks.test.ts` and `association.test.ts`; test builds use their own RP ID (`service_defaults::relying_party_id`, [hardening §6](security/hardening.md#6-test-builds-have-their-own-passkey-domain-review-0-1-follow-up)). When Play App Signing is enabled its certificate is to be added, and nothing else. |
+| **App associations** (`app-web/getvela.app/src/routes/.well-known/assetlinks.json/+server.ts`, `app-web/getvela.app/src/routes/.well-known/apple-app-site-association/+server.ts`) | which native apps may use `getvela.app` passkeys. **Exactly two identities**: Android `app.getvela.wallet` with release-key SHA-256 `A3:8E:36:FE:5A:99:AE:30:73:F7:91:4C:3D:43:58:32:AE:BD:D9:7D:C1:A4:DF:EF:9E:4B:3A:6E:10:31:9D:53` (`get_login_creds` and `handle_all_urls`), and iOS `F9W689P9NE.app.getvela.VelaWallet` (`webcredentials`; app links for `/sign`, `/pay`, `/pay/`). No `/.well-known/webauthn` related-origins file is served. | pinned exactly by `assetlinks.test.ts` and `association.test.ts`, which run in CI's `site` job on every pull request (since the final review; before it they ran only by hand) and before every `bun run deploy` of the site; test builds use their own RP ID (`service_defaults::relying_party_id`, [hardening §6](security/hardening.md#6-test-builds-have-their-own-passkey-domain-review-0-1-follow-up)). When Play App Signing is enabled its certificate is to be added, and nothing else. |
 | **The app code you run** (the web wallet as served, an extension or app build) | everything it renders and every request it asks the authenticator to sign | — (this is the Bybit class: [§5](#5-adversaries-and-outcomes), [§6.7](#67-the-signing-page), [§12](#12-build-and-release-verifiability)) |
 | **The Chrome extension's permissions** (`app-web/vela-wallet/extension/manifest.json`) | it holds `https://getvela.app/*` (so it can use `getvela.app` passkeys) and `*://*/*` (to inject the provider) | — |
 | **RPC nodes** | liveness; balances and history shown (one node's word) | a signing verdict: simulation, state diff, code and authority reads need two independent providers, or the person's own node ([§6.4](#64-two-provider-simulation-and-the-state-diff-guard)) |
 | **Relay** (vela-relay, `service_defaults::BUNDLER_SERVICE_URL`) | inclusion and timing within the operation's validity window; quoting the gas price | the operation's content, the fee amount and recipient (signed); `settlementGas` above the cap ([§6.11](#611-the-settlementgas-cap)); a per-gas price above 3× the wallet's own reading |
 | **Key index** (`service_defaults::PASSKEY_INDEX_URL`) | availability of sign-in on a new device | which keys co-own an address: checked against the registry on chain, and an unchecked multi-key answer shows no receive address ([§6.12](#612-key-index-verification)) |
-| **Chain data** (`service_defaults::ETHEREUM_DATA_URL`) | token lists, logos, ERC-7730 descriptors as served | grading a call green or "verified" ([§6.1](#61-clear-signing-and-provenance)) |
+| **Chain data** (`service_defaults::ETHEREUM_DATA_URL`) | token lists, logos, ERC-7730 descriptors as served (not signed, not hash-pinned: G25); the chain index, from which the RPC pool takes endpoints on a network Vela's own lists do not cover with two providers (G26) | grading a call green or "verified" ([§6.1](#61-clear-signing-and-provenance)) |
 | **Rates** (`service_defaults::FIAT_RATES_URL`) | the fiat figure shown, and the token amount a fiat-denominated entry becomes | — (a wrong rate changes how much a fiat amount sends; the token amount is shown before signing) |
 | **Genesis service and mailbox** (`service_defaults::GENESIS_SERVICE_URL`) | availability of a multisig's genesis record and proposal list | authority, hashes, approvals: recomputed and re-verified on the device ([§9](#9-the-multisig-model)) |
 | **PeerConnect relay** (`service_defaults::PEERCONNECT_RELAY_URL`) and its token endpoint, with PeerConnect's trial-token fallback (`service_defaults::PEERCONNECT_TRIAL_URL`) | carrying an outside owner's wallet session for a multisig | the signatures it carries: checked by the core (ecrecover) before use |
 | **Passkey model directory** (`service_defaults::AAGUID_DIRECTORY_URL`) | naming an authenticator model | — (display only) |
-| **Analytics host** `tj.appsdata.org` (Rybbit) | — | the web wallet and extension send nothing unless the person turns statistics on (`app-web/vela-wallet/src/lib/analytics/consent.svelte.ts`); the website getvela.app loads Rybbit's script on every page except `/chain-setup` (`app-web/getvela.app/src/routes/+layout.svelte`). [§11](#11-privacy) |
+| **Analytics host** `tj.appsdata.org` (Rybbit) | — | the web wallet and extension send nothing unless the person turns statistics on (`app-web/vela-wallet/src/lib/analytics/consent.svelte.ts`); the website getvela.app loads Rybbit's script, unpinned and with no `script-src` CSP, on every page except `/chain-setup` (`app-web/getvela.app/src/routes/+layout.svelte`; G27). [§11](#11-privacy) |
 
 ---
 
@@ -195,7 +196,9 @@ replayed by the core and by every shell through the real core.
   (`rust/crates/vela-core/src/typed_data_request.rs`, the VELA-2026-001 fix).
 - **Guarantees.** The sheet shows Vela's own decoding of the bytes that will be signed, with the
   provenance said. A compromised descriptor service cannot make a call "verified" or green.
-- **Does not guarantee.** That a Fetched or SelectorDb description is true. That an EIP-712
+- **Does not guarantee.** That a Fetched or SelectorDb description is true: fetched descriptors are
+  neither signed by a publisher nor pinned by hash in the build, and the only fetched one called
+  verified is one equal to a built-in (`ClearProvenance::PinnedMatch`; G25). That an EIP-712
   message is harmless: typed data can authorise asset movement (Permit, Permit2, orders), and
   the guards in §6.2–§6.3 apply to it. Recipient facts ("is it a contract", "first time") and the
   `no_code` probe are one node's word; they only add cautions.
@@ -217,8 +220,19 @@ replayed by the core and by every shell through the real core.
   checks the final params again (`parent_safe_guard::enforce`). The same self-call rule holds at
   a connected multisig's own address (`multisig_dapp::self_call_refusal`, SEC-PARENT-2).
 - **Guarantees.** A connected site cannot obtain a signature that changes who controls the
-  account or a Safe it owns, through any of these shapes, on any shell or the signing page.
-- **Does not guarantee.** Protection against a shape outside the list (a future Safe version's
+  account or a Safe it owns, through any of these shapes **when the target is written as `0x` and
+  40 hex digits**, on any shell or the signing page.
+- **Does not guarantee.** **A target written another way (G24, open).** The walk
+  (`parent_safe_guard::parent_targets`) considers a call's `to` and a typed-data
+  `verifyingContract` only when they are `0x` followed by exactly 40 hex digits
+  (`parent_safe_guard::is_address`); anything else is skipped, not refused. The core reads
+  addresses more loosely elsewhere: `primitives::parse_address` takes one with or without `0x`,
+  and the EIP-712 encoder left-pads a short one to 20 bytes
+  (`rust/crates/vela-core/src/eip712.rs#pad_scalar`). A request that names a parent Safe in such a
+  spelling is not checked by this guard. The fix (canonicalising every address before the walk) is
+  in progress on a separate branch and is to be recorded as `docs/multisig-machines.md` §41; until
+  it lands, VELA-2026-002's fix is incomplete for these spellings.
+  Protection against a shape outside the list (a future Safe version's
   new admin function, a module's own admin calls on a Safe that has one). An `isOwner` read for a
   Safe on another chain is made on the request's chain only. The signing page cannot read the
   chain, so it refuses these shapes on **any** Safe but the account, which is stricter.
@@ -274,7 +288,9 @@ replayed by the core and by every shell through the real core.
   refuse; it cannot make a multisig member change look declared. A network with one public
   provider never locks a member out of their own multisig.
 - **Does not guarantee.** Independence beyond a registrable-domain heuristic (two brands reselling
-  one backend count as two). Two colluding providers. The state diff for a **Vela account's own**
+  one backend count as two). Two colluding providers. Independence from the chain-data service on a
+  network Vela's own lists do not cover with two providers: there the other source, or both, come
+  from its chain index (G26). The state diff for a **Vela account's own**
   transactions: there is none; those rest on simulation and the guards. Ordinary display reads
   (balances, history) are one node's word. On a single-provider network, who can act for a
   multisig is one node's word (held "… anyway"; G22).
@@ -367,7 +383,8 @@ build can change any of them.
 
 - **Rule.** The fee is in band: a transfer to the relay inside the MultiSend the passkey signs,
   with zero EntryPoint fees and no paymaster (`docs/ARCHITECTURE.md` "Fee model"). The amount is
-  `max(settlementGas × inBandFeePerGas[tier], floor)` where the relay bills gas used, and
+  `max(settlementGas × inBandFeePerGas[tier] × 1.125, floor)` where the relay bills gas used
+  (the 12.5 % is `fee_policy::FEE_HEADROOM_BPS`, below), and
   `3 × gas limits × max(wallet reading, relay price)` only against a relay that publishes neither
   figure (`fee_policy::IN_BAND_PRICE`, the `Charge` variants). A wallet send is bound review →
   hash (`signed_review::reviewed_safe_op_hash`); a dApp's request is bound to the review frozen at
@@ -460,7 +477,10 @@ build can change any of them.
   (`multisig_proposals::next_nonce_of`). A proposal no member vouches for is `from_non_member`: out
   of the default list and every count, behind "Show proposals from non-members" with a warning.
   Contract members must be bound to their own genesis (`multisig::counterfactual_authority`,
-  `Refusal::OwnerNotBound`).
+  `Refusal::OwnerNotBound`). Where a member is a contract on one of the multisig's networks, its
+  genesis may be read from its own creation transaction (§40): the network's explorer names the
+  transaction, as a hint only; the transaction is read from the chain, and a genesis is kept only
+  if it makes exactly that member (`multisig::genesis_in_creation_input`).
 - **Guarantees.** The mailbox cannot make a member sign a hash its device did not compute, cannot
   stall the nonce with a stranger's far-ahead post, and cannot present a stranger's post as
   "needs your approval".
@@ -624,7 +644,7 @@ unconfirmed Vela account can be made a member (§6.12). The full list is the
 | Genesis service and mailbox | multisig owners, threshold, name; proposals and approvals; **no authentication, CORS `*`**: anyone who knows a Safe's address can read its pending proposals | the service's | — |
 | PeerConnect relay | an encrypted session between Vela and an outside owner's wallet; tokens from `getvela.app/api/peerconnect-token`, or PeerConnect's trial token as a fallback | theirs | — |
 | Bug report service | what you type and attach; filed as a **public** GitHub issue | until deleted | do not send one |
-| Rybbit analytics (`tj.appsdata.org`) | web wallet and extension: **only if turned on** — screens and named moments with coarse details, never an address, amount or transaction outcome (`app-web/vela-wallet/src/lib/analytics/catalog.ts#TX_OUTCOME_EVENTS`, `payload.test.ts`); the website: page views and some clicks, on every page but `/chain-setup` | Rybbit's | off by default in the wallet; the native apps send none |
+| Rybbit analytics (`tj.appsdata.org`) | web wallet and extension: **only if turned on** — screens and named moments with coarse details, never an address, amount or transaction outcome (`app-web/vela-wallet/src/lib/analytics/catalog.ts#TX_OUTCOME_EVENTS`, `payload.test.ts`), and a site's approved request with no kind or network (`app-web/vela-wallet/src/lib/analytics/catalog.ts#dapp_request_approved`); the website: page views and some clicks, on every page but `/chain-setup` | Rybbit's | off by default in the wallet; the native apps send none |
 | Apple / Google / your password manager | your synced passkeys; Apple's and Google's tunnel servers carry a hybrid (QR) ceremony | theirs | use a security key |
 
 The authoritative list for users is the privacy page
@@ -639,13 +659,26 @@ How to check each artifact yourself is [`docs/security/verify.md`](security/veri
 one-page public summary at [`docs/security/review-pack.md`](security/review-pack.md#how-to-verify-vela-yourself).
 In short:
 
-- **Web core** (the wasm the web wallet and extensions run): rebuilt byte for byte in a pinned
-  container by `rust/scripts/reproduce-web.sh` (`rust/scripts/web-build.Dockerfile`); CI job
-  `web-core-reproducible` compares it on every PR and attests it on `main`. Measured
-  byte-identical on two clean macOS builds; **Linux not yet measured** (the first CI run is the
-  cross-host proof).
-- **Signing page**: `app-web/trusted-signer/samples/build-single.mjs --check`, blocking in CI under
-  Bun and Node.
+**"Blocking" means: if branch protection requires it.** The CI jobs below run on every pull
+request, and a red one fails the run. Whether a red job stops a merge is the repository's
+branch-protection setting, which is an owner action that this repository cannot show or enforce
+([hardening go-live](security/hardening.md#round-22-go-live-the-owner), item 2). Read every "blocks"
+below with that condition.
+
+- **Web core** (the wasm the web wallet and extensions run): rebuilt in a pinned container by
+  `rust/scripts/reproduce-web.sh` (`rust/scripts/web-build.Dockerfile`) and compared byte for byte
+  with the committed module; CI job `web-core-reproducible` runs that on every PR. Measured
+  byte-identical on two clean macOS builds; **Linux not yet measured** (G5): a CI run of this job is
+  the first cross-host comparison, and if the container's bytes differ from the committed macOS
+  build, the job fails.
+- **Attestation of the web core.** The same job attests the module it built
+  (`actions/attest-build-provenance`) **only on a push to `main`, and only when its rebuild matched
+  the committed bytes** (the attest step runs after the compare). `main` is v0.9.8, which predates
+  the job, so today no module served by wallet.getvela.app has an attestation and
+  `gh attestation verify` on it fails. It can succeed only after this branch is merged to `main`
+  and that run's container build matches (G5).
+- **Signing page**: `app-web/trusted-signer/samples/build-single.mjs --check`, run in CI on every PR
+  (`signing-page`) under Bun and Node.
 - **The rest of the web wallet's JavaScript** is built by Vite on Cloudflare and is **not**
   compared byte for byte.
 - **Native releases** carry GitHub build-provenance attestations (macOS: Apple notarization, then
@@ -653,7 +686,16 @@ In short:
 - **Supply chain**: `deny.toml` (cargo-deny over both lockfiles), JS audits, Dependabot
   (`.github/dependabot.yml`), the PeerConnect vendor check
   (`scripts/check-peerconnect-vendor.mjs`, `app-web/vela-wallet/src/lib/vendor/peerconnect/VENDOR.json`).
-  No CodeQL, secret scanning or SBOM.
+  Every third-party GitHub Action is pinned to a full commit SHA, its release named in a comment;
+  Dependabot moves the SHA with the release, and `dtolnay/rust-toolchain` (pinned to its `stable`
+  branch head, which has no release tags) is moved by hand. No CodeQL, secret scanning or SBOM
+  (G18).
+- **Tests that run where.** The fork tests (`tests/multisig_fork.rs`, `tests/signing_truth_fork.rs`,
+  `tests/lying_index_fork.rs`, `tests/safe_op_window_fork.rs`, `tests/erc6492_fork.rs`) run only in
+  the nightly `multisig-fork` job, which is not a pull-request check, and which skips itself when
+  `vars.SGR_MAILBOX_REF` (the pinned genesis service) is unset. The web e2e suite runs nightly,
+  except `e2e/extension-site-start.e2e.ts` and `e2e/security-headers.e2e.ts`, which run in the `web`
+  job on every PR.
 
 ---
 
@@ -667,13 +709,13 @@ Each item is open at the commit above. "Accepted" means decided and recorded; th
 | G2 | **`getvela.app` accounts: the signing page is display assurance, not authority.** The page-scoped RP ID (keys only the page can use) is the fix. | owner decision, not built | `signing_venue.rs`; [hardening R22-3](security/hardening.md#owner-decision-a-page-scoped-rp-id-the-real-fix-not-built-this-round) |
 | G3 | **The page-only passkey domain is not built** (same item, as a product: an opt-in "page-only signing" account on a dedicated registrable domain). | owner decision | as G2 |
 | G4 | **First-party key backup simulation is one node's word**: the wallet's own key-record backup gets no exemption and is "… anyway", held, when its simulation is uncorroborated. Honest; a candidate for a first-party rule. | open | [hardening "Left open (Round 22, signing truth)"](security/hardening.md#left-open-round-22-signing-truth) |
-| G5 | **Linux reproducibility of the web wasm is unmeasured.** If CI's container bytes differ from the committed macOS build, the container's build is to be committed and served. | owner item (read the first CI run) | [hardening R22-2](security/hardening.md#r22-2-reproducible-builds-review-1-9); [verify.md](security/verify.md) |
+| G5 | **Linux reproducibility of the web wasm is unmeasured.** If CI's container bytes differ from the committed macOS build, the container's build is to be committed and served. Until a `main` run's rebuild matches, no web core has an attestation, so `gh attestation verify` on the served module fails ([§12](#12-build-and-release-verifiability)). | owner item (read the first CI run) | [hardening R22-2](security/hardening.md#r22-2-reproducible-builds-review-1-9); [verify.md](security/verify.md) |
 | G6 | **GPL-3.0 `zlog` / `ztracing` / `ztracing_macro` are linked into the desktop** through the pinned gpui. A release blocker for the desktop until the pin moves past zed `ac5af8b9` (relicensed Apache-2.0), or the risk is accepted for one release. | owner item | `deny.toml`; [hardening R22-1](security/hardening.md#r22-1-dependency-gates-review-1-10) |
 | G7 | **SafeGenesisRegistry v4 is not audited** (internal adversarial review only). The multisig rules do not take its word for authority, but it records geneses and names. | accepted for an unreleased feature | [Audits & known issues](https://getvela.app/docs/security-audits) |
 | G8 | The mailbox server's Round 22 changes (`nonceTooFar`, stranger allowance, open-first listing) are uncommitted in their repository; CI's nightly fork job still pins `mailbox-any-signer`. | owner item | [hardening §10](security/hardening.md#10-the-mailbox-cannot-stall-or-phish-a-multisig-review-1-13-wallet-side) |
 | G9 | An unconfirmed account can sign and can be made a multisig member; iOS can re-save a confirmed account as unconfirmed (fail-safe); an older build drops `identity`. | open (R23 candidate) | [hardening "Round 22: left open"](security/hardening.md#round-22-left-open) |
 | G10 | No allowance list or revoke screen. | planned | KNOWN-BUGS R22-PLAN-1 |
-| G11 | The signing page reads `PermitBatch`, `PermitBatchTransferFrom` and `PermitBatchWitnessTransferFrom` as generic typed data; batch legs are judged by 2^128 alone. | open | [hardening "Round 22: left open"](security/hardening.md#round-22-left-open) |
+| G11 | The signing page reads Permit2's batch forms, `PermitBatch`, `PermitBatchTransferFrom` and `PermitBatchWitnessTransferFrom`, as generic typed data (caution, never green). It reads `PermitSingle`, `PermitTransferFrom` and `PermitWitnessTransferFrom` as the permit or transfer they are (`app-web/trusted-signer/src/lib/resolve.js`). The wallet's own sheet and guard read both witness forms. Batch legs are judged by 2^128 alone. | open | [hardening "Round 22: left open"](security/hardening.md#round-22-left-open) |
 | G12 | A relay older than CONTRACT v2 is priced on its own limits, not capped against the wallet's model. | open | [hardening §2](security/hardening.md#2-the-relays-settlementgas-is-capped-review-1-6) |
 | G13 | No self-submit path: censorship by the relay is answered only by switching relays or running one. | open | [§5](#5-adversaries-and-outcomes) |
 | G14 | CTAP security keys keep `getvela.app` in every build; the key index's recorded RP for a test build's keys follows each shell's own reading. | open (test builds only) | [hardening §6](security/hardening.md#6-test-builds-have-their-own-passkey-domain-review-0-1-follow-up) |
@@ -686,6 +728,10 @@ Each item is open at the commit above. "Accepted" means decided and recorded; th
 | G21 | The phones' page path has no end-to-end harness; hold-to-confirm and the assistive path have not been walked on real hardware. | open | [hardening R22-3](security/hardening.md#r22-3-the-signing-page-check-then-open-review-0-5) |
 | G22 | **On a network whose pool holds one provider, who can act for a multisig is one node's word** in the member's own flows (held "… anyway", said, refused with Refuse blind signing). A lying sole node can hide a module or guard from the review; it cannot move funds (the Safe enforces its owners on chain; the state-diff guard's refusal stands alone). A provider-diverse default pool is the fix. | accepted, documented | [hardening §18](security/hardening.md#18-round-22-follow-ups-one-provider-a-fee-that-moves-39) |
 | G23 | **The fee headroom is paid, not refunded**: a fee at the relay's published price is shown and signed 12.5 % above the quote (`fee_policy::FEE_HEADROOM_BPS`), and the relay keeps it. | accepted, documented | [hardening §18](security/hardening.md#18-round-22-follow-ups-one-provider-a-fee-that-moves-39) |
+| G24 | **The parent-Safe guard skips a target address it does not recognise as canonical.** A call's `to` or a typed-data `verifyingContract` that is not `0x` and exactly 40 hex digits is not walked (`parent_safe_guard::is_address`), while `primitives::parse_address` (no `0x` needed) and the EIP-712 encoder (`rust/crates/vela-core/src/eip712.rs#pad_scalar`, short addresses left-padded) still read it as an address. A site that writes a parent Safe that way is not refused by this guard, so VELA-2026-002's fix does not cover those spellings yet. | open; fix in progress (to be `docs/multisig-machines.md` §41) | [§6.2](#62-the-self-call-and-parent-safe-guards) |
+| G25 | **Fetched ERC-7730 descriptors are neither signed nor hash-pinned.** One equal to a built-in descriptor is `ClearProvenance::PinnedMatch`; every other is `ClearProvenance::Fetched`, floored at Normal risk and said as unauthenticated, but what it says a call does is the chain-data service's word. No publisher signature or build-time hash list exists. | open | [§6.1](#61-clear-signing-and-provenance) |
+| G26 | **On a network Vela's own RPC lists do not cover with two providers, the chain index supplies the other source.** The pool's tiers are the person's own, Vela's built-in and curated public lists, then the chain index (`RpcSource::Builtin`, `RpcSource::Fallback`), which the chain-data service serves. Where Vela's lists name one provider, the corroborating source comes from that index; where they name none (a network added from the index), both do. Two endpoints one compromised service names under two registrable domains pass `corroborate::independent`, so a "two-provider" verdict there rests on the chain-data service. | open | [§6.4](#64-two-provider-simulation-and-the-state-diff-guard); G1 |
+| G27 | **getvela.app loads a third-party analytics script, and has no `script-src` CSP.** Rybbit's `https://tj.appsdata.org/api/script.js` is loaded, unpinned and without Subresource Integrity, on every page but `/chain-setup` (`app-web/getvela.app/src/routes/+layout.svelte`), and the site's CSP is `frame-ancestors 'none'` alone (`app-web/getvela.app/src/lib/security-headers.ts`). The Permissions-Policy keeps that script from using `getvela.app` passkeys, but whoever controls it can rewrite any page it runs on, including the download links and the docs that say how to verify a build. Leaving the tag off `/chain-setup` does not keep the script from that page's deployer key: the key is in the origin's `localStorage` (`app-web/getvela.app/src/lib/chain-setup/deployer-wallet.ts#STORAGE_KEY`), which the script can read from any other page of the site, and a client-side navigation to `/chain-setup` from a page that loaded the script keeps it running there. Recommended: remove it, or self-host a pinned copy with SRI, and add a `script-src` CSP. Not changed here: the site's inline SvelteKit scripts would first need kit's hash-mode CSP. | open | [§11](#11-privacy); [hardening §4](security/hardening.md#4-origin-hardening-review-1-1) |
 
 Open bugs in the tracker are in [`docs/KNOWN-BUGS.md`](KNOWN-BUGS.md); the security-relevant ones
 are SEC-PARENT-1, SEC-PARENT-2 and SEC-PARENT-3 (all fixed on this branch) and R22-PLAN-1.
@@ -702,7 +748,7 @@ key yet; **no bug bounty**). `security.txt` is served by both sites
 | ID | Issue | Fixed in | Published |
 | --- | --- | --- | --- |
 | [VELA-2026-001](security/advisories/VELA-2026-001-typed-data-preview-mismatch.md) | A typed-data request could preview one EIP-712 message and sign another | v0.9.6 | not yet |
-| [VELA-2026-002](security/advisories/VELA-2026-002-parent-safe-authority.md) | A site connected to a Vela account could act for a Safe that account owns | `64da454d3`, not released | not yet; after the release |
+| [VELA-2026-002](security/advisories/VELA-2026-002-parent-safe-authority.md) | A site connected to a Vela account could act for a Safe that account owns | `64da454d3`, not released; incomplete for a target address in a non-canonical spelling (G24, fix in progress) | not yet; after the release |
 | [VELA-2026-003](security/advisories/VELA-2026-003-passkey-app-association.md) | getvela.app's app-association files let development and demo apps request users' passkeys | site `0562c17bb`, deployed 2026-11-07 | not yet |
 
 Internal incidents that put no user at risk: [`docs/security/incidents.md`](security/incidents.md).
@@ -715,3 +761,4 @@ Internal incidents that put no user at risk: [`docs/security/incidents.md`](secu
 | --- | --- | --- |
 | 2026-11-09 | `fa6083c87` | First version (Round 23), following the outline of the 2026-11-07 internal review. Supersedes the whitepaper's "Threats considered" as the reference threat model. |
 | 2026-11-12 | `41d0c60b2` | Round 22 follow-ups (§39): the one-provider rule and `SigningDisagreed` (§6.4, §7, G22); charged = shown with no livelock and the fee headroom (§6.9, G23); every unbounded grant held (§6.6). |
+| 2026-11-12 | `dff291256` | Final review, docs and CI: re-stamped (§1); the association tests run in CI (§4); §6.2's guarantee limited to canonical addresses (G24); descriptors not signed or pinned (§6.1, G25); the chain index as second source (G26); getvela.app's analytics script and missing `script-src` (G27); "blocking" and the web core's attestation said as they are (§12, G5); G11 aligned with the page's code; a member's genesis read from its creation (§6.14, §40); a site's approved request counted without kind or network (§11). |
