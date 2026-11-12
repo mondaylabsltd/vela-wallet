@@ -602,6 +602,8 @@ fn member_flow(network: Network) -> Shell {
     }
     ms.dispatch(proposals::Event::ConfirmDraft {
         as_member: Some(locals[0].address.clone()),
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     settle(&mut ms, &mut shell);
     if network == Network::Disagreeing {
@@ -626,6 +628,8 @@ fn member_flow(network: Network) -> Shell {
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         owner: locals[1].address.clone(),
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     settle(&mut ms, &mut shell);
     let item = ms
@@ -668,6 +672,8 @@ fn member_flow(network: Network) -> Shell {
         safe_tx_hash: hash.clone(),
         executor,
         shown_fee,
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     settle(&mut ms, &mut shell);
     let verdict = ms.view().executions[&format!("100:{hash}")].clone();
@@ -1118,7 +1124,7 @@ mod parent {
         assert_eq!(blocked.reason, Some(reason));
         assert!(!view.confirm_gate_open);
         let ops = sign.dispatch(SignEvent::ApproveTapped {
-            opts: SignApproveOpts::default(),
+            opts: support::reviewed_opts(),
         });
         assert!(
             !ops.iter().any(|op| matches!(
@@ -1240,6 +1246,8 @@ mod parent {
         settle(&mut ms, &mut shell);
         ms.dispatch(proposals::Event::ConfirmDraft {
             as_member: Some(a.clone()),
+            anyway_confirmed: true,
+            refuse_blind: false,
         });
         settle(&mut ms, &mut shell);
         let ActionState::Done {
@@ -1276,6 +1284,8 @@ mod parent {
             safe_tx_hash: hash.clone(),
             executor: a.clone(),
             shown_fee,
+            anyway_confirmed: true,
+            refuse_blind: false,
         });
         settle(&mut ms, &mut shell);
         let verdict = ms.view().executions[&format!("100:{hash}")].clone();

@@ -629,6 +629,12 @@ pub enum Event {
     /// one used here last, else the first).
     ConfirmDraft {
         as_member: Option<String>,
+        /// §41 (P2-5): the press was the "… anyway" confirm.
+        #[serde(default)]
+        anyway_confirmed: bool,
+        /// §41 (P2-5): "Refuse blind signing" is on.
+        #[serde(default)]
+        refuse_blind: bool,
     },
     /// Withdraw the draft (nothing more is asked or sent).
     Withdraw,
@@ -637,6 +643,12 @@ pub enum Event {
         chain_id: u64,
         safe_tx_hash: String,
         owner: String,
+        /// §41 (P2-5): the press was the "… anyway" confirm.
+        #[serde(default)]
+        anyway_confirmed: bool,
+        /// §41 (P2-5): "Refuse blind signing" is on.
+        #[serde(default)]
+        refuse_blind: bool,
     },
     /// What executing it would be: the preview.
     Preview {
@@ -659,6 +671,12 @@ pub enum Event {
         #[serde(default)]
         #[cfg_attr(feature = "bindings", ts(optional))]
         shown_fee: Option<String>,
+        /// §41 (P2-5): the press was the "… anyway" confirm.
+        #[serde(default)]
+        anyway_confirmed: bool,
+        /// §41 (P2-5): "Refuse blind signing" is on.
+        #[serde(default)]
+        refuse_blind: bool,
     },
     /// core-ms-2: "Approve and execute", one press, offered where
     /// [`ProposalsView::approve_execute`] names `executor`: its execution —
@@ -683,6 +701,12 @@ pub enum Event {
         #[serde(default)]
         #[cfg_attr(feature = "bindings", ts(optional))]
         shown_fee: Option<String>,
+        /// §41 (P2-5): the press was the "… anyway" confirm.
+        #[serde(default)]
+        anyway_confirmed: bool,
+        /// §41 (P2-5): "Refuse blind signing" is on.
+        #[serde(default)]
+        refuse_blind: bool,
     },
     /// core-ms-2: [`Event::ConfirmDraft`], then — when the proposer's own
     /// approval makes it ready ([`DraftView::execute_now`]: a site's
@@ -692,6 +716,12 @@ pub enum Event {
     ProposeExecute {
         #[serde(default)]
         as_member: Option<String>,
+        /// §41 (P2-5): the press was the "… anyway" confirm.
+        #[serde(default)]
+        anyway_confirmed: bool,
+        /// §41 (P2-5): "Refuse blind signing" is on.
+        #[serde(default)]
+        refuse_blind: bool,
     },
     /// core-ms-2: the shell answered the site's `wallet_getCallsStatus` read
     /// with `calls_status[id]`: forgotten (answers not taken are kept at most
@@ -780,7 +810,14 @@ pub enum Event {
         #[cfg_attr(feature = "bindings", ts(type = "number"))]
         chain_id: u64,
         safe_tx_hash: String,
+        /// §41 (P2-5): the press was the "… anyway" confirm.
+        #[serde(default)]
+        anyway_confirmed: bool,
+        /// §41 (P2-5): "Refuse blind signing" is on.
+        #[serde(default)]
+        refuse_blind: bool,
     },
+
     /// What the outside session came to for the SafeTx it was handed.
     OutsideAnswered {
         #[cfg_attr(feature = "bindings", ts(type = "number"))]
@@ -1154,6 +1191,18 @@ struct Draft {
     review_run: u64,
 }
 
+/// §41 (P2-5): the person's press, as the shell reports it with the event
+/// that signs (`ConfirmDraft`, `ProposeExecute`, `Approve`, `Execute`,
+/// `ApproveExecute`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Press {
+    /// The press was the held "… anyway" confirm (or the assistive path's
+    /// second press of it).
+    pub anyway_confirmed: bool,
+    /// "Refuse blind signing" is on.
+    pub refuse_blind: bool,
+}
+
 #[derive(Default)]
 pub struct State {
     /// §37: the person asked to see the proposals no member vouches for.
@@ -1239,6 +1288,11 @@ pub struct State {
     /// Not re-quoted while here ([`look_if_stale`] takes no new look), and
     /// served marked `signing` ([`pressed_looks`]).
     pressing: BTreeSet<String>,
+    /// §41 (P2-5): what the person's press said, per SafeTx hash (lowercase):
+    /// whether it was the "… anyway" confirm, and whether Refuse blind
+    /// signing is on. [`authorize_signing`] checks it against the posture
+    /// it works out itself.
+    presses: BTreeMap<String, Press>,
     verdicts: BTreeMap<String, Value>,
     /// The executions being watched ([`exec_key`]): each flight followed once.
     watching: BTreeSet<String>,
@@ -1794,17 +1848,52 @@ impl App for MultisigProposals {
                     draft(&io, &st, chain_id, proposal).await
                 })
             }
-            Event::ConfirmDraft { as_member } => propose_draft(model, as_member, false),
-            Event::ProposeExecute { as_member } => propose_draft(model, as_member, true),
+            Event::ConfirmDraft {
+                as_member,
+                anyway_confirmed,
+                refuse_blind,
+            } => {
+                note_draft_press(
+                    &mut lock(&model.state),
+                    Press {
+                        anyway_confirmed,
+                        refuse_blind,
+                    },
+                );
+                propose_draft(model, as_member, false)
+            }
+            Event::ProposeExecute {
+                as_member,
+                anyway_confirmed,
+                refuse_blind,
+            } => {
+                note_draft_press(
+                    &mut lock(&model.state),
+                    Press {
+                        anyway_confirmed,
+                        refuse_blind,
+                    },
+                );
+                propose_draft(model, as_member, true)
+            }
             Event::ApproveExecute {
                 chain_id,
                 safe_tx_hash,
                 executor,
                 shown_fee,
+                anyway_confirmed,
+                refuse_blind,
             } => {
                 let pressed = preview_key(chain_id, &safe_tx_hash, &executor);
                 {
                     let mut s = lock(&model.state);
+                    s.presses.insert(
+                        safe_tx_hash.to_ascii_lowercase(),
+                        Press {
+                            anyway_confirmed,
+                            refuse_blind,
+                        },
+                    );
                     let hash = safe_tx_hash.to_ascii_lowercase();
                     s.actions
                         .insert(format!("execute:{hash}"), ActionState::Working);
@@ -1831,11 +1920,21 @@ impl App for MultisigProposals {
                 chain_id,
                 safe_tx_hash,
                 owner,
+                anyway_confirmed,
+                refuse_blind,
             } => {
                 let key = format!("approve:{}", safe_tx_hash.to_ascii_lowercase());
-                lock(&model.state)
-                    .actions
-                    .insert(key.clone(), ActionState::Working);
+                {
+                    let mut s = lock(&model.state);
+                    s.actions.insert(key.clone(), ActionState::Working);
+                    s.presses.insert(
+                        safe_tx_hash.to_ascii_lowercase(),
+                        Press {
+                            anyway_confirmed,
+                            refuse_blind,
+                        },
+                    );
+                }
                 person_flow(model, move |io, st| async move {
                     let outcome = approve(&io, &st, chain_id, &safe_tx_hash, &owner).await;
                     let approved = matches!(outcome, ActionState::Done { .. });
@@ -1877,11 +1976,20 @@ impl App for MultisigProposals {
                 safe_tx_hash,
                 executor,
                 shown_fee,
+                anyway_confirmed,
+                refuse_blind,
             } => {
                 let key = format!("execute:{}", safe_tx_hash.to_ascii_lowercase());
                 let pressed = preview_key(chain_id, &safe_tx_hash, &executor);
                 {
                     let mut s = lock(&model.state);
+                    s.presses.insert(
+                        safe_tx_hash.to_ascii_lowercase(),
+                        Press {
+                            anyway_confirmed,
+                            refuse_blind,
+                        },
+                    );
                     s.actions.insert(key.clone(), ActionState::Working);
                     s.pressing.insert(pressed.clone());
                 }
@@ -2989,6 +3097,25 @@ async fn authorize_signing(
     // §39: a read that stood on one node makes it "… anyway", whatever the
     // review's own rule says — never a plain signature on one node's word.
     let anyway = review.as_ref().is_some_and(|r| r.sign.anyway) || io.read_on_one_node(chain_id);
+    // §41 (P2-5): the "… anyway" is the core's to hold, not the door's: a
+    // press that was not the person's explicit "… anyway" signs no
+    // "… anyway" posture, and with Refuse blind signing on none signs.
+    if anyway {
+        let hash = multisig::safe_tx_hash(chain_id, &account.address, tx)
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let press = lock(st).presses.get(&hash).copied().unwrap_or_default();
+        if press.refuse_blind {
+            return Err(Stop::State(ActionState::Failed {
+                detail: failure::core_reason("blind_refused"),
+            }));
+        }
+        if !press.anyway_confirmed {
+            return Err(Stop::State(ActionState::Failed {
+                detail: failure::core_reason("anyway_not_confirmed"),
+            }));
+        }
+    }
     match multisig_gather::decide(chain_id, &account.address, tx, Some(found), review.as_ref()) {
         multisig_review::Gate::Open => Ok(anyway),
         multisig_review::Gate::Unchecked => Err(Stop::State(unchecked_state(io, chain_id))),
@@ -4641,6 +4768,18 @@ async fn gas_of(io: &Io<Event>, chain_id: u64, from: &str, call: &Call) -> Optio
 
 /// Propose the draft (`ConfirmDraft`) — and, `then_execute`, execute it
 /// once the proposer's own approval made it ready (`ProposeExecute`).
+/// §41 (P2-5): the press on the draft, kept under the draft's own SafeTx
+/// hash — the one [`authorize_signing`] reads for it.
+fn note_draft_press(s: &mut State, press: Press) {
+    if let Some(hash) = s
+        .draft
+        .as_ref()
+        .map(|d| d.item.safe_tx_hash.to_ascii_lowercase())
+    {
+        s.presses.insert(hash, press);
+    }
+}
+
 fn propose_draft(model: &Model, as_member: Option<String>, then_execute: bool) -> Cmd {
     let (round, chain_id, drafted) = {
         let mut s = lock(&model.state);

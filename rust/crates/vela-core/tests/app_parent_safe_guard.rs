@@ -227,7 +227,7 @@ fn assert_refused_as(sut: &mut Sut, function: &str, reason: ParentReason, safe: 
     );
     // However the shell asks, nothing is signed.
     let ops = sut.dispatch(Event::ApproveTapped {
-        opts: SignApproveOpts::default(),
+        opts: support::reviewed_opts(),
     });
     assert!(
         !ops.iter().any(|op| matches!(
@@ -403,7 +403,7 @@ fn an_unknown_target_is_read_before_it_can_be_signed() {
     assert!(view.blocked.is_none());
     // A tap from a stale frame waits too.
     let ops = sut.dispatch(Event::ApproveTapped {
-        opts: SignApproveOpts::default(),
+        opts: support::reviewed_opts(),
     });
     assert!(
         !ops.iter().any(|op| matches!(
@@ -457,7 +457,7 @@ fn a_safe_this_account_does_not_own_opens_once_read() {
     assert!(view.confirm_gate_open, "read false: signable");
     // And the chokepoint lets the read it cleared through.
     let ops = sut.dispatch(Event::ApproveTapped {
-        opts: SignApproveOpts::default(),
+        opts: support::reviewed_opts(),
     });
     assert!(
         ops.iter()
@@ -523,7 +523,7 @@ fn a_rewrite_toward_an_unread_safe_is_refused_at_submit() {
     sut.dispatch(Event::ApproveTapped {
         opts: SignApproveOpts {
             params_override_json: Some(rewritten.to_string()),
-            ..SignApproveOpts::default()
+            ..support::reviewed_opts()
         },
     });
     let ops = sut.resolve(SignShellResult::PreCheck { funding: None });
@@ -553,7 +553,7 @@ fn a_rewrite_toward_a_multisig_is_refused_at_submit() {
     sut.dispatch(Event::ApproveTapped {
         opts: SignApproveOpts {
             params_override_json: Some(rewritten.to_string()),
-            ..SignApproveOpts::default()
+            ..support::reviewed_opts()
         },
     });
     let ops = sut.resolve(SignShellResult::PreCheck { funding: None });
@@ -661,7 +661,7 @@ fn a_safe_tx_for_a_safe_this_account_does_not_own_is_still_refused() {
         Some(SignErrorKind::SelfCallBlocked)
     );
     let ops = sut.dispatch(Event::ApproveTapped {
-        opts: SignApproveOpts::default(),
+        opts: support::reviewed_opts(),
     });
     assert!(
         !ops.iter().any(|op| matches!(

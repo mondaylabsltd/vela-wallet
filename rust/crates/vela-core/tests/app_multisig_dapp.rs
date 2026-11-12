@@ -127,6 +127,8 @@ fn execute(sut: &mut Sut, world: &mut World, account: &MultisigAccount, hash: &s
             chain_id: 100,
             safe_tx_hash: hash.to_owned(),
             owner: fixture(1).address,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     let owners = [fixture(0).address, fixture(1).address, fixture(2).address];
@@ -171,6 +173,8 @@ fn execute(sut: &mut Sut, world: &mut World, account: &MultisigAccount, hash: &s
             safe_tx_hash: hash.to_owned(),
             executor: fixture(0).address,
             shown_fee,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     tx_hash
@@ -190,7 +194,11 @@ fn its_review_comes_first_and_proposed_is_not_answered() {
     run_short(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     assert_eq!(world.passkeys.len(), 1, "one passkey prompt");
     let held = sut.view().dapp["r1"].clone();
@@ -229,7 +237,11 @@ fn a_close_after_proposing_says_proposed_once() {
     run_short(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     let hash = sut.view().dapp["r1"].safe_tx_hash.clone().unwrap();
     run_short(&mut sut, &mut world, Event::DappLeave { id: "r1".into() });
@@ -257,7 +269,11 @@ fn the_site_is_told_proposed_before_the_limit() {
     run_short(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     assert_eq!(answer(&sut, "r1"), None);
     let t0 = world.now;
@@ -277,7 +293,11 @@ fn executed_the_site_gets_the_transaction_that_ran_it() {
     run_short(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     let hash = sut.view().dapp["r1"].safe_tx_hash.clone().unwrap();
     let tx = execute(&mut sut, &mut world, &account, &hash);
@@ -296,7 +316,11 @@ fn its_number_used_by_another_is_the_members_cancelling_it() {
     run_short(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     let owners = [fixture(0).address, fixture(1).address, fixture(2).address];
     let mut safe = DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2);
@@ -319,7 +343,11 @@ fn a_dismissed_passkey_answers_nothing() {
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     let view = sut.view();
     assert_eq!(view.actions["propose"], ActionState::Cancelled);
@@ -367,7 +395,11 @@ fn a_batch_is_one_proposal_answered_its_id_then_followed() {
     run_short(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     let held = sut.view().dapp["b1"].clone();
     let hash = held.safe_tx_hash.clone().unwrap();
@@ -457,7 +489,11 @@ fn a_batch_proposed_while_the_list_is_read_still_says_its_number() {
         sut.resolve_matching(|o| *o == op, res);
     }
     assert_eq!(held_back.len(), 1, "the poll's read is out");
-    sut.dispatch(Event::ConfirmDraft { as_member: None });
+    sut.dispatch(Event::ConfirmDraft {
+        as_member: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
     for _ in 0..20_000 {
         let next = sut
             .outstanding()
@@ -564,7 +600,11 @@ fn a_site_transaction_ready_on_its_proposal_runs_in_one_press() {
     run_short(
         &mut sut,
         &mut world,
-        Event::ProposeExecute { as_member: None },
+        Event::ProposeExecute {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     assert_eq!(world.sent.len(), 1, "{:?}", sut.view().actions);
     assert!(matches!(
@@ -847,7 +887,11 @@ fn a_site_draft_that_would_change_the_multisig_is_never_proposed() {
     run_short(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     assert_eq!(
         sut.view().actions.get("propose"),
@@ -881,7 +925,11 @@ fn the_members_own_change_of_members_is_still_proposed() {
     run_short(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     assert!(
         matches!(

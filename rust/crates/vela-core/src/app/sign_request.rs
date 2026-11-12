@@ -315,7 +315,7 @@ pub fn fee_rose(shown: Option<&SignQuotedFee>, now: Option<&SignQuotedFee>) -> b
 
 /// The approve-tap payload — `approveRequest(opts)` (`dapp-connection.tsx:623`),
 /// bigints as decimal strings.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct SignApproveOpts {
     /// Wei, decimal string.
@@ -383,6 +383,37 @@ pub struct SignApproveOpts {
     /// them from the built-in table, or not at all.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reading: Option<super::dapp_activity::DappReading>,
+    /// §41 (P2-5): what the sheet showed when the confirm fired — the
+    /// reading, the approval guard's view and the simulation's verdict, as
+    /// the core's own machines made them, and the person's "Refuse blind
+    /// signing" — from which THIS machine works out the confirm's posture
+    /// again (`sign_confirm::posture`, `guarded_posture`). `None` (a shell
+    /// that sends none) is no review: nothing is signed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review: Option<ApproveReview>,
+    /// §41 (P2-5): the person confirmed "… anyway" — the held press (or the
+    /// assistive path's second one) of a confirm the posture says is
+    /// "… anyway". Checked here against the posture worked out from
+    /// [`Self::review`]: a plain approve of an "… anyway" posture is not
+    /// taken, and with Refuse blind signing on none is.
+    #[serde(default)]
+    pub anyway_confirmed: bool,
+}
+
+/// §41 (P2-5): the sheet as the person saw it at the confirm — the core
+/// machines' own views, handed back verbatim — for the signing machine's own
+/// check of the posture ([`SignApproveOpts::review`]). The hold's duration
+/// stays the shell's: only whether the confirm was "… anyway", and whether
+/// it may be at all, is decided here.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct ApproveReview {
+    pub clear: super::clear_signing::ClearSigningView,
+    pub guard: super::approval_guard::GuardView,
+    #[serde(default)]
+    pub sim: Option<super::sim_outcome::SimVerdict>,
+    #[serde(default)]
+    pub refuse_blind: bool,
 }
 
 /// Bundler gas-account funding facts (`FundingNeeded`), amounts as decimal
@@ -3344,6 +3375,28 @@ fn kill_presubmit_pipeline(model: &mut Model) {
 // Approve pipeline
 // ---------------------------------------------------------------------------
 
+/// §41 (P2-5): whether the approve may go on, by the posture this machine
+/// works out itself ([`SignApproveOpts::review`]).
+fn posture_admits(model: &Model, opts: &SignApproveOpts) -> bool {
+    use super::clear_signing::ClearSurface;
+    use super::sign_confirm::{guarded_posture, is_transaction, posture};
+    let Some(review) = opts.review.as_ref() else {
+        return false;
+    };
+    let view = SignRequest.view(model);
+    if review.clear.resolving || review.clear.surface == ClearSurface::Loading {
+        return false;
+    }
+    if review.clear.surface == ClearSurface::None && is_transaction(&view) {
+        return false;
+    }
+    let held = guarded_posture(
+        posture(&view, &review.clear, review.sim.as_ref()),
+        &review.guard,
+    );
+    !held.anyway || (opts.anyway_confirmed && !review.refuse_blind)
+}
+
 fn approve_with(
     model: &mut Model,
     opts: SignApproveOpts,
@@ -3386,6 +3439,15 @@ fn approve_with(
     // held ([`ConfirmBlock::SimChecking`]); a tap from a stale frame waits
     // too — nothing is approved ahead of the one line the site cannot write.
     if model.sim_checking() {
+        return Command::done();
+    }
+    // §41 (P2-5): the posture is the core's, at approve time, not the
+    // shell's word. Worked out again from what the sheet showed (the
+    // reading, the guard, the verdict): a request whose reading is still out
+    // or never started is not taken; an "… anyway" posture is taken only on
+    // the person's explicit "… anyway", and never with Refuse blind signing
+    // on. Like every gate above, a tap the core does not take signs nothing.
+    if !posture_admits(model, &opts) {
         return Command::done();
     }
     let Some(signer) = model.accounts.get(model.active_index as usize).cloned() else {

@@ -688,11 +688,22 @@ pub(super) fn update(event: Event, model: &mut Model) -> Cmd {
         Event::ApproveOutside {
             chain_id,
             safe_tx_hash,
+            anyway_confirmed,
+            refuse_blind,
         } => {
             let key = format!("approve:{}", safe_tx_hash.to_ascii_lowercase());
-            lock(&model.state)
-                .actions
-                .insert(key.clone(), ActionState::Working);
+            {
+                let mut s = lock(&model.state);
+                s.actions.insert(key.clone(), ActionState::Working);
+                s.presses.insert(
+                    safe_tx_hash.to_ascii_lowercase(),
+                    super::Press {
+                        anyway_confirmed,
+                        refuse_blind,
+                    },
+                );
+            }
+
             flow(model, move |io, st| async move {
                 let outcome = approve_outside(&io, &st, chain_id, &safe_tx_hash, &key).await;
                 lock(&st).actions.insert(key, outcome);

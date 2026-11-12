@@ -171,7 +171,7 @@ fn approved() -> DomainDriver<SignRequest> {
         first_party: false,
     });
     sign.dispatch(SignEvent::ApproveTapped {
-        opts: SignApproveOpts::default(),
+        opts: support::reviewed_opts(),
     });
     let ops = sign.resolve(SignRes::PreCheck { funding: None });
     assert!(
