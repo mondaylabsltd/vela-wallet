@@ -336,6 +336,65 @@ class ParentSafeEntryPointsTest {
         closeRefused(c)
     }
 
+    /**
+     * 0.9.10: a page writes the Safe's address without its `0x` (or `0X`, or
+     * under-width) — the encoders read it as the Safe, 0.9.9's guard did not.
+     * Every arrival case of the vector is answered -32602 before any read or
+     * sheet, nothing signed, and the page hears it.
+     */
+    @Test
+    fun `a non-canonical address from a page is answered -32602 before any read, never signed`() = runBlocking<Unit> {
+        val cases = vector.getJSONArray("cases").let { all -> (0 until all.length()).map(all::getJSONObject) }
+            .filter { it.getJSONObject("expect").optString("verdict") == "invalid" }
+        assertTrue("the arrival cases: ${cases.size}", cases.size >= 7)
+        for ((n, c) in cases.withIndex()) {
+            val name = c.getString("name")
+            responses.clear()
+            reads.clear()
+            val input = c.getJSONObject("input")
+            val h = browser(signer, chain)
+            val op = pageAsks(h, "b$n", input.getString("method"), input.getJSONArray("params"))
+            val ctl = controller { _, _, _ -> returned(word(1)) }
+            ctl.open(incoming(op))
+            withTimeout(10_000) { while (responses.isEmpty()) delay(10) }
+            val answer = responses.single() as SignResponsePayload.Err
+            assertEquals(name, -32602, answer.code)
+            assertEquals(name, SignErrorKind.InvalidParams, answer.kind)
+            assertTrue("$name: never read: $reads", reads.isEmpty())
+            assertEquals(name, 0, signs.get())
+            h.dispatch(DbrEvent.SigningAnswered("tab-1", "b$n", answer, null), DbrEvent.serializer())
+            assertEquals(name, -32602, pageAnswer("b$n").getJSONObject("error").getInt("code"))
+        }
+    }
+
+    /** 0.9.10: a page's SafeMessage / SafeOp for a Safe v1.5.0 this account owns is its approval — read, refused. */
+    @Test
+    fun `a SafeMessage or SafeOp for an owned Safe v1_5_0 is refused once read owned`() = runBlocking<Unit> {
+        for ((n, pair) in listOf(
+            "0.9.10 v1.5.0: SafeMessage under an owned Safe v1.5.0's domain, isOwner true: refused" to "SafeMessage",
+            "0.9.10 v1.5.0: SafeOp for an owned Safe v1.5.0 (its `safe`), under the 4337 module's domain: refused" to "SafeOp",
+        ).withIndex()) {
+            val (name, function) = pair
+            responses.clear()
+            reads.clear()
+            val input = case(name)
+            val h = browser(signer, chain)
+            val op = pageAsks(h, "v$n", input.getString("method"), input.getJSONArray("params"))
+            val ctl = controller { _, _, _ -> returned(word(1)) }
+            ctl.open(incoming(op))
+            val view = refused(ctl)
+            assertEquals(name, parent, view.blocked!!.parent)
+            assertEquals(name, ParentReason.Owner, view.blocked!!.reason)
+            assertEquals(name, function, view.blocked!!.function)
+            assertEquals(name, listOf(parent), reads.map { it.second })
+            assertEquals(
+                strings.t("componentsUi.signing.parentSafeBlocked", mapOf("function" to function, "safe" to ExploreLive.shortAddress(parent))),
+                sheetWords(view),
+            )
+            closeRefused(ctl)
+        }
+    }
+
     @Test
     fun `the read is answered as the node said - result verbatim, its error, or unreachable`() {
         fun body(json: JSONObject) = RpcResult.Body(json)

@@ -154,6 +154,71 @@ class ParentSafeGuardDeviceTest {
         assertAnsweredRefused(script)
     }
 
+    /**
+     * 0.9.10: the same takeover with the Safe's address written without its
+     * `0x` — the encoders read it as the Safe, 0.9.9's guard did not — is
+     * answered -32602 at arrival by this phone's core: no read, no sheet,
+     * nothing signed.
+     */
+    @Test
+    fun the_bare_hex_takeover_is_answered_invalid_params_by_this_phones_core() {
+        val verdict = JSONObject(
+            parentSafeCheck(
+                JSONObject().put("method", "eth_sendTransaction").put("params", tx(parent.removePrefix("0x"), takeoverData))
+                    .put("signer", signer).put("chain_id", chain).put("answers", JSONArray()).put("at_submit", false)
+                    .put("at_arrival", true).toString(),
+            ),
+        )
+        assertEquals("invalid", verdict.getString("verdict"))
+        assertEquals("Invalid transaction `to`: expected 0x followed by 40 hex characters", verdict.getString("message"))
+
+        for (to in listOf(parent.removePrefix("0x"), "0X" + parent.removePrefix("0x"), parent.dropLast(2))) {
+            asked.clear()
+            val script = machine { SafeOwnerAnswer.Returned(owned) }
+            arrive(script, tx(to, takeoverData))
+            assertFalse("$to: never read", asked.any { it.optString("type") == "read_safe_owner" })
+            val payload = asked.single { it.optString("type") == "send_response" }.getJSONObject("payload")
+            assertEquals(to, -32602, payload.getInt("code"))
+            assertEquals(to, "invalid_params", payload.getString("kind"))
+            assertEquals(to, null, view(script).blocked)
+            assertFalse("$to: nothing signed", asked.any { it.optString("type") == "sign_and_submit" })
+        }
+    }
+
+    /** 0.9.10: a site's SafeOp for a Safe this account owns (under a Safe v1.5.0, its approval) — read, refused. */
+    @Test
+    fun a_safe_op_for_an_owned_safe_is_refused_by_this_phones_core() {
+        val module = "0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226"
+        val doc = JSONObject()
+            .put("types", JSONObject()
+                .put("EIP712Domain", JSONArray().put(JSONObject().put("name", "chainId").put("type", "uint256")).put(JSONObject().put("name", "verifyingContract").put("type", "address")))
+                .put("SafeOp", JSONArray().put(JSONObject().put("name", "safe").put("type", "address")).put(JSONObject().put("name", "nonce").put("type", "uint256")).put(JSONObject().put("name", "callData").put("type", "bytes"))))
+            .put("primaryType", "SafeOp")
+            .put("domain", JSONObject().put("chainId", chain).put("verifyingContract", module))
+            .put("message", JSONObject().put("safe", parent).put("nonce", "0").put("callData", "0x"))
+        val script = machine { SafeOwnerAnswer.Returned(owned) }
+        script.dispatch(
+            Wire.json.encodeToString(
+                SignEvent.serializer(),
+                SignEvent.RequestArrived(
+                    id = "rid-1", method = "eth_signTypedData_v4", params_json = JSONArray().put(signer).put(doc.toString()).toString(),
+                    origin = "https://app.example", transport_id = "tab-1", dedicated_transport = true, per_request_chain = chain,
+                    granted_address = signer, now_ms = 1.0,
+                ),
+            ),
+        )
+        assertEquals("the Safe is read, never the module", listOf(parent), asked.filter { it.optString("type") == "read_safe_owner" }.map { it.getString("safe") })
+        val view = view(script)
+        assertEquals(parent, view.blocked!!.parent)
+        assertEquals(ParentReason.Owner, view.blocked!!.reason)
+        assertEquals("SafeOp", view.blocked!!.function)
+        assertEquals(
+            strings.t("componentsUi.signing.parentSafeBlocked", mapOf("function" to "SafeOp", "safe" to ExploreLive.shortAddress(parent))),
+            sheetWords(view),
+        )
+        assertAnsweredRefused(script)
+    }
+
     @Test
     fun a_safe_nobody_could_read_is_refused_couldnt_check() {
         val script = machine { SafeOwnerAnswer.Unreachable("offline") }
