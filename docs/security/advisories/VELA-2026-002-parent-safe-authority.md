@@ -4,13 +4,13 @@
 | --- | --- |
 | Title | A connected site could make a Vela account approve or execute for a Safe it owns |
 | Ecosystem / package | Other / `mondaylabsltd/vela-wallet` |
-| Affected versions | `<= 0.9.8` when the Vela account is an owner of another Safe (see "Affected versions"). The multisig feature never shipped with it. |
-| Patched versions | The first release that contains merge `64da454d3` (not released yet) |
+| Affected versions | `<= 0.9.9` when the Vela account is an owner of another Safe (0.9.9 only for a non-canonical address spelling, or a `SafeMessage`/`SafeOp` on a Safe v1.5.0 parent; see "Affected versions"). The multisig feature never shipped with it. |
+| Patched versions | 0.9.9 for targets written `0x` + 40 hex digits; completed in **0.9.10** |
 | Severity | High (Vela's assessment); CVSS 3.1 base 6.1 |
 | CVSS vector | `CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:C/C:N/I:H/A:N` |
 | Weakness | CWE-441: Unintended Proxy or Intermediary ("Confused Deputy") |
 | Credit | An external researcher (reported 2026-09-29, in the appendix to the VELA-2026-001 report) |
-| Status | **Fixed before release; Vela multisig never shipped with it.** Released versions remain exposed in the uncommon setup described below until the next release. The fix does not yet cover a target address written in a non-canonical spelling ("Known gap in the fix", below; fix in progress). **Do not publish this advisory before a release with the complete fix ships.** |
+| Status | **Fixed.** 0.9.9 refused the attack for targets written `0x` + 40 hex digits; 0.9.10 completes it: a non-canonical address (bare hex, `0X`, under-width) is refused at arrival (-32602), and `SafeTx`, `SafeMessage` and `SafeOp` for any Safe the account owns are refused whatever its version (a Safe v1.5.0 parent accepts an owner's wrapped signature). Vela multisig never shipped with the issue. Publish once 0.9.10 is released. |
 
 ## Summary
 
@@ -86,9 +86,12 @@ setup.
 | Version | Status |
 | --- | --- |
 | up to v0.9.5 | Affected: the reported two-document form, plus forms (a), (b), (c) |
-| v0.9.6 to v0.9.8 (current release) | Affected: forms (a), (b), and (c) with `SafeMessage`, but only for a Vela account that owns another Safe |
+| v0.9.6 to v0.9.8 | Affected: forms (a), (b), and (c) with `SafeMessage`, but only for a Vela account that owns another Safe |
+| v0.9.9 | Affected only for a target written without `0x`, as `0X` or under-width, and for `SafeMessage` / `SafeOp` on a Safe v1.5.0 parent |
+| v0.9.10 | Fixed |
 | `feat/multisig-account` before `64da454d3` | Affected (unreleased) |
-| `feat/multisig-account` from `64da454d3` | Fixed for targets written as `0x` and 40 hex digits; other spellings open (see "Known gap in the fix") |
+| `feat/multisig-account` from `64da454d3` to before `final-core-fixes` | Fixed for targets written as `0x` and 40 hex digits; other spellings open (unreleased) |
+| `feat/multisig-account` from the `final-core-fixes` merge (§41) | Fixed |
 
 ## Fix
 
