@@ -15,8 +15,10 @@ use it. Vela is in <a href="/blog/vela-is-in-alpha">alpha</a> — start with sma
 amounts. Vela has no token. Everything here can be checked against the
 open-source code; where the code and this page disagree, the code is right and
 this page is a bug. Last verified against commit <code>fa6083c87</code> (the
-development branch, which includes the unreleased multisig feature). The
-reference threat model, with a code location and a test for every claim, is
+development branch, which includes the unreleased multisig feature); what it says
+about the web core's reproducible build and attestation was corrected against
+<code>dff291256</code>. The reference threat model, which cites the code and tests
+for each claim and lists the known gaps, is
 <a href="https://github.com/mondaylabsltd/vela-wallet/blob/main/docs/SECURITY-MODEL.md">SECURITY-MODEL.md</a>.
 </Callout>
 
@@ -154,9 +156,10 @@ The domain is also a dependency this paper returns to below.
   recipient are part of what you sign, so you pay exactly what the confirm screen
   showed.
 - Where the relay bills the gas an operation uses, the fee is
-  **`settlementGas × inBandFeePerGas`**: the gas the relay says it will bill,
-  times the per-gas price it publishes for the chosen speed, with a minimum of
-  about $0.01. The wallet checks both. It refuses a `settlementGas` above the
+  **`settlementGas × inBandFeePerGas`, plus 12.5%**: the gas the relay says it
+  will bill, times the per-gas price it publishes for the chosen speed, plus one
+  block's largest base-fee rise (charged, not refunded), with a minimum of about
+  $0.01. The wallet checks both figures. It refuses a `settlementGas` above the
   smaller of the gas limits the operation is signed with and 125% of the wallet's
   own gas model plus 50,000, and a per-gas price more than three times the same
   formula applied to its own gas-price reading. Against a relay that publishes
@@ -300,8 +303,12 @@ self-custody gives you is that Vela is not a second party who can.
   [Bybit](/docs/bybit-attack) class of attack, and **for a wallet whose keys
   belong to getvela.app, Vela does not stop it**: a compromised wallet can ask
   your passkey for a signature directly. What exists: the web core (the compiled
-  code that makes every decision) rebuilds byte for byte from the source and is
-  attested by CI; release packages carry GitHub build-provenance attestations
+  code that makes every decision) is built in a pinned container, and CI rebuilds
+  it on every change and compares it byte for byte with the committed file. Two
+  clean builds on macOS matched; a Linux build matching the macOS one has not been
+  measured yet. CI attests the web core only after a merge to the main branch whose
+  rebuild matches, and none has happened yet, so no web core served today carries
+  an attestation. Release packages carry GitHub build-provenance attestations
   (macOS images are notarized; the Windows installer is not code-signed); and you
   can build the extension or apps yourself. The
   [Trusted Signer](/docs/clear-signing-self-host), an independent signing page

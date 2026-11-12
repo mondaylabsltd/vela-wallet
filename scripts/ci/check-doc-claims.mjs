@@ -8,7 +8,8 @@
  *
  * A security document is only worth reading if what it cites is there. For
  * every document checked (default: docs/SECURITY-MODEL.md,
- * docs/security/hardening.md, docs/security/review-pack.md) this fails when:
+ * docs/security/hardening.md, docs/security/review-pack.md,
+ * docs/security/verify.md) this fails when:
  *
  *   - a repository path in a code span (`rust/crates/vela-core/src/app/send.rs`,
  *     `tests/vectors/rules/rp-id.json`, `e2e/page-from-bytes.e2e.ts`) names
@@ -52,7 +53,8 @@ const ROOT = normalize(join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 export const DEFAULT_DOCS = [
 	'docs/SECURITY-MODEL.md',
 	'docs/security/hardening.md',
-	'docs/security/review-pack.md'
+	'docs/security/review-pack.md',
+	'docs/security/verify.md'
 ];
 
 /** Top-level names a slash path without an extension must start with to be read as ours. */

@@ -58,6 +58,12 @@ describe('the privacy page', () => {
 		expect(page).toContain('They are off until you switch on');
 		expect(page).toContain('Nothing about a transaction is ever sent');
 		expect(page).toContain("A site's request to send a transaction is never counted.");
+		// Final review: an approval is counted bare, and the page says so
+		// rather than claiming nothing can be matched to a transaction.
+		expect(page).toContain(
+			'only the approval is counted: not what kind of request it was, and not its network'
+		);
+		expect(page).not.toContain('no statistic can be matched to a transaction on chain');
 		// The words of the opt-out era are gone.
 		expect(page).not.toContain('"send confirmed"');
 		expect(page).not.toContain('turns it off on that browser');

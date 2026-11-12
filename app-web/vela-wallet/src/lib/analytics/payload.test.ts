@@ -296,4 +296,22 @@ describe('transaction outcomes', () => {
 	it("a site's transaction request is a kind nothing counts", () => {
 		expect([...TX_REQUEST_KINDS].sort()).toEqual(['send_calls', 'send_transaction']);
 	});
+
+	// Final review: an approved signature (a permit, an order) is taken on
+	// chain by the site; its kind, network and time would point at that
+	// transaction. An approval carries neither, whatever a call site passes.
+	it("a site's approved request says neither its kind nor its network", () => {
+		expect(EVENTS.dapp_request_approved).toEqual([]);
+		for (const kind of ['sign_typed_data', 'sign_message', 'add_network', 'other']) {
+			const payload = buildPayload(
+				{
+					type: 'custom_event',
+					name: 'dapp_request_approved',
+					properties: { kind, chain: 8453 } as never
+				},
+				CONTEXT
+			);
+			expect(JSON.parse(payload!.properties!)).toEqual({ surface: 'web', locale: 'ja' });
+		}
+	});
 });

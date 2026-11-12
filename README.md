@@ -124,9 +124,11 @@ findings and the past advisories are on
 [Audits & known issues](https://getvela.app/docs/security-audits).
 
 The threat model is **[docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md)**: what
-each defence guarantees and what it does not, with a code location and a test
-for every claim (checked in CI by `scripts/ci/check-doc-claims.mjs`), every
-"… anyway" override, and the known gaps. An auditor's scope document, with a
+each defence guarantees and what it does not, citing the code and the tests for
+each claim, every "… anyway" override, and the known gaps. CI
+(`scripts/ci/check-doc-claims.mjs`) checks that every cited path, symbol and id
+exists; it does not check that the cited code or test supports the sentence
+around it. That is the reader's to judge. An auditor's scope document, with a
 one-page "how to verify Vela yourself", is
 [docs/security/review-pack.md](docs/security/review-pack.md).
 
@@ -217,7 +219,7 @@ and does not guarantee is in
 
 ## Gas & Fee Model
 
-*The Security, Service endpoints and fee sections were last verified against commit `fa6083c87` (2026-11-09).*
+*The Security, Service endpoints and fee sections were last verified against commit `fa6083c87` (2026-11-09); the threat-model paragraph and the in-band fee formula (its 12.5% headroom) were corrected against `dff291256` (2026-11-12).*
 
 Vela Wallet uses ERC-4337 account abstraction, so transactions are relayed by a **bundler** instead of being submitted directly by the user. This means:
 
@@ -226,7 +228,7 @@ Vela Wallet uses ERC-4337 account abstraction, so transactions are relayed by a 
 Each transaction incurs a gas fee deducted from **your Safe wallet** — in the network's native token by default, or in a supported stablecoin where the bundler offers ERC-20 settlement (Tempo has no native coin, so gas there is always settled in USD stablecoins). The fee consists of:
 
 - **On-chain gas cost** — The actual cost to execute the transaction on the blockchain.
-- **Relayer service fee** — one rule in `rust/crates/vela-core/src/app/fee_policy.rs`, shared by every shell. Where the relay bills the gas an operation uses (Ethereum, Gnosis, Polygon, BNB Chain and their testnets), the charge is **`settlementGas × inBandFeePerGas`** for the chosen speed (the default is *standard*), with minimums of 0.00001 native units or $0.01 in stablecoins. The wallet refuses a `settlementGas` above the lower of the signed gas limits and 125% of its own gas model + 50,000, and a per-gas price above 3× the same formula on its own gas reading. Against a relay that publishes neither figure, the charge is **3 × the gas limits × the higher of the wallet's and the relay's gas price** (`INBAND_MARKUP`; 2× on Tempo). Either way it is more than the chain burns, and the difference is never refunded. Measured on a Uniswap swap on Base under the 3× rule (spec 083), the charge was about **14×** the on-chain cost ($0.098 against $0.0068). The margin pays the relayer that fronts the gas and runs the infrastructure. Details: [ARCHITECTURE "Fee model"](docs/ARCHITECTURE.md#fee-model).
+- **Relayer service fee** — one rule in `rust/crates/vela-core/src/app/fee_policy.rs`, shared by every shell. Where the relay bills the gas an operation uses (Ethereum, Gnosis, Polygon, BNB Chain and their testnets), the charge is **`settlementGas × inBandFeePerGas`** for the chosen speed (the default is *standard*), plus 12.5% (`FEE_HEADROOM_BPS`: one block's largest base-fee rise, so a quote that moves that much still signs the figure shown; charged, not refunded), with minimums of 0.00001 native units or $0.01 in stablecoins. The wallet refuses a `settlementGas` above the lower of the signed gas limits and 125% of its own gas model + 50,000, and a per-gas price above 3× the same formula on its own gas reading. Against a relay that publishes neither figure, the charge is **3 × the gas limits × the higher of the wallet's and the relay's gas price** (`INBAND_MARKUP`; 2× on Tempo). Either way it is more than the chain burns, and the difference is never refunded. Measured on a Uniswap swap on Base under the 3× rule (spec 083), the charge was about **14×** the on-chain cost ($0.098 against $0.0068). The margin pays the relayer that fronts the gas and runs the infrastructure. Details: [ARCHITECTURE "Fee model"](docs/ARCHITECTURE.md#fee-model).
 
 The confirmation screen shows a single quoted total in the fee asset and in fiat, rounded up. The quoted amount and its recipient are part of the signed payload, so the relayer is paid exactly what was shown, and the figures pressed are frozen until the signature: a quote that moves in between signs nothing. Every operation is valid for 30 minutes (`validUntil`), so a relay cannot land it later.
 

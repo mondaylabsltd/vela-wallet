@@ -5,7 +5,7 @@ there is, where the code that decides safety lives, how to build and test it, wh
 known to be open, and how to reach us. The threat model is
 [`docs/SECURITY-MODEL.md`](../SECURITY-MODEL.md); read it first.
 
-**Prepared against commit `fa6083c87`** (branch `feat/multisig-account`, 2026-11-09). The latest
+**Prepared against commit `fa6083c87`** (branch `feat/multisig-account`, 2026-11-09); its CI and test-corpus sections re-checked at `dff291256` with the final review's CI fixes (2026-11-12). The latest
 release, v0.9.8 on `main`, predates the Round 21–22 hardening and the multisig feature
 ([SECURITY-MODEL §1](../SECURITY-MODEL.md#1-scope-and-status)). Every path and symbol below is
 checked to exist by `scripts/ci/check-doc-claims.mjs` in CI.
@@ -52,7 +52,7 @@ Where a bug costs funds or authority. Start here.
 | --- | --- | --- |
 | **Signing: what is hashed** | `user_op::signable_safe_op_hash`, `signed_review::reviewed_safe_op_hash`, `signed_review::dapp_safe_op_hash`, `signed_review::dapp_message_hash`, `rust/crates/vela-core/src/typed_data_request.rs`, `rust/crates/vela-core/src/sign_message.rs` | make a shell hash something other than the reviewed calls, fee leg, digest, chain or account; a typed-data request whose preview and digest differ (the VELA-2026-001 class) |
 | **The dApp signing machine** | `rust/crates/vela-core/src/app/sign_request.rs` (arrival, `proceed_submit`), `sign_confirm::posture`, `sign_confirm::with_posture` | reach a plain confirm over an unread check; skip the submit re-check; get a "… anyway" past Refuse blind signing |
-| **Guards** | `self_call_guard::detect_self_call`, `parent_safe_guard::verdict`, `parent_safe_guard::enforce`, `approval_guard::calldata_approvals`, `clear_signing::sign_in_refusal` | a takeover shape the recursion misses (depth, encoding, a carrier not listed); an `isOwner` answer that clears a Safe the account owns; an approval the detector misses |
+| **Guards** | `self_call_guard::detect_self_call`, `parent_safe_guard::verdict`, `parent_safe_guard::enforce`, `approval_guard::calldata_approvals`, `clear_signing::sign_in_refusal` | a takeover shape the recursion misses (depth, encoding, a carrier not listed; a target address in a non-canonical spelling is already known, SECURITY-MODEL G24); an `isOwner` answer that clears a Safe the account owns; an approval the detector misses |
 | **Clear signing and provenance** | `rust/crates/vela-core/src/app/clear_signing.rs` (`ClearProvenance`, `project_result`) | a descriptor or selector reading that grades green, or reads as "verified", without being built in |
 | **Simulation and corroboration** | `rust/crates/vela-core/src/app/corroborate.rs`, `sim_outcome::classify_envelope`, `rust/crates/vela-core/src/app/rpc_pool.rs` (witness phase, chain-id probe) | one lying node producing a plain verdict; two endpoints of one provider counted as independent; a witness answer reused across chains |
 | **Fees** | `rust/crates/vela-core/src/app/fee_policy.rs` (`settlement_gas_cap`, `IN_BAND_PRICE`, `fee_figure`), `send::press_frozen`, `send::max_shown_exact` | a charge above what was shown; a relay bill above the cap; a quote change under the press that signs |
@@ -107,10 +107,13 @@ key or production service. **Please do not write to production services** (SECUR
 harbour): key-index registrations and registry records are permanent.
 
 CI (`.github/workflows/ci.yml`) runs on every pull request: the core on Linux and macOS, the
-Kotlin and Swift binding corpora, the web unit suite and one e2e spec, the signing page's rebuild
-under Bun and Node, the supply-chain gates, the web-core rebuild, and the claims check. The full
-web e2e suite, the signing-page suites and the fork suites run nightly
-(`.github/workflows/nightly.yml`).
+Kotlin and Swift binding corpora, the web unit suite and two e2e specs
+(`extension-site-start.e2e.ts`, `security-headers.e2e.ts`), the website's unit suite (its
+app-association files, security.txt and headers among them), the signing page's rebuild under
+Bun and Node, the supply-chain gates, the web-core rebuild, and the claims check. Which of
+these stop a merge is the repository's branch-protection setting, an owner action this
+repository cannot show. The full web e2e suite, the signing-page suites and the fork suites run
+nightly (`.github/workflows/nightly.yml`); nightly runs gate no merge.
 
 ---
 
@@ -121,9 +124,9 @@ web e2e suite, the signing-page suites and the fork suites run nightly
 | Conformance vectors (crypto, ABI, EIP-712, Safe addresses, WebAuthn, identicons, i18n) | `rust/crates/vela-core/tests/vectors/` (65 files) | Rust, the Kotlin and Swift bindings, the shipped wasm (`rust/crates/vela-core/tests/conformance.rs`) |
 | Security rules | `rust/crates/vela-core/tests/vectors/rules/`: `parent-safe-guard.json`, `multisig-self-call.json`, `signing-truth.json`, `lying-index.json`, `settlement-gas-cap.json`, `send-fee-cover.json`, `rp-id.json`, `production-writes.json`, `passkey-errors.json`, `transport-failures.json` | the core and every shell through the real core |
 | Multisig review | `rust/crates/vela-core/tests/vectors/multisig/`, `rust/crates/vela-core/tests/vectors/multisig-review/` | the core and every shell's review replay |
-| Fork tests (real contracts on a local Gnosis fork) | `rust/crates/vela-core/tests/multisig_fork.rs`, `rust/crates/vela-core/tests/signing_truth_fork.rs`, `rust/crates/vela-core/tests/lying_index_fork.rs`, `rust/crates/vela-core/tests/safe_op_window_fork.rs`, `rust/crates/vela-core/tests/erc6492_fork.rs`; the lying RPC is `rust/crates/vela-core/tests/fork_proxy` | nightly CI |
+| Fork tests (real contracts on a local Gnosis fork) | `rust/crates/vela-core/tests/multisig_fork.rs`, `rust/crates/vela-core/tests/signing_truth_fork.rs`, `rust/crates/vela-core/tests/lying_index_fork.rs`, `rust/crates/vela-core/tests/safe_op_window_fork.rs`, `rust/crates/vela-core/tests/erc6492_fork.rs` (with `scripts/onchain/erc6492/verify.mjs`); the lying RPC is `rust/crates/vela-core/tests/fork_proxy` | nightly CI, all five in the `multisig-fork` job; the job skips itself while `vars.SGR_MAILBOX_REF` (the pinned genesis service the harness starts) is unset |
 | Signing-page suites (hostile inputs, takeover shapes, digests, the SW pin) | `app-web/trusted-signer/samples/` (`hostile-test.mjs`, `takeover-test.mjs`, `safeop-test.mjs`, `sw-pin-test.mjs`, …) | `scripts/ci/trusted-signer-suites.sh` |
-| Web end to end | `app-web/vela-wallet/e2e/` (`parent-safe-guard.e2e.ts`, `page-from-bytes.e2e.ts`, `security-headers.e2e.ts`, `e2e/onchain/` against the fork) | nightly (one spec in CI `web`) |
+| Web end to end | `app-web/vela-wallet/e2e/` (`parent-safe-guard.e2e.ts`, `page-from-bytes.e2e.ts`, `security-headers.e2e.ts`, `e2e/onchain/` against the fork) | nightly (`security-headers.e2e.ts` and `extension-site-start.e2e.ts` also in CI `web`) |
 | Cross-platform scenario manifest | `docs/scenarios/multisig.yaml` | `scripts/ci/check-scenarios.mjs` |
 
 ---

@@ -10,7 +10,7 @@
 | CVSS vector | `CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:C/C:N/I:H/A:N` |
 | Weakness | CWE-441: Unintended Proxy or Intermediary ("Confused Deputy") |
 | Credit | An external researcher (reported 2026-09-29, in the appendix to the VELA-2026-001 report) |
-| Status | **Fixed before release; Vela multisig never shipped with it.** Released versions remain exposed in the uncommon setup described below until the next release. **Do not publish this advisory before that release ships.** |
+| Status | **Fixed before release; Vela multisig never shipped with it.** Released versions remain exposed in the uncommon setup described below until the next release. The fix does not yet cover a target address written in a non-canonical spelling ("Known gap in the fix", below; fix in progress). **Do not publish this advisory before a release with the complete fix ships.** |
 
 ## Summary
 
@@ -88,7 +88,7 @@ setup.
 | up to v0.9.5 | Affected: the reported two-document form, plus forms (a), (b), (c) |
 | v0.9.6 to v0.9.8 (current release) | Affected: forms (a), (b), and (c) with `SafeMessage`, but only for a Vela account that owns another Safe |
 | `feat/multisig-account` before `64da454d3` | Affected (unreleased) |
-| `feat/multisig-account` from `64da454d3` | Fixed |
+| `feat/multisig-account` from `64da454d3` | Fixed for targets written as `0x` and 40 hex digits; other spellings open (see "Known gap in the fix") |
 
 ## Fix
 
@@ -118,6 +118,17 @@ as a vector on every shell (`ParentSafeGuardTests`, `ParentSafeGuardVectorTest`,
 `multisig/scenarios.rs`, signer `samples/takeover-test.mjs` 67/67).
 
 The fix ships with the first release made from `feat/multisig-account`.
+
+**Known gap in the fix (final review, 2026-11-12; open).** The guard looks at a call's `to` and
+a typed-data `verifyingContract` only when it is written as `0x` followed by exactly 40 hex
+digits (`parent_safe_guard.rs`, `is_address`); a target written any other way is skipped, not
+refused. Other parts of the core read addresses more loosely: `primitives::parse_address`
+accepts one without `0x`, and the EIP-712 encoder left-pads a short one to 20 bytes (`eip712.rs`,
+`pad_scalar`). So a request that names a parent Safe in such a spelling is not refused by this
+guard, and the fix does not yet cover every spelling of every form above. Canonicalising each
+address before the check is in progress (to be recorded as `docs/multisig-machines.md` §41);
+[SECURITY-MODEL G24](../../SECURITY-MODEL.md#13-known-gaps-and-accepted-risks) tracks it. This
+advisory is not to be published until that fix is in the release that carries `64da454d3`.
 
 ## Workarounds
 
