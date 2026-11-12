@@ -69,7 +69,7 @@ jobs:
     name: Validate bundle metadata
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # shellcheck over scripts/*.sh already runs in the Linux workflow's
       # metadata job; these checks are the macOS-only complement.
       - name: The Info.plist template must be valid once substituted
@@ -113,7 +113,7 @@ jobs:
     env:
       VELA_TEAM_ID: F9W689P9NE
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # Decided FIRST and in one place, so "is this run allowed to publish" has
       # one answer that the build step, the verify step and the release job all
       # read — never three slightly different guesses.
@@ -233,10 +233,10 @@ jobs:
             echo "VELA_NOTARY_PROFILE=vela-notary"
             echo "VELA_NOTARY_KEYCHAIN=$keychain"
           } >> "$GITHUB_ENV"
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: app-desktop/vela-wallet
           # gpui and gpui_platform are git dependencies on the whole Zed
@@ -286,7 +286,7 @@ jobs:
       - name: Delete the throwaway keychain
         if: always() && steps.credentials.outputs.publishable == 'true'
         run: security delete-keychain "$RUNNER_TEMP/vela-signing.keychain-db" || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dmg
           path: app-desktop/vela-wallet/dist/macos/*.dmg
