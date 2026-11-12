@@ -4419,6 +4419,99 @@ mod parent_safe_tests {
         });
     }
 
+    /// VELA-2026-002, 0.9.10: the vector's arrival refusals — the takeover,
+    /// an approveHash, a batch leg with the Safe's address written without
+    /// its `0x` (or `0X`, or under-width), a bare or under-width
+    /// `verifyingContract` — are answered -32602 as the browser hands them
+    /// in: no ownership read, no refused column, nothing signed.
+    #[test]
+    fn a_non_canonical_address_is_answered_invalid_params_before_any_read() {
+        const CHAIN: u32 = 424_335;
+        let v = vector();
+        let arrivals: Vec<Value> = v["cases"]
+            .as_array()
+            .map(|cases| {
+                cases
+                    .iter()
+                    .filter(|c| c["expect"]["verdict"] == "invalid")
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default();
+        assert!(arrivals.len() >= 7, "the arrival cases");
+        crate::executor::storage::tests::with_temp_state("sign-parent-bare-hex", || {
+            chain_answering(CHAIN, Some(TRUE));
+            for case in &arrivals {
+                let name = case["name"].as_str().unwrap_or_default();
+                let column = Column::open(
+                    &request_of(case, CHAIN),
+                    case["input"]["signer"].as_str().unwrap_or_default(),
+                    vec![CHAIN],
+                );
+                assert!(column.reads().is_empty(), "{name}: never read");
+                assert!(column.nothing_signed(), "{name}: {:?}", column.asked);
+                assert!(column.sign.view().blocked.is_none(), "{name}");
+                let [answer] = column.answers.as_slice() else {
+                    panic!("{name}: one answer: {:?}", column.answers);
+                };
+                assert!(
+                    matches!(
+                        answer,
+                        SignResponsePayload::Err {
+                            code: -32602,
+                            kind: SignErrorKind::InvalidParams,
+                            ..
+                        }
+                    ),
+                    "{name}: {answer:?}"
+                );
+            }
+        });
+    }
+
+    /// VELA-2026-002, 0.9.10: a site's `SafeMessage` / `SafeOp` for a Safe
+    /// this account owns — under a Safe v1.5.0, either is its approval — is
+    /// read, then refused, nothing signed, answered -32603.
+    #[test]
+    fn a_safe_message_or_safe_op_for_an_owned_v150_safe_is_read_then_refused() {
+        const CHAIN: u32 = 424_336;
+        let v = vector();
+        let parent = v["parent"].as_str().unwrap_or_default();
+        crate::executor::storage::tests::with_temp_state("sign-parent-safe-op", || {
+            chain_answering(CHAIN, Some(TRUE));
+            for (name, function) in [
+                (
+                    "0.9.10 v1.5.0: SafeMessage under an owned Safe v1.5.0's domain, isOwner true: refused",
+                    "SafeMessage",
+                ),
+                (
+                    "0.9.10 v1.5.0: SafeOp for an owned Safe v1.5.0 (its `safe`), under the 4337 module's domain: refused",
+                    "SafeOp",
+                ),
+            ] {
+                // The document's own chain is this test's.
+                let mut shape = case(name);
+                let mut doc: Value =
+                    serde_json::from_str(shape["input"]["params"][1].as_str().unwrap_or_default())
+                        .unwrap_or_else(|error| unreachable!("{name}: {error}"));
+                doc["domain"]["chainId"] = Value::from(CHAIN);
+                shape["input"]["params"][1] = Value::String(doc.to_string());
+                let mut column = Column::open(
+                    &request_of(&shape, CHAIN),
+                    shape["input"]["signer"].as_str().unwrap_or_default(),
+                    vec![CHAIN],
+                );
+                assert_eq!(column.reads(), vec![(CHAIN, parent.to_owned())], "{name}");
+                assert_eq!(
+                    column.sign.view().blocked.map(|b| b.function),
+                    Some(function.to_owned()),
+                    "{name}"
+                );
+                column.assert_refused(parent, ParentReason::Owner);
+            }
+        });
+    }
+
     /// The same read answered "not an owner": the request is the person's
     /// to decide, as any other (the guard decides nothing more).
     #[test]
