@@ -52,7 +52,8 @@ describe('the envelope this shell hands the core (rpcCorroboratedEnvelope)', () 
 		const both = await corroboratedEnvelope('eth_simulateV1', [], 1, async () => ({
 			body: body(reply),
 			witnessBody: body(reply),
-			ownNode: false
+			ownNode: false,
+			soleProvider: false
 		}));
 		expect(simOutcome(USER, both)?.kind).toBe('deltas');
 		const none = await corroboratedEnvelope('eth_simulateV1', [], 1, async () => {

@@ -135,6 +135,12 @@ sealed class RpcCallVerdict {
         val witness_url: String? = null,
         /** R22: the pool holds the person's own node alone ("Only use my node") and it answered. */
         val own_node: Boolean = false,
+        /**
+         * §39 (r22-2), a corroborated read only: nobody independent answered
+         * BECAUSE the pool holds no other provider for this chain — passed
+         * into the envelope (`rpcCorroboratedEnvelope`'s `soleProvider`).
+         */
+        val sole_provider: Boolean = false,
     ) : RpcCallVerdict()
 
     /** The endpoint capped the block range; retry within `max_span`. */

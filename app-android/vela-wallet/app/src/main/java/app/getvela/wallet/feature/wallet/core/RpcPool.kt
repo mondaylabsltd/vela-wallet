@@ -146,6 +146,7 @@ class RpcPool(
                         // R22: the second node's body, kept under its own url.
                         witness = verdict.witness_url?.let { waiting.bodies[it] },
                         ownNode = verdict.own_node,
+                        soleProvider = verdict.sole_provider,
                     )
                 // The endpoint's own answer rides along: a caller that judges
                 // nothing (the tracker's find-event, spec 082 T180) hands the
@@ -229,6 +230,12 @@ sealed class RpcResult {
         val witness: JSONObject? = null,
         /** R22: the person's own node answered alone, by their choice ("Only use my node"). */
         val ownNode: Boolean = false,
+        /**
+         * §39 (r22-2): no witness because the pool holds no other provider
+         * for this chain (configuration, not failure) — the core may take
+         * one node's word as an explicit "… anyway" for the member's own flows.
+         */
+        val soleProvider: Boolean = false,
     ) : RpcResult()
 
     /**
@@ -260,8 +267,9 @@ sealed class RpcResult {
                 answer.json.toString(),
                 answer.witness?.toString(),
                 answer.ownNode,
+                answer.soleProvider,
             )
-            is RangeCapped, is Failed, null -> uniffi.vela_core_uniffi.rpcCorroboratedEnvelope(null, null, false)
+            is RangeCapped, is Failed, null -> uniffi.vela_core_uniffi.rpcCorroboratedEnvelope(null, null, false, false)
         }
     }
 }

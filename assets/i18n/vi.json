@@ -557,8 +557,8 @@
   "txErrorProposalNotSupported": "Ứng dụng này chưa thể đề xuất giao dịch multisig, nên chưa có gì được ký hay đề xuất.",
   "maxMoved": "Mức tối đa giờ là {{to}} {{symbol}} (trước là {{from}}): phí mạng vừa được tính lại nên khoản giữ lại để trả phí đã thay đổi.",
   "feeSigning": "Ký với phí và số tiền này — chúng giữ nguyên cho đến khi bạn xác nhận hoặc hủy.",
-  "feeMoved": "Phí mạng được tính lại trước khi ký nên chưa có gì được ký. Phí ở trên là phí mới — xác nhận lại để gửi với phí này.",
-  "feeMovedMax": "Phí mạng được tính lại trước khi ký nên chưa có gì được ký. Với phí mới ở trên, mức tối đa giờ là {{to}} {{symbol}} (trước là {{from}}) — xác nhận lại để gửi.",
+  "feeMoved": "Phí mạng đã tăng kể từ khi bạn nhấn, nên chưa có gì được ký. Phí ở trên là phí mới — nhấn lần nữa để trả phí này.",
+  "feeMovedMax": "Phí mạng đã tăng kể từ khi bạn nhấn, nên chưa có gì được ký. Mức tối đa giờ là {{to}} {{symbol}} (trước đó là {{from}}) với phí mới ở trên — nhấn lần nữa để gửi.",
   "txReviewAgain": "Xem lại",
   "txSendAgain": "Gửi lại",
   "txCheckingElapsed": "Đang kiểm tra xem đã gửi đi chưa… {{elapsed}}s",
@@ -1704,6 +1704,7 @@
    "simDisagreed": "Hai nút độc lập trả lời khác nhau về việc giao dịch này làm gì. Hãy kiểm tra trước khi ký.",
    "simOwnNode": "Chỉ được kiểm tra bởi nút của riêng bạn",
    "ownNodeHint": "Để kiểm tra bằng một nút bạn tin, hãy thêm nút của bạn và bật “Chỉ dùng nút của tôi” cho mạng này.",
+   "feeRose": "Phí mạng đã tăng kể từ khi bạn nhấn, nên chưa có gì được ký. Phí đang hiển thị là phí mới — nhấn lần nữa để trả phí này.",
    "confirmAgain": "Nhấn lần nữa để xác nhận"
   },
   "signingApprove": {

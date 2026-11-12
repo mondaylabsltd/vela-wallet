@@ -465,6 +465,12 @@ windows-sys = { version = "0.59", features = [
 # gains no second copy.
 [dev-dependencies]
 k256 = { version = "0.14.0", default-features = false, features = ["ecdsa", "alloc"] }
+# R22 follow-up (r22-5): the keyboard's way to a held confirm is tested in a
+# real gpui window — `TestAppContext` / `VisualTestContext`, simulated Tab,
+# Enter and a moved clock (`ui::hold_confirm`'s keyboard test). The SAME rev
+# as [dependencies] (see the note there); only the feature is added, and only
+# for test builds.
+gpui = { git = "https://github.com/zed-industries/zed", rev = "c97b7c0ea41acf56e9726964eca10c2078e921b0", features = ["test-support"] }
 
 # Embeds the application icon into vela-wallet.exe as resource id 1, which is
 # where gpui's LoadImageW looks for it. Declared unconditionally rather than
@@ -519,3 +525,12 @@ opt-level = 3
 # no longer links private API.
 [patch."https://github.com/zed-industries/zed"]
 gpui_macos = { path = "../vendor/gpui_macos" }
+
+# R22 follow-up (r22-5): gpui's `test-support` (the dev-dependency above,
+# test builds only) pulls `proptest`, which Zed's workspace pins to a git
+# commit — a source deny.toml does not allow (`unknown-git = "deny"`). The
+# crates.io release the lock already carries (alloy-primitives, ruint and
+# const-hex name it) stands in for it: no new source, and nothing in any
+# shipped artifact.
+[patch."https://github.com/proptest-rs/proptest"]
+proptest = "1.10.0"

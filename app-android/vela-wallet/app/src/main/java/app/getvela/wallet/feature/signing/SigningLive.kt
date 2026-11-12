@@ -1121,10 +1121,15 @@ object SigningLive {
                 // unlimited approval — a wallet fault, not "unlimited is disabled".
                 SignErrorKind.UnsupportedChain -> s.t("send.lock.netNotFound")
                 SignErrorKind.UserRejected, SignErrorKind.WalletSwitchedChains -> ""
+                // §39 (A1): the fee rose since the press — nothing was signed,
+                // the row draws the new figure, the next confirm pays it.
+                SignErrorKind.FeeRose -> s.t(FEE_ROSE_KEY)
                 else -> failureWords(sign, s)
             }
             when {
                 text.isEmpty() -> Unit
+                // Not a failure: a caution, beside the new figure.
+                error.kind == SignErrorKind.FeeRose -> add(SigningBlock.Warning(SigningTone.Caution, text))
                 // "Not sent yet" (PR 2 polish) is no failure: its sentence is
                 // said in the sheet's neutral voice, never as a warning.
                 sign.failure_not_sent -> add(SigningBlock.Sentence(text, SigningTone.Neutral))
@@ -1852,6 +1857,9 @@ object SigningLive {
 
     /** R22: the "… anyway" confirm's label (`ConfirmState.anyway`). */
     const val SIGN_ANYWAY_KEY = "componentsUi.signing.certain.signAnyway"
+
+    /** §39 (A1): the fee rose since the press — nothing signed, the new figure drawn (`sign_request::FEE_ROSE_KEY`). */
+    const val FEE_ROSE_KEY = "componentsUi.signing.feeRose"
 
     /** R22: under a held confirm, and its accessibility hint. */
     const val HOLD_TO_CONFIRM_KEY = "componentsUi.signing.holdToConfirm"

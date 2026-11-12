@@ -340,6 +340,7 @@
       "simDisagreed": "Dua node independen memberi jawaban berbeda tentang apa yang dilakukan transaksi ini. Periksa sebelum menandatangani.",
       "simOwnNode": "Diperiksa hanya oleh node Anda sendiri",
       "ownNodeHint": "Untuk memeriksa dengan node yang Anda percaya, tambahkan node Anda sendiri dan aktifkan “Hanya gunakan node saya” untuk jaringan ini.",
+      "feeRose": "Biaya jaringan naik sejak Anda menekan, jadi tidak ada yang ditandatangani. Biaya yang ditampilkan adalah yang baru — tekan lagi untuk membayarnya.",
       "confirmAgain": "Tekan sekali lagi untuk mengonfirmasi"
     },
     "signingApprove": {

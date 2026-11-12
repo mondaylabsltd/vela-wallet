@@ -43,6 +43,7 @@
 	} from '../core/gate.svelte';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
 	import { failureWords } from '../shell/failure';
+	import { uncheckedWords } from '../core/gate-words';
 	import { localAccounts } from '../shell/local-accounts';
 	import { machines } from '../shell/machines.svelte';
 	import type { MultisigMemberRow } from '../generated/MultisigMemberRow';
@@ -201,7 +202,7 @@
 						: error instanceof SigningRefusedError
 							? fillTemplate(m.authority.refusedOn, { network: chainName(error.chainId) })
 							: error instanceof SigningUncheckedError
-								? fillTemplate(m.authority.signUnchecked, { network: chainName(error.chainId) })
+								? uncheckedWords(m.authority, error)
 								: error instanceof SigningBlockedError
 									? m.review.blocked
 									: fillTemplate(m.proposal.failed, {

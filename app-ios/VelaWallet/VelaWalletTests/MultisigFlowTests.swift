@@ -269,8 +269,15 @@ final class MsSimWorld: MultisigPorts {
             body = ["error": error]
         case .unanswered: body = nil
         }
+        // §39 (r22-2): a network whose pool holds one provider — nobody
+        // independent to ask, by configuration (`sole_provider`).
+        if soleProvider {
+            return RpcCorroborated(primary: body, witness: nil, ownNode: false, soleProvider: true).envelope
+        }
         return RpcCorroborated(primary: body, witness: body, ownNode: false).envelope
     }
+    /// §39 (r22-2): the pool holds one provider for this world's chain.
+    var soleProvider = false
 
     func rpc(chainId: Int, method: String, params: Any) async -> MultisigRpcReply {
         rpcLog.append("\(chainId) \(method)")
@@ -981,8 +988,11 @@ struct MultisigFlowTests {
         let said = model.pressFailures(at: .approve)
         #expect(said.map(\.id) == ["executeFailed"], "said beside the one press: \(said)")
         let line = try #require(said.first?.text)
+        // §39 (r22-4): said WHY — the core's `feeRose`, `{{fee}}` the new
+        // figure as the fee line draws it — never "That didn't go through:".
+        #expect(line == Self.feeRose(execute(), words: words), "\(line)")
         let prefix = words.t("proposal.failed", ["reason": ""]).trimmingCharacters(in: .whitespaces)
-        #expect(line.hasPrefix(prefix) && line.components(separatedBy: prefix).count == 2, "\(line)")
+        #expect(!line.contains(prefix), "\(line)")
         #expect(!model.notes.contains { $0.id == "executeFailed" }, "not (only) at the head of the sheet")
 
         // The sheet as drawn, scrolled down to the press.
@@ -1001,6 +1011,58 @@ struct MultisigFlowTests {
         hub.sendProposal(["type": "approve_execute", "chain_id": 100, "safe_tx_hash": hash, "executor": owners[1]])
         await Wait.until({ !world.sentFees.isEmpty }, orIdle: { hub.proposals.isIdle })
         #expect(world.sentFees == ["0x2"])
+    }
+
+    // MARK: §39 r22-2 — one provider never locks a multisig
+
+    /// Arc's pool holds one public provider: nobody independent can be
+    /// asked, by configuration. The review's state check is said "only one
+    /// node could confirm" (`oneNode`) — never "checked" — with the way to
+    /// add one's own node; its door is "… anyway", held; and the member's
+    /// own approve goes through on it (one passkey), never locked.
+    @Test func oneProviderLetsTheMemberApproveAnywaySaidAsOneNode() async throws {
+        let world = try MsSimWorld()
+        let (hub, _, owners, transfer) = try await Self.rejecting(world, salt: "0x73")
+        defer { hub.proposals.dispose(); hub.accounts.dispose(); hub.members.dispose() }
+        let hash = transfer.safeTxHash
+        let words = MsWords(loc: hub.loc, hub: nil)
+        func item() -> MsProposalItem? { hub.proposalsView.items.first { $0.safeTxHash == hash } }
+        func kind() -> String? { hub.proposalsView.lookup(hub.proposalsView.reviewStates, chainId: 100, hash: hash)?.kind }
+
+        world.soleProvider = true
+        hub.sendProposal(["type": "review_again", "chain_id": 100, "safe_tx_hash": hash])
+        await Wait.until({ kind() == "loading" }, orIdle: { hub.proposals.isIdle })
+        await Wait.until({ ["ready", "unchecked", "failed"].contains(kind() ?? "") }, orIdle: { hub.proposals.isIdle })
+        #expect(kind() == "ready", "\(String(describing: kind()))")
+        let review = try #require(item().flatMap { hub.proposalsView.review($0) })
+        let verdict = review["state"]?["verdict"]
+        #expect(verdict?.kind == "unavailable" && verdict?["reason"]?.string == "oneNode",
+                "\(String(describing: review["state"]))")
+        let network = words.network(100)
+        #expect(MsReviewBody.unreadStateLine(verdict, network: network, words: words)
+                == words.t("review.stateOneNode", ["network": network]))
+        #expect(MsReviewBody.offersOwnNode(verdict))
+
+        let model = MsProposalModel(item: try #require(item()), view: hub.proposalsView, words: words, account: nil)
+        #expect(model.door.enabled && model.door.anyway, "\(model.door)")
+        #expect(model.door.holdMs > 0, "an unread check is held")
+
+        let asked = world.passkeys.count
+        hub.sendProposal(["type": "approve", "chain_id": 100, "safe_tx_hash": hash, "owner": owners[1]])
+        await Wait.until({ item()?.status == "ready" }, orIdle: { hub.proposals.isIdle })
+        #expect(item()?.status == "ready", "\(String(describing: hub.proposalsView.action("approve:\(hash)")?.raw))")
+        #expect(world.passkeys.count == asked + 1, "one passkey: never locked")
+    }
+
+    /// §39 (r22-4): a `fee_moved` stop's sentence — the catalog's
+    /// `home.multisig.proposal.feeRose`, `{{fee}}` the stop's own new figure
+    /// written as the fee line writes it (rounded up, with the coin).
+    @MainActor
+    static func feeRose(_ state: MsTagged?, words: MsWords) -> String {
+        let detail = MultisigShellFailure.read(state?["detail"]?.string) ?? [:]
+        let chain = (detail["chainId"] as? NSNumber)?.intValue ?? 100
+        let fee = "\(SendLive.feeFromBase(detail["amount"] as? String ?? "", decimals: MsWords.coinDecimals)) \(words.symbol(chain))"
+        return words.t("proposal.feeRose", ["fee": fee])
     }
 
     // MARK: §24 natives carry the fee shown
@@ -1059,8 +1121,10 @@ struct MultisigFlowTests {
         let said = now.pressFailures(at: .approve)
         #expect(said.map(\.id) == ["executeFailed"], "said beside the one press: \(said)")
         let line = try #require(said.first?.text)
+        // §39 (r22-4): said WHY, never "That didn't go through:".
+        #expect(line == Self.feeRose(execute(), words: words), "\(line)")
         let prefix = words.t("proposal.failed", ["reason": ""]).trimmingCharacters(in: .whitespaces)
-        #expect(line.hasPrefix(prefix) && line.components(separatedBy: prefix).count == 2, "\(line)")
+        #expect(!line.contains(prefix), "\(line)")
         #expect(!now.notes.contains { $0.id == "executeFailed" }, "not at the head of the sheet too")
         #expect(now.shownFee(for: owners[1]) == "0x2", "the next press carries the figure now drawn")
 

@@ -1622,6 +1622,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 			cancelled: k('componentsUi.signing.passkeyClosed'),
 			timed_out: k('componentsUi.signing.passkeyTimedOut')
 		},
+		// §39 (r22-3 / A1): the fee went up since the press — nothing signed.
+		feeRose: k('componentsUi.signing.feeRose'),
 		signerReasons: Object.fromEntries(
 			Object.entries(SIGNER_REASON_KEYS).map(([kind, key]) => [kind, k(key)])
 		),

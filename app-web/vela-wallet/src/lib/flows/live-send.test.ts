@@ -11,7 +11,12 @@ import type { FeeFailureView } from '$lib/core/generated/FeeFailureView';
 import { FeeSpeedCore } from '$lib/core/client';
 import type { SendToken } from '$lib/core/generated/SendToken';
 import type { SendView } from '$lib/core/generated/SendView';
-import { resolveMultisigMessages, resolveWalletFlowMessages } from '$lib/i18n/engine.server';
+import type { BalanceView } from '$lib/core/generated/BalanceView';
+import {
+	resolveMultisigMessages,
+	resolveWalletFlowMessages,
+	resolveWalletMessages
+} from '$lib/i18n/engine.server';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { shortenAddress } from '$lib/wallet/identity';
 import { chainName } from '$lib/services/networks';
@@ -19,7 +24,7 @@ import { fill } from '$lib/wallet/messages';
 import { liveAssetRow, MONEY_PENDING, sentAmountText } from '$lib/wallet/live';
 import { COMMITTED, expectWithheld, ON_ITS_WAY } from '$lib/wallet/testing/fiat-withheld';
 import { buildFlowState } from './fixtures';
-import { tokenMarkFor } from './marks';
+import { chainMark, tokenMarkFor } from './marks';
 import { wouldFailView } from './testing/fee-core';
 import {
 	liveFeeTokenPick,
@@ -28,6 +33,7 @@ import {
 	liveSendForm,
 	liveSendPick,
 	liveSendReceipt,
+	sendPickOutage,
 	sendTokenClass,
 	sendTokenId,
 	visibleSendTokens,
@@ -35,6 +41,39 @@ import {
 } from './live-send';
 
 const m = resolveWalletFlowMessages('en');
+const walletWords = resolveWalletMessages('en');
+/** r22-7: a balance view in which every network answered. */
+const balanceViewWith = (): BalanceView => ({
+	address: '0x' + 'aa'.repeat(20),
+	display_total_usd: 25,
+	balance_unknown: false,
+	unpriced_only: false,
+	balance_partial: false,
+	unreachable: false,
+	notice: null,
+	hidden: false,
+	refreshing: false,
+	last_refreshed_at_ms: 1,
+	updated_at_ms: 1,
+	networks_read: true,
+	unread_chain_ids: [],
+	tokens: [],
+	unpriced_tokens: [],
+	failed_chain_ids: [],
+	rate_limited_chain_ids: [],
+	unreachable_networks: [],
+	fallback_chain_ids: [],
+	fallback_status_key: '',
+	unreachable_key: null,
+	internal_chain_ids: [],
+	internal_key: null,
+	checking_key: null,
+	live_key: null,
+	empty_key: null,
+	holdings_loading: false,
+	cached_total_usd: null,
+	switcher: { open: false, loading: false, balances: [], hidden: false }
+});
 const identicon = (seed: string) => `<svg data-seed="${seed}"></svg>`;
 const identity: WalletIdentity = {
 	name: 'My Wallet',
@@ -229,6 +268,44 @@ describe('the token picker', () => {
 		const nothing = liveSendPick(pickModel(), inputs({ tokens: [] }));
 		expect(nothing.rows).toHaveLength(0);
 		expect(nothing.empty).toBe(m['send.noTokensWithBalance']);
+	});
+
+	// r22-7: Arc refused — the home draws the last-known USDC under "Can't
+	// reach Arc Testnet right now"; the picker said "No tokens with balance".
+	// It lists the same rows, under the home's own line for that network.
+	it('r22-7: a network the wallet cannot reach now — its last-known rows, under the home’s line', () => {
+		const ARC = 5042002;
+		const usdc: SendToken = { ...USDT, chain_id: ARC, symbol: 'USDC', balance: '25' };
+		const view = {
+			...balanceViewWith(),
+			tokens: [],
+			failed_chain_ids: [ARC],
+			unreachable_key: 'assets.unreachableOne',
+			unreachable_networks: [
+				{
+					chain_id: ARC,
+					last_known: 'held' as const,
+					last_seen_usd: 25,
+					line_key: 'assets.lastSeen',
+					cause: 'network' as const,
+					rpc_fixable: true,
+					status_key: 'home.balanceDetailStatusFailed'
+				}
+			]
+		};
+		const outage = sendPickOutage(view, walletWords.assets);
+		expect(outage).toEqual({
+			chainIds: [ARC],
+			text: fill(walletWords.assets.unreachableOne, { name: chainName(ARC) })
+		});
+		const model = liveSendPick(pickModel(), { ...inputs({ tokens: [usdc] }), outage });
+		expect(model.rows.map((r) => r.ticker)).toEqual(['USDC']);
+		expect(model.rows[0]).toMatchObject({ balance: '25' });
+		expect(model.notice).toEqual({ mark: chainMark(ARC), text: outage!.text });
+
+		// Every network answered: no line.
+		expect(sendPickOutage(balanceViewWith(), walletWords.assets)).toBeUndefined();
+		expect(liveSendPick(pickModel(), inputs({ tokens: [usdc] })).notice).toBeUndefined();
 	});
 
 	it('an unpriced token says so rather than showing a zero', () => {

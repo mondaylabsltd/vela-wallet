@@ -191,7 +191,7 @@ struct R22SimVectorTests {
             let name = c["name"] as? String ?? "?"
             let envelope = try #require(c["envelope"] as? [String: Any])
             let expect = try #require(c["expect"] as? [String: Any])
-            let record = simOutcome(user: user, replyJson: CoreJSON.string(envelope))
+            let record = simOutcome(user: user, replyJson: CoreJSON.string(envelope), valueWei: nil)
             #expect(record.kind == expect["kind"] as? String, "\(name): kind \(record.kind)")
             #expect(record.source == expect["source"] as? String, "\(name): source \(String(describing: record.source))")
             #expect(record.noticeKey == expect["notice_key"] as? String, "\(name): notice_key")
@@ -213,7 +213,7 @@ struct R22SimVectorTests {
         let file = try vector("rules/signing-truth.json")
         let user = try #require(file["user"] as? String)
         let own = try #require((file["sim"] as? [[String: Any]])?.first { ($0["expect"] as? [String: Any])?["source"] as? String == "own_node" })
-        let record = simOutcome(user: user, replyJson: CoreJSON.string(try #require(own["envelope"] as? [String: Any])))
+        let record = simOutcome(user: user, replyJson: CoreJSON.string(try #require(own["envelope"] as? [String: Any])), valueWei: nil)
         let verdict = SigningController.simVerdictObject(of: record)
         #expect(verdict["source"] as? String == "own_node")
         #expect(verdict["source_key"] as? String == "componentsUi.signing.simOwnNode")
@@ -374,7 +374,7 @@ struct R22ConfirmTests {
     private static let user = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
 
     private func verdict(_ envelope: String) -> String {
-        CoreJSON.string(SigningController.simVerdictObject(of: simOutcome(user: Self.user, replyJson: envelope)))
+        CoreJSON.string(SigningController.simVerdictObject(of: simOutcome(user: Self.user, replyJson: envelope, valueWei: nil)))
     }
 
     private var checked: String {

@@ -2038,6 +2038,59 @@ fn far_above_the_balance_is_unlimited_like() {
     assert_eq!(capped.view().unlimited_warning_key, UNLIMITED_WARNING_KEY);
 }
 
+/// §39 (R22 follow-up, an R22 observation against §37): an unlimited
+/// approval carried by Multicall3 and an unlimited Permit2 witness permit
+/// signed with a plain Confirm, while a two-leg unlimited batch was held.
+/// Every unbounded grant — however it arrives — makes the confirm a held
+/// danger, from the guard's one verdict.
+#[test]
+fn every_unbounded_grant_holds_the_confirm_however_it_is_nested() {
+    use vela_core::app::sign_confirm::{guarded_posture, Posture, HOLD_TO_CONFIRM_MS};
+    let witness = json!({
+        "types": {},
+        "primaryType": "PermitWitnessTransferFrom",
+        "domain": { "name": "Permit2", "chainId": 1, "verifyingContract": PERMIT2 },
+        "message": {
+            "permitted": { "token": USDC, "amount": max_u256().to_string() },
+            "spender": SPENDER, "nonce": "0", "deadline": "1900000000",
+            "witness": { "info": { "reactor": SPENDER }, "swapper": WALLET }
+        }
+    });
+    let inner = approve_calldata(SPENDER, max_u256());
+    let cases = [
+        (
+            TX,
+            tx_params(
+                "0xcA11bde05977b3631167028862bE2a173976CA11",
+                &aggregate3(&[(USDC, inner.clone())]),
+            ),
+        ),
+        (
+            TX,
+            tx_params(USDC, &multicall(std::slice::from_ref(&inner))),
+        ),
+        ("eth_signTypedData_v4", json!([WALLET, witness.to_string()])),
+        (TX, tx_params(USDC, &inner)),
+    ];
+    for (method, params) in cases {
+        let view = guard_for(method, &params).view();
+        assert!(view.unlimited_warning, "{method} {params}");
+        let plain = Posture::default();
+        let held = guarded_posture(plain, &view);
+        assert!(held.danger, "{params}");
+        assert_eq!(held.hold_ms, HOLD_TO_CONFIRM_MS, "{params}");
+    }
+    // A bounded grant adds nothing.
+    let bounded = guard_for(
+        TX,
+        &tx_params(USDC, &approve_calldata(SPENDER, U256::from(5u8))),
+    );
+    assert_eq!(
+        guarded_posture(Posture::default(), &bounded.view()),
+        Posture::default()
+    );
+}
+
 /// Permit2's witness transfer reads as the transfer it is (it fell through
 /// to blind typed data): the spender, the token, the amount, the deadline.
 #[test]

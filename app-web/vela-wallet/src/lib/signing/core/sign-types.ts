@@ -268,6 +268,10 @@ export function signErrorMessage(notice: SignErrorNotice): string {
 			return 'Gas account funding cancelled';
 		case 'stale_fee_quote':
 			return 'The quoted fee expired. Review the request again.';
+		case 'fee_rose':
+			// §39 (A1): never sent to a site — the sheet stays and says it — but
+			// worded as the core words it (`dapp_rpc::sign_error_message`).
+			return 'The network fee went up since the person pressed; nothing was signed';
 		case 'submit_failed':
 		default:
 			return detail ?? 'Signing failed';

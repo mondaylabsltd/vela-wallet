@@ -239,6 +239,7 @@
         "feeUncheckedHeld": "Tidak bisa memeriksa apakah transaksi akan berjalan — Eksekusi akan memeriksa lagi.",
         "feeRetry": "Periksa lagi",
         "feeSigning": "Ditandatangani dengan biaya ini — tetap sampai kamu mengonfirmasi atau membatalkan.",
+        "feeRose": "Biaya jaringan naik menjadi ≈ {{fee}} sejak Anda menekan; tidak ada yang ditandatangani. Tekan lagi untuk membayar {{fee}}.",
         "feeSetup": "Termasuk penyiapan satu kali di {{network}} ≈ {{amount}}:",
         "feeSetupPlain": "Termasuk penyiapan satu kali di {{network}}:",
         "setupMultisig": "menerapkan multisig ini",
@@ -437,6 +438,7 @@
         "signRiskConfirm": "Saya mengerti risikonya, tanda tangani",
         "signRiskCancel": "Jangan tanda tangani",
         "signUnchecked": "Vela tidak bisa memeriksa siapa yang bisa bertindak atas multisig ini di {{network}}, jadi belum akan menandatangani di sana. Coba lagi sebentar lagi.",
+        "signDisagreed": "Dua node independen di {{network}} memberi jawaban berbeda tentang siapa yang dapat bertindak untuk multisig ini, jadi Vela tidak akan menandatangani di sana. Tambahkan node Anda sendiri di Pengaturan untuk memeriksa dengan node yang Anda percayai, atau coba lagi nanti.",
         "ownerNotBound": "Di {{network}}, anggota {{address}} adalah kontrak yang tidak terikat pada pembuatannya sendiri di sana — siapa pun yang bisa men-deploy di alamat itu akan memegang suaranya."
       },
       "external": {
@@ -808,6 +810,8 @@
         },
         "stateUnconfirmed": "Hanya satu node di {{network}} yang menjawab, jadi Vela tidak bisa memastikan apa yang diubah di multisig saat dijalankan. Hanya pembacaan Vela atas transaksi yang berlaku.",
         "stateDisagreed": "Dua node independen di {{network}} tidak sepakat tentang apa yang diubah di multisig saat dijalankan. Hanya pembacaan Vela atas transaksi yang berlaku.",
+        "stateOneNode": "Hanya satu node yang dapat memastikan siapa yang dapat bertindak di {{network}} dan apa yang berubah di multisig jika dijalankan. Tambahkan node Anda sendiri di Pengaturan agar diperiksa dua kali.",
+        "addOwnNode": "Tambahkan node Anda sendiri",
         "blindRefused": "Vela tidak akan menandatangani ini: “Tolak penandatanganan buta” aktif, dan sebagian transaksi ini tidak bisa diperiksa. Anda bisa mengubahnya di Pengaturan."
       },
       "notify": {

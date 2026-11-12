@@ -28,6 +28,34 @@ use serde_json::{json, Value};
 pub enum Kind {
     Honest,
     Lying,
+    /// §39 (R22 follow-up): lies about WHO CAN ACT — every `eth_getCode`
+    /// answered the other way round (code where there is none, none where
+    /// there is) and every `getOwners()` answered with an attacker alone.
+    /// Beside an honest node it is a disagreement, never a plain read.
+    AuthorityLiar,
+}
+
+/// `getOwners()`.
+const GET_OWNERS: &str = "0xa0e67e2b";
+
+/// §39: the authority lie ([`Kind::AuthorityLiar`]).
+pub fn lie_about_authority(request: &Value, mut answer: Value) -> Value {
+    let method = request["method"].as_str().unwrap_or_default();
+    let data = request["params"][0]["data"].as_str().unwrap_or_default();
+    match method {
+        "eth_getCode" => {
+            let none = answer["result"].as_str().is_none_or(|c| c == "0x");
+            answer["result"] = Value::String(if none { "0x6080604052" } else { "0x" }.to_owned());
+        }
+        "eth_call" if data.to_ascii_lowercase().starts_with(GET_OWNERS) => {
+            answer["result"] = Value::String(format!(
+                "0x{:064x}{:064x}{:0>64}",
+                32, 1, "bad0000000000000000000000000000000000bad"
+            ));
+        }
+        _ => {}
+    }
+    answer
 }
 
 /// A running proxy: its URL.
@@ -164,6 +192,9 @@ impl Proxy {
                         Kind::Honest => answer,
                         Kind::Lying => serde_json::from_str::<Value>(&answer)
                             .map(|v| lie(&request, v).to_string())
+                            .unwrap_or(answer),
+                        Kind::AuthorityLiar => serde_json::from_str::<Value>(&answer)
+                            .map(|v| lie_about_authority(&request, v).to_string())
                             .unwrap_or(answer),
                     };
                     let reply = format!(

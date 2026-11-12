@@ -351,7 +351,8 @@ pub fn sign_error_why(kind: SignErrorKind, detail: Option<&str>) -> Why {
         | SignErrorKind::SelfCallBlocked
         | SignErrorKind::ParentSafeBlocked
         | SignErrorKind::SignInRefused
-        | SignErrorKind::StaleFeeQuote => (Wallet, DbrReason::WalletRefused),
+        | SignErrorKind::StaleFeeQuote
+        | SignErrorKind::FeeRose => (Wallet, DbrReason::WalletRefused),
         SignErrorKind::SignerUnavailable => (Signer, DbrReason::SignerUnavailable),
         SignErrorKind::SignerNotDiscoverable => (Signer, DbrReason::SignerNotDiscoverable),
         SignErrorKind::SignerFailed => (Signer, DbrReason::SignerFailed),

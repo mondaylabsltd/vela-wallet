@@ -557,8 +557,8 @@
   "txErrorProposalNotSupported": "This app can't propose multisig transactions yet, so nothing was signed or proposed.",
   "maxMoved": "Max is now {{to}} {{symbol}} (it was {{from}}): the network fee was quoted again, so the amount kept back for it changed.",
   "feeSigning": "Signing at this fee and amount — they stay fixed until you confirm or cancel.",
-  "feeMoved": "The network fee was quoted again before signing, so nothing was signed. The fee above is the new one — confirm again to send at it.",
-  "feeMovedMax": "The network fee was quoted again before signing, so nothing was signed. Max is now {{to}} {{symbol}} (it was {{from}}) with the new fee above — confirm again to send it.",
+  "feeMoved": "The network fee went up since you pressed, so nothing was signed. The fee above is the new one — press again to pay it.",
+  "feeMovedMax": "The network fee went up since you pressed, so nothing was signed. Max is now {{to}} {{symbol}} (it was {{from}}) with the new fee above — press again to send it.",
   "txReviewAgain": "Review again",
   "txSendAgain": "Send again",
   "txCheckingElapsed": "Checking whether it went out… {{elapsed}}s",
@@ -1756,6 +1756,7 @@
    "simDisagreed": "Two independent nodes gave different answers about what this transaction does. Review it before you sign.",
    "simOwnNode": "Checked by your own node only",
    "ownNodeHint": "To check with a node you trust, add your own and turn on “Only use my node” for this network.",
+   "feeRose": "The network fee went up since you pressed, so nothing was signed. The fee shown is the new one — press again to pay it.",
    "confirmAgain": "Press again to confirm"
   },
   "currency": {

@@ -2948,6 +2948,9 @@ impl WalletPage {
             .flex_col()
             .gap(px(16.))
             .pb(px(16.))
+            // The shell's own Tab walk (`ui::focus_walk`) stands aside here:
+            // this form walks its own fields, below.
+            .key_context(crate::ui::focus_walk::OWN_TAB)
             // Tab, between the two fields this form has. Nothing in this shell
             // bound it, so a person who typed a name and pressed Tab — the
             // reflex every other form on their machine has taught them —
@@ -19730,7 +19733,10 @@ impl WalletPage {
                         && verdict.kind == "unconfirmed"
                 })
                 .map(|_| host.chain_id);
-            let fee = host.fee_view();
+            // §39 (A1): the figure the confirm began on while a hold is under
+            // way or the confirm is armed — never re-drawn under a press —
+            // else the live quote.
+            let fee = host.drawn_fee_view();
             // Where the executor will sign, from the same context it reads
             // (`SignContext::follow_venue`).
             handoff = host.handoff();
@@ -20636,6 +20642,20 @@ impl WalletPage {
             (None, Some(signer))
         };
         column = column.children(signer_in_body);
+        // §39 (A1): the held confirm beginning (a hold's start, the first
+        // keyboard press) holds the fee row on the figure drawn then; let go
+        // without firing, the row is live again.
+        #[cfg(not(target_os = "linux"))]
+        let confirm_engage: Option<crate::ui::hold_confirm::Engage> =
+            self.signing_host.clone().map(|host| {
+                std::rc::Rc::new(
+                    move |engaged: bool, _: &mut gpui::Window, cx: &mut gpui::App| {
+                        host.update(cx, |host, cx| host.confirm_engaged(engaged, cx));
+                    },
+                ) as crate::ui::hold_confirm::Engage
+            });
+        #[cfg(target_os = "linux")]
+        let confirm_engage: Option<crate::ui::hold_confirm::Engage> = None;
         // The column's one action, who signs over it and the line under it
         // are its FOOT, not its last blocks: pinned at the bottom, where
         // nothing above can move them.
@@ -20662,6 +20682,7 @@ impl WalletPage {
                     model.confirm_hold_ms,
                     &self.signing.hold_words(),
                     confirm_action,
+                    confirm_engage,
                     cx,
                 )
             }
@@ -23666,7 +23687,9 @@ impl Render for WalletPage {
             root
         };
 
-        window_frame(root, &theme, window)
+        // R22 follow-up r22-5: Tab / ⇧Tab walk the window's tab stops — a
+        // sheet's held confirm among them (`ui::focus_walk`).
+        crate::ui::tab_walk(window_frame(root, &theme, window))
     }
 }
 

@@ -1888,6 +1888,87 @@ fn stale_tempo_quote_is_rereviewed_never_silently_repriced() {
     );
 }
 
+/// §39 (R22 follow-up, r22-3 / A1 on Android): a site's send armed at a fee
+/// of 0.12 was charged 0.138 — a re-quote landed before the second press and
+/// the approve took the fee view at the handler. Now the approve carries the
+/// figure the sheet showed when the confirm began (`quoted_fee`) beside the
+/// quote at the handler (`current_fee`): at or under it, the figure shown is
+/// signed; above it, nothing is signed and the sheet says why.
+#[test]
+fn a_site_send_signs_the_fee_shown_or_nothing_when_the_quote_rose() {
+    let relay = "0x9999999999999999999999999999999999999999";
+    let fee = |amount: &str| SignQuotedFee {
+        amount: amount.to_owned(),
+        recipient: relay.to_owned(),
+        tier: None,
+    };
+    // The quote rose under the confirm: nothing signed, said, reviewable.
+    let mut sut = boot();
+    sut.dispatch(Arrive::global("rid-rise", "eth_sendTransaction", &plain_send_params()).event());
+    let ops = sut.dispatch(approve(SignApproveOpts {
+        quoted_fee: Some(fee("120000000000000000")),
+        current_fee: Some(fee("138000000000000000")),
+        ..SignApproveOpts::default()
+    }));
+    assert!(
+        ops.is_empty(),
+        "a quote above the figure shown signs nothing: {ops:?}"
+    );
+    let view = sut.view();
+    assert_eq!(view.error.expect("said").kind, SignErrorKind::FeeRose);
+    assert_eq!(
+        view.surface,
+        SignSurface::Sheet,
+        "the next confirm pays the new figure"
+    );
+    // The site was sent nothing, and holds no answer: a swipe is the
+    // person's "no" — answered 4001, never a dismissal that leaves the site
+    // waiting for ever (spec 081).
+    assert_eq!(view.swipe_action, SignSwipeAction::Reject);
+    let mut swiped = boot();
+    swiped
+        .dispatch(Arrive::global("rid-swipe", "eth_sendTransaction", &plain_send_params()).event());
+    swiped.dispatch(approve(SignApproveOpts {
+        quoted_fee: Some(fee("120000000000000000")),
+        current_fee: Some(fee("138000000000000000")),
+        ..SignApproveOpts::default()
+    }));
+    let ops = swiped.dispatch(Event::SwipeDismissed);
+    let (code, kind, _) = ops
+        .iter()
+        .find_map(response_error)
+        .unwrap_or_else(|| panic!("the site is answered: {ops:?}"));
+    assert_eq!((code, kind), (4001, SignErrorKind::UserRejected));
+    // Another recipient is no figure the person saw either.
+    let mut moved = fee("120000000000000000");
+    moved.recipient = "0x6666666666666666666666666666666666666666".to_owned();
+    assert!(sut
+        .dispatch(approve(SignApproveOpts {
+            quoted_fee: Some(fee("120000000000000000")),
+            current_fee: Some(moved),
+            ..SignApproveOpts::default()
+        }))
+        .is_empty());
+
+    // The quote fell under the confirm: the figure SHOWN is signed.
+    let mut sut = boot();
+    sut.dispatch(Arrive::global("rid-fall", "eth_sendTransaction", &plain_send_params()).event());
+    sut.dispatch(approve(SignApproveOpts {
+        quoted_fee: Some(fee("120000000000000000")),
+        current_fee: Some(fee("110000000000000000")),
+        ..SignApproveOpts::default()
+    }));
+    let ops = sut.resolve(Res::PreCheck { funding: None });
+    let signed = ops
+        .iter()
+        .find_map(|op| match op {
+            Op::SignAndSubmit { quoted_fee, .. } => quoted_fee.clone(),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("a submission: {ops:?}"));
+    assert_eq!(signed.amount, "120000000000000000", "charged = shown");
+}
+
 /// Spec 069: the speed the displayed fee was priced at travels to the
 /// submission beside it, and the dead `rapid` never does.
 #[test]

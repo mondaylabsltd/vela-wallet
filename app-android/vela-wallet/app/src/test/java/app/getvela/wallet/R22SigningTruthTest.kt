@@ -88,7 +88,7 @@ class R22SigningTruthTest {
         for (case in cases) {
             val name = case.jsonObject["name"]!!.jsonPrimitive.content
             val expect = case.jsonObject["expect"]!!.jsonObject
-            val record = uniffi.vela_core_uniffi.simOutcome(user, case.jsonObject["envelope"].toString())
+            val record = uniffi.vela_core_uniffi.simOutcome(user, case.jsonObject["envelope"].toString(), null)
             assertEquals(name, expect["kind"]!!.jsonPrimitive.content, record.kind)
             expect["source"]?.let { assertEquals("$name: source", (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content, record.source) }
             expect["notice_key"]?.let { assertEquals("$name: notice", (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content, record.noticeKey) }

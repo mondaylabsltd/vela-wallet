@@ -93,7 +93,27 @@ export async function simulateVerdict(
 	} catch {
 		reply = UNREACHABLE_REPLY;
 	}
-	return simOutcome(from, reply);
+	return simOutcome(from, reply, sentValueWei(calls));
+}
+
+/**
+ * §39: the native value `calls` send from the account, as the wallet decoded
+ * them — their sum, in wei, as a decimal; `undefined` when it is zero or a
+ * value does not read (unknown: nothing is claimed). The core reconciles a
+ * node's answer with it (`with_decoded_value`); this only adds.
+ */
+export function sentValueWei(calls: FeeCall[]): string | undefined {
+	let sum = 0n;
+	for (const call of calls) {
+		const text = (call.value ?? '').trim();
+		if (text === '' || text === '0x') continue;
+		try {
+			sum += BigInt(text);
+		} catch {
+			return undefined;
+		}
+	}
+	return sum > 0n ? sum.toString() : undefined;
 }
 
 /**

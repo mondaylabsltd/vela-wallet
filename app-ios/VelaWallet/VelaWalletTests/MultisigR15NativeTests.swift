@@ -145,9 +145,12 @@ struct MultisigR15NativeTests {
         let line = try #require(beside.first?.text)
         #expect(line.contains("0.12"), "\(line)")
         #expect(beside.first?.tone == .danger)
-        // One "That didn't go through:", never two (the web's r15-6).
+        // §39 (r22-4): said WHY — "The network fee went up to ≈ 0.12 xDAI
+        // since you pressed; nothing was signed." — never "That didn't go
+        // through: Network fee ≈ …" (KNOWN-BUGS R20-15).
+        #expect(line == words.t("proposal.feeRose", ["fee": "0.12 \(words.symbol(100))"]), "\(line)")
         let prefix = words.t("proposal.failed", ["reason": ""]).trimmingCharacters(in: .whitespaces)
-        #expect(line.components(separatedBy: prefix).count - 1 == 1, "\(line)")
+        #expect(!line.contains(prefix), "\(line)")
         #expect(!m.notes.contains { $0.id == "executeFailed" }, "said once, where it was pressed")
         #expect(m.pressFailures(at: .execute).isEmpty)
     }

@@ -333,6 +333,44 @@ fn a_strangers_proposal_is_shown_only_behind_the_disclosure() {
     assert_eq!(sut.view().items.len(), 1);
 }
 
+/// §39 (R22 follow-up, S4 on Android): a stranger's hidden proposal at a
+/// member's number still gave the member's item "Only one of these can run…"
+/// — the hidden post seen indirectly. Hidden proposals count for nothing:
+/// not for the conflict note, nor (a stranger's cancellation) to void it.
+#[test]
+fn a_hidden_strangers_proposal_raises_no_conflict_note() {
+    let (mut world, mut sut, account) = setup(&[0, 1]);
+    let ours = hash_of(&propose(&mut sut, &mut world, transfer("1"), None));
+    let theirs = multisig::cancel_tx(&account.address, "0x0").unwrap();
+    let signed = strangers(&account, 100, &theirs);
+    world
+        .mailbox
+        .push(stored(&account, 100, &theirs, vec![signed]));
+    run(&mut sut, &mut world, Event::Refresh { fresh: true });
+    run(&mut sut, &mut world, Event::ShowNonMembers { show: true });
+    let view = sut.view();
+    let item = view
+        .items
+        .iter()
+        .find(|i| i.safe_tx_hash == ours)
+        .expect("ours is listed");
+    assert!(item.same_nonce.is_empty(), "{:?}", item.same_nonce);
+    assert_eq!(
+        item.cancelled_by, None,
+        "a stranger's cancellation voids nothing"
+    );
+    let stranger = view
+        .items
+        .iter()
+        .find(|i| i.from_non_member)
+        .expect("the stranger's, behind the disclosure");
+    assert_eq!(
+        stranger.same_nonce,
+        vec![ours],
+        "its own note names the members'"
+    );
+}
+
 /// r5reg-5: the member picked on the review signs, and is offered first next time.
 #[test]
 fn the_member_picked_is_remembered() {
@@ -736,6 +774,95 @@ fn an_unchecked_network_signs_nothing_yet() {
     assert!(world.passkeys.is_empty());
 }
 
+/// §39 (R22 follow-up, r22-2 — Arc with its default RPC: the pool holds one
+/// public provider, and a member could neither propose nor execute: the
+/// gate's authority reads found no second provider, and desktop said "Can't
+/// reach Arc Testnet"). One provider, by the pool's configuration: the
+/// member's own flow goes on — as "… anyway", the review saying "only one
+/// node could check" (`oneNode`), the page told it is "… anyway".
+#[test]
+fn one_provider_lets_a_member_sign_only_anyway_said_as_one_node() {
+    let (mut world, mut sut, _) = setup(&[0, 1]);
+    world.one_provider.insert(100);
+    run(
+        &mut sut,
+        &mut world,
+        Event::Draft {
+            chain_id: 100,
+            proposal: transfer("1"),
+        },
+    );
+    let draft = sut.view().draft.expect("a draft");
+    let review = draft.review.clone().expect("the review is drawn");
+    assert_eq!(
+        review["state"]["verdict"]["reason"], "oneNode",
+        "never \"checked\": {}",
+        review["state"]
+    );
+    assert_eq!(review["sign"]["anyway"], true, "{}", review["sign"]);
+    run(
+        &mut sut,
+        &mut world,
+        Event::ConfirmDraft { as_member: None },
+    );
+    let done = sut.view().actions["propose"].clone();
+    hash_of(&done);
+    assert_eq!(world.passkeys.len(), 1, "signed");
+    assert_eq!(
+        world.passkey_purposes[0]["anyway"], true,
+        "signed as \"… anyway\": {}",
+        world.passkey_purposes[0]
+    );
+}
+
+/// §39: two independent nodes that answer who can act differently are a
+/// real signal — nothing is signed, not even "… anyway", and it is said as
+/// the disagreement it is (`SigningDisagreed`), never "can't reach".
+#[test]
+fn two_disagreeing_nodes_sign_nothing() {
+    let (mut world, mut sut, _) = setup(&[0, 1]);
+    run(
+        &mut sut,
+        &mut world,
+        Event::Draft {
+            chain_id: 100,
+            proposal: transfer("1"),
+        },
+    );
+    world.disagreeing.insert(100);
+    run(
+        &mut sut,
+        &mut world,
+        Event::ConfirmDraft { as_member: None },
+    );
+    assert_eq!(sut.view().actions["propose"], ActionState::SigningDisagreed);
+    assert!(world.passkeys.is_empty());
+}
+
+/// §39: two independent nodes that agree — the plain path, unchanged: no
+/// "… anyway" asked of the page.
+#[test]
+fn two_agreeing_nodes_sign_plainly() {
+    let (mut world, mut sut, _) = setup(&[0, 1]);
+    run(
+        &mut sut,
+        &mut world,
+        Event::Draft {
+            chain_id: 100,
+            proposal: transfer("1"),
+        },
+    );
+    let review = sut.view().draft.and_then(|d| d.review).expect("drawn");
+    assert_ne!(review["state"]["verdict"]["reason"], "oneNode");
+    run(
+        &mut sut,
+        &mut world,
+        Event::ConfirmDraft { as_member: None },
+    );
+    hash_of(&sut.view().actions["propose"]);
+    assert_eq!(world.passkeys.len(), 1);
+}
+
 // -- approving and executing ------------------------------------------------------------
 
 /// Two members approve; the second's approval meets the threshold.
@@ -832,9 +959,10 @@ fn an_execution_never_signs_a_fee_other_than_the_one_shown() {
 /// few seconds, so a fresh look (inside `PREVIEW_FRESH_MS`) can replace the
 /// fee between the paint and the press — the press signed the look's new
 /// figure, not the one the person saw. The press now carries the figure
-/// drawn under it (`shown_fee`): any look whose fee is another — fresh or
-/// re-quoted — stops with `fee_moved`, nothing signed; a press on the new
-/// figure signs exactly it.
+/// drawn under it (`shown_fee`). §39 (R22 follow-up, r22-3: six presses on
+/// Android, each stopped by a quote that moved): a quote at or under the
+/// figure carried signs EXACTLY the figure carried; only one above it stops
+/// with `fee_moved`, nothing signed, and a press on the new figure signs it.
 #[test]
 fn a_press_signs_only_the_fee_it_carries_even_on_a_fresh_look() {
     let (mut world, mut sut, _) = setup(&[0, 1]);
@@ -887,8 +1015,11 @@ fn a_press_signs_only_the_fee_it_carries_even_on_a_fresh_look() {
         executor: fixture(0).address,
         shown_fee: Some(shown),
     };
+    // §39 (r22-3): a figure drawn BELOW the quote now (the quote rose under
+    // the press) signs nothing — the stop names the new figure.
     let passkeys = world.passkeys.len();
-    no_clock(&mut sut, &mut world, press("999".to_owned()));
+    let below = (fee(&look).parse::<u128>().unwrap() - 1).to_string();
+    no_clock(&mut sut, &mut world, press(below));
     let ActionState::Failed { detail } = sut.view().actions[&format!("execute:{hash}")].clone()
     else {
         panic!("{:?}", sut.view().actions);
@@ -898,13 +1029,26 @@ fn a_press_signs_only_the_fee_it_carries_even_on_a_fresh_look() {
     assert_eq!(
         detail["amount"],
         fee(&look),
-        "the figure it would have signed"
+        "the figure the next press signs"
     );
     assert!(world.sent.is_empty(), "nothing signed or sent");
     assert_eq!(world.passkeys.len(), passkeys);
-    // Pressed on the figure now shown: signed at exactly it.
-    no_clock(&mut sut, &mut world, press(fee(&look)));
+    // §39: a figure drawn ABOVE the quote now (it fell under the press)
+    // signs exactly the figure drawn: charged = shown, the relay gets more
+    // than its quote.
+    no_clock(&mut sut, &mut world, press("999".to_owned()));
     assert_eq!(world.sent.len(), 1, "signed at the fee shown");
+    let signed = world
+        .sent_fees
+        .last()
+        .cloned()
+        .flatten()
+        .expect("a fee leg");
+    assert_eq!(
+        vela_core::app::multisig_shell::quantity(signed["amount"].as_str().unwrap()),
+        Some(999),
+        "the fee leg pays the figure shown, not the lower quote: {signed}"
+    );
 }
 
 /// Round 16 (r16-1 desktop, r16-7 iOS): after a fee-moved stop the footer
@@ -1013,7 +1157,7 @@ fn a_fee_moved_stop_is_withdrawn_when_the_look_has_no_figure() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             executor: fixture(0).address,
-            shown_fee: Some("999".to_owned()),
+            shown_fee: Some("0".to_owned()), // §39: a figure under the quote: the stop
         },
     );
     let key = format!("execute:{hash}");
@@ -2777,7 +2921,7 @@ fn failures_are_stable_kinds_never_english_text() {
         (
             r#"{"kind":"fee_moved","amount":"1","chainId":100,"executor":"0xa"}"#,
             FailureKind::FeeMoved,
-            None,
+            Some("home.multisig.proposal.feeRose"),
         ),
         (
             r#"{"kind":"unknown","message":"TypeError: x is undefined"}"#,

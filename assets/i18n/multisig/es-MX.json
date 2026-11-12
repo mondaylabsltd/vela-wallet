@@ -165,6 +165,7 @@
     "feeUncheckedHeld": "No se pudo comprobar si se ejecutaría — Ejecutar lo vuelve a comprobar.",
     "feeRetry": "Comprobar de nuevo",
     "feeSigning": "Se firma con esta comisión: no cambia hasta que confirmes o canceles.",
+    "feeRose": "La comisión de red subió a ≈ {{fee}} desde que presionaste; no se firmó nada. Presiona de nuevo para pagar {{fee}}.",
     "feeSetup": "Incluye una configuración única en {{network}} ≈ {{amount}}:",
     "feeSetupPlain": "Incluye una configuración única en {{network}}:",
     "setupMultisig": "desplegar este multisig",
@@ -367,6 +368,7 @@
     "signRiskConfirm": "Entiendo el riesgo, firmar",
     "signRiskCancel": "No firmar",
     "signUnchecked": "Vela no pudo comprobar quién puede actuar por esta multifirma en {{network}}, así que todavía no firmará ahí. Inténtalo de nuevo en un momento.",
+    "signDisagreed": "Dos nodos independientes de {{network}} dieron respuestas distintas sobre quién puede actuar por este multisig, así que Vela no firmará ahí. Agrega tu propio nodo en Configuración para verificar con uno de confianza, o inténtalo más tarde.",
     "ownerNotBound": "En {{network}}, el miembro {{address}} es un contrato que nada vincula a su propia creación allí: quien pueda desplegar en esa dirección tendría su voto."
    },
    "external": {
@@ -738,6 +740,8 @@
     },
     "stateUnconfirmed": "Solo respondió un nodo en {{network}}, así que Vela no pudo confirmar qué cambia en el multisig al ejecutarla. Solo queda la lectura de Vela de la transacción.",
     "stateDisagreed": "Dos nodos independientes en {{network}} no coinciden en qué cambia en el multisig al ejecutarla. Solo queda la lectura de Vela de la transacción.",
+    "stateOneNode": "Solo un nodo pudo confirmar quién puede actuar en {{network}} y qué cambia en el multisig al ejecutarla. Agrega tu propio nodo en Configuración para que se verifique dos veces.",
+    "addOwnNode": "Agregar tu propio nodo",
     "blindRefused": "Vela no firmará esto aquí: “Rechazar firma a ciegas” está activado y parte de esta transacción no se pudo revisar. Puedes cambiarlo en Configuración."
    },
    "notify": {

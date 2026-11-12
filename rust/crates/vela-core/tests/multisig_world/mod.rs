@@ -412,6 +412,13 @@ pub struct World {
     pub sent_fees: Vec<Option<Value>>,
     pub send_answer: Option<Res>,
     pub quote_answer: Option<Res>,
+    /// §39 (r22-2): networks whose pool holds one provider only: every
+    /// corroborated read is one node's answer, `soleProvider` (Arc with its
+    /// default RPC).
+    pub one_provider: BTreeSet<u64>,
+    /// §39: networks whose second, independent node answers every
+    /// corroborated `eth_call` differently from the first (a lying node).
+    pub disagreeing: BTreeSet<u64>,
     pub notices: Vec<Notice>,
     pub random: u8,
     /// What a sent user operation does on chain when it lands.
@@ -478,6 +485,8 @@ impl Default for World {
             sent_fees: Vec::new(),
             send_answer: None,
             quote_answer: None,
+            one_provider: BTreeSet::new(),
+            disagreeing: BTreeSet::new(),
             notices: Vec::new(),
             random: 7,
             on_send: None,
@@ -962,6 +971,37 @@ impl World {
         }
     }
 
+    /// §39: a corroborated read as this network gives it — one provider
+    /// only ([`World::one_provider`]), or a witness that disagrees
+    /// ([`World::disagreeing`]).
+    fn network_shape(&self, chain_id: u64, method: &str, answer: Res) -> Res {
+        let Res::RpcCorroborated { mut envelope } = answer else {
+            return answer;
+        };
+        if self.one_provider.contains(&chain_id) {
+            if let Some(map) = envelope.as_object_mut() {
+                map.remove("witness");
+            }
+            envelope["soleProvider"] = Value::Bool(true);
+        } else if self.disagreeing.contains(&chain_id)
+            && matches!(method, "eth_call" | "eth_getCode")
+        {
+            if let Some(result) = envelope["witness"]["result"].as_str() {
+                let lie = if result == "0x" {
+                    "0x6080".to_owned()
+                } else {
+                    let mut lie = result.to_owned();
+                    let last = if lie.ends_with('0') { '1' } else { '0' };
+                    lie.pop();
+                    lie.push(last);
+                    lie
+                };
+                envelope["witness"]["result"] = Value::String(lie);
+            }
+        }
+        Res::RpcCorroborated { envelope }
+    }
+
     /// The shell's answer to one operation.
     pub fn answer(&mut self, op: &Op) -> Res {
         match op {
@@ -981,7 +1021,7 @@ impl World {
                 // R22: an honest network — a corroborated read is answered
                 // alike by a second, independent node.
                 if *corroborate {
-                    honest_twin(answer)
+                    self.network_shape(*chain_id, method, honest_twin(answer))
                 } else {
                     answer
                 }
@@ -1053,14 +1093,29 @@ impl World {
             Op::QuoteCalls { .. } => self.quote_answer.clone().unwrap_or(Res::Quoted {
                 quote: json!({"kind": "quoted", "fee": {"token": null, "amount": "0x1"}, "totalGas": "0x1", "executorDeployed": true}),
             }),
-            Op::Simulate { .. } => Res::Simulated {
+            Op::Simulate { chain_id, .. } => {
                 // R22: the simulation is always a corroborated read.
-                reply: honest_sim(
+                let reply = honest_sim(
                     self.sim_replies
                         .pop_front()
                         .unwrap_or_else(|| self.sim_reply.clone()),
-                ),
-            },
+                );
+                let reply = if self.one_provider.contains(chain_id) {
+                    reply.map(|r| match serde_json::from_str::<Value>(&r) {
+                        Ok(mut v) if v.is_object() => {
+                            if let Some(map) = v.as_object_mut() {
+                                map.remove("witness");
+                            }
+                            v["soleProvider"] = Value::Bool(true);
+                            v.to_string()
+                        }
+                        _ => r,
+                    })
+                } else {
+                    reply
+                };
+                Res::Simulated { reply }
+            }
             Op::RecipientRisk { address, .. } => {
                 let (is_contract, first_time) = self
                     .recipients

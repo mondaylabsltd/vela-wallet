@@ -1191,7 +1191,7 @@ mod tests {
         let lines = press_failure_lines(&actions, HASH, words);
         assert_eq!(lines.len(), 1, "{lines:?}");
         assert!(lines[0].contains("0.099144"), "{}", lines[0]);
-        assert_eq!(lines[0].matches("That didn't go through").count(), 1);
+        assert_eq!(lines[0].matches("nothing was signed").count(), 1);
         // The core moved the stop's figure with the look: the next render
         // says the new one, never the old.
         actions.insert(

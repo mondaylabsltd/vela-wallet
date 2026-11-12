@@ -1217,9 +1217,12 @@ impl WalletPage {
                     cx.notify();
                 }
             }))
+            // The shell's own Tab walk (`ui::focus_walk`) stands aside here:
+            // this form walks its own stops, below.
+            .key_context(crate::ui::focus_walk::OWN_TAB)
             // Tab walks the form's stops: the two wells, each tile, the add
-            // target (C1). Nothing else in this shell binds Tab, so it is
-            // the form's to take. (⇧Tab never arrives on macOS at this gpui:
+            // target (C1) — the form's to take: the shell's walk binds Tab
+            // outside forms like this one. (⇧Tab never arrives on macOS at this gpui:
             // a key with no character goes to the input context first.)
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
                 let ks = &event.keystroke;

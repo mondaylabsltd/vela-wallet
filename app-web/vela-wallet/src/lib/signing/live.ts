@@ -2101,9 +2101,13 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	const note =
 		!enabled && confirmState?.key
 			? m.confirmBlock[confirmState.key]
-			: enabled && sign.passkey_note
-				? m.passkeyNote[sign.passkey_note]
-				: undefined;
+			: // §39 (A1): the fee rose since the press — nothing was signed; the
+				// fee row now draws the new figure, and the next confirm pays it.
+				enabled && sign.error?.kind === 'fee_rose' && m.feeRose
+				? m.feeRose
+				: enabled && sign.passkey_note
+					? m.passkeyNote[sign.passkey_note]
+					: undefined;
 
 	const shown = verdictShown(inputs);
 	const drawn = withSimVerdict(
@@ -2205,6 +2209,18 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	};
 }
 
+/** A fee view's in-band quote — no recipient, no quote: the core's own rule. */
+function quotedFeeOf(fee: FeeView | null | undefined): SignApproveOpts['quoted_fee'] {
+	const quote = fee?.fee ?? null;
+	return quote && quote.fee_recipient
+		? {
+				amount: quote.fee_asset.type === 'erc20' ? quote.fee_asset.amount : quote.total_wei,
+				recipient: quote.fee_recipient,
+				tier: quote.tier
+			}
+		: null;
+}
+
 /**
  * What the approve carries — every field a copy of a machine's view, none
  * decided here.
@@ -2225,22 +2241,23 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 export function approveOptsOf(
 	fee: FeeView | null | undefined,
 	clear: ClearSigningView,
-	guard: GuardView
+	guard: GuardView,
+	/**
+	 * §39 (r22-3 / A1): the fee machine's quote AT the approve, beside `fee`,
+	 * the figure the sheet drew when the confirm began. Absent: the core
+	 * signs `fee` as before.
+	 */
+	current?: FeeView | null
 ): SignApproveOpts {
 	const quote = fee?.fee ?? null;
 	return {
 		max_fee_per_gas: quote ? quote.max_fee_per_gas : null,
 		bundler_cost_wei: null,
 		gas_fee_token: fee?.fee_token ?? null,
-		// No recipient, no in-band quote: the core's own rule.
-		quoted_fee:
-			quote && quote.fee_recipient
-				? {
-						amount: quote.fee_asset.type === 'erc20' ? quote.fee_asset.amount : quote.total_wei,
-						recipient: quote.fee_recipient,
-						tier: quote.tier
-					}
-				: null,
+		quoted_fee: quotedFeeOf(fee),
+		// At or under `quoted_fee` the figure shown is signed; above it nothing
+		// is (`fee_rose`) — the core's rule, never weighed here.
+		current_fee: current === undefined ? null : quotedFeeOf(current),
 		fee_collector: null,
 		params_override_json: guard.rewritten_params_json,
 		intent: clear.record_intent ?? null,

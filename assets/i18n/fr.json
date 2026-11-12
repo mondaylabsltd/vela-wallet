@@ -560,8 +560,8 @@
   "txErrorProposalNotSupported": "Cette app ne peut pas encore proposer de transactions multisig : rien n’a été signé ni proposé.",
   "maxMoved": "Le max est maintenant de {{to}} {{symbol}} (au lieu de {{from}}) : les frais de réseau ont été recalculés, donc la part mise de côté pour eux a changé.",
   "feeSigning": "Signature avec ces frais et ce montant — ils ne changent pas tant que vous ne confirmez ou n’annulez pas.",
-  "feeMoved": "Les frais de réseau ont été recalculés avant la signature, donc rien n’a été signé. Les frais ci-dessus sont les nouveaux — confirmez à nouveau pour envoyer avec eux.",
-  "feeMovedMax": "Les frais de réseau ont été recalculés avant la signature, donc rien n’a été signé. Avec les nouveaux frais ci-dessus, le max est maintenant de {{to}} {{symbol}} (au lieu de {{from}}) — confirmez à nouveau pour l’envoyer.",
+  "feeMoved": "Les frais de réseau ont augmenté depuis votre appui, donc rien n’a été signé. Les frais ci-dessus sont les nouveaux — appuyez à nouveau pour les payer.",
+  "feeMovedMax": "Les frais de réseau ont augmenté depuis votre appui, donc rien n’a été signé. Le max est maintenant de {{to}} {{symbol}} (il était de {{from}}) avec les nouveaux frais ci-dessus — appuyez à nouveau pour l’envoyer.",
   "txReviewAgain": "Revoir",
   "txSendAgain": "Renvoyer",
   "txCheckingElapsed": "Vérification de son envoi… {{elapsed}} s",
@@ -1709,6 +1709,7 @@
    "simDisagreed": "Deux nœuds indépendants donnent des réponses différentes sur ce que fait cette transaction. Vérifiez-la avant de signer.",
    "simOwnNode": "Vérifié uniquement par votre propre nœud",
    "ownNodeHint": "Pour vérifier avec un nœud de confiance, ajoutez le vôtre et activez « Utiliser uniquement mon nœud » pour ce réseau.",
+   "feeRose": "Les frais de réseau ont augmenté depuis votre appui, donc rien n’a été signé. Les frais affichés sont les nouveaux — appuyez à nouveau pour les payer.",
    "confirmAgain": "Appuyez à nouveau pour confirmer"
   },
   "signingApprove": {

@@ -214,6 +214,8 @@ class NativeShownFeeDeviceTest {
         // Ready; Execute's look priced at 0x1 is on screen.
         waitFor("multisig.proposal.fee", 60_000)
         compose.waitUntil(30_000) { enabled("multisig.proposal.execute") == true }
+        // The look's figure itself, never "Checking … the network fee…" a frame before it lands.
+        compose.waitUntil(60_000) { runCatching { text("multisig.proposal.fee") }.getOrDefault("").contains("≈") }
         val drawn = text("multisig.proposal.fee")
         assertTrue(drawn, drawn.isNotEmpty())
 
@@ -254,8 +256,10 @@ class NativeShownFeeDeviceTest {
         waitFor("multisig.proposal.note.executeFailed", 30_000)
         assertEquals(1, compose.onAllNodesWithTag("multisig.proposal.note.executeFailed", useUnmergedTree = true).fetchSemanticsNodes().size)
         val said = text("multisig.proposal.note.executeFailed")
-        assertEquals(said, 1, said.split("That didn't go through").size - 1)
-        assertTrue(said, said.contains("Network fee"))
+        // §39 (r22-4): said as why it stopped — the fee went up — with the new
+        // figure; never "That didn't go through: Network fee ≈ …".
+        assertEquals(said, 1, said.split("The network fee went up to ≈").size - 1)
+        assertTrue(said, said.contains("nothing was signed") && !said.contains("That didn't go through"))
         // (1 and 2 wei read the same at the line's precision: the core
         // compares base units, so the figure carried is the look's own.)
 

@@ -201,7 +201,7 @@ class R14LeftoversTest {
     }
 
     @Test
-    fun `the core's fee_moved answer is said with the new fee and the executor's name`() {
+    fun `the core's fee_moved answer says the fee rose, with the new figure`() {
         // The core's `fee_moved_detail` shape (multisig_proposals.rs).
         val ana = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
         val named = MultisigWords(
@@ -211,6 +211,10 @@ class R14LeftoversTest {
             nativeSymbol = { if (it == 100) "XDAI" else null },
         )
         val detail = """{"kind":"fee_moved","amount":"97200000000000000","chainId":100,"executor":"$ana"}"""
-        assertEquals("That didn't go through: Network fee ≈ 0.0972 XDAI, paid by Ana", named.failureText(detail))
+        // §39 (r22-4): why it stopped, with the new figure the next press pays.
+        assertEquals(
+            "The network fee went up to ≈ 0.0972 XDAI since you pressed; nothing was signed. Press again to pay 0.0972 XDAI.",
+            named.failureText(detail),
+        )
     }
 }

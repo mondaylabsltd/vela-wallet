@@ -133,6 +133,11 @@ struct HoldConfirmButton: View {
     var showsHint: Bool = true
     let press: ConfirmPress
     var haptic: VelaHaptic = .confirm
+    /// §39 (R22 follow-up, A1): the confirm began (`true`: a hold started,
+    /// the assistive path armed) or ended without firing (`false`: lifted
+    /// early, disarmed, shut). The dApp sheet takes the fee it draws at the
+    /// beginning and holds its fee row still until the end.
+    var onEngage: (Bool) -> Void = { _ in }
     let action: () -> Void
 
     @State private var state = HoldConfirmState()
@@ -256,6 +261,7 @@ struct HoldConfirmButton: View {
     private func begin() {
         guard state.holdingSinceMs == nil else { return }
         state.pressBegan(nowMs: Self.nowMs)
+        onEngage(true)
         VelaHaptic.press.play()
         withAnimation(.linear(duration: Double(press.holdMs) / 1000)) { progress = 1 }
         holdTimer?.cancel()
@@ -281,6 +287,9 @@ struct HoldConfirmButton: View {
         holdTimer?.cancel()
         holdTimer = nil
         _ = state.pressEnded()
+        // Lifted early, the confirm is over (after it fired, the action has
+        // already taken the figure, and this ends nothing).
+        if !armed { onEngage(false) }
         withAnimation(.easeOut(duration: 0.2)) { progress = 0 }
     }
 
@@ -289,6 +298,7 @@ struct HoldConfirmButton: View {
         switch state.activate(nowMs: Self.nowMs, windowMs: windowMs) {
         case .armed:
             armed = true
+            onEngage(true)
             VelaHaptic.press.play()
             UIAccessibility.post(notification: .announcement, argument: press.confirmAgain)
             disarm?.cancel()
@@ -298,6 +308,7 @@ struct HoldConfirmButton: View {
                 guard !Task.isCancelled else { return }
                 state.expire(nowMs: Self.nowMs, windowMs: window)
                 armed = state.armed(nowMs: Self.nowMs, windowMs: window)
+                if !armed { onEngage(false) }
             }
         case .confirmed:
             fire()
@@ -320,6 +331,7 @@ struct HoldConfirmButton: View {
         state.expire(nowMs: .infinity, windowMs: 0)
         armed = false
         progress = 0
+        onEngage(false)
     }
 }
 

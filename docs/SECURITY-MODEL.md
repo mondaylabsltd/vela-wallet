@@ -252,9 +252,9 @@ replayed by the core and by every shell through the real core.
 ### 6.4 Two-provider simulation and the state-diff guard
 
 - **Rule.** A read a verdict stands on is a corroborated read: the RPC pool asks a second
-  endpoint from another provider (`app::corroborate::provider_of`, `corroborate::independent`; at
-  most `rpc_pool::WITNESS_MAX_ASKS` extra asks; never hedged), after each endpoint has reported
-  the chain's id. The core compares meaning, not bytes: simulation within 2 %
+  endpoint from another provider (`app::corroborate::provider_of`, `corroborate::independent`; one
+  endpoint per other provider, best-scored first, within `rpc_pool::WITNESS_BUDGET_MS`; never
+  hedged), after each endpoint has reported the chain's id. The core compares meaning, not bytes: simulation within 2 %
   (`sim_outcome::SIM_AGREE_BPS`, showing the worse figure), the state diff by its verdict, code,
   storage and `eth_call` exactly (`corroborate::same_answer`). This covers the sign sheet's
   `eth_simulateV1`, every read of the multisig review, the gate before every multisig signature
@@ -263,18 +263,27 @@ replayed by the core and by every shell through the real core.
   **state-diff guard** (`multisig_review::StateVerdict`, `debug_traceCall` prestate diff and the
   SafeStateProbe) applies to multisig reviews: a change to who controls the multisig that the
   transaction does not declare refuses signing with no override (`StateVerdict::Undeclared`); a
-  refusal from either node stands alone.
+  refusal from either node stands alone. **One provider** (§39): where the pool holds no other
+  provider at all (`RpcCallVerdict::Respond::sole_provider`, `corroborate::SOLE_PROVIDER_KEY`), an
+  authority read in the member's own multisig flow (`Io::corroborating_own`,
+  `corroborate::authority_read`) goes on as "… anyway", held and said
+  (`home.multisig.review.stateOneNode`, with the way to add one's own node); a site's guard
+  (`isOwner`) stays strict; two that disagree refuse (`ActionState::SigningDisagreed`).
 - **Guarantees.** One lying or compromised node cannot produce a plain verdict: alone it gives
   "unconfirmed" ("… anyway"); beside an honest node it gives "disagreed". A lie can make Vela
-  refuse; it cannot make a multisig member change look declared.
+  refuse; it cannot make a multisig member change look declared. A network with one public
+  provider never locks a member out of their own multisig.
 - **Does not guarantee.** Independence beyond a registrable-domain heuristic (two brands reselling
   one backend count as two). Two colluding providers. The state diff for a **Vela account's own**
   transactions: there is none; those rest on simulation and the guards. Ordinary display reads
-  (balances, history) are one node's word.
-- **Tests.** Vector `tests/vectors/rules/signing-truth.json` (13 simulation envelopes, 8 `isOwner`
-  readings, 12 provider URLs); `tests/r22_signing_truth.rs`; fork `tests/signing_truth_fork.rs`
+  (balances, history) are one node's word. On a single-provider network, who can act for a
+  multisig is one node's word (held "… anyway"; G22).
+- **Tests.** Vector `tests/vectors/rules/signing-truth.json` (13 simulation envelopes, 9 `isOwner`
+  readings, 12 provider URLs, 8 `authority` reads); `tests/r22_signing_truth.rs`; fork `tests/signing_truth_fork.rs`
   (a real drain behind a lying proxy, `tests/fork_proxy`) and `tests/multisig_fork.rs`
-  (`a_lying_node_never_gives_a_member_change_a_plain_review`).
+  (`a_lying_node_never_gives_a_member_change_a_plain_review`,
+  `one_provider_lets_the_members_sign_and_execute_as_anyway`,
+  `two_disagreeing_providers_refuse_the_member`).
 
 ### 6.5 The review door
 
@@ -295,7 +304,10 @@ replayed by the core and by every shell through the real core.
   is held for `sign_confirm::HOLD_TO_CONFIRM_MS` (1.5 s); with assistive technology, a first
   activation arms and a second within `sign_confirm::CONFIRM_AGAIN_WINDOW_MS` (5 s) confirms. The
   "Refuse blind signing" setting (`prefs::keys::REFUSE_BLIND_SIGNING`, **off by default**) turns
-  every "… anyway" into a refusal (`ConfirmBlock::BlindRefused`).
+  every "… anyway" into a refusal (`ConfirmBlock::BlindRefused`). Every unbounded grant, however
+  nested (a carrier, a batch leg, a permit, Permit2's witness transfer), is a held danger
+  (`sign_confirm::guarded_posture`, §39). A re-check of a verdict already on the sheet keeps its
+  door, so a hold or an arm is not cut by it.
 - **Guarantees.** No unread check is confirmed by a tap, a double tap or a press made while the
   sheet is arriving. With the setting on, nothing unread is signed at all.
 - **Does not guarantee.** That a person reads a held warning. The default is off on purpose
@@ -363,14 +375,22 @@ build can change any of them.
   `signed_review::dapp_message_hash`). From the press to its signature the figures pressed are
   frozen; a quote that moved under the press signs nothing and says so (`send::press_frozen`,
   `docs/multisig-machines.md` §34). Fees round up at the shown places (`fee_policy::fee_figure`);
-  Max sends exactly what it shows (`send::max_shown_exact`).
+  Max sends exactly what it shows (`send::max_shown_exact`). **§39:** a quote at or under the
+  figure on screen signs exactly the figure on screen (charged = shown, the relay gets at least
+  its quote); only a rise stops, said why (`send::quote_within`, the multisig execution, a site's
+  request through `SignApproveOpts::current_fee` and `sign_request::fee_rose`). A fee at the
+  relay's published price carries `fee_policy::FEE_HEADROOM_BPS` (12.5 %, one block's base-fee
+  rise). A site's sheet carries the fee drawn when the confirm began and holds it still while
+  armed or held.
 - **Guarantees.** The amount, recipient and fee signed are the ones shown; nothing is signed on a
-  figure nobody saw. A shell cannot hash an operation whose calls differ from the reviewed ones.
+  figure nobody saw, and nothing above it. A shell cannot hash an operation whose calls differ
+  from the reviewed ones. A quote that moves down never stops a press.
 - **Does not guarantee.** That the fee is close to the on-chain cost: the README records one swap
-  charged about 14× its gas. The signing sheet's approve reads the fee view at the handler, not
-  the painted frame (a one-frame window, no incident).
+  charged about 14× its gas; the headroom is paid, not refunded (G23).
 - **Tests.** Vector `tests/vectors/rules/send-fee-cover.json`; `tests/app_send_fee_cover.rs`
-  (`the_figures_signed_are_the_figures_pressed_or_nothing_is_signed`); `r22_signing_truth.rs`
+  (`the_figures_signed_are_the_figures_pressed_or_nothing_is_signed`,
+  `a_max_that_moves_and_moves_back_is_said_each_time`); `tests/app_sign_request.rs`
+  (`a_site_send_signs_the_fee_shown_or_nothing_when_the_quote_rose`); `r22_signing_truth.rs`
   (`attest`); a test per shell that a drifted operation prompts no passkey.
 
 ### 6.10 validUntil: every SafeOp expires
@@ -477,6 +497,7 @@ blind signing" unless marked otherwise.
 | **… anyway: simulation not read** | `eth_simulateV1` did not come back, timed out, is not offered, only one provider answered, or two disagreed (`sim_outcome::SimOutcome`) | caution or danger, held; "Check again"; the own-node hint | a single-provider pool or a network without `eth_simulateV1` would otherwise block ordinary use |
 | **… anyway: simulation says it reverts** | the simulation reverts | danger, held | a simulation is one block's view on one or two nodes, not the execution; the decision (review 1-3) was "a revert blocks unless the person goes through … anyway" |
 | **… anyway: multisig state diff or simulation unread** | `Concern::StateUnread` or `Concern::Unsimulated` in a multisig review | held; door `blindRefused` with the setting on | networks without `debug_traceCall`, or one provider |
+| **… anyway: one provider says who can act** (§39) | the member's own multisig flow on a network whose pool holds no other provider (`corroborate::authority_read` → `one_node`): owners, threshold, modules, guard and nonce are one node's word; the review says `home.multisig.review.stateOneNode`, never "checked" | held; every signature asked "… anyway"; refused with Refuse blind signing; "Add your own node" one link away. **Not** for a site's request (§6.2 stays strict) | a network with one public provider would otherwise lock its members out of their own multisig with no way forward |
 | **eth_sign** | `eth_sign` (signed as EIP-191 wrapped in the account's `SafeMessage`, `rust/crates/vela-core/src/sign_message.rs`) | blind, held; the signing page refuses `eth_sign` | dApp compatibility |
 | **Unlimited approval kept** | an unbounded amount the person does not cap | red line, cap one chip away; consent per approval per leg. **Not** gated by Refuse blind signing (it is read, not blind) | Permit2 and EIP-5792 bundles revert if the approve leg is re-encoded |
 | **Multisig account risk** | a deployed multisig has a module, guard, unknown singleton or unknown fallback handler (`multisig::Risk`, `Gate::Risk`) | a confirmation before **every** signature (`MultisigOperation::AskRisk`). Not gated by Refuse blind signing. **The design document said "stop signing"; the code asks** (`docs/multisig-vault-design.md` §5.2 note). **Decided 2026-11-09: the code's behaviour stands.** Vela never creates a multisig with a module or guard, so one exists only after the members approved adding it (and the state-diff guard flags that write); stopping would lock the funds with no way out, while a held confirmation that names the risk keeps the members informed and the Safe recoverable | members may knowingly use a module; the chain read itself is corroborated |
@@ -484,7 +505,8 @@ blind signing" unless marked otherwise.
 | **Kill switch** | `integrity::ENFORCE = false` opens a refused page with its refusal drawn | a source change and a release | recovery from a self-inflicted outage |
 | **Test-build production writes** | `VELA_ALLOW_PRODUCTION_WRITES=1` | test builds only; off by default | real-device passes that must write |
 
-Where Vela fails **closed** with no override: the self-call and parent-Safe shapes (§6.2); a
+Where Vela fails **closed** with no override: two independent nodes that disagree about who can
+act for a multisig (`ActionState::SigningDisagreed`, §6.4); the self-call and parent-Safe shapes (§6.2); a
 sign-in that does not bind (§6.13); an undeclared control change in a multisig (§6.4); the
 multisig safe-shape rules (§9); an operation with no expiry (§6.10); a fee or calldata that drifted
 from the review (§6.9); an unknown page hash on the official host (§6.7); a refuted account's
@@ -662,6 +684,8 @@ Each item is open at the commit above. "Accepted" means decided and recorded; th
 | G19 | No EIP-7702 stance, no migration to newer EntryPoint or Safe versions for existing accounts; the audits page names EntryPoint v0.7's interception issue. | open | [Audits & known issues](https://getvela.app/docs/security-audits) |
 | G20 | An AI agent may ask to switch statistics on (a `Manage` intent the person approves). | open | [hardening §3](security/hardening.md#3-usage-statistics-are-opt-in-review-1-8) |
 | G21 | The phones' page path has no end-to-end harness; hold-to-confirm and the assistive path have not been walked on real hardware. | open | [hardening R22-3](security/hardening.md#r22-3-the-signing-page-check-then-open-review-0-5) |
+| G22 | **On a network whose pool holds one provider, who can act for a multisig is one node's word** in the member's own flows (held "… anyway", said, refused with Refuse blind signing). A lying sole node can hide a module or guard from the review; it cannot move funds (the Safe enforces its owners on chain; the state-diff guard's refusal stands alone). A provider-diverse default pool is the fix. | accepted, documented | [hardening §18](security/hardening.md#18-round-22-follow-ups-one-provider-a-fee-that-moves-39) |
+| G23 | **The fee headroom is paid, not refunded**: a fee at the relay's published price is shown and signed 12.5 % above the quote (`fee_policy::FEE_HEADROOM_BPS`), and the relay keeps it. | accepted, documented | [hardening §18](security/hardening.md#18-round-22-follow-ups-one-provider-a-fee-that-moves-39) |
 
 Open bugs in the tracker are in [`docs/KNOWN-BUGS.md`](KNOWN-BUGS.md); the security-relevant ones
 are SEC-PARENT-1, SEC-PARENT-2 and SEC-PARENT-3 (all fixed on this branch) and R22-PLAN-1.
@@ -690,3 +714,4 @@ Internal incidents that put no user at risk: [`docs/security/incidents.md`](secu
 | Date | Commit verified | Change |
 | --- | --- | --- |
 | 2026-11-09 | `fa6083c87` | First version (Round 23), following the outline of the 2026-11-07 internal review. Supersedes the whitepaper's "Threats considered" as the reference threat model. |
+| 2026-11-12 | `41d0c60b2` | Round 22 follow-ups (§39): the one-provider rule and `SigningDisagreed` (§6.4, §7, G22); charged = shown with no livelock and the fee headroom (§6.9, G23); every unbounded grant held (§6.6). |

@@ -100,6 +100,23 @@ export function stateBlocks(review: MultisigReviewOut, ctx: ReviewContext): Bloc
 				{ kind: 'source', text: source, tone: 'neutral' }
 			];
 		case 'unavailable': {
+			// §39 (r22-2): one node could check, where the pool holds no other
+			// provider — said as that, with the way to add one's own node (the
+			// signing sheet's own destination: this network's RPC settings).
+			if (v.reason === 'oneNode' && m.stateOneNode) {
+				return [
+					{
+						kind: 'warning',
+						tone: 'caution',
+						text: fillTemplate(m.stateOneNode, { network }),
+						ownNode: {
+							text: '',
+							action: m.addOwnNode,
+							...(ctx.ownNodeHref ? { href: ctx.ownNodeHref } : {})
+						}
+					}
+				];
+			}
 			// R22 (review 1-2): the core names why — one node's word nobody
 			// independent confirmed, or two nodes that disagree; anything else is
 			// "couldn't check" as before.

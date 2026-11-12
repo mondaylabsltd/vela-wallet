@@ -239,6 +239,7 @@
         "feeUncheckedHeld": "Çalışıp çalışmayacağı kontrol edilemedi — Yürüt yeniden kontrol eder.",
         "feeRetry": "Yeniden kontrol et",
         "feeSigning": "Bu ücretle imzalanıyor — onaylayana ya da iptal edene kadar değişmez.",
+        "feeRose": "Bastığınızdan beri ağ ücreti ≈ {{fee}} seviyesine çıktı; hiçbir şey imzalanmadı. {{fee}} ödemek için tekrar basın.",
         "feeSetup": "{{network}} üzerinde tek seferlik kurulum dahil ≈ {{amount}}:",
         "feeSetupPlain": "{{network}} üzerinde tek seferlik kurulum dahil:",
         "setupMultisig": "bu multisig’i dağıtma",
@@ -437,6 +438,7 @@
         "signRiskConfirm": "Riski anladım, imzala",
         "signRiskCancel": "İmzalama",
         "signUnchecked": "Vela, {{network}} üzerinde bu çoklu imza adına kimin işlem yapabileceğini kontrol edemedi, bu yüzden orada henüz imza atmayacak. Birazdan tekrar dene.",
+        "signDisagreed": "{{network}} üzerindeki iki bağımsız düğüm, bu çoklu imza adına kimin işlem yapabileceği konusunda farklı yanıtlar verdi; bu yüzden Vela orada imzalamayacak. Güvendiğiniz bir düğümle kontrol etmek için Ayarlar'dan kendi düğümünüzü ekleyin veya daha sonra tekrar deneyin.",
         "ownerNotBound": "{{network}} ağında üye {{address}}, oradaki kendi oluşturulmasına hiçbir şeyle bağlı olmayan bir sözleşme — o adrese dağıtım yapabilen kişi onun oyunu elinde tutar."
       },
       "external": {
@@ -808,6 +810,8 @@
         },
         "stateUnconfirmed": "{{network}} üzerinde yalnızca bir düğüm yanıt verdi, bu yüzden Vela çalıştırıldığında çoklu imzada neyin değişeceğini doğrulayamadı. Yalnızca Vela’nın işlemi okuması geçerli.",
         "stateDisagreed": "{{network}} üzerindeki iki bağımsız düğüm, çalıştırıldığında çoklu imzada neyin değişeceği konusunda farklı yanıt verdi. Yalnızca Vela’nın işlemi okuması geçerli.",
+        "stateOneNode": "{{network}} üzerinde kimin işlem yapabileceğini ve çalıştırıldığında çoklu imzada neyin değişeceğini yalnızca bir düğüm doğrulayabildi. İki kez kontrol edilmesi için Ayarlar'dan kendi düğümünüzü ekleyin.",
+        "addOwnNode": "Kendi düğümünü ekle",
         "blindRefused": "Vela bunu burada imzalamayacak: “Kör imzalamayı reddet” açık ve bu işlemin bir kısmı kontrol edilemedi. Ayarlar’dan değiştirebilirsiniz."
       },
       "notify": {

@@ -44,7 +44,7 @@
 		<div class="words">
 			<p data-room={text}></p>
 			{#if ownNode}
-				<p class="hint" data-room={ownNode.text}></p>
+				{#if ownNode.text}<p class="hint" data-room={ownNode.text}></p>{/if}
 				<p class="again" data-room={ownNode.action}></p>
 			{/if}
 		</div>
@@ -59,7 +59,8 @@
 				<button type="button" class="again" data-tap onclick={onrecheck}>{recheck.label}</button>
 			{/if}
 			{#if ownNode}
-				<p class="hint">{ownNode.text}</p>
+				<!-- §39: a line that already says it (the multisig review's oneNode) has no hint of its own. -->
+				{#if ownNode.text}<p class="hint">{ownNode.text}</p>{/if}
 				{#if ownNode.href}
 					<!-- eslint-disable svelte/no-navigation-without-resolve -- a resolve()d settings path (`ownNodeSettingsHref`), opened beside the sheet -->
 					<a

@@ -734,7 +734,10 @@ class SigningController(
                 .getOrElse { RpcResult.Failed(rateLimited = false) }
                 ?: return null
         }
-        val record = SimDeltas.outcome(wallet.address, answer)
+        // §39: the native value the request sends, as the wallet decoded it —
+        // a node's "No asset changes" never erases it.
+        val value = SimDeltas.nativeValue(feeCalls.map { SimDeltas.Call(it.to, it.value, it.data) })
+        val record = SimDeltas.outcome(wallet.address, answer, value)
         VelaLog.event("signing.sim", "outcome", "chain" to chainId, "kind" to record.kind)
         // Spec 103: what the agent's review reads of it — the core's record
         // as it came, and the judged moves once there are any.
@@ -785,9 +788,13 @@ class SigningController(
 
     /**
      * Run [request]'s simulation and put its verdict on the sheet. The core
-     * is told of every run (`SimStarted` / `SimSettled`): a second run holds
-     * the confirm again for its own short wait, so nobody signs over a
-     * verdict about to change. A verdict about the NETWORK (dapp-15, the
+     * is told of the FIRST run (`SimStarted`), which holds the confirm for
+     * its short wait. §39 (r22-6): a re-check of a verdict already on the
+     * sheet is no new wait — the core is not told it started (and ignores
+     * one for a landed verdict), so the confirm keeps that verdict's door
+     * and a hold or an arm made on it survives a re-check that lands the
+     * same; a verdict that lands different changes the door when it lands
+     * (`SimSettled`). A verdict about the NETWORK (dapp-15, the
      * notice's `recheck` — no node answered) is asked again by itself once
      * the chain answers a plain read, and on the person's "Check again"
      * ([simAgain]); the web's `simulateOnSheet`.
@@ -806,7 +813,7 @@ class SigningController(
         // really goes out. From this to `SimSettled` (or its own four
         // seconds) the core holds the confirm; nothing in this shell
         // shuts the confirm on the simulation, or runs a clock for it.
-        if (simParams != null) dispatchSign(SignEvent.SimStarted(request.id))
+        if (simParams != null && !again) dispatchSign(SignEvent.SimStarted(request.id))
         // UNDISPATCHED: it starts now, in this step, and runs to its
         // first real wait (the node). So an end that needs no wait — no
         // payload to send, a host with no simulator — is on the sheet,
@@ -913,7 +920,46 @@ class SigningController(
         scope.launch { closed.first { it }; speedControl.dispose(); following?.cancel(); nodeWatch?.cancel(); multisigWatch?.cancel() }
     }
 
-    fun approve() = dispatchSign(SignEvent.ApproveTapped(approveOpts(fee.value, clear.value, guard.value, _sim.value)))
+    /**
+     * The confirm completed (the hold ran its course, the assistive path's
+     * second press, or a plain press). §39 (r22-3 / A1): the figure signed
+     * is the one the sheet DREW when the confirm began ([heldFee]; a plain
+     * press: the one drawn now), and the fee machine's quote now rides
+     * beside it (`current_fee`) — the core signs the figure drawn when the
+     * quote charges no more, and nothing when it rose (`fee_rose`: the sheet
+     * then draws the new figure, says why, and the next confirm pays it).
+     * Never a charge above what was shown. The row is let go either way.
+     */
+    fun approve() {
+        val live = fee.value
+        val shown = _heldFee.value ?: live
+        _heldFee.value = null
+        dispatchSign(SignEvent.ApproveTapped(approveOpts(shown, clear.value, guard.value, _sim.value, current = live)))
+    }
+
+    private val _heldFee = MutableStateFlow<FeeView?>(null)
+
+    /**
+     * §39 (A1): the fee the sheet drew when the confirm began, held still
+     * while a hold runs or the confirm is armed — the row draws this, never
+     * a newer quote under a finger already on the button. `null`: not held
+     * (the row draws [fee]).
+     */
+    val heldFee: StateFlow<FeeView?> = _heldFee
+
+    /**
+     * §39 (A1): the confirm began — a hold's start, or the assistive path's
+     * first press (armed). The figure drawn now is held; one already held
+     * (a hold started on an armed confirm) stays.
+     */
+    fun confirmBegan() {
+        if (_heldFee.value == null) _heldFee.value = fee.value
+    }
+
+    /** §39 (A1): the confirm was let go without completing (released early, the arm's window ran out, shut): the row follows the quote again. */
+    fun confirmLetGo() {
+        _heldFee.value = null
+    }
 
     // -- the speed control (spec 069) -----------------------------------------------
 
@@ -1053,22 +1099,18 @@ class SigningController(
          * and what the record keeps (the desktop's `approve_opts`) — every one
          * copied from the view that drew it, none decided here.
          */
-        fun approveOpts(fee: FeeView, clear: ClearSigningView, guard: GuardView, sim: SimOutcome? = null): SignApproveOpts = SignApproveOpts(
+        fun approveOpts(fee: FeeView, clear: ClearSigningView, guard: GuardView, sim: SimOutcome? = null, current: FeeView? = null): SignApproveOpts = SignApproveOpts(
             max_fee_per_gas = fee.fee?.max_fee_per_gas,
             bundler_cost_wei = null,
             // The coin the person picked pays, and the amount signed is in THAT
             // coin — the send core's own rule (`submit_user_op`): an ERC-20 fee's
             // amount rides in `fee_asset`, `total_wei` is 0 for it.
             gas_fee_token = fee.fee_token,
-            quoted_fee = fee.fee?.let {
-                val amount = when (val asset = it.fee_asset) {
-                    is FeeAssetView.Erc20 -> asset.amount
-                    FeeAssetView.Native -> it.total_wei
-                }
-                // …with the speed this very estimate was priced at, named on the wire
-                // beside the amount (spec 069); the core drops a `rapid`.
-                SignQuotedFee(amount = amount, recipient = it.fee_recipient.orEmpty(), tier = it.tier)
-            },
+            // §39 (A1): the figure DRAWN when the confirm began — the one signed.
+            quoted_fee = quotedOf(fee),
+            // §39 (r22-3 / A1): the fee machine's quote at the approve; above
+            // the figure drawn, the core signs nothing (`fee_rose`).
+            current_fee = current?.let(::quotedOf),
             fee_collector = null,
             params_override_json = guard.rewritten_params_json,
             // Spec 093: the verb the record keeps is the core's (no best-effort
@@ -1086,6 +1128,20 @@ class SigningController(
             // Spec 097: what the reading named, copied — never decided here.
             reading = clear.record_reading,
         )
+
+        /**
+         * A fee view's figure as the approve carries it: the amount in the
+         * coin that pays (an ERC-20 fee's in `fee_asset`; the native one's
+         * `total_wei`), its recipient, and the speed this very estimate was
+         * priced at (spec 069; the core drops a `rapid`). `null`: unpriced.
+         */
+        fun quotedOf(fee: FeeView): SignQuotedFee? = fee.fee?.let {
+            val amount = when (val asset = it.fee_asset) {
+                is FeeAssetView.Erc20 -> asset.amount
+                FeeAssetView.Native -> it.total_wei
+            }
+            SignQuotedFee(amount = amount, recipient = it.fee_recipient.orEmpty(), tier = it.tier)
+        }
 
         /**
          * 083 F1: the lines the sheet drew under "Balance changes" — the

@@ -609,6 +609,77 @@ fn submitted(sut: &Sut) -> Option<(String, String)> {
     })
 }
 
+/// §39 (R22 follow-up, r22-1, S1 on iOS): Parallel Two held 0.222 USDC; Max
+/// read 0.066 with a 0.156 fee; a quote of 0.154045 moved it to 0.067955
+/// ("Max is now 0.067955 (it was 0.066)"); a quote back at 0.156 flipped it
+/// back to 0.066 + 0.156 WITHOUT A WORD — the sentence was said from the
+/// figure first shown, which equalled the new one — and the press signed
+/// 0.066 + 0.156 while the person had last read 0.067955 + 0.154045. Every
+/// move of the Max is said from the figure drawn now, and the press signs
+/// exactly what is drawn.
+#[test]
+fn a_max_that_moves_and_moves_back_is_said_each_time() {
+    let case = serde_json::json!({
+        "tokens": [{ "chain_id": 5042002, "address": null, "decimals": 18, "symbol": "USDC", "balance": "0.222" }],
+        "token": 0
+    });
+    let (mut sut, token) = picked(&case);
+    let chain = token.chain_id;
+    let quote = |wei: &str| {
+        deploying_fee(
+            chain,
+            &serde_json::json!({ "asset": "native", "total_wei": wei }),
+        )
+    };
+    sut.dispatch(Event::SetRecipient {
+        recipient: RECIPIENT.to_owned(),
+    });
+    settle(&mut sut, None);
+    sut.dispatch(Event::FeeUpdated {
+        estimate: quote("156000000000000000"),
+    });
+    settle(&mut sut, None);
+    sut.dispatch(Event::TapMax);
+    settle(&mut sut, None);
+    sut.dispatch(Event::Continue);
+    settle(&mut sut, Some(&quote("156000000000000000")));
+    assert_eq!(sut.view().stage, SendStage::Confirm);
+    assert_eq!(sut.view().confirm_amount, "0.066");
+    // The quote falls: said.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: quote("154045000000000000"),
+    });
+    let view = sut.view();
+    assert_eq!(view.confirm_amount, "0.067955");
+    let moved = view.max_moved.clone().expect("the move is said");
+    assert_eq!(
+        (moved.from.as_str(), moved.to.as_str()),
+        ("0.066", "0.067955")
+    );
+    // …and comes back: said too, from the figure drawn now.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: quote("156000000000000000"),
+    });
+    let view = sut.view();
+    assert_eq!(view.confirm_amount, "0.066");
+    let moved = view
+        .max_moved
+        .clone()
+        .expect("the move back is said, never a silent flip");
+    assert_eq!(
+        (moved.from.as_str(), moved.to.as_str()),
+        ("0.067955", "0.066")
+    );
+    // The press signs exactly what is drawn.
+    sut.dispatch(Event::SlideConfirm {
+        review: view.review_digest.clone(),
+    });
+    answer_press_reads(&mut sut);
+    let (amount, fee) = submitted(&sut).expect("signed");
+    assert_eq!(amount, "66000000000000000");
+    assert_eq!(fee, "156000000000000000");
+}
+
 /// The R20 S1 path, replayed: a press is frozen from the press to the
 /// signature; a quote that moved under it stops the press beside the button
 /// with the new figures, nothing signed; the next press signs exactly those.
@@ -743,6 +814,13 @@ fn the_figures_signed_are_the_figures_pressed_or_nothing_is_signed() {
             sut.view().fee_moved.is_none(),
             "{name}: the press clears the stop"
         );
+        // §39: a quote that lands under this press, at or under the stop's
+        // figure, does not stop it again: the stop's figure is signed.
+        if !case["next_quote"].is_null() {
+            sut.dispatch(Event::FeeUpdated {
+                estimate: deploying_fee(chain, &case["next_quote"]),
+            });
+        }
         answer_press_reads(&mut sut);
         let (amount, fee) =
             submitted(&sut).unwrap_or_else(|| panic!("{name}: the next press is signed"));

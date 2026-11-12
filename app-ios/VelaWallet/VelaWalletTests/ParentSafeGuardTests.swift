@@ -339,6 +339,15 @@ struct ParentSafeSheetTests {
         let (code, kind) = payloadKind(rig)
         #expect(code == -32603)
         #expect(kind == "parent_safe_blocked")
+        // §39 (r22-9): the site is never told a membership the wallet did
+        // not check — the words the browser's core answers the page with
+        // (`dapp_rpc::sign_error_words` over the refusal's kind and detail).
+        let detail = rig.answers.last?.payload["message"] as? String
+        let message = signErrorWords(kind: kind ?? "", detail: detail) ?? ""
+        #expect(message.hasPrefix(
+            "The wallet refused a request to act for a multisig (Safe) on this account's behalf"
+        ), "\(message)")
+        #expect(!message.contains("member of"), "\(message)")
         #expect(rig.nothingSigned)
     }
 

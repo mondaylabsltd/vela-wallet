@@ -1208,7 +1208,11 @@ fun VelaNavHost(
                     val signView by controller.sign.collectAsStateWithLifecycle()
                     val clearView by controller.clear.collectAsStateWithLifecycle()
                     val guardView by controller.guard.collectAsStateWithLifecycle()
-                    val signFee by controller.fee.collectAsStateWithLifecycle()
+                    val liveSignFee by controller.fee.collectAsStateWithLifecycle()
+                    // §39 (A1): while a hold runs or the confirm is armed, the fee
+                    // row stays at the figure drawn when it began — the figure signed.
+                    val heldSignFee by controller.heldFee.collectAsStateWithLifecycle()
+                    val signFee = heldSignFee ?: liveSignFee
                     val signSpeed by controller.speed.collectAsStateWithLifecycle()
                     val signSim by controller.sim.collectAsStateWithLifecycle()
                     val refuseBlind by app.getvela.wallet.core.data.SigningPrefs.refuseBlind.collectAsStateWithLifecycle()
@@ -1303,6 +1307,7 @@ fun VelaNavHost(
                                 // commitment point, a dismiss after — the core routes it.
                                 onDismiss = { controller.swipeDismissed() },
                                 onConfirm = { controller.approve() },
+                                onConfirmEngage = { began -> if (began) controller.confirmBegan() else controller.confirmLetGo() },
                                 onChip = { id -> controller.guardChip(id) },
                                 onCustomAmount = { controller.guardCustomAmount(it) },
                                 onLegChip = { leg, id -> controller.guardChip(id, leg) },
@@ -3400,6 +3405,14 @@ fun VelaNavHost(
                 // once it is there (the accounts machine keeps it).
                 application.container.multisig.sheet.value = null
                 application.container.pendingSettingsPage.value = app.getvela.wallet.feature.settings.SettingsPage.AddNetwork
+                navController.swapOverWallet(VelaDestinations.SETTINGS)
+            },
+            // §39 (r22-2): "Add your own node" under a review one node alone
+            // could check — that network's RPC settings ("Only use my node"),
+            // the signing sheet's own destination.
+            onOwnNode = { chainId ->
+                application.container.multisig.sheet.value = null
+                application.container.pendingNetworkDetail.value = chainId
                 navController.swapOverWallet(VelaDestinations.SETTINGS)
             },
             onFund = {

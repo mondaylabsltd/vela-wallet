@@ -112,6 +112,18 @@ fn cap_at(tier: FeeTier, base: u128) -> u128 {
 
 /// The published price of one tier at `base`, as the relay computes it: the
 /// same formula, so the same function.
+/// §39 (R22 follow-up, r22-3): what the wallet shows and signs for a charge
+/// at the relay's published price — the charge with the headroom one block's
+/// base-fee rise needs (`fee_policy::FEE_HEADROOM_BPS`), rounded up.
+fn shown(charge: u128) -> u128 {
+    charge + (charge * vela_core::app::fee_policy::FEE_HEADROOM_BPS).div_ceil(10_000)
+}
+
+/// The relay's own figure under the one the wallet shows ([`shown`]).
+fn relay_usd(shown_wei: u128) -> f64 {
+    usd(shown_wei) * 10_000.0 / (10_000 + vela_core::app::fee_policy::FEE_HEADROOM_BPS) as f64
+}
+
 fn published(tier: FeeTier, base: u128) -> u128 {
     IN_BAND_PRICE
         .per_gas(tier, base, tip(tier))
@@ -517,9 +529,9 @@ fn a_contract_relay_is_paid_its_published_price_on_settlement_gas_and_is_covered
             assert_eq!(quoted.total_gas, settlement, "{}", at("priced gas"));
             assert_eq!(
                 quoted.total_wei,
-                settlement * published(tier, RELAY_BASE),
+                shown(settlement * published(tier, RELAY_BASE)),
                 "{}",
-                at("the relay's price, not the wallet's own reading")
+                at("the relay's price (and §39's headroom), not the wallet's own reading")
             );
             let cap = cap_at(tier, RELAY_BASE);
             assert!(
@@ -573,12 +585,13 @@ fn a_contract_relays_figures_at_the_measured_block() {
                 Some(settlement_gas(op.used)),
             )
             .expect("v2");
+            // The relay's figure; §39 shows it with one block's headroom.
             assert!(
-                (usd(v2.total_wei) - want).abs() < 0.005,
+                (relay_usd(v2.total_wei) - want).abs() < 0.005,
                 "{} {}: ${:.4} ≠ ${want}",
                 op.name,
                 name(tier),
-                usd(v2.total_wei)
+                relay_usd(v2.total_wei)
             );
             println!(
                 "{}, {}: ${:.2} | ${:.2} | ${:.2} | {:.1}×",
@@ -604,7 +617,8 @@ fn the_2026_10_02_send_at_the_relays_own_estimate() {
             .expect("quoted")
             .total_wei
     });
-    let dollars = paid.map(|wei| (usd(wei) * 100.0).round() / 100.0);
+    // The relay's figures; §39 shows (and pays) them with one block's headroom.
+    let dollars = paid.map(|wei| (relay_usd(wei) * 100.0).round() / 100.0);
     assert_eq!(dollars, [2.40, 2.87, 3.70]);
     for (tier, wei) in TIERS.into_iter().zip(paid) {
         assert!(wei >= relay_requires(198_848, cap_at(tier, RELAY_BASE)));
@@ -623,12 +637,15 @@ fn the_wallets_reading_is_only_a_floor_under_a_lagging_relay() {
     // A block's largest fall below our reading: the relay's price stands.
     let fallen = BASE - BASE / 8;
     let quoted = quote(&op, tier, BASE, new_row(tier, fallen), Some(settlement)).expect("quoted");
-    assert_eq!(quoted.total_wei, settlement * published(tier, fallen));
+    assert_eq!(
+        quoted.total_wei,
+        shown(settlement * published(tier, fallen))
+    );
     // Further below than any next block can be: raised to that next block.
     let lagging = BASE * 3 / 4;
     let quoted = quote(&op, tier, BASE, new_row(tier, lagging), Some(settlement)).expect("quoted");
     let floor = (published(tier, lagging) * cap_at(tier, fallen)).div_ceil(cap_at(tier, lagging));
-    assert_eq!(quoted.total_wei, settlement * floor);
+    assert_eq!(quoted.total_wei, shown(settlement * floor));
     assert!(floor > published(tier, lagging));
 }
 

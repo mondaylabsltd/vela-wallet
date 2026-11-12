@@ -104,6 +104,7 @@ async function signAndRefuse() {
 			bundler_cost_wei: null,
 			gas_fee_token: null,
 			quoted_fee: null,
+			current_fee: null,
 			fee_collector: null,
 			params_override_json: null,
 			intent: null,

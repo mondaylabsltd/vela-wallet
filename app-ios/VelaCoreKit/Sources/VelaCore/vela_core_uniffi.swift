@@ -20778,17 +20778,19 @@ public func relayErrorMessage(errorJson: String) -> String  {
  * R22: the one envelope a corroborated read hands the core — the first
  * node's JSON-RPC body (`None`: the pool gave up), the second, independent
  * node's (`None`: none answered), and whether the pool holds the person's
- * own node alone ("Only use my node"). Pass it to `sim_outcome`, or as a
+ * own node alone ("Only use my node"), and (§39, r22-2) whether the pool
+ * holds no other provider to ask (`sole_provider` on the verdict). Pass it to `sim_outcome`, or as a
  * multisig `rpc_corroborated` answer's `envelope`. See
  * `vela_core::app::corroborate`.
  */
-public func rpcCorroboratedEnvelope(primaryJson: String?, witnessJson: String?, ownNode: Bool) -> String  {
+public func rpcCorroboratedEnvelope(primaryJson: String?, witnessJson: String?, ownNode: Bool, soleProvider: Bool) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_rpc_corroborated_envelope(
         FfiConverterOptionString.lower(primaryJson),
         FfiConverterOptionString.lower(witnessJson),
-        FfiConverterBool.lower(ownNode),uniffiCallStatus
+        FfiConverterBool.lower(ownNode),
+        FfiConverterBool.lower(soleProvider),uniffiCallStatus
     )
 })
 }
@@ -21069,12 +21071,13 @@ public func signingVenueChoices(domain: String, activeJson: String, savedJson: S
  * revert is a danger and a node that could not check is a caution, on every
  * client.
  */
-public func simOutcome(user: String, replyJson: String) -> SimOutcomeRecord  {
+public func simOutcome(user: String, replyJson: String, valueWei: String?) -> SimOutcomeRecord  {
     return try!  FfiConverterTypeSimOutcomeRecord_lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_sim_outcome(
         FfiConverterString.lower(user),
-        FfiConverterString.lower(replyJson),uniffiCallStatus
+        FfiConverterString.lower(replyJson),
+        FfiConverterOptionString.lower(valueWei),uniffiCallStatus
     )
 })
 }
@@ -24033,7 +24036,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_relay_error_message() != 61806) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_rpc_corroborated_envelope() != 9407) {
+    if (uniffi_vela_core_uniffi_checksum_func_rpc_corroborated_envelope() != 22202) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_safe_message_hash() != 30627) {
@@ -24087,7 +24090,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_signing_venue_choices() != 64039) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_sim_outcome() != 18486) {
+    if (uniffi_vela_core_uniffi_checksum_func_sim_outcome() != 48932) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_still_qr_sizes() != 40343) {

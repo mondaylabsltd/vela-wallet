@@ -152,7 +152,15 @@ impl Shell {
         };
         let first = ask(self.rpcs.get(&chain));
         let witness = ask(self.witnesses.get(&chain));
-        vela_core::app::corroborate::corroborated_envelope(first.as_ref(), witness.as_ref(), false)
+        // §39: a chain this shell holds no second node for is a pool of one
+        // provider (Arc with its default RPC) — said as such.
+        let sole = !self.witnesses.contains_key(&chain);
+        vela_core::app::corroborate::corroborated_envelope(
+            first.as_ref(),
+            witness.as_ref(),
+            false,
+            sole,
+        )
     }
 
     /// The executor's user operation, stood in for: each call sent from its
@@ -273,8 +281,18 @@ impl Shell {
                 }
             }
             Op::Passkey {
-                owner, challenge, ..
+                owner,
+                challenge,
+                purpose,
+                ..
             } => {
+                // §39: what each signature was asked as.
+                if let Some(anyway) = serde_json::to_value(purpose)
+                    .ok()
+                    .and_then(|p| p["anyway"].as_bool())
+                {
+                    self.log.push(format!("passkey {owner} anyway={anyway}"));
+                }
                 let local = self
                     .locals
                     .iter()
@@ -311,8 +329,20 @@ impl Shell {
                 chain_id,
                 from,
                 calls,
+                purpose,
                 ..
-            } => self.send_calls(*chain_id, from, calls),
+            } => {
+                // §39: an execution is the executor's one signature.
+                if let Some(purpose) = purpose {
+                    let anyway = serde_json::to_value(purpose)
+                        .ok()
+                        .and_then(|p| p["anyway"].as_bool())
+                        .unwrap_or(false);
+                    self.log
+                        .push(format!("passkey {from} (execute) anyway={anyway}"));
+                }
+                self.send_calls(*chain_id, from, calls)
+            }
             Op::UserOpStatus { .. } => Res::UserOpStatus {
                 status: Some("included".to_owned()),
                 tx_hash: self.last_tx.clone(),
@@ -382,13 +412,75 @@ fn create_two_of_three_propose_approve_twice_execute() {
         eprintln!("VELA_MULTISIG_FORK not set: skipped");
         return;
     }
+    member_flow(Network::TwoHonest);
+}
+
+/// §39 (R22 follow-up, r22-2 — Arc with its default RPC: one public
+/// provider, and a member could neither propose nor execute). The pool
+/// holds ONE provider for chain 100 (no second node at all): the whole
+/// member flow — create, propose, approve, execute — lands on the fork, each
+/// signature asked as "… anyway" (one node's word, said so), never refused
+/// as "can't check".
+#[test]
+#[ignore = "needs the fork harness (scripts/onchain/multisig-fork/up.sh) and VELA_MULTISIG_FORK=1"]
+fn one_provider_lets_the_members_sign_and_execute_as_anyway() {
+    if std::env::var("VELA_MULTISIG_FORK").is_err() {
+        eprintln!("VELA_MULTISIG_FORK not set: skipped");
+        return;
+    }
+    let shell = member_flow(Network::OneProvider);
+    let signed: Vec<&String> = shell
+        .log
+        .iter()
+        .filter(|l| l.starts_with("passkey"))
+        .collect();
+    assert!(!signed.is_empty(), "{:?}", shell.log);
+    assert!(
+        signed.iter().all(|l| l.contains("anyway=true")),
+        "every signature on one node's word is \"… anyway\": {signed:?}"
+    );
+}
+
+/// §39: a second, independent node that answers who can act DIFFERENTLY (an
+/// authority liar) is a real signal — the proposal is refused,
+/// `SigningDisagreed`, and no passkey is asked, not even "… anyway".
+#[test]
+#[ignore = "needs the fork harness (scripts/onchain/multisig-fork/up.sh) and VELA_MULTISIG_FORK=1"]
+fn two_disagreeing_providers_refuse_the_member() {
+    if std::env::var("VELA_MULTISIG_FORK").is_err() {
+        eprintln!("VELA_MULTISIG_FORK not set: skipped");
+        return;
+    }
+    let shell = member_flow(Network::Disagreeing);
+    assert!(
+        !shell.log.iter().any(|l| l.starts_with("passkey")),
+        "no passkey asked: {:?}",
+        shell.log
+    );
+}
+
+/// The network a member flow runs on (§39).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Network {
+    /// Two independent, honest nodes: the plain path.
+    TwoHonest,
+    /// One provider in the pool, no second node at all.
+    OneProvider,
+    /// The second node lies about who can act (from the proposal on).
+    Disagreeing,
+}
+
+fn member_flow(network: Network) -> Shell {
     let service = format!("http://127.0.0.1:{}", port("GENESIS_PORT", 8787));
     let rpc = format!("http://127.0.0.1:{}", port("FORK_PORT", 8545));
     let locals: Vec<LocalAccount> = (0..3).map(fixture).collect();
     let mut shell = Shell {
         service: service.clone(),
-        witnesses: honest_witness(&rpc),
-        rpcs: BTreeMap::from([(100, rpc)]),
+        witnesses: match network {
+            Network::OneProvider => BTreeMap::new(),
+            Network::TwoHonest | Network::Disagreeing => honest_witness(&rpc),
+        },
+        rpcs: BTreeMap::from([(100, rpc.clone())]),
         store: BTreeMap::new(),
         locals: locals.clone(),
         last_tx: None,
@@ -481,6 +573,11 @@ fn create_two_of_three_propose_approve_twice_execute() {
         account: Some(account.clone()),
     });
     settle(&mut ms, &mut shell);
+    if network == Network::Disagreeing {
+        let liar = fork_proxy::Proxy::start(&rpc, fork_proxy::Kind::AuthorityLiar);
+        shell.witnesses = BTreeMap::from([(100, liar.url)]);
+        shell.log.clear();
+    }
     let to = "0x00000000000000000000000000000000000000bb";
     ms.dispatch(proposals::Event::Draft {
         chain_id: 100,
@@ -494,10 +591,29 @@ fn create_two_of_three_propose_approve_twice_execute() {
     });
     settle(&mut ms, &mut shell);
     assert!(ms.view().draft.is_some(), "{:?}", ms.view().actions);
+    if network == Network::OneProvider {
+        let review = ms.view().draft.and_then(|d| d.review).expect("the review");
+        assert_eq!(
+            review["state"]["verdict"]["reason"], "oneNode",
+            "said as one node's word, never \"checked\": {}",
+            review["state"]
+        );
+        assert_eq!(review["sign"]["anyway"], true);
+    }
     ms.dispatch(proposals::Event::ConfirmDraft {
         as_member: Some(locals[0].address.clone()),
     });
     settle(&mut ms, &mut shell);
+    if network == Network::Disagreeing {
+        assert_eq!(
+            ms.view().actions["propose"],
+            ActionState::SigningDisagreed,
+            "{:?}",
+            shell.log
+        );
+        eprintln!("refused: two independent nodes disagree about who can act");
+        return shell;
+    }
     let ActionState::Done {
         safe_tx_hash: hash,
         kept: false,
@@ -570,7 +686,8 @@ fn create_two_of_three_propose_approve_twice_execute() {
         .find(|i| i.safe_tx_hash == hash)
         .unwrap();
     assert_eq!(item.status, ProposalStatus::Done);
-    eprintln!("executed in {}", verdict["txHash"]);
+    eprintln!("executed in {} ({network:?})", verdict["txHash"]);
+    shell
 }
 
 // ---------------------------------------------------------------------------

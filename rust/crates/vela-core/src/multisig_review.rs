@@ -1720,6 +1720,8 @@ struct StateRead {
     first: Option<StateVerdict>,
     second: Option<StateVerdict>,
     own_node: bool,
+    /// §39 (r22-2): one node, on a network whose pool holds no other.
+    sole_provider: bool,
 }
 
 impl StateRead {
@@ -1736,6 +1738,7 @@ impl StateRead {
             first,
             second,
             own_node: corroborate::own_node(e),
+            sole_provider: corroborate::sole_provider(e),
         })
     }
 
@@ -1903,11 +1906,20 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
                         .into_iter()
                         .flatten()
                         .any(|read| read.standing() == Standing::Disagreed);
+                    // §39 (r22-2): one node, where the pool holds no other
+                    // provider — said "only one node could check", with the
+                    // way to add one's own.
+                    let one_node = [&traced, &probed]
+                        .into_iter()
+                        .flatten()
+                        .all(|read| read.sole_provider);
                     StateGuard {
                         source: StateSource::None,
                         verdict: StateVerdict::Unavailable {
                             reason: if disagreed {
                                 corroborate::DISAGREED
+                            } else if one_node {
+                                corroborate::ONE_NODE
                             } else {
                                 corroborate::UNCORROBORATED
                             }
@@ -1936,6 +1948,34 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
                 }
             }
         }
+    };
+
+    // §39 (R22 follow-up, r22-2): on a network whose pool holds no other
+    // provider, a state check nobody could read is said as what it is —
+    // "only one node could check" — with the way to add one's own node;
+    // never "checked". (A disagreement stays a disagreement.)
+    let one_node = [&input.trace, &input.probe]
+        .into_iter()
+        .flatten()
+        .any(corroborate::sole_provider)
+        || input
+            .sim_reply
+            .as_deref()
+            .and_then(|r| serde_json::from_str::<Value>(r).ok())
+            .is_some_and(|v| corroborate::sole_provider(&v));
+    let state = match state {
+        StateGuard {
+            source,
+            verdict: StateVerdict::Unavailable { reason },
+        } if one_node && reason != corroborate::DISAGREED && reason != "unreachable" => {
+            StateGuard {
+                source,
+                verdict: StateVerdict::Unavailable {
+                    reason: corroborate::ONE_NODE.into(),
+                },
+            }
+        }
+        other => other,
     };
 
     // What moves: the signing sheet's simulation; where the network does

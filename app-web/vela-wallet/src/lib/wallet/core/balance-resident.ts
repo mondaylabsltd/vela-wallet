@@ -92,34 +92,20 @@ let currentSwitcherBalances = new Map<string, number>();
 let currentSwitcherKey = '[]';
 
 /**
- * Whether the ACTIVE account has settled at least one fetch round.
- *
- * The view carries no such flag (`bootstrapped` is model-private), and a
- * streamed first round is a partial list — the chains still out are missing,
- * not empty. What does mark a settle is `last_refreshed_at_ms`, which the core
- * writes on every `FetchSettled` for the current address and on nothing else.
- * It survives an account switch, so the value held at the switch is the
- * baseline: the account has settled once that value moves.
+ * The account the view was last committed for. Whether it has settled a
+ * round is the core's word (`networks_read`, {@link balanceSettledFor}); this
+ * only notices an account switch, which ends every wait for the old one.
  */
-let settleWatch: { address: string | null; baseline: number | null; settled: boolean } = {
-	address: null,
-	baseline: null,
-	settled: false
-};
+let shownAddress: string | null = null;
 
 function trackSettle(view: BalanceView): void {
-	if (view.address !== settleWatch.address) {
-		settleWatch = { address: view.address, baseline: view.last_refreshed_at_ms, settled: false };
-		// Nobody waiting on the old account's round is waiting on anything now.
-		for (const waiter of [...roundWaiters]) {
-			if (view.address === null || waiter.address.toLowerCase() !== view.address.toLowerCase()) {
-				waiter.done();
-			}
+	if (view.address === shownAddress) return;
+	shownAddress = view.address;
+	// Nobody waiting on the old account's round is waiting on anything now.
+	for (const waiter of [...roundWaiters]) {
+		if (view.address === null || waiter.address.toLowerCase() !== view.address.toLowerCase()) {
+			waiter.done();
 		}
-		return;
-	}
-	if (view.address !== null && view.last_refreshed_at_ms !== settleWatch.baseline) {
-		settleWatch.settled = true;
 	}
 }
 
@@ -227,10 +213,15 @@ export function balanceView(): BalanceView {
  * moment its holdings stop being "whatever has arrived so far".
  */
 export function balanceSettledFor(address: string): boolean {
+	// r22-7: the core's word (`networks_read`: the account's first read has
+	// ended, whatever it reached). The stamp watched below does not move for
+	// a round in which every network the account lives on failed (r9/r10-1):
+	// read as "not settled", it kept Send walking chains that do not answer
+	// while the home drew their last-known rows.
 	return (
-		settleWatch.settled &&
-		settleWatch.address !== null &&
-		settleWatch.address.toLowerCase() === address.toLowerCase()
+		current.networks_read &&
+		current.address !== null &&
+		current.address.toLowerCase() === address.toLowerCase()
 	);
 }
 

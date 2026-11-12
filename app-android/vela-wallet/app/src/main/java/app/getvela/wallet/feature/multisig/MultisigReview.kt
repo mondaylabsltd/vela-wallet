@@ -95,7 +95,7 @@ fun MultisigReviewBody(
         // knows of it — never "To 0x3e9b…" and then "To 0x3e9b…" again.
         Recipients(review, words, drawn = readingAddresses(readingLines(review, chainId, words)))
         MemberChanges(review, words, network)
-        if (!executed) StateGuard(review, words, network)
+        if (!executed) StateGuard(review, words, network, chainId)
         Technical(review, words)
     }
 }
@@ -572,8 +572,16 @@ internal fun changeText(words: MultisigWords, change: JsonElement): String = whe
     else -> words.t("change.threshold")
 }
 
+/**
+ * §39 (r22-2): where "Add your own node" under a state check one node alone
+ * could make goes — that network's RPC settings, the signing sheet's own
+ * destination (`componentsUi.signing.ownNodeHint`). `null`: nowhere (a
+ * preview), and the link is not drawn.
+ */
+val LocalMsOwnNode = androidx.compose.runtime.staticCompositionLocalOf<((Int) -> Unit)?> { null }
+
 @Composable
-private fun StateGuard(review: JsonElement, words: MultisigWords, network: String) {
+private fun StateGuard(review: JsonElement, words: MultisigWords, network: String, chainId: Int) {
     val state = review["state"]
     val verdict = state["verdict"]
     val source = if (state["source"].str == "trace") words.t("review.sourceTrace") else words.t("review.sourceProbe")
@@ -593,7 +601,16 @@ private fun StateGuard(review: JsonElement, words: MultisigWords, network: Strin
             )
             MsNote(source)
         }
-        "unavailable" -> MsNote(words.t(stateUnreadKey(verdict), "network" to network), tone = MsTone.Warning, tag = "multisig.review.state.unread")
+        "unavailable" -> Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
+            MsNote(words.t(stateUnreadKey(verdict), "network" to network), tone = MsTone.Warning, tag = "multisig.review.state.unread")
+            // §39 (r22-2): one node alone could check, the network having no
+            // other provider — never "checked"; the way to a second opinion
+            // is the person's own node.
+            val ownNode = LocalMsOwnNode.current
+            if (offersOwnNode(verdict) && ownNode != null) {
+                MsTextButton(words.t("review.addOwnNode"), tag = "multisig.review.state.ownNode") { ownNode(chainId) }
+            }
+        }
         else -> Unit
     }
 }
@@ -602,12 +619,20 @@ private fun StateGuard(review: JsonElement, words: MultisigWords, network: Strin
  * R22: why the state-change check stands unread (`verdict.reason`): one
  * node's word nobody independent confirmed (`uncorroborated`), two that
  * disagree (`disagreed`), else could not check — the leaf under `review.`.
+ * §39 (r22-2): `oneNode` — the network's pool holds one provider, so only
+ * that node could check — is said as that (`review.stateOneNode`), never
+ * "checked".
  */
 internal fun stateUnreadKey(verdict: JsonElement?): String = when (verdict["reason"].str) {
     "uncorroborated" -> "review.stateUnconfirmed"
     "disagreed" -> "review.stateDisagreed"
+    "oneNode" -> "review.stateOneNode"
     else -> "review.stateUnread"
 }
+
+/** §39 (r22-2): the state check stood on one node, the network having no other provider: "Add your own node" goes under its line. */
+internal fun offersOwnNode(verdict: JsonElement?): Boolean =
+    verdict.kind == "unavailable" && verdict["reason"].str == "oneNode"
 
 /** The guard's writes, one line each, said once. */
 internal fun stateWriteLines(words: MultisigWords, writes: List<JsonElement>): List<String> {

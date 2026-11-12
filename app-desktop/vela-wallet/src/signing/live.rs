@@ -69,8 +69,9 @@ pub fn confirm_state(
     vela_core::app::sign_confirm::confirm_state_of(sign, guard, clear, Some(fee), speed_tier)
 }
 
-/// R22 (review 1-3): [`confirm_state`] with its friction — the core's
-/// composition (`sign_confirm::with_posture` over `sign_confirm::posture`):
+/// R22 (review 1-3): [`confirm_state`] with its friction — the core's one
+/// gate (`sign_confirm::confirm_state`, its posture guarded by the approval
+/// guard's unlimited verdict since §39):
 /// `anyway` ("Sign anyway", in the danger style) whenever something Vela
 /// checks could not be read — `sim` is the sheet's own simulation verdict
 /// (`None` before it lands: unread) — `danger`, `hold_ms` (held, or two
@@ -88,12 +89,22 @@ pub fn confirm_gate(
     sim: Option<&vela_core::app::sim_outcome::SimVerdict>,
     refuse_blind: bool,
 ) -> vela_core::app::sign_confirm::ConfirmState {
-    use vela_core::app::sign_confirm::{posture, with_posture};
-    with_posture(
-        confirm_state(sign, guard, clear, fee, speed_tier),
-        posture(sign, clear, sim),
+    // §39: the core's WHOLE gate (`sign_confirm::confirm_state`), never a
+    // composition of its parts here — this shell composed `with_posture` over
+    // `posture` itself and so missed the core's `guarded_posture`: an
+    // unbounded grant carried in a Multicall3 or a witness permit drew a
+    // plain Confirm. The message-read gate is the core's too (this shell
+    // does not observe `message_unread`, so it holds nothing).
+    vela_core::app::sign_confirm::confirm_state(&vela_core::app::sign_confirm::ConfirmInput {
+        sign: sign.clone(),
+        guard: guard.clone(),
+        clear: clear.clone(),
+        fee: Some(fee.clone()),
+        speed_tier,
+        message_unread: false,
+        sim: sim.cloned(),
         refuse_blind,
-    )
+    })
 }
 
 /// The confirm's words, as the core's gate says them (R22): "Sign anyway"
@@ -2235,6 +2246,10 @@ pub fn status_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
                 || s.error_generic.clone(),
                 |block| s.venue_blocks.say(block),
             ),
+            // §39 (r22-3 / A1): the fee rose above the figure shown when the
+            // confirm began — nothing signed, nothing answered to the site;
+            // the row draws the new figure and the next confirm pays it.
+            SignErrorKind::FeeRose => s.fee_rose.clone(),
             _ => s.error_generic.clone(),
         };
         if !text.is_empty() {
@@ -5064,6 +5079,41 @@ mod tests {
             ..pristine_sign()
         };
         assert!(status_blocks(&rejected, &s).is_empty());
+    }
+
+    /// §39 (r22-3 / A1): a confirm the core refused because the fee rose
+    /// above the figure shown (`SignErrorKind::FeeRose`, nothing signed,
+    /// nothing answered to the site) says why, in the catalog's words —
+    /// never the generic "couldn't be submitted".
+    #[test]
+    fn a_fee_that_rose_since_the_confirm_says_so() {
+        let s = strings();
+        let rose = SignView {
+            error: Some(vela_core::app::sign_request::SignErrorNotice::new(
+                SignErrorKind::FeeRose,
+                None,
+            )),
+            ..pristine_sign()
+        };
+        let drawn = status_blocks(&rose, &s);
+        assert_eq!(
+            s.fee_rose,
+            crate::loc::Loc::from_env().t(vela_core::app::sign_request::FEE_ROSE_KEY)
+        );
+        assert!(
+            drawn.iter().any(|block| matches!(
+                block,
+                Block::Warning { text, .. } if *text == s.fee_rose
+            )),
+            "the fee-rose sentence is drawn"
+        );
+        assert!(
+            !drawn.iter().any(|block| matches!(
+                block,
+                Block::Warning { text, .. } if *text == s.error_generic
+            )),
+            "never the generic failure"
+        );
     }
 
     /// Working, then submitted — and never both.

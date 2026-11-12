@@ -105,6 +105,14 @@ fun VelaHoldToConfirmButton(
     keepHintRoom: Boolean = false,
     /** The hint line's test tag. */
     hintTag: String = HOLD_HINT_TAG,
+    /**
+     * §39 (A1): the confirm began (`true`: a hold's start, or the assistive
+     * path's first press, which arms it) or was let go without confirming
+     * (`false`: released early, the arm's window ran out, the button shut).
+     * The signing sheet holds the figure it drew still from the first and
+     * signs it; a confirm that completes calls [onConfirm] instead.
+     */
+    onEngage: (Boolean) -> Unit = {},
 ) {
     if (holdMs <= 0) {
         Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(VelaSpacing.sm)) {
@@ -121,6 +129,7 @@ fun VelaHoldToConfirmButton(
     val haptic = rememberVelaHaptic()
     val scope = rememberCoroutineScope()
     val confirm by rememberUpdatedState(onConfirm)
+    val engage by rememberUpdatedState(onEngage)
     val progress = remember { Animatable(0f) }
     var armed by remember { mutableStateOf(false) }
     val active = enabled && !loading
@@ -132,14 +141,17 @@ fun VelaHoldToConfirmButton(
             delay(windowMs)
             gate.expire()
             armed = false
+            engage(false)
         }
     }
     // Shut or busy: nothing stays armed or half-held.
     LaunchedEffect(active) {
         if (!active) {
+            val engaged = armed || progress.value > 0f
             gate.expire()
             armed = false
             progress.snapTo(0f)
+            if (engaged) engage(false)
         }
     }
 
@@ -149,6 +161,7 @@ fun VelaHoldToConfirmButton(
             HoldGate.Step.Armed -> {
                 armed = true
                 haptic(VelaHaptic.Press)
+                engage(true)
             }
             HoldGate.Step.Confirmed -> {
                 armed = false
@@ -194,6 +207,7 @@ fun VelaHoldToConfirmButton(
                             gate.expire()
                             armed = false
                             haptic(VelaHaptic.Press)
+                            engage(true)
                             var done = false
                             val run: Job = scope.launch {
                                 progress.snapTo(0f)
@@ -206,6 +220,7 @@ fun VelaHoldToConfirmButton(
                             if (!done) {
                                 // Released early: nothing happens; the fill drains.
                                 run.cancel()
+                                engage(false)
                                 scope.launch { progress.animateTo(0f, tween(durationMillis = DRAIN_MS)) }
                             } else {
                                 scope.launch { progress.snapTo(0f) }

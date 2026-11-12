@@ -1005,6 +1005,18 @@ fn a_group_that_does_not_derive_its_address_is_refused() {
         ),
         "a non-deriving group is a sign-in failure, never a save; got {next:?}"
     );
+    // §39 (r22-8): said in the catalog's words, never the core's English
+    // nor the biometric advice.
+    assert!(
+        matches!(
+            next.as_slice(),
+            [ShellOperation::Prompt {
+                kind: PromptKind::SignInFailed { words_key: Some(key), phone_link: false, .. },
+                ..
+            }] if key == "onboarding.login.registryUnreachableBody"
+        ),
+        "{next:?}"
+    );
     assert!(!sut.view().busy);
 }
 

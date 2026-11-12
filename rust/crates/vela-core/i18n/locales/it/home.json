@@ -242,6 +242,7 @@
         "feeUncheckedHeld": "Non è stato possibile verificare se andrebbe a buon fine — Esegui verifica di nuovo.",
         "feeRetry": "Verifica di nuovo",
         "feeSigning": "Si firma con questa commissione: resta fissa finché non confermi o annulli.",
+        "feeRose": "La commissione di rete è salita a ≈ {{fee}} da quando hai premuto; non è stato firmato nulla. Premi di nuovo per pagare {{fee}}.",
         "feeSetup": "Include una configurazione una tantum su {{network}} ≈ {{amount}}:",
         "feeSetupPlain": "Include una configurazione una tantum su {{network}}:",
         "setupMultisig": "distribuzione di questo multisig",
@@ -444,6 +445,7 @@
         "signRiskConfirm": "Ho capito il rischio, firma",
         "signRiskCancel": "Non firmare",
         "signUnchecked": "Vela non è riuscita a verificare chi può agire per questo multisig su {{network}}, quindi non firmerà ancora lì. Riprova tra un momento.",
+        "signDisagreed": "Due nodi indipendenti su {{network}} hanno risposto in modo diverso su chi può agire per questo multisig, quindi Vela non firmerà lì. Aggiungi il tuo nodo nelle Impostazioni per verificare con uno di cui ti fidi, oppure riprova più tardi.",
         "ownerNotBound": "Su {{network}}, il membro {{address}} è un contratto che nulla lega alla propria creazione lì: chi può distribuire a quell'indirizzo ne avrebbe il voto."
       },
       "external": {
@@ -815,6 +817,8 @@
         },
         "stateUnconfirmed": "Su {{network}} ha risposto un solo nodo, quindi Vela non ha potuto confermare cosa cambia nel multisig eseguendola. Resta solo la lettura della transazione da parte di Vela.",
         "stateDisagreed": "Due nodi indipendenti su {{network}} non concordano su cosa cambia nel multisig eseguendola. Resta solo la lettura della transazione da parte di Vela.",
+        "stateOneNode": "Un solo nodo ha potuto confermare chi può agire su {{network}} e cosa cambia nel multisig eseguendola. Aggiungi il tuo nodo nelle Impostazioni per farla verificare due volte.",
+        "addOwnNode": "Aggiungi il tuo nodo",
         "blindRefused": "Vela non firmerà qui: “Rifiuta la firma alla cieca” è attivo e una parte di questa transazione non è stata verificata. Puoi cambiarlo nelle Impostazioni."
       },
       "notify": {

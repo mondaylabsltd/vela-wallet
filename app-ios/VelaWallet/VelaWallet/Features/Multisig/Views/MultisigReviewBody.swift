@@ -14,6 +14,9 @@ import SwiftUI
 struct MsReviewBody: View {
     @Environment(\.theme) private var theme
     @Environment(\.walletTextScale) private var textScale
+    /// §39 (r22-2): this network's RPC settings, where "Only use my node"
+    /// is — `nil` where the host has no way there.
+    @Environment(\.msOpenOwnNode) private var openOwnNode
     let review: MsJSON
     let chainId: Int
     let words: MsWords
@@ -360,8 +363,17 @@ struct MsReviewBody: View {
                 MsNote(text: source)
             }
         case "unavailable":
-            MsNote(text: Self.unreadStateLine(verdict, network: network, words: words), tone: .warning,
-                   identifier: "multisig.review.state.unread")
+            VStack(alignment: .leading, spacing: Tokens.Space.s8) {
+                MsNote(text: Self.unreadStateLine(verdict, network: network, words: words), tone: .warning,
+                       identifier: "multisig.review.state.unread")
+                // §39 (r22-2): one provider on this network — the way to add
+                // the person's own node, this network's RPC settings (the
+                // signing sheet's `ownNodeHint` destination).
+                if Self.offersOwnNode(verdict), let openOwnNode {
+                    VelaButton(title: words.t("review.addOwnNode"), kind: .secondary) { openOwnNode(chainId) }
+                        .accessibilityIdentifier("multisig.review.addOwnNode")
+                }
+            }
         case "withheld":
             // r9-9: refused for another reason, said once above — nothing in
             // the guard's place (no "changes nothing" beside "won't sign").
@@ -375,13 +387,23 @@ struct MsReviewBody: View {
     /// one node's word (`uncorroborated`) and two that disagree
     /// (`disagreed`) are said as what they are; any other reason is
     /// "couldn't read" as before.
+    /// §39 (r22-2): `oneNode` — the network's pool holds one provider, so
+    /// only one node could check — is said as that, never "checked", with
+    /// the way to add the person's own node (`offersOwnNode`).
     @MainActor
     static func unreadStateLine(_ verdict: MsJSON?, network: String, words: MsWords) -> String {
         switch verdict?["reason"]?.string {
         case "uncorroborated": words.t("review.stateUnconfirmed", ["network": network])
         case "disagreed": words.t("review.stateDisagreed", ["network": network])
+        case "oneNode": words.t("review.stateOneNode", ["network": network])
         default: words.t("review.stateUnread", ["network": network])
         }
+    }
+
+    /// The state check stood on one node because the network has no other
+    /// provider: "Add your own node" goes under its line.
+    static func offersOwnNode(_ verdict: MsJSON?) -> Bool {
+        verdict?.kind == "unavailable" && verdict?["reason"]?.string == "oneNode"
     }
 
     private func writeLines(_ writes: [MsJSON]) -> [String] {
@@ -500,5 +522,21 @@ struct MsReviewPending: View {
         let blocked = words.t("review.state.blocked")
         guard let key = door.reasonKey else { return blocked }
         return "\(words.loc.t(key, vars: ["network": network])) \(blocked)"
+    }
+}
+
+// MARK: - The way to this network's RPC settings (§39, r22-2)
+
+private struct MsOpenOwnNodeKey: EnvironmentKey {
+    static let defaultValue: (@MainActor (Int) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    /// "Add your own node" under a review whose state check only one node
+    /// could make: opens that network's RPC settings (the chain id given).
+    /// Set by the multisig host; `nil`: no way there, no link drawn.
+    var msOpenOwnNode: (@MainActor (Int) -> Void)? {
+        get { self[MsOpenOwnNodeKey.self] }
+        set { self[MsOpenOwnNodeKey.self] = newValue }
     }
 }

@@ -37,6 +37,8 @@ struct ExploreScreen: View {
     /// site (`SigningLive.spaceNote`), drawn under the requester.
     var signingSpaceNote: String?
     var onSigningConfirm: () -> Void = {}
+    /// §39 (A1): a held confirm began or ended (`SigningSheet.onConfirmEngaged`).
+    var onSigningConfirmEngaged: (Bool) -> Void = { _ in }
     /// The spending-cap chips and the person's own figure. The core decides
     /// what each means; the sheet only reports the tap.
     var onAllowanceChip: (String) -> Void = { _ in }
@@ -616,6 +618,7 @@ struct ExploreScreen: View {
                     model: signingLive,
                     spaceNote: signingSpaceNote,
                     onConfirm: onSigningConfirm,
+                    onConfirmEngaged: onSigningConfirmEngaged,
                     onAllowanceChip: onAllowanceChip,
                     onAllowanceAmount: onAllowanceAmount,
                     onAllowanceLegChip: onAllowanceLegChip,

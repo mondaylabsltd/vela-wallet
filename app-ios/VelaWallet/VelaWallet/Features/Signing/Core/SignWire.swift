@@ -90,6 +90,12 @@ enum SignErrorKind: String, Decodable {
     /// stale before submit; the sheet re-quotes rather than silently
     /// re-pricing what somebody already read.
     case staleFeeQuote = "stale_fee_quote"
+    /// §39 (R22 follow-up, r22-3 / A1): **no response is sent for this one
+    /// either.** The fee quote at the approve (`current_fee`) is ABOVE the
+    /// figure the sheet drew when the confirm began (`quoted_fee`): nothing
+    /// was signed. The sheet stays, draws the new fee and says why
+    /// (`componentsUi.signing.feeRose`); the next confirm pays it.
+    case feeRose = "fee_rose"
     /// -32603 — no passkey can be used here (an unsigned build, a device
     /// without one; spec 099 R8, the passkey classifier's `not_supported`).
     case signerUnavailable = "signer_unavailable"

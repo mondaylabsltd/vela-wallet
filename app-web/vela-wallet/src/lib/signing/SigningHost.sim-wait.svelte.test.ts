@@ -42,6 +42,8 @@ import type { SignEvent } from '$lib/core/generated/SignEvent';
 import type { SignView } from '$lib/core/generated/SignView';
 
 const ME = '0x1111111111111111111111111111111111111111';
+/** r22-6: a node reply marked as one node's alone, nobody independent answering. */
+const SINGLE_NODE = vi.hoisted(() => 'single-node:');
 
 /** dapp-15: whether the chain answers a plain read again (the host's "is the node back?"). */
 const chain = vi.hoisted(() => ({ back: false }));
@@ -124,9 +126,13 @@ vi.mock('$lib/wallet/core/tracker-resident', () => ({
 // envelope `rpcSimulateReply` now hands over) — an honest network.
 vi.mock('$lib/services/sim/sim-engine-rpc', () => ({
 	rpcSimulateReply: (from: string, calls: unknown[], chainId: number) =>
-		node
-			.ask({ from, calls, chainId })
-			.then(async (reply: string) => (await import('$lib/signing/sim-witnessed')).agreed(reply)),
+		node.ask({ from, calls, chainId }).then(async (reply: string) => {
+			const witnessed = await import('$lib/signing/sim-witnessed');
+			// r22-6: `SINGLE` + a reply — one node answered, nobody independent ("unconfirmed").
+			return reply.startsWith(SINGLE_NODE)
+				? witnessed.singleNode(reply.slice(SINGLE_NODE.length))
+				: witnessed.agreed(reply);
+		}),
 	// Send's own simulation (`tx-simulation`), which no sheet draws: not run here.
 	rpcSimulate: async () => null
 }));
@@ -150,7 +156,8 @@ vi.mock('$lib/flows/core/speed-control.svelte', () => ({
 			return READY_SPEED;
 		}
 		get feeInForce() {
-			return READY_FEE;
+			// §39 (A1): the fee in force, as a test moves it (READY unless it does).
+			return liveFee.view ?? READY_FEE;
 		}
 		feeOptions() {
 			return [];
@@ -226,7 +233,7 @@ const READY_FEE = {
 		tier: 'fast',
 		quoted: true,
 		fee_asset: { type: 'native' },
-		fee_recipient: null
+		fee_recipient: null as string | null
 	},
 	stale: false,
 	fee_token: null,
@@ -407,8 +414,13 @@ class RealSign {
 }
 let core = new RealSign();
 
+/** §39 (A1): the fee machine's quote now — a test raises it under a press. */
+const liveFee = $state<{ view: typeof READY_FEE | null }>({ view: null });
+
 const FEE = {
-	view: READY_FEE,
+	get view() {
+		return liveFee.view ?? READY_FEE;
+	},
 	requote: () => {},
 	requestQuote: async () => {},
 	selectAsset: () => {},
@@ -523,6 +535,7 @@ function mount() {
 
 beforeAll(() => loadCore());
 beforeEach(() => {
+	liveFee.view = null;
 	node = new Node();
 	core = new RealSign();
 	core.boot();
@@ -558,7 +571,8 @@ describe('a check no node could answer is asked again (dapp-15)', () => {
 		expect(again, 'the line offers to check again').toBeTruthy();
 		again!.click();
 		await asked(2);
-		// The core is told of the new run, and the old line stays — stale.
+		// The core is told of the new run, and the old line stays — stale —
+		// with its door: a re-check of a landed verdict is no new wait (r22-6).
 		await vi.waitFor(
 			() => expect(core.sent.filter((e) => e.type === 'sim_started')).toHaveLength(2),
 			WAIT
@@ -579,6 +593,141 @@ describe('a check no node could answer is asked again (dapp-15)', () => {
 		await asked(3);
 		node.asked[2].answer(NOTHING_MOVES);
 		await vi.waitFor(() => expect(verdictLine()).toBe(NO_CHANGE), WAIT);
+		await screen.unmount();
+	}, 40_000);
+
+	/**
+	 * r22-6: an unconfirmed verdict ("only one node answered") is asked again
+	 * every few seconds. Each re-check told the core the simulation was out
+	 * again, and the core shut the confirm "Checking…" until it landed: the
+	 * door flipped between "Sign anyway" and a shut "Confirm send" every
+	 * ~6 s, cancelling a hold or a "Press again to confirm" started late in
+	 * a cycle. A re-check of a verdict already on the sheet keeps that
+	 * verdict's door; only a verdict that changes changes it.
+	 */
+	it('r22-6: a re-check keeps the landed verdict’s door, and an arm survives a re-check that lands the same', async () => {
+		const screen = mount();
+		core.arrive('tx:1', 'transaction');
+		await asked();
+		node.asked[0].answer(SINGLE_NODE + NOTHING_MOVES);
+		// Landed: the door is "… anyway", held — and the landing's own beat is over.
+		await vi.waitFor(() => {
+			expect(confirmEl()?.disabled).toBe(false);
+			expect(holdLine()).toBe('holdToConfirm');
+		}, WAIT);
+		const frames = watchFrames();
+
+		// The assistive path arms it: "Press again to confirm".
+		confirmEl()!.click();
+		await vi.waitFor(() => expect(holdLine()).toBe('confirmAgain'), WAIT);
+
+		// Asked again, the answer still out: the door stays as it was.
+		const again = [
+			...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')
+		].find((button) => button.textContent?.trim() === 'simRecheck');
+		expect(again, 'the unconfirmed line offers to check again').toBeTruthy();
+		again!.click();
+		await asked(2);
+		await frames.further();
+		expect(confirmEl()?.disabled).toBe(false);
+		expect(heldLine()).toBeNull();
+		expect(holdLine()).toBe('confirmAgain');
+
+		// It lands saying the same: the door, and the arm, are untouched.
+		node.asked[1].answer(SINGLE_NODE + NOTHING_MOVES);
+		await vi.waitFor(
+			() => expect(document.body.querySelector('[role="dialog"] .banner .stale')).toBeNull(),
+			WAIT
+		);
+		await frames.further();
+		expect(holdLine()).toBe('confirmAgain');
+		frames.stop();
+		expect(
+			frames.frames.filter((frame) => frame.disabled || frame.line !== null),
+			'no frame shut the door during the re-check'
+		).toEqual([]);
+		// §39: the core WAS told of the re-check (`sim_started`) — and it is
+		// the core that keeps the landed verdict's door (`on_sim_started`).
+		expect(core.sent.filter((e) => e.type === 'sim_started')).toHaveLength(2);
+
+		// The second press confirms.
+		confirmEl()!.click();
+		await vi.waitFor(
+			() => expect(core.sent.some((e) => e.type === 'approve_tapped')).toBe(true),
+			WAIT
+		);
+
+		// A re-check whose verdict CHANGES changes the door: checked by two
+		// nodes alike, nothing moves — a plain confirm, no hold.
+		const againNow = [
+			...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')
+		].find((button) => button.textContent?.trim() === 'simRecheck');
+		againNow!.click();
+		await asked(3);
+		node.asked[2].answer(NOTHING_MOVES);
+		await vi.waitFor(() => {
+			expect(verdictLine()).toBe(NO_CHANGE);
+			expect(confirmEl()?.disabled).toBe(false);
+			expect(holdLine()).toBeNull();
+		}, WAIT);
+		await screen.unmount();
+	}, 40_000);
+});
+
+/**
+ * §39 (r22-3 / A1): the approve signs the fee the sheet DREW when the confirm
+ * began — the hold's start, or the assistive path's first press — and the fee
+ * row is held still on it while the confirm is armed; the quote at the
+ * approve goes beside it (`current_fee`), for the core to refuse a rise.
+ */
+describe('the fee drawn when the confirm began is the fee signed (A1)', () => {
+	const RELAY = '0x' + '77'.repeat(20);
+	const priced = (total: string) => ({
+		...READY_FEE,
+		fee: { ...READY_FEE.fee, total_wei: total, fee_recipient: RELAY }
+	});
+	/** The fee row's line (`FeeRow`'s `.line`) as drawn. */
+	const rowText = () =>
+		document.body.querySelector<HTMLElement>('[role="dialog"] .line')?.textContent ?? '';
+
+	it('armed, the row holds the figure drawn; the approve carries it and the quote now', async () => {
+		liveFee.view = priced('2100000000000000');
+		const screen = mount();
+		core.arrive('tx:1', 'transaction');
+		await asked();
+		node.asked[0].answer(SINGLE_NODE + NOTHING_MOVES);
+		await vi.waitFor(() => {
+			expect(confirmEl()?.disabled).toBe(false);
+			expect(holdLine()).toBe('holdToConfirm');
+		}, WAIT);
+		const drawn = rowText();
+		expect(drawn).toMatch(/0\.0021/);
+
+		// The assistive path's first press: the figure drawn is kept.
+		confirmEl()!.click();
+		await vi.waitFor(() => expect(holdLine()).toBe('confirmAgain'), WAIT);
+		// The quote rises while it is armed: the row does not move under it.
+		liveFee.view = priced('3100000000000000');
+		await tick();
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		expect(rowText()).toBe(drawn);
+		expect(rowText()).not.toMatch(/0\.0031/);
+		expect(holdLine()).toBe('confirmAgain');
+
+		// The second press: the figure drawn, and the quote now, beside it.
+		confirmEl()!.click();
+		await vi.waitFor(
+			() => expect(core.sent.some((e) => e.type === 'approve_tapped')).toBe(true),
+			WAIT
+		);
+		const approve = core.sent.find((e) => e.type === 'approve_tapped') as Extract<
+			SignEvent,
+			{ type: 'approve_tapped' }
+		>;
+		expect(approve.opts.quoted_fee?.amount).toBe('2100000000000000');
+		expect(approve.opts.current_fee?.amount).toBe('3100000000000000');
+		// Let go: the row draws the quote in force again.
+		await vi.waitFor(() => expect(rowText()).toMatch(/0\.0031/), WAIT);
 		await screen.unmount();
 	}, 40_000);
 });

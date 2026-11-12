@@ -2377,6 +2377,9 @@ pub struct Model {
     /// at the press. While that press is out ([`press_frozen`]) the confirm
     /// draws THIS, never a newer quote, and the Max does not move.
     press: Option<Press>,
+    /// §39 (r22-3): the quote the confirm drew before the one up now (a tap
+    /// drawn on it a frame before the new one landed).
+    drawn_before: Option<FeeEstimate>,
     /// §34: [`SendView::fee_moved`] — the last press signed nothing because
     /// the quote at the signature was not the one shown.
     fee_moved: Option<SendFeeMoved>,
@@ -3231,7 +3234,10 @@ impl Send {
                 // Drawn for another review than the one up now: nothing is
                 // confirmed, and the review in front is what is drawn next.
                 Some(drawn) if review_digest(model).as_deref() != Some(drawn.as_str()) => {
-                    stale_press(model)
+                    match stale_tap_within_quote(model, &drawn) {
+                        Some(pressed) => slide_confirm_at(model, Some(pressed)),
+                        None => stale_press(model),
+                    }
                 }
                 _ => slide_confirm(model),
             },
@@ -4871,19 +4877,22 @@ fn set_max(model: &mut Model, exact: String) {
     let exact = max_shown_exact(&exact);
     let figure = max_figure(&exact);
     // r5reg-3: a Max the person saw, filled again from a newer quote — the
-    // reserve for the fee moved — is said, never swapped silently: the figure
-    // first shown, and the one sent.
+    // reserve for the fee moved — is said, never swapped silently.
+    // §39 (R22 follow-up, r22-1, S1 on iOS): said from the figure DRAWN NOW,
+    // every move. It was said from the figure first shown, so a quote that
+    // fell (0.066 → 0.067955, said) and came back (→ 0.066) un-said the
+    // move: `from` equalled the new figure, the sentence vanished, and the
+    // amount and fee flipped back to 0.066 + 0.156 without a word while the
+    // person had last read 0.067955 + 0.154045. Every move is now said:
+    // "Max is now 0.066 (it was 0.067955)".
     if let Some(MaxFill::Exact(before)) = &model.max_fill {
-        let shown = model
-            .max_moved
-            .as_ref()
-            .map_or_else(|| max_figure(before), |moved| moved.from.clone());
-        model.max_moved = (shown != figure).then(|| SendMaxMoved {
-            from: shown,
-            to: figure.clone(),
-        });
-        // §34: a stop's figures that moved again are `max_moved`'s to say.
-        if model.max_moved.is_some() {
+        let drawn = max_figure(before);
+        if drawn != figure {
+            model.max_moved = Some(SendMaxMoved {
+                from: drawn,
+                to: figure.clone(),
+            });
+            // §34: a stop's figures that moved again are `max_moved`'s to say.
             model.fee_moved = None;
         }
     }
@@ -6704,8 +6713,30 @@ fn leave_confirm(model: &mut Model) {
     }
 }
 
-#[allow(clippy::neg_cmp_op_on_partial_ord)] // NaN must fall to `edit_amount`, never to signing
 fn slide_confirm(model: &mut Model) -> Cmd {
+    slide_confirm_at(model, None)
+}
+
+/// §39 (r22-3): a tap drawn on the confirm a frame before the quote now up
+/// landed: the quote it was drawn on, when the review drawn is exactly that
+/// quote's and the quote now charges no more ([`quote_within`]) — the press
+/// signs it. `None`: the quote rose, or the tap was drawn on something else;
+/// it confirms nothing and says so ([`stale_press`]).
+fn stale_tap_within_quote(model: &Model, drawn: &str) -> Option<FeeEstimate> {
+    let before = model.drawn_before.clone()?;
+    let now = model.fee_estimate.as_ref()?;
+    if !quote_within(now, &before) {
+        return None;
+    }
+    let plan = submit_plan_at(model, Some(before.clone()))?;
+    let digest = signed_review(&plan)?.digest();
+    (digest == drawn).then_some(before)
+}
+
+/// [`slide_confirm`]; `drawn`: the quote the tap was drawn on, when it is
+/// not the newest (§39) — the press is made on it.
+#[allow(clippy::neg_cmp_op_on_partial_ord)] // NaN must fall to `edit_amount`, never to signing
+fn slide_confirm_at(model: &mut Model, drawn: Option<FeeEstimate>) -> Cmd {
     if model.step != SendStep::Confirm {
         return Command::done();
     }
@@ -6759,11 +6790,18 @@ fn slide_confirm(model: &mut Model) -> Cmd {
         return Command::done();
     };
     // What this confirm is for, frozen: the submit signs it or nothing.
-    model.confirmed_review = submit_plan(model).as_ref().and_then(signed_review);
+    // §39: a tap drawn on the quote before is made on that quote.
+    let pressed_fee = drawn.or_else(|| selected_fee(model).cloned());
+    model.confirmed_review = match &pressed_fee {
+        Some(fee) if model.fee_estimate.as_ref() != Some(fee) => {
+            submit_plan_at(model, Some(fee.clone()))
+                .as_ref()
+                .and_then(signed_review)
+        }
+        _ => submit_plan(model).as_ref().and_then(signed_review),
+    };
     // §34: …and what it was pressed on stays on screen until then.
-    model.press = Some(Press {
-        fee: selected_fee(model).cloned(),
-    });
+    model.press = Some(Press { fee: pressed_fee });
     model.fee_moved = None;
     model.cancelled = false;
     model.passkey_note = None;
@@ -6951,6 +6989,12 @@ struct SubmitPlan {
 
 /// `None` when the batch cannot be built — the submit's generic error.
 fn submit_plan(model: &Model) -> Option<SubmitPlan> {
+    submit_plan_at(model, model.fee_estimate.clone())
+}
+
+/// [`submit_plan`] at `fee` — the newest quote, or (§39) the one the press
+/// was made on.
+fn submit_plan_at(model: &Model, fee: Option<FeeEstimate>) -> Option<SubmitPlan> {
     let (Some(token), Some(account)) = (model.selected_token.clone(), model.account.clone()) else {
         return None;
     };
@@ -6959,10 +7003,7 @@ fn submit_plan(model: &Model) -> Option<SubmitPlan> {
     // In-band: sign EXACTLY the fee the confirm screen displayed (amount +
     // recipient) — the bundler's 2× gate rejects a stale quote loudly and the
     // user re-confirms a NEW number, never a silent mismatch (invariant ①).
-    let current_fee = model
-        .fee_estimate
-        .clone()
-        .filter(|f| f.chain_id == chain_id);
+    let current_fee = fee.filter(|f| f.chain_id == chain_id);
     let max_fee_per_gas = current_fee.as_ref().map(|f| f.max_fee_per_gas.to_string());
     let quoted_fee = current_fee.as_ref().and_then(|f| {
         let recipient = f.fee_recipient.clone()?;
@@ -7120,6 +7161,41 @@ fn signed_review(plan: &SubmitPlan) -> Option<SignedReview> {
     })
 }
 
+/// §39 (R22 follow-up, r22-3): the plan the press was made on, when the
+/// quote now charges no more than it — the same chain, coin and recipient,
+/// an amount at or under the one pressed — and that plan is exactly the
+/// review the person confirmed. `None`: the quote rose (or changed coin or
+/// recipient), and the press stops ([`press_moved`]).
+fn pressed_plan_within_quote(model: &Model) -> Option<SubmitPlan> {
+    let pressed = model.press.as_ref()?.fee.clone()?;
+    let now = model.fee_estimate.as_ref()?;
+    if !quote_within(now, &pressed) {
+        return None;
+    }
+    let plan = submit_plan_at(model, Some(pressed))?;
+    (model.confirmed_review.as_ref() == signed_review(&plan).as_ref()).then_some(plan)
+}
+
+/// §39: does the quote `now` charge no more than `pressed` — the same chain,
+/// coin and recipient, and an amount at or under it?
+#[must_use]
+pub fn quote_within(now: &FeeEstimate, pressed: &FeeEstimate) -> bool {
+    let charged = |f: &FeeEstimate| match &f.fee_asset {
+        FeeAsset::Erc20 { token, amount, .. } => (Some(token.to_ascii_lowercase()), *amount),
+        FeeAsset::Native => (None, f.total_wei),
+    };
+    let (now_coin, now_amount) = charged(now);
+    let (pressed_coin, pressed_amount) = charged(pressed);
+    now.chain_id == pressed.chain_id
+        && now_coin == pressed_coin
+        && now.fee_recipient.as_deref().map(str::to_ascii_lowercase)
+            == pressed
+                .fee_recipient
+                .as_deref()
+                .map(str::to_ascii_lowercase)
+        && now_amount <= pressed_amount
+}
+
 /// The digest of the review the model holds now ([`SendView::review_digest`]).
 fn review_digest(model: &Model) -> Option<String> {
     submit_plan(model)
@@ -7150,12 +7226,12 @@ fn prepared_gas_for(
 /// the operation's hash is only computed against
 /// ([`crate::signed_review::reviewed_safe_op_hash`]).
 fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
-    let Some(plan) = submit_plan(model) else {
+    let Some(mut plan) = submit_plan(model) else {
         // Any build refusal is what a thrown `BatchSendError` became: the
         // generic catch — calm, localized, semantic (invariant ⑮).
         return submit_generic_error(model, gen);
     };
-    let Some(review) = signed_review(&plan) else {
+    let Some(mut review) = signed_review(&plan) else {
         return submit_generic_error(model, gen);
     };
     // What the confirm froze is what is signed. Anything that moved since —
@@ -7163,8 +7239,21 @@ fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
     // review back in front of the person with its new figures, unsigned.
     // §34: said beside the button, with the new figures — never a silent
     // return of the button, never a quiet re-derivation of a Max.
+    // §39 (R22 follow-up, r22-3): a quote that moved DOWN (or not at all in
+    // what it charges) signs the figures pressed — exactly: the fee leg
+    // pays the fee shown (charged = shown) and the relay gets at least its
+    // quote now. Only a quote that rose above the figure shown stops.
     if model.confirmed_review.as_ref() != Some(&review) {
-        return press_moved(model, gen);
+        match pressed_plan_within_quote(model) {
+            Some(pressed) => {
+                // Exactly the review the person confirmed.
+                if let Some(confirmed) = model.confirmed_review.clone() {
+                    review = confirmed;
+                }
+                plan = pressed;
+            }
+            None => return press_moved(model, gen),
+        }
     }
     let SubmitPlan {
         chain_id,
@@ -7387,6 +7476,12 @@ fn fee_updated(model: &mut Model, estimate: FeeEstimateView) -> Cmd {
     let Some(fee) = parse_fee_view(&estimate) else {
         return Command::done();
     };
+    // §39 (r22-3): the quote the confirm drew until now — a tap drawn on it
+    // a frame before this one landed signs it when the new quote charges no
+    // more (`stale_tap_within_quote`).
+    if model.step == SendStep::Confirm && !press_frozen(model) {
+        model.drawn_before = model.fee_estimate.take();
+    }
     model.fee_estimate = Some(fee);
     // A settled quote is no failure, whatever the bridge says next.
     model.fee_failed = false;

@@ -7111,14 +7111,16 @@ export function rpcCooldownMs(consecutive_failures) {
  * R22: the one envelope a corroborated read hands the core — the first
  * node's JSON-RPC body (`undefined`: the pool gave up), the second,
  * independent node's (`undefined`: none answered) and whether the pool holds
- * the person's own node alone ("Only use my node"). Pass it to `simOutcome`,
+ * the person's own node alone ("Only use my node"), and (§39, r22-2) whether the pool
+ * holds no other provider to ask (`sole_provider` on the verdict). Pass it to `simOutcome`,
  * or as a multisig `rpc_corroborated` answer. See `vela_core::app::corroborate`.
  * @param {string | null | undefined} primary_json
  * @param {string | null | undefined} witness_json
  * @param {boolean} own_node
+ * @param {boolean | null} [sole_provider]
  * @returns {string}
  */
-export function rpcCorroboratedEnvelope(primary_json, witness_json, own_node) {
+export function rpcCorroboratedEnvelope(primary_json, witness_json, own_node, sole_provider) {
     let deferred3_0;
     let deferred3_1;
     try {
@@ -7126,7 +7128,7 @@ export function rpcCorroboratedEnvelope(primary_json, witness_json, own_node) {
         var len0 = WASM_VECTOR_LEN;
         var ptr1 = isLikeNone(witness_json) ? 0 : passStringToWasm0(witness_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         var len1 = WASM_VECTOR_LEN;
-        const ret = wasm.rpcCorroboratedEnvelope(ptr0, len0, ptr1, len1, own_node);
+        const ret = wasm.rpcCorroboratedEnvelope(ptr0, len0, ptr1, len1, own_node, isLikeNone(sole_provider) ? 0xFFFFFF : sole_provider ? 1 : 0);
         deferred3_0 = ret[0];
         deferred3_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
@@ -7803,22 +7805,25 @@ export function signingVenueChoices(domain, active_json, saved_json) {
  * which nothing of theirs moves. See `vela_core::app::sim_outcome`.
  * @param {string} user
  * @param {string} reply_json
+ * @param {string | null} [value_wei]
  * @returns {string}
  */
-export function simOutcome(user, reply_json) {
-    let deferred3_0;
-    let deferred3_1;
+export function simOutcome(user, reply_json, value_wei) {
+    let deferred4_0;
+    let deferred4_1;
     try {
         const ptr0 = passStringToWasm0(user, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ptr1 = passStringToWasm0(reply_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.simOutcome(ptr0, len0, ptr1, len1);
-        deferred3_0 = ret[0];
-        deferred3_1 = ret[1];
+        var ptr2 = isLikeNone(value_wei) ? 0 : passStringToWasm0(value_wei, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len2 = WASM_VECTOR_LEN;
+        const ret = wasm.simOutcome(ptr0, len0, ptr1, len1, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
 }
 

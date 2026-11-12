@@ -672,7 +672,9 @@ clean diff for a takeover, or "not an owner" to clear a parent-Safe request.
   different answers…", Check again, and the confirm is "… anyway". State diff →
   `StateVerdict::Unavailable { reason: "uncorroborated" | "disagreed" }`. Authority reads
   used by a guard → "couldn't check": the multisig gate is `SigningUnchecked`, and the
-  parent-Safe guard refuses `Unchecked`.
+  parent-Safe guard refuses `Unchecked`. §18 refines this: two that disagree are
+  `SigningDisagreed`; one provider where the pool holds no other goes on, in the member's
+  own multisig flows only, as "… anyway".
 - **Where it applies.** The signing sheet's own simulation, every read of the multisig
   review (`gather_review` runs on a corroborating `Io`), the gate before every multisig
   signature (`authorize_signing` and the outside page's `gate_now`: `judge`, members,
@@ -688,8 +690,9 @@ clean diff for a takeover, or "not an owner" to clear a parent-Safe request.
   your own node only" under the balance changes (`simOwnNode`). The network setting says
   what it means (`onlyMineTrust`). When a check is unconfirmed, the sheet offers it
   (`ownNodeHint`, which opens the network's RPC settings).
-- **Bounded load.** At most two extra POSTs (`WITNESS_MAX_ASKS`) and one chain-id probe per
-  new endpoint. A corroborated read is never hedged: it is left out of `pending_urls`,
+- **Bounded load.** At most one extra POST per other provider, within
+  `rpc_pool::WITNESS_BUDGET_MS` (§18; Round 22 first asked at most two), and one chain-id
+  probe per new endpoint. A corroborated read is never hedged: it is left out of `pending_urls`,
   because an early answer would skip the witness. Answers already fetched are reused: the
   witness is asked only after the first node answered, and a review read again re-asks
   only its silent checks (r16-3).
@@ -867,6 +870,172 @@ shown).**
 `max_sends_exactly_what_it_shows`. `send-fee-cover.json`'s R20 Max now reads and sends
 0.005887. Invariant ⑨ now reads "never more than the balance less the fee, less than one
 shown place left".
+
+## 18. Round 22 follow-ups: one provider, a fee that moves (§39)
+
+Round 22's verification on Arc Testnet found that two of §12–§17's rules, taken
+together, locked people out or looped. `docs/multisig-machines.md` §39 is the summary
+table; this is the reasoning.
+
+### 18.1 One public provider must not lock a multisig (r22-2, S2)
+
+**Found.** Arc Testnet with the default RPC: a member's review loaded ("Only one node
+answered…", "Execute anyway"), but the held "Execute anyway" stopped in 150 ms. The
+gate's authority reads (owners, threshold, modules, guard, nonce) are corroborated reads
+(§12), and no second provider answered. Desktop said "Can't reach Arc Testnet" (it mapped
+`ActionState::SigningUnchecked` to a reachability sentence); Android said it could not
+check who can act. Adding an own node fixed it. The likely cause of "no second provider":
+Arc's chain index lists two hosts that answered nothing from the tester's network ahead of
+`arc-testnet.drpc.org`, and the witness asked at most two.
+
+**Decision.**
+- **The witness is looked for within a budget, not a count.** `rpc_pool::WITNESS_BUDGET_MS`
+  (10 s) from the first answer; one endpoint per OTHER provider (`corroborate::provider_of`
+  differs), best-scored first; a chain-id probe that hangs scores as a failure, so the next
+  read asks past it. Ten seconds is two hung chain-id probes (3 s each) and an answer, and
+  stays under the review's own read bound. The load bound is now one POST and one probe per
+  other provider (was two), still never hedged.
+- **"The pool holds one provider" is a fact of configuration, said by the pool.**
+  `RpcCallVerdict::Respond::sole_provider` is true only when no endpoint of the pool for
+  that chain is another provider (a node proven to serve another chain is not this chain's
+  provider). A ban, a cooldown or a silent witness is a failure, not a sole provider: Try
+  again can work there. The envelope carries it (`corroborate::SOLE_PROVIDER_KEY`).
+- **The member's own flows go on, as "… anyway"** (`Io::corroborating_own`,
+  `corroborate::authority_read` → `one_node`): approve, execute, propose (a site's draft
+  included — it is the members' own review of their own multisig), a member change, the
+  outside page's signature. The read is taken, remembered, and the signature is asked
+  "… anyway" (held 1.5 s, or the assistive two presses), whatever the review's own rule
+  said. The review never says "checked": its state line is
+  `home.multisig.review.stateOneNode` ("Only one node could confirm who can act on
+  {network} and what running it changes in the multisig. Add your own node in Settings to
+  have it checked twice.") with `addOwnNode`, which opens that network's RPC settings.
+  "Refuse blind signing" refuses it like any "… anyway".
+  - *Why not refuse.* On a single-provider network the refusal is permanent: the member
+    cannot sign or execute their own multisig with the wallet's defaults, and the words
+    blamed reachability. The core principle forbids a rule that locks a person out with no
+    way forward. Ledger-style refusal remains one switch away.
+  - *What one lying node can do then.* Hide a module or guard (no risk confirmation), or
+    misstate owners in the review. It cannot move funds: the Safe enforces its own owners
+    and threshold on chain, the state-diff guard's undeclared-write refusal stands alone
+    (§12), and every such signature is held and said as one node's word.
+- **Strict where a site is the threat.** §31's `isOwner` and the self-call rule refuse
+  when uncorroborated, including on a single-provider network (`authority_read(…, false)`
+  → `unchecked`): refusing a site's request locks nobody out of anything.
+- **Two that disagree refuse.** `ActionState::SigningDisagreed`
+  (`home.multisig.authority.signDisagreed`): a real signal, never "… anyway".
+- **Words.** `SigningUnchecked` is `home.multisig.authority.signUnchecked` on every
+  shell, never "can't reach".
+
+**Proof.** Vector `signing-truth.json` `authority` (8 cases, own flow and site guard) and
+an `owner` case (one provider: a site's guard stays strict); `r22_signing_truth.rs` pool
+tests, red on the old two-ask rule; `app_multisig_proposals.rs`
+`one_provider_lets_a_member_sign_only_anyway_said_as_one_node`,
+`two_disagreeing_nodes_sign_nothing`, `two_agreeing_nodes_sign_plainly`. On the fork
+(`tests/multisig_fork.rs`, fresh harness on ports 9741–9746): with no second node at all,
+`one_provider_lets_the_members_sign_and_execute_as_anyway` creates a 2-of-3, proposes,
+approves twice and executes — the review says `oneNode`, every signature is asked
+"… anyway", the transfer lands; `two_disagreeing_providers_refuse_the_member` puts an
+authority-lying `fork_proxy` (`Kind::AuthorityLiar`: code and `getOwners` inverted) beside
+the honest node, and the proposal is `SigningDisagreed` with no passkey asked.
+
+### 18.2 A fee that moves must not loop, nor be charged above what was shown (r22-3, S2; A1; r22-1, S1)
+
+**Found.** Android's multisig Execute never went through: six presses, each stopped
+"That didn't go through: Network fee ≈ X" because the relay's quote moved between the look
+and the press (§24's "a new quote that is not the one on screen signs nothing"). A real
+network's base fee moves every block, so a stop on ANY difference is a livelock in the
+making. Separately, iOS charged a Max's old figures (r22-1), and Android charged a site's
+send 0.138 after the sheet was armed at 0.12 (A1).
+
+**Decision.**
+- **A quote at or under the figure on screen signs exactly the figure on screen.** The fee
+  leg pays it — charged = shown, and the relay receives at least what it now asks. Only a
+  quote ABOVE the figure shown stops; the stop names the new figure and the next press pays
+  it, and that press too signs its figure when the quote then is at or under it. One rule
+  in the core for: Send and Max (`send::quote_within`, the press's quote; a tap drawn on the
+  quote before the one now up signs that quote when it charges no more), a multisig execute
+  and the one press (`execute_as`), a site's transaction and `wallet_sendCalls`
+  (`SignApproveOpts::current_fee` beside `quoted_fee`; `sign_request::fee_rose`,
+  `SignErrorKind::FeeRose`).
+- **The figure shown is the one the confirm began on.** A site's sheet hands the fee it
+  drew when the hold began, or at the assistive path's first press, and holds the fee row
+  still while armed or held (A1). Send and multisig already froze the press (§34, §32).
+- **Headroom.** A fee priced at the relay's published per-gas price
+  (`Charge::Published`) carries `fee_policy::FEE_HEADROOM_BPS` = 12.5 %, rounded up.
+  - *Why 12.5 %.* It is the most EIP-1559 lets a base fee rise in one block, and the
+    relay's per-gas figure follows the next block's base fee: a quote shown for a block or
+    two stays payable however the base fee moves. viem's default is 20 %, MetaMask's
+    `maxFeePerGas` is about 2× base; but this headroom is CHARGED (the fee leg is fixed in
+    the signature, nothing is refunded), so it is kept to one block.
+  - *Consistent with the bounds.* A relay that publishes no price is paid 3× its gas price
+    (`INBAND_MARKUP`, the 3× bound) and gets no headroom on top. The settlementGas cap
+    (`settlement_gas_cap`, 125 % + 50,000) bounds the gas a relay may bill, before any of
+    this; the headroom touches the price, not the gas.
+- **Stop words say why** (r22-4, KNOWN-BUGS R20-15): `home.multisig.proposal.feeRose`
+  ("The network fee went up to ≈ {{fee}} since you pressed; nothing was signed. Press
+  again to pay {{fee}}."), `componentsUi.signing.feeRose`, and `send.feeMoved` /
+  `send.feeMovedMax` reworded. Never "That didn't go through: Network fee ≈ X".
+- **r22-1.** The Max's move was said from the figure first shown, so a quote that fell
+  (said) and came back un-said it and flipped the figures back silently while the person
+  had last read the lower fee. Every move is now said from the figure drawn now
+  (`send::set_max`); the press signs exactly what is drawn (the shell carries the review
+  digest it drew, and §34 freezes it).
+
+**Proof.** `send-fee-cover.json` `press_freeze` +4 cases (red with the rule off);
+`a_max_that_moves_and_moves_back_is_said_each_time` (red on the old `set_max`);
+`a_press_signs_only_the_fee_it_carries_even_on_a_fresh_look` (the fee leg is the 999
+carried over a quote of 1; a figure under the quote stops); `a_site_send_signs_the_fee_shown_or_nothing_when_the_quote_rose`;
+`app_fee_eth_mainnet.rs` (the relay's published figures unchanged, shown with the
+headroom). The fork relay stand-in moves its gas price on every quote (`relay.py`
+`MOVING_GAS`, `/v1/test/gas`) for the shells' onchain proof.
+
+### 18.3 Smaller faults (S3/S4)
+
+- **Desktop keyboard (r22-5).** Tab / Shift-Tab traverse a sheet; Enter or Space on a
+  focused hold button arms "Press again to confirm" for 5 s
+  (`sign_confirm::CONFIRM_AGAIN_WINDOW_MS`), as on web and Android.
+- **A re-check keeps the door (r22-6).** `on_sim_started` ignores a re-check of a verdict
+  already on the sheet: the confirm no longer flips between "Sign anyway" and a shut
+  "Checking…", and a hold or arm made on it survives a re-check that lands the same.
+- **Send's picker under a refused network (r22-7).** The last-known rows with the home's
+  "Can't reach …" line, never "No tokens with balance".
+- **Sign-in words (r22-8).** A key-index group that does not make its recorded address is
+  said `onboarding.login.registryUnreachableBody` (`login::REGISTRY_MISMATCH_WORDS`), never
+  the core's English with biometric advice.
+- **A site's refusal (r22-9)** no longer asserts a membership the wallet could not check.
+- **Hidden stranger proposals** count for nothing — not for a member's "Only one of these
+  can run…" note, and a stranger's cancellation voids nothing (`mark_cancellations`).
+- **A node never erases a value the wallet decoded** (`sim_outcome::with_decoded_value`):
+  with "Only use my node", a checked answer that moves no native coin is drawn with the
+  request's own native outflow. Reconciled, not refused: an honest node without
+  `traceTransfers` reports no native move at all.
+- **A stop that sent the site nothing is still answered.** A `FeeRose` (or a stale Tempo
+  quote) holds no answer for the site; a swipe of that sheet returned `Dismiss` and the
+  site waited for ever. An error with nothing sent, no answer held and nothing in flight
+  now swipes as `Reject` (4001), the spec-081 rule (vector `signing-truth.json`
+  `fee_rose`).
+- **The desktop's connect request behind the chip (R22v-10)** is not fixed: the Connection
+  column opens only on a new consent, and a restored tab's standing one is not raised
+  again. Recorded in KNOWN-BUGS with the fix direction; nothing is granted meanwhile.
+- **Every unbounded grant is a held danger** (`sign_confirm::guarded_posture`): a
+  Multicall3- or multicall-carried approval and a Permit2 witness permit were a plain
+  Confirm while a two-leg unlimited batch was held. The approval guard's one verdict
+  (`GuardView.unlimited_warning`) now holds the confirm however the grant is nested
+  (`every_unbounded_grant_holds_the_confirm_however_it_is_nested`).
+
+### 18.4 Left open
+
+- On a single-provider network a member signs on one node's word about who can act —
+  said, held, and one switch ("Refuse blind signing") or one node ("Add your own node")
+  away from corroborated. A provider-diverse default pool for Arc is the real fix and is
+  the chain index's to list.
+- The headroom is paid, not refunded (the in-band fee leg is fixed in the signature).
+- A quote that rises more than the headroom between the look and the press still stops
+  once — said, and the next press pays it.
+- R22v-10 (desktop): a restored tab's connect request waits behind the account chip.
+- Dependency advisories published after a round's gates fail CI until the lock moves:
+  rustix 1.1.6 and the Windows passkey crate's crypto-bigint / ctutils / wnaf were updated
+  here (§39).
 
 ## Left open (Round 22, signing truth)
 - Provider independence is a URL heuristic (above).

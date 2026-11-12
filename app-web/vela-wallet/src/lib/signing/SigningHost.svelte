@@ -56,6 +56,8 @@
 	import { feeRowTap } from '$lib/flows/fee-failure';
 	import { subscribeTxTracker, txTrackerView } from '$lib/wallet/core/tracker-resident';
 	import type { FeeTier } from '$lib/core/generated/FeeTier';
+	import type { FeeView } from '$lib/core/generated/FeeView';
+	import type { HoldPhase } from '$lib/ui/hold-confirm';
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
 	import { panelSurface } from '$lib/dapp/panel-surface.svelte';
 	import { onMount, untrack } from 'svelte';
@@ -483,10 +485,17 @@
 	 * Run request `requestId`'s simulation and put its verdict on the sheet.
 	 * A verdict the core marks as about the network (`recheck` — no node
 	 * answered) is asked again, by itself, once the chain answers a plain read
-	 * again, and on the person's "Check again" (dapp-15). The core is told of
-	 * every run (`sim_started` / `sim_settled`): a second run holds the confirm
-	 * again for its own short wait, so nobody signs over a verdict about to
-	 * change.
+	 * again, and on the person's "Check again" (dapp-15).
+	 *
+	 * The core is told of every run (`sim_started` / `sim_settled`): until a
+	 * verdict is on the sheet the confirm is shut, "Checking…". A re-check of
+	 * a verdict already on the sheet keeps that verdict's door — the core's
+	 * rule (§39, r22-6: `on_sim_started` ignores it): an unconfirmed verdict
+	 * is asked again every few seconds, and a door that shut on each re-check
+	 * flipped between "Sign anyway" and a shut "Confirm send", cancelling a
+	 * hold or a "Press again to confirm" begun late in a cycle. The landed
+	 * verdict — drawn stale meanwhile — keeps its door until the re-check
+	 * lands; only a verdict that changes changes it.
 	 */
 	function simulateOnSheet(
 		requestId: string,
@@ -634,6 +643,38 @@
 	 * re-quote or holds a failure of its own.
 	 */
 	const feeShown = $derived(speedControl.feeInForce);
+
+	/**
+	 * §39 (r22-3 / A1): the fee the sheet DREW when the confirm began — the
+	 * start of the hold, or the assistive path's first press — for the request
+	 * it began on. While the hold runs or the confirm is armed the fee row is
+	 * held still on it (a newer quote is not drawn under a press in progress),
+	 * and it is what the approve signs (`quoted_fee`); the fee machine's quote
+	 * at the approve goes beside it (`current_fee`). Above it, the core signs
+	 * nothing (`fee_rose`): the row then draws the new figure, and the next
+	 * confirm pays it. Let go once the confirm is idle again.
+	 */
+	let drawnFee = $state<{ requestId: string; view: FeeView } | null>(null);
+	let confirmPhase: HoldPhase = 'idle';
+	function onConfirmPhase(next: HoldPhase): void {
+		confirmPhase = next;
+		const id = signView.request?.id ?? null;
+		if (next !== 'idle') {
+			if (id !== null && drawnFee?.requestId !== id) {
+				drawnFee = { requestId: id, view: $state.snapshot(feeShown) as FeeView };
+			}
+			return;
+		}
+		// A completed hold (or the second press) goes idle and confirms in the
+		// same step: the approve reads the fee drawn first, then it is let go.
+		queueMicrotask(() => {
+			if (confirmPhase === 'idle') drawnFee = null;
+		});
+	}
+	/** The fee the sheet draws: the one held under a press in progress, else the fee in force. */
+	const feeDrawn = $derived(
+		drawnFee !== null && drawnFee.requestId === signView.request?.id ? drawnFee.view : feeShown
+	);
 	/** Every failed run and every recovery is a `fee:` line (spec 082 G61). */
 	const feeFailures = new FeeFailureLog();
 	$effect(() => {
@@ -707,7 +748,8 @@
 			sign: signView,
 			clear: signingSheet.clear,
 			guard: signingSheet.guard,
-			fee: feeShown,
+			// §39 (A1): held still while a hold runs or the confirm is armed.
+			fee: feeDrawn,
 			// Round 7 (S4): the page has it — "Waiting for the signing page…".
 			progress: { ...signRequest.progress, onPage },
 			// This request's own simulation, and no other's.
@@ -761,7 +803,8 @@
 	 * each copied from its machine's view.
 	 */
 	function approveOpts() {
-		return approveOptsOf(fee.view, signingSheet.clear, signingSheet.guard);
+		// §39 (A1): the figure drawn when the confirm began, and the quote now.
+		return approveOptsOf(feeDrawn, signingSheet.clear, signingSheet.guard, fee.view);
 	}
 
 	/** The chip ids the drawn editor emits, in the guard's vocabulary. */
@@ -864,6 +907,7 @@
 		}}
 		onmessageunread={(unread) => (unreadFor = unread ? (signView.request?.id ?? null) : null)}
 		onrecheck={() => simAgain?.()}
+		onconfirmphase={onConfirmPhase}
 		onchip={guardChip}
 		oncustom={guardCustom}
 		onfee={() => {

@@ -36,6 +36,7 @@
 	import { externalSigning } from '../external/signing.svelte';
 	import { riskConfirmation, SigningBlockedError, SigningRefusedError } from '../core/gate.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
+	import { uncheckedWords } from '../core/gate-words';
 	import AuthorityNotice from './AuthorityNotice.svelte';
 	import AddMultisigSheet from './AddMultisigSheet.svelte';
 	import CreateMultisigSheet from './CreateMultisigSheet.svelte';
@@ -516,7 +517,7 @@
 			/>
 		{:else}
 			<p class="notice" role="alert">
-				{fillTemplate(m.authority.signUnchecked, { network: chainName(sheet.error.chainId) })}
+				{uncheckedWords(m.authority, sheet.error)}
 			</p>
 		{/if}
 	</Sheet>

@@ -22,7 +22,13 @@ export type CorroboratedCall = (
 export function envelopeOf(answer: CorroboratedAnswer | null): string {
 	return answer === null
 		? rpcCorroboratedEnvelope(null, null, false)
-		: rpcCorroboratedEnvelope(answer.body, answer.witnessBody, answer.ownNode);
+		: rpcCorroboratedEnvelope(
+				answer.body,
+				answer.witnessBody,
+				answer.ownNode,
+				// §39 (r22-2): the pool holds no other provider to ask.
+				answer.soleProvider
+			);
 }
 
 /**

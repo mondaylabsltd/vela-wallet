@@ -165,6 +165,7 @@
     "feeUncheckedHeld": "Não foi possível verificar se ela seria executada — Executar verifica de novo.",
     "feeRetry": "Verificar de novo",
     "feeSigning": "Assinando com esta taxa — ela não muda até você confirmar ou cancelar.",
+    "feeRose": "A taxa de rede subiu para ≈ {{fee}} desde que você tocou; nada foi assinado. Toque de novo para pagar {{fee}}.",
     "feeSetup": "Inclui uma configuração única em {{network}} ≈ {{amount}}:",
     "feeSetupPlain": "Inclui uma configuração única em {{network}}:",
     "setupMultisig": "implantar este multisig",
@@ -367,6 +368,7 @@
     "signRiskConfirm": "Entendi o risco, assinar",
     "signRiskCancel": "Não assinar",
     "signUnchecked": "A Vela não conseguiu verificar quem pode agir por esta multisig em {{network}}, então ainda não vai assinar lá. Tente de novo em instantes.",
+    "signDisagreed": "Dois nós independentes da {{network}} deram respostas diferentes sobre quem pode agir por este multisig, então a Vela não vai assinar lá. Adicione seu próprio nó em Configurações para verificar com um nó de confiança, ou tente mais tarde.",
     "ownerNotBound": "Em {{network}}, o membro {{address}} é um contrato que nada vincula à sua própria criação lá — quem puder implantar nesse endereço teria o voto dele."
    },
    "external": {
@@ -738,6 +740,8 @@
     },
     "stateUnconfirmed": "Só um nó respondeu em {{network}}, então a Vela não conseguiu confirmar o que muda no multisig ao executá-la. Vale só a leitura da Vela sobre a transação.",
     "stateDisagreed": "Dois nós independentes em {{network}} discordam sobre o que muda no multisig ao executá-la. Vale só a leitura da Vela sobre a transação.",
+    "stateOneNode": "Só um nó conseguiu confirmar quem pode agir na {{network}} e o que muda no multisig ao executá-la. Adicione seu próprio nó em Configurações para que seja verificado duas vezes.",
+    "addOwnNode": "Adicionar seu próprio nó",
     "blindRefused": "A Vela não vai assinar isto aqui: “Recusar assinatura às cegas” está ativado e parte desta transação não pôde ser verificada. Você pode mudar isso em Ajustes."
    },
    "notify": {

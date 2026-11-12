@@ -100,6 +100,10 @@ struct RpcCorroborated {
     let ownNode: Bool
     /// The pool gave up because every node was rate limiting.
     var rateLimited: Bool = false
+    /// §39 (r22-2): nobody independent answered BECAUSE the pool holds no
+    /// other provider for this chain (the verdict's `sole_provider`) —
+    /// configuration, not failure. Passed into the envelope as it came.
+    var soleProvider: Bool = false
 
     /// The one envelope the core reads (`rpc_corroborated_envelope`) — built
     /// by the core's helper, never by hand.
@@ -107,7 +111,8 @@ struct RpcCorroborated {
         rpcCorroboratedEnvelope(
             primaryJson: primary.map { CoreJSON.string($0) },
             witnessJson: witness.map { CoreJSON.string($0) },
-            ownNode: ownNode
+            ownNode: ownNode,
+            soleProvider: soleProvider
         )
     }
 
@@ -820,7 +825,8 @@ final class RpcPool {
         return RpcCorroborated(
             primary: entry.body(url) ?? ["result": NSNull()],
             witness: (verdict["witness_url"] as? String).flatMap { entry.body($0) },
-            ownNode: verdict["own_node"] as? Bool ?? false
+            ownNode: verdict["own_node"] as? Bool ?? false,
+            soleProvider: verdict["sole_provider"] as? Bool ?? false
         )
     }
 

@@ -44,6 +44,12 @@ const DRAWN_WITHIN: Duration = Duration::from_millis(250);
 /// What a held confirm does when it fires.
 pub type Fire = Rc<dyn Fn(&mut Window, &mut App)>;
 
+/// §39 (A1): told when a held confirm begins (`true`: a hold's start, or the
+/// assistive path's first press — armed) and when it is let go without
+/// firing (`false`: released early, disarmed after its window, or no longer
+/// drawn). The signing sheet holds the fee it drew still in between.
+pub type Engage = Rc<dyn Fn(bool, &mut Window, &mut App)>;
+
 /// The two lines a held confirm says (resolved by the caller, the corpus's
 /// `componentsUi.signing.holdToConfirm` and `…confirmAgain`).
 #[derive(Clone, Debug)]
@@ -166,6 +172,12 @@ impl HoldState {
         })
     }
 
+    /// Neither a hold under way nor an arm standing: the confirm is let go.
+    #[must_use]
+    pub fn idle(&self) -> bool {
+        self.pressed.is_none() && self.armed.is_none()
+    }
+
     /// Past the window, the arm is dropped; `true` when it was.
     pub fn disarm_if_due(&mut self, now: Instant, window_ms: u32) -> bool {
         let due = self
@@ -201,12 +213,32 @@ fn with_state<R>(cx: &mut App, id: &SharedString, f: impl FnOnce(&mut HoldState)
         .or_default())
 }
 
+/// The clock a hold and an arm are measured on: gpui's own
+/// (`BackgroundExecutor::now`) — the wall clock in the app, and the test
+/// scheduler's under `TestAppContext`, so the 5 s disarm is tested by moving
+/// the clock rather than by waiting.
+fn now(cx: &App) -> Instant {
+    cx.background_executor().now()
+}
+
 /// The subject `id` is drawn held for right now, if it is.
 fn drawn_now(cx: &App, id: &SharedString, now: Instant) -> Option<SharedString> {
     let holds = cx.try_global::<Holds>()?;
     let drawn = holds.drawn.borrow();
     let (subject, at) = drawn.get(id)?;
     (now.saturating_duration_since(*at) < DRAWN_WITHIN).then(|| subject.clone())
+}
+
+/// Whether the confirm `id` stands armed for `subject` now ("Press again to
+/// confirm").
+#[cfg(test)]
+#[must_use]
+pub fn armed_now(cx: &App, id: &str, subject: &str) -> bool {
+    let window_ms = vela_core::app::sign_confirm::CONFIRM_AGAIN_WINDOW_MS;
+    let at = now(cx);
+    cx.try_global::<Holds>()
+        .and_then(|holds| holds.states.get(id))
+        .is_some_and(|state| state.armed(at, window_ms, &SharedString::from(subject.to_owned())))
 }
 
 /// This frame draws `id` held for `subject`: (fill, armed).
@@ -217,7 +249,7 @@ fn drawing(
     hold_ms: u32,
     window_ms: u32,
 ) -> (f32, bool) {
-    let now = Instant::now();
+    let now = now(cx);
     let Some(holds) = cx.try_global::<Holds>() else {
         return (0.0, false);
     };
@@ -233,6 +265,16 @@ fn drawing(
     })
 }
 
+/// `id` was let go (a hold over without firing, an arm run out): the
+/// caller hears it — only once nothing else holds it (a new press, an arm).
+fn let_go(id: &SharedString, engage: Option<&Engage>, window: &mut Window, cx: &mut App) {
+    if let Some(engage) = engage
+        && with_state(cx, id, |state| state.idle())
+    {
+        engage(false, window, cx);
+    }
+}
+
 /// A pointer went down: the hold begins, and its fill is redrawn until it
 /// completes (the confirm fires) or is let go.
 fn begin_hold(
@@ -240,15 +282,19 @@ fn begin_hold(
     subject: SharedString,
     hold_ms: u32,
     fire: Fire,
+    engage: Option<Engage>,
     window: &mut Window,
     cx: &mut App,
 ) {
-    let now = Instant::now();
-    let token = with_state(cx, &id, |state| state.press(now, &subject));
+    let at = now(cx);
+    let token = with_state(cx, &id, |state| state.press(at, &subject));
     cx.default_global::<Holds>()
         .drawn
         .borrow_mut()
-        .insert(id.clone(), (subject, now));
+        .insert(id.clone(), (subject, at));
+    if let Some(engage) = engage.as_ref() {
+        engage(true, window, cx);
+    }
     window.refresh();
     window
         .spawn(cx, async move |cx| {
@@ -256,10 +302,10 @@ fn begin_hold(
                 cx.background_executor().timer(FRAME).await;
                 let done = cx
                     .update(|window, cx| {
-                        let now = Instant::now();
-                        let drawn = drawn_now(cx, &id, now);
+                        let at = now(cx);
+                        let drawn = drawn_now(cx, &id, at);
                         let poll = with_state(cx, &id, |state| {
-                            state.poll(token, now, hold_ms, drawn.as_ref())
+                            state.poll(token, at, hold_ms, drawn.as_ref())
                         });
                         window.refresh();
                         match poll {
@@ -268,7 +314,10 @@ fn begin_hold(
                                 fire(window, cx);
                                 true
                             }
-                            Poll::Released => true,
+                            Poll::Released => {
+                                let_go(&id, engage.as_ref(), window, cx);
+                                true
+                            }
                         }
                     })
                     .unwrap_or(true);
@@ -286,22 +335,25 @@ fn activate(
     subject: &SharedString,
     window_ms: u32,
     fire: &Fire,
+    engage: Option<Engage>,
     window: &mut Window,
     cx: &mut App,
 ) {
-    match with_state(cx, &id, |state| {
-        state.activate(Instant::now(), window_ms, subject)
-    }) {
+    let at = now(cx);
+    match with_state(cx, &id, |state| state.activate(at, window_ms, subject)) {
         Activation::Confirm => fire(window, cx),
         Activation::Armed => {
+            if let Some(engage) = engage.as_ref() {
+                engage(true, window, cx);
+            }
             window.refresh();
             window
                 .spawn(cx, async move |cx| {
                     cx.background_executor().timer(ms(window_ms)).await;
                     cx.update(|window, cx| {
-                        if with_state(cx, &id, |state| {
-                            state.disarm_if_due(Instant::now(), window_ms)
-                        }) {
+                        let at = now(cx);
+                        if with_state(cx, &id, |state| state.disarm_if_due(at, window_ms)) {
+                            let_go(&id, engage.as_ref(), window, cx);
                             window.refresh();
                         }
                     })
@@ -318,7 +370,13 @@ fn activate(
 /// its accessible name; `fill` the colour the hold grows in; `subject` what
 /// it confirms (the request, the transaction) — a hold or an arm never
 /// carries over to another. Answers the pointer, the keyboard and assistive
-/// technology (module doc).
+/// technology (module doc). `engage` (§39, A1) hears the confirm begin and
+/// be let go without firing.
+///
+/// A tab stop: Tab and ⇧Tab reach it through the shell's focus walk
+/// ([`crate::ui::tab_walk`], bound in `app_menu`), and Enter or Space on it
+/// arms it — R22 follow-up r22-5, where nothing in the shell bound Tab and
+/// the keyboard path was unreachable.
 #[allow(
     clippy::too_many_arguments,
     reason = "the control, what it confirms, its words and its act"
@@ -333,6 +391,7 @@ pub fn held_confirm(
     hold_ms: u32,
     words: &HoldWords,
     fire: Fire,
+    engage: Option<Engage>,
     cx: &App,
 ) -> Div {
     let id: SharedString = id.into();
@@ -349,6 +408,7 @@ pub fn held_confirm(
     let (up_id, out_id) = (id.clone(), id.clone());
     let (press_subject, key_subject, a11y_subject) =
         (subject.clone(), subject.clone(), subject.clone());
+    let (press_engage, key_engage, a11y_engage) = (engage.clone(), engage.clone(), engage);
     let control = div()
         .id(ElementId::Name(id))
         .role(Role::Button)
@@ -377,6 +437,7 @@ pub fn held_confirm(
                 press_subject.clone(),
                 hold_ms,
                 fire.clone(),
+                press_engage.clone(),
                 window,
                 cx,
             );
@@ -398,6 +459,7 @@ pub fn held_confirm(
                     &key_subject,
                     window_ms,
                     &key_fire,
+                    key_engage.clone(),
                     window,
                     cx,
                 );
@@ -411,6 +473,7 @@ pub fn held_confirm(
                 &a11y_subject,
                 window_ms,
                 &a11y_fire,
+                a11y_engage.clone(),
                 window,
                 cx,
             );
@@ -554,5 +617,151 @@ mod tests {
         assert!(state.disarm_if_due(late, WINDOW));
         assert!(!state.disarm_if_due(late, WINDOW), "dropped once");
         assert_eq!(state.activate(late, WINDOW, &a), Activation::Armed);
+    }
+}
+
+/// R22 follow-up r22-5 (S3): the held confirm is reachable from the keyboard
+/// in a real gpui window — the shell's own bindings (`app_menu`) and focus
+/// walk ([`crate::ui::tab_walk`]) over the one held confirm this shell draws.
+/// Tab reaches it; Enter arms it ("Press again to confirm"); the arm runs out
+/// after `CONFIRM_AGAIN_WINDOW_MS` on gpui's clock; Enter, Enter confirms —
+/// once. And the confirm's `engage` hears each begin and each let-go.
+#[cfg(test)]
+mod keyboard {
+    use std::cell::{Cell, RefCell};
+    use std::rc::Rc;
+    use std::time::Duration;
+
+    use gpui::{
+        Context, FocusHandle, InteractiveElement as _, IntoElement, KeyDownEvent, KeyUpEvent,
+        Keystroke, ParentElement as _, Render, Styled as _, TestAppContext, VisualTestContext,
+        Window, div,
+    };
+    use vela_core::app::sign_confirm::{CONFIRM_AGAIN_WINDOW_MS, HOLD_TO_CONFIRM_MS};
+
+    const ID: &str = "signing-confirm";
+    const SUBJECT: &str = "rid-1";
+
+    /// A sheet as the shell draws one: a root that holds the window's focus
+    /// (as `WalletPage` does) and walks it, over a held confirm.
+    struct Sheet {
+        focus: FocusHandle,
+        fired: Rc<Cell<u32>>,
+        engaged: Rc<RefCell<Vec<bool>>>,
+    }
+
+    impl Render for Sheet {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            let theme = crate::theme::Theme::light();
+            let fired = self.fired.clone();
+            let engaged = self.engaged.clone();
+            let words = super::HoldWords {
+                hold: "Hold to confirm".into(),
+                again: "Press again to confirm".into(),
+            };
+            crate::ui::tab_walk(
+                div()
+                    .id("sheet")
+                    .track_focus(&self.focus)
+                    .size_full()
+                    .child(super::held_confirm(
+                        ID,
+                        SUBJECT,
+                        &theme,
+                        div()
+                            .h(gpui::px(48.))
+                            .w(gpui::px(240.))
+                            .child("Sign anyway"),
+                        super::hold_fill(),
+                        "Sign anyway".into(),
+                        HOLD_TO_CONFIRM_MS,
+                        &words,
+                        Rc::new(move |_, _| fired.set(fired.get() + 1)),
+                        Some(Rc::new(move |on, _, _| engaged.borrow_mut().push(on))),
+                        cx,
+                    )),
+            )
+        }
+    }
+
+    /// A key pressed and let go on whatever has the keyboard — a key down
+    /// then a key up, as the platform sends them (gpui turns an Enter or a
+    /// Space pair into the focused control's keyboard click).
+    fn press(cx: &mut VisualTestContext, key: &str) {
+        let keystroke = Keystroke::parse(key).unwrap_or_else(|e| unreachable!("{key}: {e}"));
+        cx.simulate_event(KeyDownEvent {
+            keystroke: keystroke.clone(),
+            is_held: false,
+            prefer_character_input: false,
+        });
+        cx.simulate_event(KeyUpEvent { keystroke });
+    }
+
+    fn armed(cx: &mut VisualTestContext) -> bool {
+        cx.update(|_, cx| super::armed_now(cx, ID, SUBJECT))
+    }
+
+    #[gpui::test]
+    fn tab_reaches_the_held_confirm_and_enter_arms_disarms_and_confirms(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            cx.bind_keys(crate::app_menu::wallet_key_bindings(cfg!(
+                target_os = "macos"
+            )));
+            cx.bind_keys(crate::app_menu::focus_key_bindings());
+        });
+        let fired = Rc::new(Cell::new(0));
+        let engaged = Rc::new(RefCell::new(Vec::new()));
+        let (sheet, cx) = cx.add_window_view({
+            let (fired, engaged) = (fired.clone(), engaged.clone());
+            move |window, cx| {
+                let focus = cx.focus_handle();
+                focus.focus(window, cx);
+                Sheet {
+                    focus,
+                    fired,
+                    engaged,
+                }
+            }
+        });
+        let root = cx.update(|_, cx| sheet.read(cx).focus.clone());
+        assert!(
+            cx.update(|window, _| root.is_focused(window)),
+            "the root has the keyboard"
+        );
+
+        // Tab: the keyboard leaves the root for the held confirm.
+        cx.simulate_keystrokes("tab");
+        assert!(
+            !cx.update(|window, _| root.is_focused(window)),
+            "Tab reached no tab stop: the held confirm is unreachable from the keyboard"
+        );
+
+        // Enter: armed — "Press again to confirm" — and the sheet hears it
+        // begin; nothing fired.
+        press(cx, "enter");
+        assert!(armed(cx), "Enter on the focused confirm arms it");
+        assert_eq!(fired.get(), 0);
+        assert_eq!(*engaged.borrow(), [true]);
+
+        // Past the window: disarmed, and the sheet hears it let go.
+        cx.executor().advance_clock(Duration::from_millis(
+            u64::from(CONFIRM_AGAIN_WINDOW_MS) + 1,
+        ));
+        cx.run_until_parked();
+        assert!(!armed(cx), "disarmed after its window");
+        assert_eq!(*engaged.borrow(), [true, false]);
+        assert_eq!(fired.get(), 0);
+
+        // Enter, Enter within the window: confirmed, once.
+        press(cx, "enter");
+        assert!(armed(cx));
+        press(cx, "enter");
+        assert_eq!(fired.get(), 1, "the second press confirms");
+        assert!(!armed(cx), "and the arm is spent");
+        assert_eq!(*engaged.borrow(), [true, false, true]);
+
+        // ⇧Tab walks back the other way (one stop here: the same control).
+        cx.simulate_keystrokes("shift-tab");
+        assert!(!cx.update(|window, _| root.is_focused(window)));
     }
 }

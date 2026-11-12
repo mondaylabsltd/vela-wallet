@@ -1,5 +1,9 @@
 # Known bugs
 
+## R22v-10 (open, S4, 2026-11-11, desktop) — found in the Round 22 verification on Arc Testnet
+
+**Platform:** desktop. **Symptom:** A site's `eth_requestAccounts` sometimes does not raise the Connection sheet; it waits behind the toolbar account chip (the tab's badge reads "1") until the chip is clicked. Seen 3 of 4 times after a restart with restored tabs; on a fresh tab it opened by itself. **Likely cause:** the Connection column opens only on a NEW consent (`browser_host_changed`); a consent already standing when Explore shows its tab (a restored tab's request) is never raised again. **Fix direction:** re-raise a standing consent when Explore shows its tab. **Severity:** S4 — nothing is granted or signed; the request is answered once the chip is clicked. **Workaround:** click the account chip.
+
 ## R22-PLAN-1 (planned, feature, every surface; from review 1-12, 2026-11-07) — no allowance list, no revoke screen
 
 **Platform:** every surface. **Gap:** Vela shows and caps an approval when a site asks
@@ -115,9 +119,9 @@ fork harness (`multisig_fork.rs` `parent::…`).
 
 **Platform:** Android (test builds only). **Symptom:** After a §28-refused create, the home line says "Vela keeps trying" though nothing is retried. **Severity:** S4. **Workaround:** Point the build at a local service; use Share again.
 
-## R20-15 (open, S4, 2026-11-08, Android) — found in the R20 release-candidate acceptance
+## R20-15 (✅ FIXED 2026-11-12, §39; found 2026-11-08, Android; seen again in Round 22 on desktop, web and Android) — found in the R20 release-candidate acceptance
 
-**Platform:** Android. **Symptom:** A press stop reads "That didn't go through: Network fee ≈ …", naming the fee line as the reason. Nothing is signed. **Severity:** S4. **Workaround:** Press Check again, then Execute.
+**Platform:** Android, desktop, web. **Symptom:** A press stop reads "That didn't go through: Network fee ≈ …", naming the fee line as the reason. Nothing is signed. **Severity:** S4 (S2 with the loop it hid, r22-3). **Fix:** a quote at or under the figure shown now signs the figure shown, so a stop happens only when the fee went up; and the stop says why — `home.multisig.proposal.feeRose`, "The network fee went up to ≈ {{fee}} since you pressed; nothing was signed. Press again to pay {{fee}}." (`docs/multisig-machines.md` §39, `docs/security/hardening.md` §18).
 
 ## R20-16 (open, S4, 2026-11-08, Android) — found in the R20 release-candidate acceptance
 

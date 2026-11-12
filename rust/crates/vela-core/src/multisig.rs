@@ -3175,10 +3175,12 @@ fn vet_genesis(g: &Genesis, safe: Address) -> Result<Vetted, Vec<Refusal>> {
             }),
         }
     }
-    if setup.payment_token != Address::ZERO
-        || !setup.payment.is_zero()
-        || setup.payment_receiver != Address::ZERO
-    {
+    // Safe v1.4.1's `setup` pays only `if (payment > 0)`: with a zero payment
+    // the token and receiver are never touched, so they move no funds.
+    // Safe{Wallet} sets the receiver to its ecosystem marker
+    // (0x5afe7A11E7000000000000000000000000000000) with a zero payment; that
+    // setup is Safe's own and is accepted.
+    if !setup.payment.is_zero() {
         reasons.push(Refusal::Payment {
             token: setup.payment_token.to_checksum(None),
             amount: setup.payment.to_string(),
@@ -5742,18 +5744,34 @@ mod tests {
                 receiver: attacker.to_checksum(None)
             }]
         );
-        // A receiver alone (a zero payment) is still not Safe's plain setup.
-        let (address, g) = setup_genesis(
-            safe::SAFE_SINGLETON,
-            &SetupArgs {
+        // A receiver or token alone, with a zero payment, moves nothing:
+        // Safe's setup pays only when the payment is above zero. Safe{Wallet}
+        // writes its ecosystem marker as the receiver this way.
+        let marker: Address = "0x5afe7A11E7000000000000000000000000000000"
+            .parse()
+            .unwrap();
+        for args in [
+            SetupArgs {
+                payment_receiver: marker,
+                ..plain_setup()
+            },
+            SetupArgs {
                 payment_receiver: attacker,
                 ..plain_setup()
             },
-        );
-        assert!(matches!(
-            refusals(&g, &address)[..],
-            [Refusal::Payment { .. }]
-        ));
+            SetupArgs {
+                payment_token: attacker,
+                payment_receiver: marker,
+                ..plain_setup()
+            },
+        ] {
+            let (address, g) = setup_genesis(safe::SAFE_SINGLETON, &args);
+            assert!(matches!(
+                counterfactual_authority(&g, &address, &owned(&g, &address, safe_141_facts()))
+                    .unwrap(),
+                Authority::Verified { .. }
+            ));
+        }
     }
 
     /// Members Safe refuses, and a setup not in Safe's own encoding.
@@ -5846,9 +5864,12 @@ mod tests {
                 address: attacker.clone()
             }])
         );
+        // PAYR names the attacker as payment receiver with a zero payment:
+        // Safe's setup pays only `if (payment > 0)`, so nothing moves and the
+        // setup is Safe's own (Safe{Wallet} writes its marker the same way).
         assert!(matches!(
             verdict("PAYR"),
-            Authority::Refused { reasons } if matches!(&reasons[..], [Refusal::Payment { receiver, .. }] if *receiver == attacker)
+            Authority::Verified { threshold: 1, .. }
         ));
     }
 

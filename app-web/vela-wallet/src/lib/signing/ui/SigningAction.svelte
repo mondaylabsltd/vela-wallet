@@ -25,9 +25,15 @@
 		 * the core's gate is still the one that says why a confirm is shut.
 		 */
 		held?: boolean;
+		/**
+		 * §39 (A1): the held confirm's phase, told on every change — the host
+		 * keeps the fee drawn when a hold starts (or the assistive path arms)
+		 * and holds the fee row still until it ends.
+		 */
+		onphase?: (phase: HoldPhase) => void;
 	}
 
-	let { model, onconfirm, onclose, held = false }: Props = $props();
+	let { model, onconfirm, onclose, held = false, onphase }: Props = $props();
 
 	/** R22: the held confirm's phase — "Press again to confirm" once armed. */
 	let phase = $state<HoldPhase>('idle');
@@ -97,7 +103,10 @@
 				againLabel={model.confirm.againLabel ?? ''}
 				disabled={!model.confirm.enabled || held}
 				describedby={noteId}
-				onphase={(next) => (phase = next)}
+				onphase={(next) => {
+					phase = next;
+					onphase?.(next);
+				}}
 				onconfirm={() => onconfirm?.()}
 			>
 				{model.confirm.action}

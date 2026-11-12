@@ -1451,8 +1451,13 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `settings.refuseBlind.{title, subtitle}` (+1 branch) and
 //   `settings.sections.security`; `settingsModals.network.onlyMineTrust`.
 //   2318 (§37) + 10 leaves + 1 branch = 2329 paths, 2205 leaves, 124 branches.
-if (PATHS.length !== 2329) fail(`expected 2329 paths (2205 leaf + 124 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2205) fail(`expected 2205 leaf paths, got ${leafSet.size}`);
+// 2330 (Round 22 follow-ups, §39, 2026-11-12): + `componentsUi.signing.feeRose`
+//   (a site's request whose fee quote rose above the figure shown when the
+//   confirm began: nothing signed, said why — r22-3 / A1). `send.feeMoved`
+//   and `send.feeMovedMax` change value only (a stop now happens only when
+//   the fee went up, and says so). 2329 + 1 = 2330 paths, 2206 leaves.
+if (PATHS.length !== 2330) fail(`expected 2330 paths (2206 leaf + 124 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2206) fail(`expected 2206 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 124) fail(`expected 124 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
@@ -1586,7 +1591,14 @@ if (branchSet.size !== 124) fail(`expected 124 branch paths, got ${branchSet.siz
   //   said as one node's word or two that disagree) and `blindRefused` ("Refuse
   //   blind signing" on: the review that signs only "… anyway" is refused).
   //   697 (§37) + 3 = 700.
-  const pins = { multisig: 700 };
+  // 704 (Round 22 follow-ups, §39, 2026-11-12): + `home.multisig.authority.
+  //   signDisagreed` (two independent nodes disagree about who can act: a
+  //   real signal, nothing signed), `home.multisig.review.{stateOneNode,
+  //   addOwnNode}` (a network whose pool holds one provider: "only one node
+  //   could confirm…", with the way to add one's own) and `home.multisig.
+  //   proposal.feeRose` (a fee-moved stop said with its reason, r22-4).
+  //   700 + 4 = 704.
+  const pins = { multisig: 704 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

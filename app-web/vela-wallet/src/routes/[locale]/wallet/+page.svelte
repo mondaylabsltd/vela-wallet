@@ -173,6 +173,7 @@
 	import {
 		formChainOf,
 		makeRecipientId,
+		sendPickOutage,
 		sendTokenId,
 		visibleSendTokens,
 		type SendClassFilter
@@ -761,7 +762,6 @@
 	 */
 	const holdingsSource: HoldingsSource = {
 		view: () => balance.view,
-		settled: (address) => balance.settledFor(address),
 		reread: (address) => balance.reread(address),
 		toSend: (token) => toSendToken(toApiToken(token))
 	};
@@ -1487,6 +1487,10 @@
 					sweepPicking,
 					chainFilter: chainFilter.chainId,
 					classFilter: sendClassFilter,
+					// r22-7: a network the balances could not read now, which held
+					// something when last read — its rows are last-known; the
+					// picker says so in the home's own line.
+					outage: sendPickOutage(balance.view, data.walletMessages.assets),
 					alert: sendAlert,
 					// A multisig has no speed to pick: its fee is the executor's.
 					...(sendView.multisig

@@ -205,6 +205,12 @@ export interface CorroboratedAnswer {
 	body: RPCResponse;
 	witnessBody: RPCResponse | null;
 	ownNode: boolean;
+	/**
+	 * §39 (r22-2): nobody independent was asked BECAUSE the pool holds no
+	 * other provider for this chain (the verdict's `sole_provider`) —
+	 * configuration, not a failure. Carried into the core's envelope.
+	 */
+	soleProvider: boolean;
 }
 
 const payloads = new Map<
@@ -300,7 +306,8 @@ function settle(callId: string, verdict: RpcCallVerdict): void {
 		call.corroborated({
 			body: held,
 			witnessBody,
-			ownNode: verdict.type === 'respond' && verdict.own_node === true
+			ownNode: verdict.type === 'respond' && verdict.own_node === true,
+			soleProvider: verdict.type === 'respond' && verdict.sole_provider === true
 		});
 		return;
 	}
@@ -555,7 +562,7 @@ export async function poolCorroboratedCall(
 			chainId,
 			method,
 			// Never reached: `settle` hands a corroborated read both bodies.
-			resolve: (body) => resolve({ body, witnessBody: null, ownNode: false }),
+			resolve: (body) => resolve({ body, witnessBody: null, ownNode: false, soleProvider: false }),
 			reject,
 			corroborated: resolve
 		});

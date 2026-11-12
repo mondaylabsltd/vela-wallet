@@ -451,6 +451,12 @@ export interface SigningMessages {
 	 */
 	passkeyNote: { cancelled: string; timed_out: string };
 	/**
+	 * §39 (r22-3 / A1): the line by the confirm when the fee went up since the
+	 * press (`SignErrorKind::FeeRose`, `componentsUi.signing.feeRose`): nothing
+	 * was signed; the next confirm pays the figure now drawn.
+	 */
+	feeRose: string;
+	/**
 	 * Spec 099 R8: how the passkey failed, by the core's reason key
 	 * (`componentsUi.browserStatus.reason.signer*`) — the failed status says
 	 * it in place of the generic hint.

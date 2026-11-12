@@ -321,7 +321,10 @@ export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 								: // Issue #446: not "set up Face ID" when it was the phone link.
 									kind.phone_link
 									? t('onboarding.common.phoneLinkFailed')
-									: // Round 10: the core's sentence for the platform's error.
+									: // Round 10: the core's sentence for the error — the platform's,
+										// or (§39, r22-8) its own, such as a registry group that does
+										// not match its address — never the raw detail, and never the
+										// biometric advice under a failure no biometric had a part in.
 										kind.words_key
 										? t(kind.words_key)
 										: t('onboarding.login.alertSignInFailedBody', { message: kind.detail })

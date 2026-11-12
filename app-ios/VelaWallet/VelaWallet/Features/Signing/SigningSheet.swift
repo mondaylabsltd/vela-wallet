@@ -50,6 +50,11 @@ struct SigningSheet: View {
     /// (`SigningLive.spaceNote`), under the requester. `nil`: nothing moved it.
     var spaceNote: String?
     var onConfirm: () -> Void = {}
+    /// §39 (R22 follow-up, A1): a held confirm began (`true`: the hold's
+    /// start, the assistive path's first press) or ended without firing
+    /// (`false`) — the fee drawn at the beginning is the one signed, and the
+    /// fee row is held still meanwhile (`SigningController.confirmEngaged`).
+    var onConfirmEngaged: (Bool) -> Void = { _ in }
     /// An allowance chip was tapped: `requested`, `balance`, `custom`,
     /// `revoke`. The core decides what each means.
     var onAllowanceChip: (String) -> Void = { _ in }
@@ -304,7 +309,8 @@ struct SigningSheet: View {
                     HoldConfirmButton(title: model.confirmAsButton ? model.confirmButtonLabel : confirm.action,
                                       kind: model.confirmPress.danger ? .danger : .primary,
                                       enabled: confirm.enabled, showsHint: false, press: model.confirmPress,
-                                      haptic: model.confirmAsButton ? .press : .confirm, action: onConfirm)
+                                      haptic: model.confirmAsButton ? .press : .confirm,
+                                      onEngage: onConfirmEngaged, action: onConfirm)
                         // The Trusted Signer route's button opens a page; it
                         // signs nothing here, so it carries its own hook
                         // (Android and desktop: `signing-open-signer`).

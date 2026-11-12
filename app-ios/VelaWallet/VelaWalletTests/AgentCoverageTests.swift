@@ -269,6 +269,9 @@ private let CALLS: [String: Place] = [
     "settings.search": .step("add_network"),
     "settings.selectChain": .step("add_network"),
     "signing.approve": .later(SIGN),
+    // §39 (A1): the confirm began or ended — the fee it was drawn on is the
+    // one signed; part of the person's own confirm, as the approve is.
+    "signing.confirmEngaged": .later(SIGN),
     // Spec 103: what the agent's review reads of the sheet — the request and
     // the sheet's facts beside it.
     "signing.agentSigningJson": .machine(READ),

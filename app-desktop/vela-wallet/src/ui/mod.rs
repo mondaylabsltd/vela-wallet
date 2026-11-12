@@ -8,6 +8,7 @@ mod button;
 pub mod dialog;
 pub mod editor;
 pub mod editor_model;
+pub mod focus_walk;
 pub mod hold_confirm;
 mod launch_animation;
 mod logo;
@@ -32,6 +33,7 @@ pub use button::{
     ButtonState, ButtonVariant, button_face, vela_button, vela_button_opts, vela_button_state,
     welcome_cta, welcome_cta_state,
 };
+pub use focus_walk::tab_walk;
 pub use hold_confirm::{HoldWords, held_confirm, hold_fill};
 pub use launch_animation::LaunchAnimation;
 pub use logo::{vela_mark, vela_wordmark};

@@ -81,6 +81,11 @@ pub struct FailureSaid {
 
 const REASON_KEY: &str = "home.multisig.proposal.reason.";
 
+/// §39 (R22 follow-up, r22-4): a fee-moved stop's words, with `{{fee}}` —
+/// "The network fee went up to ≈ {{fee}} since you pressed; nothing was
+/// signed. Press again to pay {{fee}}."
+pub const FEE_ROSE_KEY: &str = "home.multisig.proposal.feeRose";
+
 /// r21-1: the expired operation's words — the Send's, the signing sheet's
 /// and the tracker's one sentence.
 pub const EXPIRED_KEY: &str = crate::app::tx_tracker::REFUSED_EXPIRED_KEY;
@@ -199,7 +204,11 @@ pub fn failure_said(detail: &str) -> FailureSaid {
             Some("home.multisig.proposal.notSent".to_owned()),
         ),
         "cannot_pay" => said(FailureKind::CannotPay, None),
-        "fee_moved" => said(FailureKind::FeeMoved, None),
+        // §39 (R22 follow-up, r22-4): the stop says why — the fee went up
+        // since the press, nothing was signed, the next press pays it
+        // (`{{fee}}`: the new figure, as the fee line draws it) — never
+        // "That didn't go through: Network fee ≈ …".
+        "fee_moved" => said(FailureKind::FeeMoved, Some(FEE_ROSE_KEY.to_owned())),
         "chain_unreachable" => said(FailureKind::ChainUnreachable, reason("chainUnreachable")),
         "production_write_refused" => said(
             FailureKind::ProductionWriteRefused,

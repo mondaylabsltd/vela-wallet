@@ -163,6 +163,7 @@
     "feeUncheckedHeld": "無法確認它能否執行 — 執行時會再檢查一次。",
     "feeRetry": "重新檢查",
     "feeSigning": "按這筆網絡費簽名——在你確認或取消之前不會變。",
+    "feeRose": "你按下後網絡手續費漲到了約 {{fee}}，甚麼都沒有簽。再按一次即按 {{fee}} 支付。",
     "feeSetup": "包含在 {{network}} 上的一次性設定 ≈ {{amount}}：",
     "feeSetupPlain": "包含在 {{network}} 上的一次性設定：",
     "setupMultisig": "部署這個多簽",
@@ -361,6 +362,7 @@
     "signRiskConfirm": "我明白風險，簽署",
     "signRiskCancel": "不簽署",
     "signUnchecked": "Vela 未能核對 {{network}} 上誰可操作這個多簽帳戶，所以暫時不會在該處簽署。請稍後再試。",
+    "signDisagreed": "{{network}} 上兩個獨立節點對誰能操作這個多簽帳戶給出了不同的答案，所以 Vela 不會在那裡簽署。可在設定中新增你自己的節點，用你信任的節點核對，或稍後再試。",
     "ownerNotBound": "在 {{network}} 上，成員 {{address}} 是一個合約，沒有任何東西把它綁定到它在那裏的創建——誰能在該地址部署，誰就掌握它的那一票。"
    },
    "external": {
@@ -732,6 +734,8 @@
     },
     "stateUnconfirmed": "{{network}} 上只有一個節點給出了結果，Vela 無法確認執行後多簽會發生甚麼變化。只有 Vela 對這筆交易的解讀成立。",
     "stateDisagreed": "{{network}} 上兩個獨立節點對執行後多簽的變化給出了不同的結果。只有 Vela 對這筆交易的解讀成立。",
+    "stateOneNode": "{{network}} 上只有一個節點能確認誰能操作這個多簽帳戶，以及執行後它會有甚麼變化。在設定中新增你自己的節點，即可由兩個節點核對。",
+    "addOwnNode": "新增你自己的節點",
     "blindRefused": "Vela 不會在這裡簽署：你開啟了「拒絕盲簽」，而這筆交易有部分內容無法檢查。可在設定中更改。"
    },
    "notify": {

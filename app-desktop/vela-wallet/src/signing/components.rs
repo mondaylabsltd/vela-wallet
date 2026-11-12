@@ -1536,7 +1536,8 @@ pub fn confirm_button(
 /// (`ConfirmState::anyway`, `danger`, `hold_ms`). Drawn in the danger fill
 /// when `danger` (the core's `anyway || danger`); held when `hold_ms > 0` —
 /// the one held confirm (`ui::hold_confirm`): press and hold, or two
-/// activations from the keyboard or assistive technology. A shut confirm,
+/// activations from the keyboard or assistive technology (`engage` hears it
+/// begin and be let go, §39 A1). A shut confirm,
 /// and a plain press, are [`confirm_button`] exactly as before.
 #[allow(
     clippy::too_many_arguments,
@@ -1551,6 +1552,7 @@ pub fn gated_confirm_button(
     hold_ms: u32,
     words: &crate::ui::HoldWords,
     action: Option<crate::flows::panels::Click>,
+    engage: Option<crate::ui::hold_confirm::Engage>,
     cx: &gpui::App,
 ) -> Div {
     let Some(action) = action.filter(|_| enabled) else {
@@ -1590,6 +1592,7 @@ pub fn gated_confirm_button(
         hold_ms,
         words,
         fire,
+        engage,
         cx,
     )
 }

@@ -742,7 +742,8 @@ pub fn sign_confirm_state(
 /// R22: the one envelope a corroborated read hands the core — the first
 /// node's JSON-RPC body (`None`: the pool gave up), the second, independent
 /// node's (`None`: none answered), and whether the pool holds the person's
-/// own node alone ("Only use my node"). Pass it to `sim_outcome`, or as a
+/// own node alone ("Only use my node"), and (§39, r22-2) whether the pool
+/// holds no other provider to ask (`sole_provider` on the verdict). Pass it to `sim_outcome`, or as a
 /// multisig `rpc_corroborated` answer's `envelope`. See
 /// `vela_core::app::corroborate`.
 #[uniffi::export]
@@ -751,11 +752,13 @@ pub fn rpc_corroborated_envelope(
     primary_json: Option<String>,
     witness_json: Option<String>,
     own_node: bool,
+    sole_provider: bool,
 ) -> String {
     vela_core::app::corroborate::corroborated_envelope_json(
         primary_json.as_deref(),
         witness_json.as_deref(),
         own_node,
+        sole_provider,
     )
 }
 
@@ -2652,7 +2655,11 @@ pub struct SimOutcomeRecord {
 /// revert is a danger and a node that could not check is a caution, on every
 /// client.
 #[uniffi::export]
-pub fn sim_outcome(user: String, reply_json: String) -> SimOutcomeRecord {
+pub fn sim_outcome(
+    user: String,
+    reply_json: String,
+    value_wei: Option<String>,
+) -> SimOutcomeRecord {
     use vela_core::app::sim_outcome::{verdict, SimReply};
     let unreadable = || {
         verdict(
@@ -2667,6 +2674,9 @@ pub fn sim_outcome(user: String, reply_json: String) -> SimOutcomeRecord {
     // beside the first (`rpc_corroborated_envelope`); without one, what moves
     // is not believed.
     let read = vela_core::app::sim_outcome::verdict_of_envelope_json(&reply_json, &user);
+    // §39: the native value the request sends, as the wallet decoded it — a
+    // node never erases it (`sim_outcome::with_decoded_value`).
+    let read = vela_core::app::sim_outcome::with_decoded_value(read, value_wei.as_deref());
     // A list that cannot be written out is an answer nobody can read: the
     // could-not-check line, never an empty list that reads "nothing moves".
     let (read, deltas_json) = match serde_json::to_string(&read.deltas) {
@@ -3792,6 +3802,7 @@ mod tests_082 {
         let crashed = sim_outcome(
             user.into(),
             json!({"error": {"code": -32603, "message": "method handler crashed"}}).to_string(),
+            None,
         );
         assert_eq!(crashed.kind, "not_offered");
         assert_eq!(crashed.notice_risk.as_deref(), Some("caution"));
@@ -3799,7 +3810,7 @@ mod tests_082 {
             crashed.notice_key.as_deref(),
             Some("componentsUi.signing.simUnavailableWarning")
         );
-        let unreachable = sim_outcome(user.into(), r#"{"unreachable":true}"#.into());
+        let unreachable = sim_outcome(user.into(), r#"{"unreachable":true}"#.into(), None);
         assert_eq!(unreachable.kind, "unreachable");
         assert_eq!(unreachable.notice_risk.as_deref(), Some("caution"));
         // dapp-15: only a network that did not answer is asked again ("Check
@@ -3817,6 +3828,7 @@ mod tests_082 {
             user.into(),
             json!({"result": [{"calls": [{"status": "0x0", "returnData": reason, "logs": []}]}]})
                 .to_string(),
+            None,
         );
         assert_eq!(reverts.kind, "reverts");
         assert_eq!(reverts.revert_reason.as_deref(), Some("nope"));
@@ -3834,7 +3846,7 @@ mod tests_082 {
         assert_eq!(unreachable.no_change_key, None);
         // R22: a checked answer is believed as two independent nodes gave it.
         let empty = json!({"result": [{"calls": [{"status": "0x1", "logs": []}]}]});
-        let alone = sim_outcome(user.into(), empty.to_string());
+        let alone = sim_outcome(user.into(), empty.to_string(), None);
         assert_eq!(alone.kind, "unconfirmed");
         assert_eq!(
             alone.no_change_key, None,
@@ -3842,7 +3854,7 @@ mod tests_082 {
         );
         let mut both = empty.clone();
         both["witness"] = empty.clone();
-        let nothing = sim_outcome(user.into(), both.to_string());
+        let nothing = sim_outcome(user.into(), both.to_string(), None);
         assert_eq!(nothing.kind, "deltas");
         assert_eq!(nothing.source.as_deref(), Some("corroborated"));
         assert_eq!(nothing.deltas_json, "[]");
@@ -3864,7 +3876,7 @@ mod tests_082 {
         let moved = json!({"result": [{"calls": [{"status": "0x1", "logs": [transfer]}]}]});
         let mut own = moved.clone();
         own["ownNode"] = json!(true);
-        let checked = sim_outcome(user.into(), own.to_string());
+        let checked = sim_outcome(user.into(), own.to_string(), None);
         assert_eq!(checked.source.as_deref(), Some("own_node"));
         assert_eq!(
             checked.source_key.as_deref(),

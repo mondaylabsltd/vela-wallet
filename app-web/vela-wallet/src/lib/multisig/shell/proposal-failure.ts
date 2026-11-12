@@ -273,6 +273,9 @@ export function actionError(
 			return new SigningBlockedError(chainId, null as never);
 		case 'signingUnchecked':
 			return new SigningUncheckedError(chainId);
+		// §39 (r22-2): two independent nodes disagree — nothing signed.
+		case 'signingDisagreed':
+			return new SigningUncheckedError(chainId, true);
 		case 'refused':
 			return refusedError(state.reason);
 		case 'mailboxRefused':

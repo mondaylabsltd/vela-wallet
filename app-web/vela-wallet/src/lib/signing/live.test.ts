@@ -2802,6 +2802,43 @@ describe('what the approve carries (spec 093)', () => {
 		expect(opts.token_meta).toBe(guard.meta);
 	});
 
+	/**
+	 * §39 (r22-3 / A1): the approve carries the fee the sheet DREW when the
+	 * confirm began (`quoted_fee`) and the fee machine's quote at the approve
+	 * (`current_fee`): the core signs the figure shown when the quote charges
+	 * no more, and nothing — `fee_rose` — when it rose.
+	 */
+	it('§39: quoted_fee is the fee drawn when the confirm began; current_fee the quote at the approve', () => {
+		const RELAY = '0x' + '77'.repeat(20);
+		const priced = (total: string): FeeView => ({
+			...QUOTED_FEE,
+			fee: { ...QUOTED_FEE.fee!, total_wei: total, fee_recipient: RELAY }
+		});
+		const opts = approveOptsOf(
+			priced('2100000000000000'),
+			INITIAL_CLEAR_VIEW,
+			INITIAL_GUARD_VIEW,
+			priced('3100000000000000')
+		);
+		expect(opts.quoted_fee).toEqual({ amount: '2100000000000000', recipient: RELAY, tier: 'fast' });
+		expect(opts.current_fee).toEqual({
+			amount: '3100000000000000',
+			recipient: RELAY,
+			tier: 'fast'
+		});
+	});
+
+	it('§39: a fee that rose is said beside the open confirm, in the core’s words (fee_rose)', () => {
+		const model = buildSigningModel(
+			inputs({ sign: { ...OPEN_SIGN, error: { kind: 'fee_rose', detail: null } } as SignView })
+		)!;
+		expect(m.feeRose).toBeTruthy();
+		expect(model.confirm.enabled).toBe(true);
+		expect(model.confirm.note).toBe(m.feeRose);
+		// It is no failure of the request: the form stays, no status over it.
+		expect(model.status).toBeUndefined();
+	});
+
 	it('nothing recorded when the core says nothing may be — never a shell guess', () => {
 		const opts = approveOptsOf(
 			null,
@@ -4179,6 +4216,23 @@ describe('R22: the confirm’s friction is the core’s', () => {
 		expect(model.confirm.enabled).toBe(true);
 		expect(model.confirm.action).toBe(m.certain.signAnyway);
 		expect(model.confirm.holdMs).toBe(1500);
+	});
+
+	/**
+	 * §39: an unbounded grant is a held danger however it arrives — the
+	 * approval guard's one verdict (`unlimited_warning`) makes the confirm so
+	 * (`sign_confirm::guarded_posture`), over a check two nodes agree on. The
+	 * sheet draws the core's posture; it decides none of it.
+	 */
+	it('§39: an unlimited grant the guard warns of — a held danger, even over an agreed check', () => {
+		const model = buildSigningModel(
+			inputs({
+				sim: endedOf(witnessed(NOTHING)),
+				guard: { ...INITIAL_GUARD_VIEW, unlimited_warning: true }
+			})
+		)!;
+		expect(model.confirm.danger).toBe(true);
+		expect(model.confirm.holdMs).toBe(holdToConfirmMs());
 	});
 
 	it('while the core still waits for the verdict: shut, and plain — never a red flash', () => {
