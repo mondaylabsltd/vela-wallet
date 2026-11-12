@@ -34,6 +34,8 @@ import type { SignView } from '$lib/core/generated/SignView';
 import { signErrorWords } from '$lib/core/kernels';
 import { resolveSigningMessages } from '$lib/i18n/engine.server';
 import { signingStatus } from '../live';
+import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from './sheet.svelte';
+
 import { createSignRequestSession } from './sign-session';
 import type { SignShellPorts } from './sign-types';
 
@@ -109,7 +111,25 @@ async function signAndRefuse() {
 			params_override_json: null,
 			intent: null,
 			unlimited_approved: false,
-			unlimited_approved_legs: []
+			unlimited_approved_legs: [],
+			// §41 (P2-5): the sheet as shown — read in full, a verdict two
+			// nodes agreed on: a plain press the core takes.
+			review: {
+				clear: { ...INITIAL_CLEAR_VIEW, resolving: false, surface: 'clear_sign' },
+				guard: INITIAL_GUARD_VIEW,
+				sim: {
+					kind: 'deltas',
+					deltas: [],
+					revert_reason: null,
+					notice_risk: null,
+					notice_key: null,
+					no_change_key: 'componentsUi.signing.simResultNoChange',
+					recheck: false,
+					source: 'corroborated'
+				},
+				refuse_blind: false
+			},
+			anyway_confirmed: false
 		}
 	});
 	await vi.waitFor(() => expect((view as SignView | null)?.error).not.toBeNull());

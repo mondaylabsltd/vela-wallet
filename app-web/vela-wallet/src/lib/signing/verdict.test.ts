@@ -238,6 +238,52 @@ describe('an unverified token is a direction and never a figure', () => {
 		expect(JSON.stringify(said).split(m.warnUnverifiedAmount).length - 1).toBe(1);
 	});
 
+	it('§41: an NFT, a grant and a log Vela could not read are rows in the corpus’s words — never "No asset changes"', () => {
+		const SPENDER = '0x76875e38fc6bc2dedcaed807ce00782db5c0d141';
+		const rows = balanceRows(
+			[
+				{
+					type: 'nft',
+					token: LURE,
+					token_id: '7',
+					standard: 'erc721',
+					direction: 'out',
+					amount: '1'
+				},
+				{
+					type: 'nft',
+					token: LURE,
+					token_id: '42',
+					standard: 'erc1155',
+					direction: 'in',
+					amount: '3'
+				},
+				{ type: 'approval', token: LURE, spender: SPENDER, unlimited: true },
+				{ type: 'approval', token: LURE, spender: SPENDER, unlimited: false },
+				{ type: 'unread', token: LURE },
+				{
+					type: 'nft',
+					token: LURE,
+					token_id: '9',
+					standard: 'erc721',
+					direction: 'still',
+					amount: '0'
+				}
+			],
+			ctx()
+		);
+		const short = `${SPENDER.slice(0, 8)}…${SPENDER.slice(-6)}`;
+		expect(rows).toEqual([
+			{ symbol: fill(m.balanceNft, { id: '7' }), delta: '−', tone: 'caution' },
+			{ symbol: fill(m.balanceNft, { id: '42' }), delta: '+3', tone: 'caution' },
+			{ symbol: fill(m.balanceApprovalAll, { spender: short }), delta: '', tone: 'danger' },
+			{ symbol: fill(m.balanceApproval, { spender: short }), delta: '', tone: 'danger' },
+			{ symbol: m.balanceUnread, delta: '', tone: 'caution' }
+		]);
+		expect(rows[0].symbol).toBe('NFT #7');
+		expect(rows[4].symbol).toBe('This changes something Vela can’t read');
+	});
+
 	it('every direction the core can name: in, out, unreadable (no sign, still a row), still (no row, no warning)', () => {
 		const judged = (direction: 'in' | 'out' | 'still' | 'unreadable'): TrustSimJudgment => ({
 			type: 'erc20_unverified',

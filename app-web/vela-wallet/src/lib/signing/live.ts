@@ -32,6 +32,7 @@ import type { FeeView } from '$lib/core/generated/FeeView';
 import type { GuardEditorView } from '$lib/core/generated/GuardEditorView';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignApproveOpts } from '$lib/core/generated/SignApproveOpts';
+import type { SimVerdict } from '$lib/core/generated/SimVerdict';
 import type { SignView } from '$lib/core/generated/SignView';
 import {
 	feeAmountText,
@@ -2191,6 +2192,7 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 			enabled,
 			// cs-8 / R22: an "… anyway" or a danger — the danger style, held.
 			...(danger ? { danger: true } : {}),
+			...(anyway ? { anyway: true } : {}),
 			...(holdMs > 0 ? { holdMs, holdLabel: m.holdToConfirm, againLabel: m.confirmAgain } : {}),
 			...(note
 				? {
@@ -2247,10 +2249,26 @@ export function approveOptsOf(
 	 * the figure the sheet drew when the confirm began. Absent: the core
 	 * signs `fee` as before.
 	 */
-	current?: FeeView | null
+	current?: FeeView | null,
+	/**
+	 * §41 (P2-5): what the core checks the posture against at the approve —
+	 * the verdict the sheet drew, the person's "Refuse blind signing", and
+	 * whether this press was the "… anyway" confirm. The core works the
+	 * posture out again from `clear`, `guard` and `sim`; with none, it signs
+	 * nothing.
+	 */
+	posture?: { sim: SimVerdict | null; refuseBlind: boolean; anyway: boolean }
 ): SignApproveOpts {
 	const quote = fee?.fee ?? null;
 	return {
+		review: {
+			clear,
+			guard,
+			sim: posture?.sim ?? null,
+			refuse_blind: posture?.refuseBlind === true
+		},
+		anyway_confirmed: posture?.anyway === true,
+
 		max_fee_per_gas: quote ? quote.max_fee_per_gas : null,
 		bundler_cost_wei: null,
 		gas_fee_token: fee?.fee_token ?? null,

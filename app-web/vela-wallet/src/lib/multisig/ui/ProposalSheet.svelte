@@ -516,6 +516,13 @@
 	const signBlocked = $derived(signRule?.allowed === false);
 	/** The "… anyway" step: the core's door says it (§12), as the review's rule does. */
 	const anyway = $derived(door.anyway);
+	/**
+	 * §41 (P2-5): what a press tells the machine — whether it was the door's
+	 * "… anyway", and "Refuse blind signing". The machine checks both against
+	 * the review it works out itself, and signs no "… anyway" without them.
+	 */
+	const pressed = () => ({ anyway_confirmed: door.anyway, refuse_blind: refuseBlind.current() });
+
 	/** §12: the review is being read (or not asked yet): said, and nothing is signed. */
 	const reviewHolding = $derived(door.shows === 'loading');
 	/** §12: every button that signs is shut unless the core's door is open. */
@@ -1012,7 +1019,7 @@
 		// r5reg-5: the member shown under "As" proposes it — never another, silently.
 		if (prebuilt) {
 			phase = { kind: 'busy', what: 'propose' };
-			proposalsHost.confirmDraft(actor?.address ?? null);
+			proposalsHost.confirmDraft(actor?.address ?? null, pressed());
 			return;
 		}
 		if (!dapp || !item) return;
@@ -1024,8 +1031,8 @@
 			return;
 		}
 		const by = actor?.address ?? null;
-		if (thenExecute) proposalsHost.proposeExecute(by);
-		else proposalsHost.confirmDraft(by);
+		if (thenExecute) proposalsHost.proposeExecute(by, pressed());
+		else proposalsHost.confirmDraft(by, pressed());
 		// Proposed (by a member here, or an outside member's wallet), or why not.
 		const state = await proposalsHost.until((view) => {
 			const now = view.actions.propose;
@@ -1066,7 +1073,8 @@
 			type: 'approve',
 			chain_id: chainId,
 			safe_tx_hash: hash,
-			owner: owner.address
+			owner: owner.address,
+			...pressed()
 		});
 		return error;
 	}
@@ -1109,7 +1117,8 @@
 			chain_id: chainId,
 			safe_tx_hash: hash,
 			executor: by,
-			...(drawn?.kind === 'priced' ? { shown_fee: drawn.fee.amount.toString() } : {})
+			...(drawn?.kind === 'priced' ? { shown_fee: drawn.fee.amount.toString() } : {}),
+			...pressed()
 		});
 		if (!error) return;
 		// r5reg-21: its number was used meanwhile — what ran is said, not a failure.
@@ -1329,8 +1338,13 @@
 		const { error } = await act(`approve:${item.safeTxHash.toLowerCase()}`, {
 			type: 'approve_outside',
 			chain_id: chainId,
-			safe_tx_hash: item.safeTxHash
+			safe_tx_hash: item.safeTxHash,
+			// §41 (P2-5): a plain click, never a held "… anyway" — on an
+			// "… anyway" review the machine refuses it, and says so.
+			anyway_confirmed: false,
+			refuse_blind: refuseBlind.current()
 		});
+
 		// The outside wallet's own refusal is its sheet's to say.
 		if (error && !cancelled(error)) phase = failedPhase(error);
 	}

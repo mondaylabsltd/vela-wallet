@@ -570,6 +570,13 @@ export interface SigningModel {
 		 */
 		danger?: boolean;
 		/**
+		 * §41 (P2-5): the confirm is the core's "… anyway"
+		 * (`ConfirmState.anyway`). Its press is sent as `anyway_confirmed`: the
+		 * core takes no "… anyway" approve without it.
+		 */
+		anyway?: boolean;
+
+		/**
 		 * R22 (review 1-3): the confirm is HELD this long (`ConfirmState.hold_ms`),
 		 * or pressed twice with assistive technology; absent or 0: a plain press.
 		 */

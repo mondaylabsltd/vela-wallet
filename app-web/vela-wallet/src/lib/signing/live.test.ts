@@ -2803,7 +2803,38 @@ describe('what the approve carries (spec 093)', () => {
 	});
 
 	/**
+	 * §41 (P2-5): the approve hands the core what the sheet showed — the
+	 * reading, the guard, the verdict, the person's "Refuse blind signing" —
+	 * and whether this press was the "… anyway" confirm; the core works the
+	 * posture out again from them and signs no "… anyway" without it.
+	 */
+	it('§41: the approve carries the review and the "… anyway" press', () => {
+		const clear = {
+			...INITIAL_CLEAR_VIEW,
+			surface: 'blind_transaction' as const,
+			sign_anyway: true
+		};
+		const sim = { kind: 'unconfirmed' } as unknown as SimVerdict;
+		const held = approveOptsOf(QUOTED_FEE, clear, INITIAL_GUARD_VIEW, undefined, {
+			sim,
+			refuseBlind: true,
+			anyway: true
+		});
+		expect(held.anyway_confirmed).toBe(true);
+		expect(held.review).toEqual({
+			clear,
+			guard: INITIAL_GUARD_VIEW,
+			sim,
+			refuse_blind: true
+		});
+		const plain = approveOptsOf(QUOTED_FEE, INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW);
+		expect(plain.anyway_confirmed).toBe(false);
+		expect(plain.review?.refuse_blind).toBe(false);
+	});
+
+	/**
 	 * §39 (r22-3 / A1): the approve carries the fee the sheet DREW when the
+
 	 * confirm began (`quoted_fee`) and the fee machine's quote at the approve
 	 * (`current_fee`): the core signs the figure shown when the quote charges
 	 * no more, and nothing — `fee_rose` — when it rose.

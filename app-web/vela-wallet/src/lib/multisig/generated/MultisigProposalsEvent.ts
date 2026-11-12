@@ -7,7 +7,23 @@ export type MultisigProposalsEvent = { "type": "start", service_url: string, acc
 /**
  * Contacts, own accounts and multisigs the person knows (for the review).
  */
-known: unknown[], } | { "type": "follow", account: unknown, } | { "type": "account", account: unknown, } | { "type": "local_accounts", accounts: Array<MultisigLocalAccount>, } | { "type": "networks", networks: number[], } | { "type": "known", known: unknown[], } | { "type": "service", url: string, } | { "type": "tick" } | { "type": "refresh", fresh: boolean, } | { "type": "show_non_members", show: boolean, } | { "type": "retry" } | { "type": "online", online: boolean, } | { "type": "watch" } | { "type": "unwatch" } | { "type": "review", chain_id: number, safe_tx_hash: string, blind: boolean, } | { "type": "review_again", chain_id: number | null, safe_tx_hash: string | null, } | { "type": "draft", chain_id: number, proposal: MultisigProposalKind, } | { "type": "confirm_draft", as_member: string | null, } | { "type": "withdraw" } | { "type": "approve", chain_id: number, safe_tx_hash: string, owner: string, } | { "type": "preview", chain_id: number, safe_tx_hash: string, executor: string, } | { "type": "execute", chain_id: number, safe_tx_hash: string, executor: string, 
+known: unknown[], } | { "type": "follow", account: unknown, } | { "type": "account", account: unknown, } | { "type": "local_accounts", accounts: Array<MultisigLocalAccount>, } | { "type": "networks", networks: number[], } | { "type": "known", known: unknown[], } | { "type": "service", url: string, } | { "type": "tick" } | { "type": "refresh", fresh: boolean, } | { "type": "show_non_members", show: boolean, } | { "type": "retry" } | { "type": "online", online: boolean, } | { "type": "watch" } | { "type": "unwatch" } | { "type": "review", chain_id: number, safe_tx_hash: string, blind: boolean, } | { "type": "review_again", chain_id: number | null, safe_tx_hash: string | null, } | { "type": "draft", chain_id: number, proposal: MultisigProposalKind, } | { "type": "confirm_draft", as_member: string | null, 
+/**
+ * §41 (P2-5): the press was the "… anyway" confirm.
+ */
+anyway_confirmed: boolean, 
+/**
+ * §41 (P2-5): "Refuse blind signing" is on.
+ */
+refuse_blind: boolean, } | { "type": "withdraw" } | { "type": "approve", chain_id: number, safe_tx_hash: string, owner: string, 
+/**
+ * §41 (P2-5): the press was the "… anyway" confirm.
+ */
+anyway_confirmed: boolean, 
+/**
+ * §41 (P2-5): "Refuse blind signing" is on.
+ */
+refuse_blind: boolean, } | { "type": "preview", chain_id: number, safe_tx_hash: string, executor: string, } | { "type": "execute", chain_id: number, safe_tx_hash: string, executor: string, 
 /**
  * r15 (fee moved): the fee the sheet drew under the press, in base
  * units (decimal) — the figure the person pressed on. When set, the
@@ -16,7 +32,15 @@ known: unknown[], } | { "type": "follow", account: unknown, } | { "type": "accou
  * own re-quote) stops with `fee_moved`, nothing signed. Missing: the
  * executor's look on screen is taken as shown (older shells).
  */
-shown_fee?: string, } | { "type": "approve_execute", chain_id: number, safe_tx_hash: string, executor: string, 
+shown_fee?: string, 
+/**
+ * §41 (P2-5): the press was the "… anyway" confirm.
+ */
+anyway_confirmed: boolean, 
+/**
+ * §41 (P2-5): "Refuse blind signing" is on.
+ */
+refuse_blind: boolean, } | { "type": "approve_execute", chain_id: number, safe_tx_hash: string, executor: string, 
 /**
  * r15 (fee moved): the fee the sheet drew under the press, in base
  * units (decimal) — the figure the person pressed on. When set, the
@@ -25,4 +49,28 @@ shown_fee?: string, } | { "type": "approve_execute", chain_id: number, safe_tx_h
  * own re-quote) stops with `fee_moved`, nothing signed. Missing: the
  * executor's look on screen is taken as shown (older shells).
  */
-shown_fee?: string, } | { "type": "propose_execute", as_member: string | null, } | { "type": "calls_status_taken", id: string, } | { "type": "send_again", chain_id: number | null, safe_tx_hash: string | null, } | { "type": "accounts", accounts: unknown[], } | { "type": "others_tick" } | { "type": "timeline", chain_id: number, safe_tx_hash: string, } | { "type": "dapp_request", id: string, account: unknown, method: string, params: unknown, origin: string, chain_id: number, limit_ms: number | null, } | { "type": "dapp_leave", id: string, } | { "type": "dapp_settled", id: string, } | { "type": "calls_status", id: string, chain_id: number, calls_id: string, } | { "type": "open_linked", chain_id: number, safe_tx_hash: string, preview: unknown, } | { "type": "close_linked" } | { "type": "approve_outside", chain_id: number, safe_tx_hash: string, } | { "type": "outside_answered", chain_id: number, safe_tx_hash: string, outcome: OutsideSessionOutcome, } | { "type": "indexed_members", addresses: Array<string>, } | { "type": "read_signers", chain_id: number, safe_tx_hash: string, };
+shown_fee?: string, 
+/**
+ * §41 (P2-5): the press was the "… anyway" confirm.
+ */
+anyway_confirmed: boolean, 
+/**
+ * §41 (P2-5): "Refuse blind signing" is on.
+ */
+refuse_blind: boolean, } | { "type": "propose_execute", as_member: string | null, 
+/**
+ * §41 (P2-5): the press was the "… anyway" confirm.
+ */
+anyway_confirmed: boolean, 
+/**
+ * §41 (P2-5): "Refuse blind signing" is on.
+ */
+refuse_blind: boolean, } | { "type": "calls_status_taken", id: string, } | { "type": "send_again", chain_id: number | null, safe_tx_hash: string | null, } | { "type": "accounts", accounts: unknown[], } | { "type": "others_tick" } | { "type": "timeline", chain_id: number, safe_tx_hash: string, } | { "type": "dapp_request", id: string, account: unknown, method: string, params: unknown, origin: string, chain_id: number, limit_ms: number | null, } | { "type": "dapp_leave", id: string, } | { "type": "dapp_settled", id: string, } | { "type": "calls_status", id: string, chain_id: number, calls_id: string, } | { "type": "open_linked", chain_id: number, safe_tx_hash: string, preview: unknown, } | { "type": "close_linked" } | { "type": "approve_outside", chain_id: number, safe_tx_hash: string, 
+/**
+ * §41 (P2-5): the press was the "… anyway" confirm.
+ */
+anyway_confirmed: boolean, 
+/**
+ * §41 (P2-5): "Refuse blind signing" is on.
+ */
+refuse_blind: boolean, } | { "type": "outside_answered", chain_id: number, safe_tx_hash: string, outcome: OutsideSessionOutcome, } | { "type": "indexed_members", addresses: Array<string>, } | { "type": "read_signers", chain_id: number, safe_tx_hash: string, };

@@ -2,6 +2,7 @@
 export * from './Account';
 export * from './AccountKey';
 export * from './AmountIssue';
+export * from './ApproveReview';
 export * from './Asset';
 export * from './BalanceCacheEntry';
 export * from './BalanceEvent';

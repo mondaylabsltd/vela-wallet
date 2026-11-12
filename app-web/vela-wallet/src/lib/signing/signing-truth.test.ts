@@ -104,7 +104,7 @@ describe('what the sheet says of it (landedVerdict)', () => {
 		const said = landedVerdict({ verdict, judged }, ctx);
 		expect(said.kind).toBe('moves');
 		expect(said.block).toMatchObject({ kind: 'balances', source: m.simOwnNode });
-		expect(m.simOwnNode).toBe('Checked by your own node only');
+		expect(m.simOwnNode).toBe('Checked by your chosen node only');
 		// Corroborated: no line about who checked.
 		const two = simOutcome(USER, witnessed(ran(nativeLog(USER, SITE, 10n ** 18n))))!;
 		const plain = landedVerdict(

@@ -30,6 +30,7 @@ import type { OutsideSessionRequest } from '../generated/OutsideSessionRequest';
 import { openOutsideSession } from '../external/signing.svelte';
 import type { MultisigShellDeps } from './handler';
 import type { MultisigMachine } from './machine.svelte';
+import { refuseBlind } from '$lib/settings/refuse-blind.svelte';
 
 /** How often the multisigs not shown are read again while a page is up (the core's own pace). */
 export const OTHERS_EVERY_MS = 60_000;
@@ -243,7 +244,13 @@ class ProposalsHost {
 				if (this.reviewing === ask) this.reviewing = null;
 				if (asked?.kind !== 'working' && asked?.kind !== 'done') fail(asked);
 			} else {
-				this.send({ type: 'confirm_draft', as_member: as });
+				// §41 (P2-5): no review was shown — never an "… anyway" press.
+				this.send({
+					type: 'confirm_draft',
+					as_member: as,
+					anyway_confirmed: false,
+					refuse_blind: refuseBlind.current()
+				});
 			}
 			// No member here: an outside member's wallet proposes it — its answer settles it.
 			const done = await this.until((view) => {
@@ -263,8 +270,14 @@ class ProposalsHost {
 	}
 
 	/** The person's word on the review-first sheet: propose it, as `as` (else the machine's pick). */
-	confirmDraft(as: string | null): void {
-		this.send({ type: 'confirm_draft', as_member: as });
+	confirmDraft(
+		as: string | null,
+		press: { anyway_confirmed: boolean; refuse_blind: boolean } = {
+			anyway_confirmed: false,
+			refuse_blind: refuseBlind.current()
+		}
+	): void {
+		this.send({ type: 'confirm_draft', as_member: as, ...press });
 	}
 
 	/**
@@ -273,8 +286,14 @@ class ProposalsHost {
 	 * machine's `propose_execute` (`execute:<hash>` working from the moment
 	 * it is proposed).
 	 */
-	proposeExecute(as: string | null): void {
-		this.send({ type: 'propose_execute', as_member: as });
+	proposeExecute(
+		as: string | null,
+		press: { anyway_confirmed: boolean; refuse_blind: boolean } = {
+			anyway_confirmed: false,
+			refuse_blind: refuseBlind.current()
+		}
+	): void {
+		this.send({ type: 'propose_execute', as_member: as, ...press });
 	}
 
 	/** The person withdrew the proposal on its review: nothing is signed or sent. */
