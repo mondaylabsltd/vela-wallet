@@ -290,7 +290,8 @@ final class ParentSafeRig {
 
     static func incoming(_ case: String, id: String = "req-1") throws -> SigningController.Incoming {
         SigningController.Incoming(
-            id: id, method: "eth_sendTransaction", paramsJson: try ParentSafeVector.paramsJson(`case`),
+            id: id, method: try ParentSafeVector.input(`case`)["method"] as? String ?? "eth_sendTransaction",
+            paramsJson: try ParentSafeVector.paramsJson(`case`),
             origin: "https://evil.example", transportId: "tab-1", chainId: chain, grantedAddress: signer
         )
     }
@@ -425,6 +426,57 @@ struct ParentSafeSheetTests {
         #expect(code == -32603 && kind == "parent_safe_blocked")
         let message = rig.answers.last?.payload["message"] as? String ?? ""
         #expect(message.contains("could not be checked"), "\(message)")
+    }
+
+    /// 0.9.10: the vector's arrival refusals — the Safe's address written
+    /// without its `0x` (or `0X`, or under-width), as a `to`, a batch leg or
+    /// a `verifyingContract` — are answered -32602 before any read or sheet,
+    /// nothing signed.
+    @Test func aNonCanonicalAddressIsAnsweredInvalidParamsBeforeAnyRead() async throws {
+        let arrivals = try ParentSafeVector.cases().filter {
+            ($0["expect"] as? [String: Any])?["verdict"] as? String == "invalid"
+        }
+        #expect(arrivals.count >= 7, "the arrival cases: \(arrivals.count)")
+        for c in arrivals {
+            let name = try #require(c["name"] as? String)
+            let rig = ParentSafeRig()
+            rig.readAnswer = .ok("0x" + String(repeating: "0", count: 63) + "1")
+            rig.controller.open(try ParentSafeRig.incoming(name))
+            await rig.until { !rig.answers.isEmpty }
+            #expect(rig.answers.count == 1, "\(name)")
+            let (code, kind) = payloadKind(rig)
+            #expect(code == -32602, "\(name)")
+            #expect(kind == "invalid_params", "\(name)")
+            #expect(rig.reads.isEmpty, "\(name): never read")
+            #expect(rig.controller.sign.blocked == nil, "\(name)")
+            #expect(rig.nothingSigned, "\(name)")
+        }
+    }
+
+    /// 0.9.10: a page's `SafeMessage` / `SafeOp` for a Safe v1.5.0 this
+    /// account owns is its approval — read, refused, nothing signed.
+    @Test func aSafeMessageOrSafeOpForAnOwnedV150SafeIsRefusedOnceRead() async throws {
+        for (name, function) in [
+            ("0.9.10 v1.5.0: SafeMessage under an owned Safe v1.5.0's domain, isOwner true: refused", "SafeMessage"),
+            ("0.9.10 v1.5.0: SafeOp for an owned Safe v1.5.0 (its `safe`), under the 4337 module's domain: refused", "SafeOp"),
+        ] {
+            let rig = ParentSafeRig()
+            rig.readAnswer = .ok("0x" + String(repeating: "0", count: 63) + "1")
+            rig.controller.open(try ParentSafeRig.incoming(name))
+            await rig.until { rig.controller.sign.blocked != nil }
+            let blocked = try #require(rig.controller.sign.blocked, "\(name)")
+            #expect(blocked.parent == ParentSafeRig.parent, "\(name)")
+            #expect(blocked.reason == .owner, "\(name)")
+            #expect(blocked.function == function, "\(name)")
+            #expect(rig.reads.count == 1, "\(name)")
+            rig.controller.approve()
+            await rig.settle()
+            #expect(rig.nothingSigned, "\(name)")
+            rig.controller.reject()
+            await rig.until { !rig.answers.isEmpty }
+            let (code, kind) = payloadKind(rig)
+            #expect(code == -32603 && kind == "parent_safe_blocked", "\(name)")
+        }
     }
 
     /// The sheet's words: the catalog's `parentSafeBlocked` /
