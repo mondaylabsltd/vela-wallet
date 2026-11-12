@@ -552,13 +552,15 @@
 				owing = null;
 				signingTransport = null;
 				void answerRequest(incoming.rid, error ? { error } : { result }, opHash);
-				// Usage statistics: the person's answer, by request kind and chain
-				// — never the site, the message or the transaction, and never for
-				// a request that puts a transaction on chain (§35, review 1-8: no
-				// event may be linked to one).
+				// Usage statistics: the person's answer — never the site, the
+				// message or the transaction, and never for a request that puts a
+				// transaction on chain (§35, review 1-8: no event may be linked to
+				// one). An approval is counted bare (no kind, no network): an
+				// approved signature can be taken on chain by the site. A
+				// rejection signs nothing, so it says its kind and network.
 				const answered = { kind: dappRequestKind(incoming.method), chain: chainId || undefined };
 				if (!TX_REQUEST_KINDS.includes(answered.kind)) {
-					if (!error) track('dapp_request_approved', answered);
+					if (!error) track('dapp_request_approved');
 					else if (error.code === 4001) track('dapp_request_rejected', answered);
 				}
 				// A request the CORE refuses outright is answered the moment it
@@ -764,7 +766,7 @@
 		addingChain = null;
 		busy = false;
 		if (outcome.type === 'added') {
-			track('dapp_request_approved', { kind: 'add_network', chain });
+			track('dapp_request_approved');
 			await publishExtChains();
 			await answerRequest(id, { result: null });
 		} else {
