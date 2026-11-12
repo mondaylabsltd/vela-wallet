@@ -35,12 +35,15 @@ import {
 	cutFigureText,
 	exactAmount,
 	moneyText,
+	sendScopedOutage,
 	sentAmountText,
 	tokenAmountText,
 	trimBalance,
-	unitAdornment
+	unitAdornment,
+	unreachableLine
 } from '$lib/wallet/live';
-import { fill } from '$lib/wallet/messages';
+import { fill, type WalletMessages } from '$lib/wallet/messages';
+import type { BalanceView } from '$lib/core/generated/BalanceView';
 import { venueBlockText } from '$lib/settings/venue';
 import { sendEstimateFailureBodyKey } from '$lib/core/kernels';
 import type { FeeFailureView } from '$lib/core/generated/FeeFailureView';
@@ -139,6 +142,12 @@ export interface SendLiveInputs {
 	chainFilter?: number | null;
 	classFilter?: SendClassFilter;
 	/**
+	 * r22-7: networks the balances could not read now that held something
+	 * when last read ({@link sendPickOutage}) — their rows in the picker are
+	 * the last-known ones the home draws — and the home's own line for them.
+	 */
+	outage?: SendPickOutage;
+	/**
 	 * The core's last `ShowAlert`, kept by the page until the person edits
 	 * or moves on (spec 038 #D4). The phone raised these natively; the web
 	 * had a `console.warn` where the sentence should have been.
@@ -178,6 +187,31 @@ const TIER_LABEL_KEY = {
 	standard: 'send.gasTier.standard',
 	slow: 'send.gasTier.slow'
 } as const satisfies Record<OfferedTier, keyof WalletFlowMessages>;
+
+/** r22-7: the networks whose rows the picker holds as last read, and the line that says so. */
+export interface SendPickOutage {
+	chainIds: number[];
+	text: string;
+}
+
+/**
+ * r22-7: what the picker says of the networks it cannot read now. The balance
+ * machine keeps a network's last-known rows while it does not answer, and the
+ * home draws them under "Can't reach Arc Testnet right now"; the picker lists
+ * the same rows, so it says the same line — the core's choice of sentence
+ * (`unreachable_key`), scoped as every send screen scopes it (send-19: only
+ * the networks last seen holding something). `undefined` when every network
+ * that matters answered.
+ */
+export function sendPickOutage(
+	view: BalanceView,
+	words: WalletMessages['assets']
+): SendPickOutage | undefined {
+	const scoped = sendScopedOutage(view, null);
+	const text = unreachableLine(scoped, words);
+	if (text === undefined) return undefined;
+	return { chainIds: scoped.unreachable_networks.map((network) => network.chain_id), text };
+}
 
 /** SD1's chips: all, the stables, the chains' own coins, the rest. */
 export type SendClassFilter = 'all' | 'stable' | 'gas' | 'other';
@@ -719,6 +753,13 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 						network: chainName(send.request_chain_id)
 					})
 				};
+	// r22-7: a network the balances cannot read now keeps its last-known rows
+	// here, as on the home — and says so in the home's line, under its mark.
+	const outage = inputs.outage;
+	const outageNotice =
+		outage !== undefined && outage.chainIds.length > 0
+			? { mark: chainMark(outage.chainIds[0]), text: outage.text }
+			: undefined;
 	// An empty list says WHY it is empty (issue 209). The account that holds
 	// nothing is where a hand-off from the address book now lands, and a panel
 	// with a search box and no rows explains itself to nobody; a filter that
@@ -752,7 +793,7 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 			recipient,
 			header: { ...model.header, title: m['send.selectTokenTitle'], pill },
 			filters,
-			notice: requestNotice,
+			notice: requestNotice ?? outageNotice,
 			selection: undefined,
 			rows,
 			empty,
@@ -772,7 +813,7 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 		notice:
 			requestNotice ??
 			(chain === null
-				? undefined
+				? outageNotice
 				: {
 						mark: chainMark(chain),
 						text: fill(m['send.multiSendChainNotice'], { network: chainName(chain) })
