@@ -548,13 +548,19 @@ enum SigningLive {
                 error.kind.signerReasonKey.map { loc.t($0) } ?? loc.t("send.txErrorGeneric")
             // Spec 102: this account cannot sign here — the venue's reason.
             case .venueBlocked: error.venueReason(loc) ?? loc.t("send.txErrorGeneric")
+            // §39 (A1): the fee rose since the confirm began — nothing was
+            // signed; the new fee is drawn and the next confirm pays it.
+            case .feeRose: s(loc, "feeRose")
             // The relay refused it (spec 082 RJ3): nothing was sent — said
             // by its reason (PR 2 note 9, `failure_refusal_key`): the account's
             // previous op holding the nonce, another that went first, the
             // fee — else the plain refusal.
             default: refusalReason(sign, loc: loc) ?? loc.t("send.txErrorGeneric")
             }
-            if sign.notSent {
+            if error.kind == .feeRose {
+                // A stop, never a failure: a caution beside the confirm.
+                blocks.append(.warning(tone: .caution, text: text))
+            } else if sign.notSent {
                 // "Not sent yet" (PR 2 polish): the previous transaction on
                 // this network still holds the nonce — nothing was sent and
                 // nothing went wrong. A calm sentence, never the danger card.

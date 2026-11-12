@@ -22,6 +22,9 @@ struct MultisigHostModifier: ViewModifier {
     let scheme: ColorScheme
     var onAddNetwork: (Int) -> Void
     var onFund: () -> Void
+    /// §39 (r22-2): "Add your own node" under a review only one node could
+    /// check — that network's RPC settings. `nil`: no link drawn.
+    var onOwnNode: (@MainActor (Int) -> Void)? = nil
 
     func body(content: Content) -> some View {
         content
@@ -32,6 +35,7 @@ struct MultisigHostModifier: ViewModifier {
                 set: { if $0 == nil { hub.sheetDismissed() } else { hub.sheet = $0 } }
             )) { sheet in
                 sheetView(sheet)
+                    .environment(\.msOpenOwnNode, onOwnNode)
                     .modifier(MultisigOverlays(hub: hub, words: words, scheme: scheme))
                     .themed(scheme)
             }

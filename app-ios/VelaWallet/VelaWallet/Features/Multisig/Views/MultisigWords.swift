@@ -483,7 +483,11 @@ struct MsWords {
         case "noMemberHere": return t("proposal.notMember")
         case "signingRefused": return t("authority.refusedOn", ["network": network(chainId)])
         case "signingBlocked": return t("review.blocked")
+        // §39 (r22-2): one node's word where two were needed is said as
+        // that — never "Can't reach {{network}}". Two independent nodes that
+        // disagree are a real signal: nothing signed, no "… anyway".
         case "signingUnchecked": return t("authority.signUnchecked", ["network": network(chainId)])
+        case "signingDisagreed": return t("authority.signDisagreed", ["network": network(chainId)])
         case "riskDeclined": return nil
         // Round 16 leftover 4: the core's own refusal carries its English
         // (`reason`) — said in the catalog's words, never that text.
@@ -607,15 +611,17 @@ struct MsWords {
         let said = MsRules.failure(detail)
         let object = MultisigShellFailure.read(detail) ?? [:]
         switch said.kind {
-        // r14-9 (the core's rule): the fee moved since the press — nothing
-        // signed; said with the new figure (its fee line's own words), so the
-        // next press is on it.
+        // r14-9 (the core's rule): the fee rose since the press — nothing
+        // signed. §39 (r22-4, KNOWN-BUGS R20-15): said WHY, in the core's
+        // key (`home.multisig.proposal.feeRose`), `{{fee}}` the new figure
+        // exactly as the fee line draws it — never "That didn't go through:
+        // Network fee ≈ …".
         case "fee_moved":
             let chain = (object["chainId"] as? NSNumber)?.intValue ?? chainId ?? 0
             let fee = "\(SendLive.feeFromBase(object["amount"] as? String ?? "0", decimals: Self.coinDecimals)) \(symbol(chain))"
-            return t("proposal.failed", ["reason": t("proposal.feeLine", [
-                "fee": fee, "name": label(object["executor"] as? String ?? ""),
-            ])])
+            let key = said.key ?? "home.multisig.proposal.feeRose"
+            let words = loc.t(key, vars: ["fee": fee])
+            return words != key ? words : t("proposal.feeRose", ["fee": fee])
         case "cannot_pay":
             return t("proposal.failed", ["reason": t("status.nobodyPays")])
         // r21-1: an execution whose window closed before it was submitted —

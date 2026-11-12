@@ -167,6 +167,33 @@ final class SigningController {
     private(set) var guardJson: String?
     /// The fee in force — whichever session prices the tier in force now.
     var fee: FeeViewWire? { fees.view }
+
+    /// §39 (R22 follow-up, A1): the fee the sheet DREW when the confirm
+    /// began — the 1.5 s hold's start, or the assistive path's first press —
+    /// kept while that confirm is in progress. `nil`: no confirm under way.
+    private(set) var pressedFee: FeeViewWire?
+    /// A hold is in progress or the assistive path is armed.
+    private(set) var confirmInProgress = false
+
+    /// The fee the sheet draws: held still — never re-drawn with a newer
+    /// quote — while a hold is in progress or the confirm is armed, so the
+    /// figure under the finger is the figure carried as `quoted_fee`.
+    var drawnFee: FeeViewWire? { confirmInProgress ? pressedFee : fee }
+
+    /// The confirm began (`true`: a hold started, the assistive path armed)
+    /// or ended without firing (`false`: lifted early, disarmed). The figure
+    /// is taken at the beginning, once, from what the sheet draws now.
+    func confirmEngaged(_ on: Bool) {
+        if on {
+            guard !confirmInProgress else { return }
+            pressedFee = fee
+            confirmInProgress = true
+        } else {
+            confirmInProgress = false
+            pressedFee = nil
+        }
+    }
+
     /// The speed control, as the `fee_speed` core decided it (spec 069).
     var speed: FeeSpeedViewWire? { fees.speed }
 
@@ -514,6 +541,8 @@ final class SigningController {
         fees.resetSpeed()
         fees.configureSpeed(preferred: preferredTier(), number: numberPreset())
         trustedSignerNotice = nil
+        // A confirm begun on another request's sheet carries nothing here.
+        confirmEngaged(false)
 
         // The world first. A machine told nothing refuses a request that names
         // a chain, and the refusal is indistinguishable from a broken network.
@@ -621,7 +650,9 @@ final class SigningController {
             // Nothing could be asked, so nothing is: the place says the
             // core's could-not-check line from its first frame, and the core
             // is told of no simulation — the confirm waits for none.
-            let record = simOutcome(user: wallet.address, replyJson: RpcCorroborated.unreachable.envelopeJson)
+            let record = simOutcome(
+                user: wallet.address, replyJson: RpcCorroborated.unreachable.envelopeJson, valueWei: nil
+            )
             simulation = Self.simulation(of: record)
             simRecord = record
             simRechecking = false
@@ -647,7 +678,12 @@ final class SigningController {
             // A request that left the sheet while the node answered: its
             // verdict is nobody's now (a new request's check owns the place).
             guard request?.id == id else { return }
-            let outcome = simOutcome(user: wallet.address, replyJson: Self.simReply(answer))
+            // §39: the native value the request sends from the account, as
+            // the wallet decoded it — a node's "No asset changes" never
+            // erases it (`sim_outcome::with_decoded_value`).
+            let outcome = simOutcome(
+                user: wallet.address, replyJson: Self.simReply(answer), valueWei: Self.nativeValueWei(calls)
+            )
             if outcome.kind != "deltas" {
                 simulation = Self.simulation(of: outcome)
                 simRecord = outcome
@@ -686,7 +722,9 @@ final class SigningController {
                 // sheet cannot report. The core's could-not-check verdict,
                 // now — never "Checking…" until the deadline.
                 simulation = Self.simulation(
-                    of: simOutcome(user: wallet.address, replyJson: RpcCorroborated.unreachable.envelopeJson)
+                    of: simOutcome(
+                        user: wallet.address, replyJson: RpcCorroborated.unreachable.envelopeJson, valueWei: nil
+                    )
                 )
                 simRechecking = false
                 simSettled(id)
@@ -807,6 +845,27 @@ final class SigningController {
     /// are the core's to tell apart.
     static func simReply(_ answer: RpcCorroborated) -> String {
         answer.envelopeJson
+    }
+
+    /// §39: the native value `calls` send from the account, as the wallet
+    /// decoded them (`dapp_request_calls`) — for a batch, the sum of every
+    /// call's — in decimal wei; `nil` when it is zero or cannot be read.
+    static func nativeValueWei(_ calls: [UserOpCall]) -> String? {
+        var total = "0"
+        for call in calls {
+            let raw = call.value.trimmingCharacters(in: .whitespaces)
+            guard !raw.isEmpty, raw != "0x", raw != "0X" else { continue }
+            let decimal: String?
+            if raw.hasPrefix("0x") || raw.hasPrefix("0X") {
+                decimal = TokenReads.scaled(hex: raw, decimals: 0)
+            } else {
+                decimal = raw.allSatisfy { $0.isASCII && $0.isNumber } ? raw : nil
+            }
+            guard let decimal else { return nil }
+            total = TokenReads.addDecimal(total, decimal)
+        }
+        let digits = total.drop { $0 == "0" }
+        return digits.isEmpty ? nil : String(digits)
     }
 
     /// The core's `SimVerdict` as JSON from the record it wrote — the shape
@@ -935,12 +994,21 @@ final class SigningController {
     // MARK: - What the sheet does
 
     /// The confirm was tapped.
+    ///
+    /// §39 (R22 follow-up, A1): `quoted_fee` is the figure the sheet drew
+    /// when this confirm began (`pressedFee`; a plain press is drawn and
+    /// pressed in one frame, so it is the live one), `current_fee` the fee
+    /// machine's quote now. The core signs the figure shown when the quote
+    /// charges no more, and refuses a rise (`fee_rose`) with nothing signed.
     func approve() {
         trustedSignerNotice = nil
         approvedAtMs = Date().timeIntervalSince1970 * 1000
+        let shown = confirmInProgress ? pressedFee : fee
+        confirmEngaged(false)
         dispatchSign(["type": "approve_tapped", "opts": Self.approveOpts(
-            fee: fee, clear: clear, guard: guardView,
-            balanceChanges: Self.drawnChanges(simVerdict, simulation: simulation)
+            fee: shown, clear: clear, guard: guardView,
+            balanceChanges: Self.drawnChanges(simVerdict, simulation: simulation),
+            currentFee: fee
         )])
     }
 
@@ -1296,7 +1364,8 @@ final class SigningController {
     /// decided here.
     static func approveOpts(
         fee: FeeViewWire?, clear: ClearSigningViewWire, guard guardView: GuardViewWire,
-        balanceChanges: [TrustSimJudgmentWire]? = nil
+        balanceChanges: [TrustSimJudgmentWire]? = nil,
+        currentFee: FeeViewWire? = nil
     ) -> [String: Any] {
         [
             "max_fee_per_gas": fee?.fee?.maxFeePerGas as Any? ?? NSNull(),
@@ -1307,6 +1376,11 @@ final class SigningController {
             // native figure and never what an ERC-20 leg moves.
             "gas_fee_token": fee?.feeToken as Any? ?? NSNull(),
             "quoted_fee": quotedFee(fee?.fee) as Any? ?? NSNull(),
+            // §39 (A1): the fee machine's quote at the approve — weighed by
+            // the core against `quoted_fee` (the figure drawn when the
+            // confirm began); `nil` (no live quote) signs `quoted_fee` as
+            // before.
+            "current_fee": quotedFee(currentFee?.fee) as Any? ?? NSNull(),
             "fee_collector": NSNull(),
             "params_override_json": guardView.rewrittenParamsJson as Any? ?? NSNull(),
             "intent": clear.recordIntent as Any? ?? NSNull(),

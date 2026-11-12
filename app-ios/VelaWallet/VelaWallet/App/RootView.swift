@@ -466,7 +466,10 @@ struct RootView: View {
                 pendingSettingsPage = .addNetwork
                 if section == .settings { settingsVisit += 1 } else { section = .settings }
             },
-            onFund: { enterReceive() }
+            onFund: { enterReceive() },
+            // §39 (r22-2): a review only one node could check — that
+            // network's RPC settings, as the signing sheet's own-node hint.
+            onOwnNode: { chainId in openNetworkRpcSettings(chainId) }
         ))
         .onChange(of: scenePhase) { _, phase in multisig.appActive(phase == .active) }
     }
@@ -1660,6 +1663,7 @@ struct RootView: View {
                         signingLive: signingSheetModel,
                         signingSpaceNote: signingSpaceNote,
                         onSigningConfirm: { signing?.approve() },
+                        onSigningConfirmEngaged: { signing?.confirmEngaged($0) },
                         // **Every chip on the editor is a PRESET, 撤销 included.**
                         //
                         // The core has a separate `revoke_chosen`, and it
@@ -1978,6 +1982,21 @@ struct RootView: View {
     private func openOwnNodeSettings() {
         guard let chainId = liveSigning?.request?.chainId else { return }
         closeSigningSheet()
+        openNetworkRpcSettings(chainId)
+    }
+
+    /// One network's RPC settings page, where "Only use my node" is — the
+    /// own-node hint's destination, for the signing sheet and (§39, r22-2)
+    /// a multisig review only one node could check. A multisig sheet up is
+    /// closed its own way first (`sheetDismissed`: a review is withdrawn,
+    /// nothing signed), as the sheet cannot wait open over Settings.
+    private func openNetworkRpcSettings(_ chainId: Int) {
+        if multisig.sheet != nil {
+            multisig.sheetDismissed()
+            // A review drafted from a transaction returns to it: that goes too.
+            multisig.sheet = nil
+            flows.close()
+        }
         settings.expandNetwork(chainId: chainId)
         pendingSettingsNetwork = chainId
         pendingSettingsPage = .networkDetail
@@ -3535,7 +3554,9 @@ struct RootView: View {
             sign: live.shownSign,
             clear: live.clear,
             guard: live.guardView,
-            fee: live.fee,
+            // §39 (A1): held still while a confirm is in progress — the
+            // figure under the finger is the one signed.
+            fee: live.drawnFee,
             context: context,
             speed: live.speed.map { SendLive.SpeedInputs(view: $0, feeView: live.feeView(of:)) },
             // Spec 099 R7: the core's one gate, and why it is shut.
@@ -4296,6 +4317,7 @@ struct RootView: View {
                     model: model,
                     spaceNote: signingSpaceNote,
                     onConfirm: { signing?.approve() },
+                    onConfirmEngaged: { signing?.confirmEngaged($0) },
                     onAllowanceChip: { chip in signing?.guardChip(chip) },
                     onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
                     onAllowanceLegChip: { leg, chip in signing?.guardChip(chip, leg: leg) },
