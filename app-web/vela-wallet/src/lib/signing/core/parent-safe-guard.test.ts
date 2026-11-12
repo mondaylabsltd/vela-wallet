@@ -56,6 +56,7 @@ interface VectorCase {
 		chain_id: number;
 		answers: unknown[];
 		at_submit: boolean;
+		at_arrival?: boolean;
 	};
 	expect: unknown;
 }
@@ -247,7 +248,11 @@ const APPROVE = {
  * The real core and the real executor: a site's request `params` from the
  * vector's signer on the vector's chain.
  */
-async function arrive(params: unknown[], ownerCall?: SafeOwnerCall) {
+async function arrive(
+	params: unknown[],
+	ownerCall?: SafeOwnerCall,
+	method = 'eth_sendTransaction'
+) {
 	const answers: Answer[] = [];
 	const faults: unknown[] = [];
 	const reads: unknown[] = [];
@@ -271,7 +276,7 @@ async function arrive(params: unknown[], ownerCall?: SafeOwnerCall) {
 	session.dispatch({
 		type: 'request_arrived',
 		id: 'rid-31',
-		method: 'eth_sendTransaction',
+		method,
 		params_json: JSON.stringify(params),
 		origin: 'https://evil.example',
 		transport_id: 'ext-31',
@@ -458,4 +463,90 @@ describe('any other Safe: read (isOwner) before it can be signed', () => {
 		expect(run.view().blocked).toBeNull();
 		await run.close();
 	});
+});
+
+/**
+ * VELA-2026-002, 0.9.10: an address a site writes without its `0x` (or `0X`,
+ * or under-width) is refused at arrival -32602 before any read or sheet — the
+ * encoders read it as the Safe, and 0.9.9's guard did not; a `SafeMessage` /
+ * `SafeOp` for a Safe this account owns (under a Safe v1.5.0 either is its
+ * approval) is refused once read owned.
+ */
+describe('0.9.10: non-canonical addresses and Safe v1.5.0', () => {
+	it('every arrival case of the vector is answered -32602, nothing read or signed', async () => {
+		const arrivals = VECTOR.cases.filter(
+			(c) => c.input.at_arrival && (c.expect as { verdict: string }).verdict === 'invalid'
+		);
+		expect(arrivals.length).toBeGreaterThanOrEqual(7);
+		for (const c of arrivals) {
+			submit.calls = 0;
+			const run = await arrive(c.input.params, undefined, c.input.method);
+			expect(run.reads, c.name).toEqual([]);
+			expect(run.view().surface, c.name).toBe('hidden');
+			expect(run.answers, c.name).toEqual([
+				{
+					id: 'rid-31',
+					result: undefined,
+					error: expect.objectContaining({
+						// The core refused it with the vector's words; the web
+						// transport answers the kind's own words, as for every
+						// -32602 since 0.9.8.
+						code: -32602,
+						kind: 'invalid_params'
+					})
+				}
+			]);
+			await run.close();
+			expect(submit.calls, c.name).toBe(0);
+		}
+	});
+
+	it('the bare-hex takeover never reaches a sheet', async () => {
+		submit.calls = 0;
+		const params = caseParams(
+			'0.9.10 non-canonical: the takeover execTransaction (v=1) with a bare-hex `to`'
+		);
+		expect((params[0] as { to: string }).to).toBe(VECTOR.parent.slice(2));
+		const run = await arrive(params);
+		expect(run.answers[0]?.error).toMatchObject({ code: -32602 });
+		expect(run.reads).toEqual([]);
+		await run.approve();
+		expect(submit.calls).toBe(0);
+		await run.close();
+	});
+
+	for (const [name, fn] of [
+		[
+			"0.9.10 v1.5.0: SafeMessage under an owned Safe v1.5.0's domain, isOwner true: refused",
+			'SafeMessage'
+		],
+		[
+			"0.9.10 v1.5.0: SafeOp for an owned Safe v1.5.0 (its `safe`), under the 4337 module's domain: refused",
+			'SafeOp'
+		]
+	] as const) {
+		it(`${fn} for an owned Safe v1.5.0 is refused once read owned`, async () => {
+			submit.calls = 0;
+			const run = await arrive(
+				caseParams(name),
+				async () => ({ result: TRUE }),
+				'eth_signTypedData_v4'
+			);
+			await vi.waitFor(() => expect(run.view().blocked).not.toBeNull());
+			expect(run.view().blocked).toMatchObject({
+				function: fn,
+				parent: VECTOR.parent,
+				reason: 'owner'
+			});
+			expect(run.reads).toHaveLength(1);
+			const m = resolveSigningMessages('en');
+			expect(selfCallBlockedText(run.view().blocked!, m)).toBe(
+				fill(m.parentSafeBlocked, { function: fn, safe: shortenAddress(VECTOR.parent) })
+			);
+			await run.approve();
+			await run.close();
+			expect(submit.calls).toBe(0);
+			expect(run.answers[0]?.error).toMatchObject({ code: -32603, kind: 'parent_safe_blocked' });
+		});
+	}
 });

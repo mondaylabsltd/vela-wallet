@@ -150,7 +150,7 @@ test.describe('the web wallet (its requester)', () => {
 		);
 	}
 
-	async function fireTakeover(page: Page): Promise<void> {
+	async function fireTakeover(page: Page, to?: string): Promise<void> {
 		await page.evaluate(
 			(tx) => {
 				const w = window as unknown as {
@@ -163,7 +163,7 @@ test.describe('the web wallet (its requester)', () => {
 					.then((result) => (w.__answer = result))
 					.catch((error) => (w.__error = error));
 			},
-			takeover(ACCOUNT, SAFE)
+			{ ...takeover(ACCOUNT, SAFE), ...(to === undefined ? {} : { to }) }
 		);
 	}
 
@@ -210,6 +210,23 @@ test.describe('the web wallet (its requester)', () => {
 		await expect
 			.poll(() => pageError(page))
 			.toMatchObject({ code: -32603, kind: 'parent_safe_blocked' });
+	});
+
+	// 0.9.10: the parent's address written without its `0x` — what the
+	// encoders read as the Safe and 0.9.9's guard did not — is refused at
+	// arrival, -32602, before any read and with no sheet.
+	test('the takeover with a bare-hex `to` is answered -32602 before any read (0.9.10)', async ({
+		page
+	}) => {
+		const reads: unknown[] = [];
+		await openWallet(page, 'owner', reads);
+		await fireTakeover(page, SAFE.slice(2));
+		await expect
+			.poll(() => pageError(page))
+			.toMatchObject({ code: -32602, kind: 'invalid_params' });
+		await expect(page.getByText('Vela can’t sign this')).toHaveCount(0);
+		await expect(page.getByTestId('signing-confirm')).toHaveCount(0);
+		expect(reads).toEqual([]);
 	});
 
 	test('the same request to a Safe this account does not own goes on as before', async ({
@@ -329,6 +346,33 @@ test.describe('the Chrome extension (a real site, its request window)', () => {
 		expect(answer.ok).toBe(false);
 		expect(answer.code).toBe(-32603);
 		expect(answer.message).toMatch(/act for a Safe this account owns/);
+		await context.close();
+	});
+
+	test('the takeover with a bare-hex `to` is answered -32602, never read or signed (0.9.10)', async () => {
+		const context = await loadExtension();
+		const reads: unknown[] = [];
+		await ownedEverywhere(context, reads);
+		await seedWallet(context);
+		const page = await context.newPage();
+		await page.goto(`http://localhost:${PORT}/`);
+
+		const connected = page.evaluate(() =>
+			window.__ask('eth_requestAccounts')
+		) as Promise<AskResult>;
+		const consent = await requestWindow(context);
+		await consent.getByRole('button', { name: 'Connect' }).click();
+		expect((await connected).result).toEqual([ACCOUNT]);
+		await noRequestWindow(context);
+
+		const answer = (await page.evaluate(
+			(tx) => window.__ask('eth_sendTransaction', [{ ...tx, value: '0x0' }]),
+			{ ...takeover(ACCOUNT, SAFE), to: SAFE.slice(2) }
+		)) as AskResult;
+		expect(answer.ok).toBe(false);
+		expect(answer.code).toBe(-32602);
+		expect(reads).toEqual([]);
+		await noRequestWindow(context);
 		await context.close();
 	});
 });
