@@ -195,7 +195,10 @@ replayed by the core and by every shell through the real core.
   Typed-data requests are read as exactly one document; a request with more than one is refused
   (`rust/crates/vela-core/src/typed_data_request.rs`, the VELA-2026-001 fix).
 - **Guarantees.** The sheet shows Vela's own decoding of the bytes that will be signed, with the
-  provenance said. A compromised descriptor service cannot make a call "verified" or green.
+  provenance said. A compromised descriptor service cannot make a call "verified" or green. A
+  reading whose only source is the selector database (4byte) or a fetched descriptor lifts nothing
+  out of "… anyway" (§41, P2-6, `sign_confirm::posture`): a transaction it describes is a plain
+  press only when its simulation is corroborated, and a signature it describes is "… anyway".
 - **Does not guarantee.** That a Fetched or SelectorDb description is true: fetched descriptors are
   neither signed by a publisher nor pinned by hash in the build, and the only fetched one called
   verified is one equal to a built-in (`ClearProvenance::PinnedMatch`; G25). That an EIP-712
@@ -256,7 +259,11 @@ replayed by the core and by every shell through the real core.
   dApp asked unless the person caps it, and the submit guard lets it through only with consent
   for that one approval, in that one leg (`SignApproveOpts.unlimited_approved_legs`).
 - **Guarantees.** No unbounded approval is signed without the sheet having shown it as such, and
-  consent for one does not cover another.
+  consent for one does not cover another. A whole-collection grant (`setApprovalForAll(true)`) is
+  a held danger alone as in a batch, and a carrier past the guard's limits (deeper than four,
+  more than 64 calls, an encoding that does not hold together) is "… anyway", never "no approval"
+  (`GuardView::carrier_unread`; §41, P2-4). A grant an unread carrier makes is caught by its own
+  log in the simulation (§6.4).
 - **Does not guarantee.** That a bounded approval is safe. Signed permits cannot be capped (they
   are signed as asked or refused). Batch legs are judged by the 2^128 line only (no per-leg
   balance). There is no allowance list or revoke screen (KNOWN-BUGS R22-PLAN-1). The signing page
@@ -286,7 +293,14 @@ replayed by the core and by every shell through the real core.
   (`home.multisig.review.stateOneNode`, with the way to add one's own node); a site's guard
   (`isOwner`) stays strict; two that disagree refuse (`ActionState::SigningDisagreed`).
 - **Guarantees.** One lying or compromised node cannot produce a plain verdict: alone it gives
-  "unconfirmed" ("… anyway"); beside an honest node it gives "disagreed". A lie can make Vela
+  "unconfirmed" ("… anyway"); beside an honest node it gives "disagreed". The verdict counts NFTs
+  (ERC-721, ERC-1155) and the approvals the account grants (ERC-20 / ERC-721 `Approval`,
+  `ApprovalForAll`, Permit2) as changes, inside the two-node agreement; a log of those events
+  naming the account that Vela cannot read is "This changes something Vela can't read" and
+  "… anyway", never "No asset changes"; an unbounded grant the simulation finds is a held danger
+  whatever carried it (`sim_outcome::derive_deltas`, `grants_unlimited`, `changes_unread`; §41,
+  P2-3). "Only use my node" trusts a node the person chose, never a URL built from a retired
+  provider key (`network_admin::has_own_rpc`; §41, P2-8). A lie can make Vela
   refuse; it cannot make a multisig member change look declared. A network with one public
   provider never locks a member out of their own multisig.
 - **Does not guarantee.** Independence beyond a registrable-domain heuristic (two brands reselling
@@ -296,7 +310,8 @@ replayed by the core and by every shell through the real core.
   transactions: there is none; those rest on simulation and the guards. Ordinary display reads
   (balances, history) are one node's word. On a single-provider network, who can act for a
   multisig is one node's word (held "… anyway"; G22).
-- **Tests.** Vector `tests/vectors/rules/signing-truth.json` (13 simulation envelopes, 9 `isOwner`
+- **Tests.** Vector `tests/vectors/rules/signing-truth.json` (23 simulation envelopes, 9 `isOwner`
+
   readings, 12 provider URLs, 8 `authority` reads); `tests/r22_signing_truth.rs`; fork `tests/signing_truth_fork.rs`
   (a real drain behind a lying proxy, `tests/fork_proxy`) and `tests/multisig_fork.rs`
   (`a_lying_node_never_gives_a_member_change_a_plain_review`,
@@ -327,8 +342,17 @@ replayed by the core and by every shell through the real core.
   (`sign_confirm::guarded_posture`, §39). A re-check of a verdict already on the sheet keeps its
   door, so a hold or an arm is not cut by it.
 - **Guarantees.** No unread check is confirmed by a tap, a double tap or a press made while the
-  sheet is arriving. With the setting on, nothing unread is signed at all.
-- **Does not guarantee.** That a person reads a held warning. The default is off on purpose
+  sheet is arriving. With the setting on, nothing unread is signed at all. The signing machines
+  hold the gate themselves (§41, P2-5): `sign_request` works the posture out again at approve
+  time from the views the sheet showed (`SignApproveOpts::review`) and takes an "… anyway" only on
+  the person's explicit "… anyway" press (`anyway_confirmed`), never with the setting on, and
+  nothing with no review; the multisig machine does the same in `authorize_signing`
+  (`anyway_confirmed`, `refuse_blind` on every signing event). A transaction whose reading never
+  started cannot be confirmed (`sign_confirm::is_transaction`, §41, P2-7).
+- **Does not guarantee.** That a person reads a held warning. The hold's duration: the core
+  cannot observe a press, only what the shell reports of it (`anyway_confirmed`); a shell that
+  lies about its own views is outside this model.
+ The default is off on purpose
   ([hardening §13](security/hardening.md#13-every-check-vela-could-not-read-is--anyway-review-1-3)):
   networks with one provider or no `eth_simulateV1` would otherwise refuse ordinary transactions.
   The signing page draws "… anyway" as the app's word and has no hold of its own. Hold and the
@@ -520,6 +544,9 @@ blind signing" unless marked otherwise.
 | **… anyway: simulation says it reverts** | the simulation reverts | danger, held | a simulation is one block's view on one or two nodes, not the execution; the decision (review 1-3) was "a revert blocks unless the person goes through … anyway" |
 | **… anyway: multisig state diff or simulation unread** | `Concern::StateUnread` or `Concern::Unsimulated` in a multisig review | held; door `blindRefused` with the setting on | networks without `debug_traceCall`, or one provider |
 | **… anyway: one provider says who can act** (§39) | the member's own multisig flow on a network whose pool holds no other provider (`corroborate::authority_read` → `one_node`): owners, threshold, modules, guard and nonce are one node's word; the review says `home.multisig.review.stateOneNode`, never "checked" | held; every signature asked "… anyway"; refused with Refuse blind signing; "Add your own node" one link away. **Not** for a site's request (§6.2 stays strict) | a network with one public provider would otherwise lock its members out of their own multisig with no way forward |
+| **… anyway: a reading only 4byte or a fetched descriptor gave** (§41, P2-6) | `ClearProvenance::SelectorDb` / `Fetched` and no corroborated simulation (every signature such a reading describes) | held; refused with Refuse blind signing | anyone can register a selector name; a fetched descriptor is the service's word (G25) |
+| **… anyway: something Vela can't read in the simulation** (§41, P2-3) | a log of an asset or approval event naming the account in a shape Vela does not read (`TrustDeltaKind::Unread`, `sim_outcome::changes_unread`) | held; "This changes something Vela can't read"; refused with Refuse blind signing | an unknown event shape must not read as "No asset changes" |
+| **… anyway: a carrier past the guard's limits** (§41, P2-4) | a call nested deeper than four carriers, carrying more than 64 calls, or whose encoding does not hold together (`GuardView::carrier_unread`) | held; refused with Refuse blind signing | the guard bounds its own work; what it did not read is not "no approval" |
 | **eth_sign** | `eth_sign` (signed as EIP-191 wrapped in the account's `SafeMessage`, `rust/crates/vela-core/src/sign_message.rs`) | blind, held; the signing page refuses `eth_sign` | dApp compatibility |
 | **Unlimited approval kept** | an unbounded amount the person does not cap | red line, cap one chip away; consent per approval per leg. **Not** gated by Refuse blind signing (it is read, not blind) | Permit2 and EIP-5792 bundles revert if the approve leg is re-encoded |
 | **Multisig account risk** | a deployed multisig has a module, guard, unknown singleton or unknown fallback handler (`multisig::Risk`, `Gate::Risk`) | a confirmation before **every** signature (`MultisigOperation::AskRisk`). Not gated by Refuse blind signing. **The design document said "stop signing"; the code asks** (`docs/multisig-vault-design.md` §5.2 note). **Decided 2026-11-09: the code's behaviour stands.** Vela never creates a multisig with a module or guard, so one exists only after the members approved adding it (and the state-diff guard flags that write); stopping would lock the funds with no way out, while a held confirmation that names the risk keeps the members informed and the Safe recoverable | members may knowingly use a module; the chain read itself is corroborated |
