@@ -148,9 +148,10 @@
 //! `eth_getCode`, a multisig's authority) is asked with
 //! [`Event::CallRequested::corroborate`]. Once one endpoint answers, the
 //! machine asks a SECOND, independent one ([`super::corroborate::provider_of`]
-//! differs) the same question — at most [`WITNESS_MAX_ASKS`] of them, one
-//! pass, no backoff — and concludes [`RpcCallVerdict::Respond`] naming both
-//! (`witness_url`). The shell hands both bodies to the core, which compares
+//! differs) the same question — one endpoint per other provider, best-scored
+//! first, within [`WITNESS_BUDGET_MS`] (§39), one pass, no backoff — and
+//! concludes [`RpcCallVerdict::Respond`] naming both (`witness_url`), or
+//! (`sole_provider`) that the pool holds no other provider at all. The shell hands both bodies to the core, which compares
 //! what they mean. With "Only use my node" on, the person's node is trusted
 //! alone (`own_node`), and nobody else is asked. Every endpoint a corroborated
 //! read is answered by has reported this chain's id first
@@ -2840,8 +2841,10 @@ fn handle_outcome(
 
 /// R22: the first answer to a corroborated read is in, from `url`. With "Only
 /// use my node" the person's node is trusted alone; otherwise the same
-/// question goes to an independent endpoint ([`WITNESS_MAX_ASKS`] at most, in
-/// the pool's order) — none left, the answer goes back alone.
+/// question goes to every other provider in turn (one endpoint each, the
+/// best-scored first, within [`WITNESS_BUDGET_MS`]) — none left, the answer
+/// goes back alone, and says whether the pool held no other provider at all
+/// (§39).
 fn begin_witness(
     model: &mut Model,
     call_id: &str,

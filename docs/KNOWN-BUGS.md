@@ -115,9 +115,9 @@ fork harness (`multisig_fork.rs` `parent::…`).
 
 **Platform:** Android (test builds only). **Symptom:** After a §28-refused create, the home line says "Vela keeps trying" though nothing is retried. **Severity:** S4. **Workaround:** Point the build at a local service; use Share again.
 
-## R20-15 (open, S4, 2026-11-08, Android) — found in the R20 release-candidate acceptance
+## R20-15 (✅ FIXED 2026-11-12, §39; found 2026-11-08, Android; seen again in Round 22 on desktop, web and Android) — found in the R20 release-candidate acceptance
 
-**Platform:** Android. **Symptom:** A press stop reads "That didn't go through: Network fee ≈ …", naming the fee line as the reason. Nothing is signed. **Severity:** S4. **Workaround:** Press Check again, then Execute.
+**Platform:** Android, desktop, web. **Symptom:** A press stop reads "That didn't go through: Network fee ≈ …", naming the fee line as the reason. Nothing is signed. **Severity:** S4 (S2 with the loop it hid, r22-3). **Fix:** a quote at or under the figure shown now signs the figure shown, so a stop happens only when the fee went up; and the stop says why — `home.multisig.proposal.feeRose`, "The network fee went up to ≈ {{fee}} since you pressed; nothing was signed. Press again to pay {{fee}}." (`docs/multisig-machines.md` §39, `docs/security/hardening.md` §18).
 
 ## R20-16 (open, S4, 2026-11-08, Android) — found in the R20 release-candidate acceptance
 
