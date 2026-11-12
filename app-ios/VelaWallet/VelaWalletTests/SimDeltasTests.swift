@@ -129,7 +129,7 @@ struct SimDeltasTests {
     private func outcome(_ answer: RpcOutcome) -> SigningController.Simulation {
         // Two independent nodes that agree (R22): one node's word alone is
         // `unconfirmed` — `R22SigningTruthTests` holds that.
-        SigningController.simulation(of: simOutcome(user: me, replyJson: SigningController.simReply(.agreed(answer))))
+        SigningController.simulation(of: simOutcome(user: me, replyJson: SigningController.simReply(.agreed(answer)), valueWei: nil))
     }
 
     /// A call that reverted is DANGER, with its reason — the old parser read
@@ -179,7 +179,7 @@ struct SimDeltasTests {
             ]]],
         ]]
         #expect(outcome(.ok(result)) == .answered)
-        let record = simOutcome(user: me, replyJson: SigningController.simReply(.agreed(.ok(result))))
+        let record = simOutcome(user: me, replyJson: SigningController.simReply(.agreed(.ok(result))), valueWei: nil)
         let deltas = try #require(
             try JSONSerialization.jsonObject(with: Data(record.deltasJson.utf8)) as? [[String: Any]]
         )
