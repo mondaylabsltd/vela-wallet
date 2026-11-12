@@ -1787,10 +1787,8 @@ fn a_records_name_is_read_from_the_chain_where_it_can_be() {
     let registry = vela_core::multisig::GENESIS_REGISTRY.to_ascii_lowercase();
     world.rpc_hooks.push(Box::new(move |chain, method, params| {
         let to = params[0]["to"].as_str().unwrap_or("").to_ascii_lowercase();
-        (chain == 100 && method == "eth_call" && to == registry).then(|| {
-            vela_core::app::multisig_shell::MultisigShellResult::RpcResult {
-                result: json!(ret.clone()),
-            }
+        (chain == 100 && method == "eth_call" && to == registry).then(|| Res::RpcResult {
+            result: json!(ret.clone()),
         })
     }));
     let mut sut = started(&mut world, vec![100]);

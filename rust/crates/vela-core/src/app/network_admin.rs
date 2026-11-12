@@ -4838,7 +4838,6 @@ fn drop_only_mine_unchosen(model: &mut Model) -> Command<NetEffect, Event> {
 }
 
 /// "Only use my node" switched (owner decision 2026-10-28). Offered only for
-
 /// a network whose saved RPC is the person's own; anywhere else there is no
 /// node of theirs to keep to, and the event changes nothing. Persisted with
 /// the network's config, and the chain's pool reloads at once so the next

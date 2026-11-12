@@ -996,7 +996,6 @@ mod posture {
     }
 
     /// §41 (P2-7): a transaction whose reading never started
-
     /// (`ClearSurface::None`) is not "not a transaction": the confirm stays
     /// shut "Reading…" until it reads, and its posture is not a plain press.
     #[test]
@@ -1035,7 +1034,6 @@ mod posture {
     }
 
     /// §41 (P2-3 / P2-4): what a corroborated answer says decides too — a log
-
     /// naming the account that nobody could read is "… anyway"; an unbounded
     /// grant the simulation found (whatever carried it) is a held danger; a
     /// bounded one is shown and is not.

@@ -1053,6 +1053,9 @@ pub enum SignEffect {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "SignEvent"))]
+// §41: `ApproveTapped` carries the sheet's views back (`SignApproveOpts::review`);
+// an event is built once per press and moved, never kept in bulk.
+#[allow(clippy::large_enum_variant)]
 pub enum Event {
     /// Every operation in flight on this device, as the tracker last said
     /// (`tx_tracker::in_flight_ops_json` of its view — forwarded on every

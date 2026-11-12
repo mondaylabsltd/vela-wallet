@@ -887,7 +887,6 @@ fn an_anyway_review_signs_only_on_the_persons_anyway() {
 }
 
 /// §39: two independent nodes that answer who can act differently are a
-
 /// real signal — nothing is signed, not even "… anyway", and it is said as
 /// the disagreement it is (`SigningDisagreed`), never "can't reach".
 #[test]

@@ -3309,7 +3309,6 @@ pub const MAX_CREATION_INPUT_HEX: usize = 512 * 1024;
 pub const MAX_CREATION_CANDIDATES: usize = 32;
 
 /// What a Safe not deployed on a chain holds the moment its genesis' setup
-
 /// has run there — for a simulation that puts it in place with a state
 /// override (`multisig_review`): the singleton it runs (the L2 one when the
 /// allowed `setupToL2` hook switches it, on any chain but Ethereum), its

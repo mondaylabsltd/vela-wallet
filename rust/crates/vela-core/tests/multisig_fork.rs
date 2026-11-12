@@ -968,7 +968,7 @@ mod parent {
     use super::*;
     use vela_core::app::parent_safe_guard::{ParentReason, SafeOwnerAnswer};
     use vela_core::app::sign_request::{
-        Event as SignEvent, SignAccountRef, SignApproveOpts, SignDappIdentity, SignErrorKind,
+        Event as SignEvent, SignAccountRef, SignDappIdentity, SignErrorKind,
         SignOperation as SignOp, SignRequest, SignResponsePayload, SignShellResult, SignSurface,
     };
 

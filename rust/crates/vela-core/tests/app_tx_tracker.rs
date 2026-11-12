@@ -2851,7 +2851,7 @@ fn a_lookback_that_cannot_reach_the_submit_never_proves_not_sent() {
 /// the bundler accepts it; answer the record it persisted and the handoff.
 fn dapp_submitted() -> (String, vela_core::app::sign_request::SignTrackerHandoff) {
     use vela_core::app::sign_request::{
-        Event as SignEvent, SignAccountRef, SignApproveOpts, SignOperation as SignOp, SignRequest,
+        Event as SignEvent, SignAccountRef, SignOperation as SignOp, SignRequest,
         SignShellResult as SignRes,
     };
     let mut sign = DomainDriver::<SignRequest>::new();
