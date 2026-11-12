@@ -163,6 +163,7 @@
     "feeUncheckedHeld": "Không kiểm tra được giao dịch có chạy được không — Thực thi sẽ kiểm tra lại.",
     "feeRetry": "Kiểm tra lại",
     "feeSigning": "Đang ký với mức phí này — phí giữ nguyên cho đến khi bạn xác nhận hoặc huỷ.",
+    "feeRose": "Phí mạng đã tăng lên khoảng {{fee}} kể từ khi bạn nhấn; chưa có gì được ký. Nhấn lần nữa để trả {{fee}}.",
     "feeSetup": "Bao gồm thiết lập một lần trên {{network}} ≈ {{amount}}:",
     "feeSetupPlain": "Bao gồm thiết lập một lần trên {{network}}:",
     "setupMultisig": "triển khai multisig này",
@@ -361,6 +362,7 @@
     "signRiskConfirm": "Tôi hiểu rủi ro, ký",
     "signRiskCancel": "Không ký",
     "signUnchecked": "Vela không kiểm tra được ai có thể hành động cho đa chữ ký này trên {{network}}, nên chưa ký ở đó. Hãy thử lại sau giây lát.",
+    "signDisagreed": "Hai nút độc lập trên {{network}} trả lời khác nhau về việc ai có thể hành động cho ví đa chữ ký này, nên Vela sẽ không ký ở đó. Hãy thêm nút của riêng bạn trong Cài đặt để kiểm tra bằng nút bạn tin cậy, hoặc thử lại sau.",
     "ownerNotBound": "Trên {{network}}, thành viên {{address}} là một hợp đồng không gắn với lần tạo của chính nó ở đó — ai triển khai được tại địa chỉ đó sẽ nắm phiếu của nó."
    },
    "external": {
@@ -732,6 +734,8 @@
     },
     "stateUnconfirmed": "Chỉ một nút trên {{network}} trả lời nên Vela không thể xác nhận việc chạy giao dịch thay đổi gì trong ví đa chữ ký. Chỉ còn cách Vela đọc giao dịch.",
     "stateDisagreed": "Hai nút độc lập trên {{network}} trả lời khác nhau về việc chạy giao dịch thay đổi gì trong ví đa chữ ký. Chỉ còn cách Vela đọc giao dịch.",
+    "stateOneNode": "Chỉ một nút có thể xác nhận ai có thể hành động trên {{network}} và việc thực thi sẽ thay đổi gì trong ví đa chữ ký. Hãy thêm nút của riêng bạn trong Cài đặt để được kiểm tra hai lần.",
+    "addOwnNode": "Thêm nút của riêng bạn",
     "blindRefused": "Vela sẽ không ký ở đây: “Từ chối ký mù” đang bật và một phần giao dịch này không thể kiểm tra. Bạn có thể đổi trong Cài đặt."
    },
    "notify": {

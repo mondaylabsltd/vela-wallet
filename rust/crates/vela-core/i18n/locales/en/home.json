@@ -239,6 +239,7 @@
         "feeUncheckedHeld": "Couldn’t check whether it would run — Execute checks again.",
         "feeRetry": "Check again",
         "feeSigning": "Signing at this fee — it stays fixed until you confirm or cancel.",
+        "feeRose": "The network fee went up to ≈ {{fee}} since you pressed; nothing was signed. Press again to pay {{fee}}.",
         "feeSetup": "Includes one-time setup on {{network}} ≈ {{amount}}:",
         "feeSetupPlain": "Includes one-time setup on {{network}}:",
         "setupMultisig": "deploying this multisig",
@@ -437,6 +438,7 @@
         "signRiskConfirm": "I understand the risk — sign",
         "signRiskCancel": "Don't sign",
         "signUnchecked": "Vela couldn't check who can act for this multisig on {{network}}, so it won't sign there yet. Try again in a moment.",
+        "signDisagreed": "Two independent nodes on {{network}} gave different answers about who can act for this multisig, so Vela won't sign there. Add your own node in Settings to check with one you trust, or try again later.",
         "ownerNotBound": "On {{network}}, member {{address}} is a contract nothing ties to its own creation there — whoever can deploy at that address would hold its vote."
       },
       "external": {
@@ -808,6 +810,8 @@
         },
         "stateUnconfirmed": "Only one node on {{network}} answered, so Vela couldn’t confirm what running it changes in the multisig. Only Vela’s reading of the transaction stands.",
         "stateDisagreed": "Two independent nodes on {{network}} disagree about what running it changes in the multisig. Only Vela’s reading of the transaction stands.",
+        "stateOneNode": "Only one node could confirm who can act on {{network}} and what running it changes in the multisig. Add your own node in Settings to have it checked twice.",
+        "addOwnNode": "Add your own node",
         "blindRefused": "Vela won’t sign this here: “Refuse blind signing” is on, and part of this transaction couldn’t be checked. You can change it in Settings."
       },
       "notify": {

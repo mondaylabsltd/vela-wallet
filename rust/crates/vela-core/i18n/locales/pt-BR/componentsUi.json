@@ -340,6 +340,7 @@
       "simDisagreed": "Dois nós independentes deram respostas diferentes sobre o que esta transação faz. Revise antes de assinar.",
       "simOwnNode": "Verificado apenas pelo seu próprio nó",
       "ownNodeHint": "Para verificar com um nó em que você confia, adicione o seu e ative “Usar só meu nó” nesta rede.",
+      "feeRose": "A taxa de rede subiu desde que você tocou, então nada foi assinado. A taxa exibida é a nova — toque de novo para pagá-la.",
       "confirmAgain": "Toque de novo para confirmar"
     },
     "signingApprove": {

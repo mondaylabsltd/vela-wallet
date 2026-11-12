@@ -239,6 +239,7 @@
         "feeUncheckedHeld": "Ob sie durchläuft, ließ sich nicht prüfen — Ausführen prüft erneut.",
         "feeRetry": "Erneut prüfen",
         "feeSigning": "Signiert wird mit dieser Gebühr – sie bleibt fest, bis du bestätigst oder abbrichst.",
+        "feeRose": "Die Netzwerkgebühr ist seit deinem Tippen auf ≈ {{fee}} gestiegen; nichts wurde signiert. Tippe erneut, um {{fee}} zu zahlen.",
         "feeSetup": "Enthält die einmalige Einrichtung auf {{network}} ≈ {{amount}}:",
         "feeSetupPlain": "Enthält die einmalige Einrichtung auf {{network}}:",
         "setupMultisig": "Bereitstellen dieses Multisigs",
@@ -437,6 +438,7 @@
         "signRiskConfirm": "Risiko verstanden – signieren",
         "signRiskCancel": "Nicht signieren",
         "signUnchecked": "Vela konnte nicht prüfen, wer auf {{network}} für dieses Multisig handeln kann, und signiert dort deshalb noch nicht. Versuche es gleich noch einmal.",
+        "signDisagreed": "Zwei unabhängige Knoten auf {{network}} haben unterschiedlich beantwortet, wer für dieses Multisig handeln kann, daher signiert Vela dort nicht. Füge in den Einstellungen deinen eigenen Knoten hinzu, um mit einem vertrauenswürdigen zu prüfen, oder versuche es später erneut.",
         "ownerNotBound": "Auf {{network}} ist Mitglied {{address}} ein Vertrag, den nichts an seine eigene Erstellung dort bindet – wer an dieser Adresse bereitstellen kann, hätte seine Stimme."
       },
       "external": {
@@ -808,6 +810,8 @@
         },
         "stateUnconfirmed": "Auf {{network}} hat nur ein Knoten geantwortet, daher konnte Vela nicht bestätigen, was die Ausführung am Multisig ändert. Es gilt nur Velas Lesart der Transaktion.",
         "stateDisagreed": "Zwei unabhängige Knoten auf {{network}} sind uneins, was die Ausführung am Multisig ändert. Es gilt nur Velas Lesart der Transaktion.",
+        "stateOneNode": "Nur ein Knoten konnte bestätigen, wer auf {{network}} handeln kann und was die Ausführung im Multisig ändert. Füge in den Einstellungen deinen eigenen Knoten hinzu, damit doppelt geprüft wird.",
+        "addOwnNode": "Eigenen Knoten hinzufügen",
         "blindRefused": "Vela signiert das hier nicht: „Blindes Signieren ablehnen“ ist an, und ein Teil dieser Transaktion ließ sich nicht prüfen. Du kannst das in den Einstellungen ändern."
       },
       "notify": {

@@ -242,6 +242,7 @@
         "feeUncheckedHeld": "Impossible de vérifier si elle passerait — Exécuter vérifie à nouveau.",
         "feeRetry": "Vérifier à nouveau",
         "feeSigning": "Signature à ces frais : ils restent fixes jusqu’à ce que vous confirmiez ou annuliez.",
+        "feeRose": "Les frais de réseau sont montés à ≈ {{fee}} depuis votre appui ; rien n’a été signé. Appuyez à nouveau pour payer {{fee}}.",
         "feeSetup": "Comprend une mise en place unique sur {{network}} ≈ {{amount}} :",
         "feeSetupPlain": "Comprend une mise en place unique sur {{network}} :",
         "setupMultisig": "déployer ce multisig",
@@ -444,6 +445,7 @@
         "signRiskConfirm": "Je comprends le risque, signer",
         "signRiskCancel": "Ne pas signer",
         "signUnchecked": "Vela n’a pas pu vérifier qui peut agir pour ce multisig sur {{network}}, donc il n’y signera pas encore. Réessayez dans un instant.",
+        "signDisagreed": "Deux nœuds indépendants de {{network}} ont donné des réponses différentes sur qui peut agir pour ce multisig, donc Vela n’y signera pas. Ajoutez votre propre nœud dans les Réglages pour vérifier avec un nœud de confiance, ou réessayez plus tard.",
         "ownerNotBound": "Sur {{network}}, le membre {{address}} est un contrat que rien ne lie à sa propre création là-bas — quiconque peut déployer à cette adresse détiendrait sa voix."
       },
       "external": {
@@ -815,6 +817,8 @@
         },
         "stateUnconfirmed": "Un seul nœud a répondu sur {{network}} : Vela n’a pas pu confirmer ce que l’exécution change dans le multisig. Seule la lecture de la transaction par Vela tient.",
         "stateDisagreed": "Deux nœuds indépendants sur {{network}} ne s’accordent pas sur ce que l’exécution change dans le multisig. Seule la lecture de la transaction par Vela tient.",
+        "stateOneNode": "Un seul nœud a pu confirmer qui peut agir sur {{network}} et ce que son exécution change dans le multisig. Ajoutez votre propre nœud dans les Réglages pour qu’il soit vérifié deux fois.",
+        "addOwnNode": "Ajouter votre propre nœud",
         "blindRefused": "Vela ne signera pas ici : « Refuser la signature à l’aveugle » est activé et une partie de cette transaction n’a pas pu être vérifiée. Vous pouvez le modifier dans les Réglages."
       },
       "notify": {

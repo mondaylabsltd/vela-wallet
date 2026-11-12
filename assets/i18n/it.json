@@ -560,8 +560,8 @@
   "txErrorProposalNotSupported": "Questa app non può ancora proporre transazioni multisig, quindi non è stato firmato né proposto nulla.",
   "maxMoved": "Il massimo ora è {{to}} {{symbol}} (prima {{from}}): la commissione di rete è stata ricalcolata, quindi è cambiato l’importo tenuto da parte per pagarla.",
   "feeSigning": "Firma con questa commissione e questo importo: non cambiano finché non confermi o annulli.",
-  "feeMoved": "La commissione di rete è stata ricalcolata prima della firma, quindi non è stato firmato nulla. Quella sopra è la nuova commissione: conferma di nuovo per inviare con questa.",
-  "feeMovedMax": "La commissione di rete è stata ricalcolata prima della firma, quindi non è stato firmato nulla. Con la nuova commissione sopra, il massimo ora è {{to}} {{symbol}} (prima {{from}}): conferma di nuovo per inviarlo.",
+  "feeMoved": "La commissione di rete è salita da quando hai premuto, quindi non è stato firmato nulla. Quella sopra è la nuova commissione: premi di nuovo per pagarla.",
+  "feeMovedMax": "La commissione di rete è salita da quando hai premuto, quindi non è stato firmato nulla. Il massimo ora è {{to}} {{symbol}} (era {{from}}) con la nuova commissione sopra: premi di nuovo per inviarlo.",
   "txReviewAgain": "Rivedi",
   "txSendAgain": "Invia di nuovo",
   "txCheckingElapsed": "Controllo dell’invio in corso… {{elapsed}} s",
@@ -1709,6 +1709,7 @@
    "simDisagreed": "Due nodi indipendenti hanno dato risposte diverse su cosa fa questa transazione. Controllala prima di firmare.",
    "simOwnNode": "Verificato solo dal tuo nodo",
    "ownNodeHint": "Per verificare con un nodo di cui ti fidi, aggiungi il tuo e attiva “Usa solo il mio nodo” per questa rete.",
+   "feeRose": "La commissione di rete è salita da quando hai premuto, quindi non è stato firmato nulla. La commissione mostrata è quella nuova: premi di nuovo per pagarla.",
    "confirmAgain": "Premi di nuovo per confermare"
   },
   "signingApprove": {
