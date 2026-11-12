@@ -157,6 +157,33 @@ describe('a passkey failure the core named', () => {
 		).toBe('onboarding.login.alertSignInFailedBody:{"message":"boom"}');
 	});
 
+	/**
+	 * r22-8: the passkey index listed a group whose members do not recompute
+	 * to the address it recorded (`login.rs`, the unit fetch). The sheet read
+	 * "registry group does not match its address — Make sure your device has
+	 * Face ID, Touch ID, or fingerprint set up": the core's developer words,
+	 * and biometric advice for a failure no biometric had any part in. It says
+	 * what happened instead — Vela could not check which wallet this passkey
+	 * opens, and nothing was saved — and no word about Face ID.
+	 */
+	it('r22-8: a registry answer that does not match its address is said in catalog words, with no biometric advice', async () => {
+		const { promptCopy } = await import('./copy');
+		const t = (key: string, params?: Record<string, string | number>) =>
+			params ? `${key}:${JSON.stringify(params)}` : key;
+		const said = promptCopy(
+			{
+				type: 'sign_in_failed',
+				detail: 'registry group does not match its address',
+				phone_link: false
+			},
+			t
+		);
+		expect(said.title).toBe('onboarding.login.alertSignInFailedTitle');
+		expect(said.message).toBe('onboarding.login.registryUnreachableBody');
+		expect(said.message).not.toContain('registry group');
+		expect(said.message).not.toContain('alertSignInFailedBody');
+	});
+
 	it('every sentence the core can name ships in the flow catalog', async () => {
 		const { FLOW_KEYS, PASSKEY_ERROR_KEYS } = await import('$lib/i18n/messages');
 		for (const key of [...PASSKEY_ERROR_KEYS, 'onboarding.common.phoneLinkFailed']) {
