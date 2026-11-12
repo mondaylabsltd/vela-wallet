@@ -57,7 +57,7 @@ jobs:
     name: Validate the packaging metadata
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: versionName / versionCode / applicationId are set
         run: |
           f=app-android/vela-wallet/app/build.gradle.kts
@@ -72,22 +72,22 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           # versionCode = `git rev-list --count HEAD` (spec 088); a shallow clone counts 1.
           fetch-depth: 0
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: '17'
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
         with:
           toolchain: 1.97.1
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: rust
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
       # rust/scripts/build-android.sh drives cargo-ndk and finds the NDK under
       # $ANDROID_SDK_ROOT/ndk/ (the runner image ships one; the script picks
       # the newest).
@@ -131,7 +131,7 @@ jobs:
           mv "$RUNNER_TEMP/SHA256SUMS-android" SHA256SUMS-android
           cat SHA256SUMS-android
       # The artifact IS the deliverable: download it from the run, sign, submit.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: android
           path: app-android/vela-wallet/out/*

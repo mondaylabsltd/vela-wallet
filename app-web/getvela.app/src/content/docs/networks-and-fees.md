@@ -91,7 +91,10 @@ their testnets, with Vela's relay):
   1.1 × (1.5 × the next block's base fee + a tip) for *slow* and *standard*, with
   1.75 × the base fee for *fast*, the tips being the 25th, 50th and 70th
   percentile of recent blocks' rewards. The default speed is *standard*.
-- **Fee = `settlementGas × inBandFeePerGas`**, with a minimum of about $0.01.
+- **Fee = `settlementGas × inBandFeePerGas`, plus 12.5%**, with a minimum of about
+  $0.01. The 12.5% is the most a base fee can rise in one block: it lets the relay's
+  quote move a little between the screen and your signature without stopping the
+  send. It is charged, not refunded; the relay keeps it.
 
 The wallet does not take either figure on trust. It refuses a quote whose
 `settlementGas` is above the smaller of the gas limits the operation is signed

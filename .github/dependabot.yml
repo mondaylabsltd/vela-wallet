@@ -228,6 +228,15 @@ updates:
       prefix: "build(deps/ios)"
 
   # ---- CI -----------------------------------------------------------------
+  # Every third-party action in .github/workflows is pinned to a full commit
+  # SHA with its release tag as a comment (`uses: o/r@<40-hex> # v4.4.0`); a
+  # tag can be moved, a commit cannot. Dependabot bumps the SHA and the
+  # comment together, to the commit the newer tag points at. The one action
+  # pinned to a BRANCH head, dtolnay/rust-toolchain (`# stable branch head`),
+  # has no release tags for Dependabot to follow: move it by hand
+  # (`git ls-remote https://github.com/dtolnay/rust-toolchain refs/heads/stable`).
+  # Every step that uses it names its toolchain (1.97.1) except four in the
+  # desktop packaging workflows, which take the branch's default (`stable`).
   - package-ecosystem: github-actions
     directory: /
     schedule:

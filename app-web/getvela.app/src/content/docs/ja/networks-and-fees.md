@@ -12,7 +12,7 @@ source: ba67791e85d6
 
 <!-- r23-translation-banner -->
 <Callout type="warning" title="This translation is out of date">
-This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/networks-and-fees">English page</a> is authoritative for security statements.
+This translation predates the English page's revision of 9 November 2026. Among what changed is <strong>the fee formula</strong>: where the relay bills the gas used (Ethereum, Gnosis, Polygon, BNB Chain and their testnets, with Vela's relay), the fee is the gas the relay bills × its published price per gas, plus 12.5%, not "3 × reserved gas × gas price" as below; the 3 × formula now applies only to a relay that publishes neither figure. The <a href="https://getvela.app/docs/networks-and-fees">English page</a> is authoritative for fees and for security statements.
 </Callout>
 
 ## 内蔵のネットワーク

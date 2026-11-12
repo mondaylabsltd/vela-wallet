@@ -46,7 +46,7 @@ jobs:
     name: Validate the manifest
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: The manifest must parse and keep its measured constraints
         run: |
           node - <<'JS'
@@ -73,13 +73,13 @@ jobs:
       run:
         working-directory: app-web/vela-wallet
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # Same pnpm/Node setup as the `web` job in ci.yml: pnpm first, so
       # setup-node can resolve the store path for its cache.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           package_json_file: app-web/vela-wallet/package.json
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -121,14 +121,14 @@ jobs:
           name="vela-wallet-extension-${version}"
           ls -l "${name}.zip" "${name}-chrome-web-store.zip"
           echo "name=${name}" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: chrome-extension
           path: app-web/vela-wallet/${{ steps.package.outputs.name }}.zip
           if-no-files-found: error
       # Not attached to a release (release.yml downloads `chrome-extension`
       # only): this one is uploaded to the Chrome Web Store dashboard by hand.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: chrome-web-store
           path: app-web/vela-wallet/${{ steps.package.outputs.name }}-chrome-web-store.zip

@@ -142,7 +142,11 @@ export const EVENTS = {
 	// A site's requests (the extension's dApp channel).
 	dapp_connect_approved: ['chain'],
 	dapp_connect_rejected: ['chain'],
-	dapp_request_approved: ['kind', 'chain'],
+	// An approved request carries nothing (final review): an approved
+	// signature — a permit, an order, a sign-in — is the kind of thing a site
+	// takes on chain itself, and its kind with its network and time would
+	// point at that transaction. A rejection signs nothing, so it keeps both.
+	dapp_request_approved: [],
 	dapp_request_rejected: ['kind', 'chain'],
 	// Settings.
 	setting_language_changed: ['locale'],

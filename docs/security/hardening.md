@@ -1,6 +1,6 @@
 # Hardening: closing the doors (Round 21), making the defences true (Round 22)
 
-*The decision record behind [`docs/SECURITY-MODEL.md`](../SECURITY-MODEL.md), which summarises it for reviewers. Every path, symbol and id cited here is checked to exist by `scripts/ci/check-doc-claims.mjs` in CI (last run clean at commit `fa6083c87`, 2026-11-09).*
+*The decision record behind [`docs/SECURITY-MODEL.md`](../SECURITY-MODEL.md), which summarises it for reviewers. Every path, symbol and id cited here is checked to exist by `scripts/ci/check-doc-claims.mjs` in CI (last run clean at commit `dff291256` with the final review's docs and CI fixes, branch `final-docs-ci`, 2026-11-12).*
 
 Round 21 closes the code items of the 2026-11-07 core-dev security review that the
 earlier P0 work left open: review items 1-6 (relay power), 1-8 (telemetry), 1-1 (web origin
@@ -153,14 +153,23 @@ against the wallet's model here; that is an R22 candidate.
   `analytics/consent.svelte.ts` counts only an explicit `vela.analytics = on`. Before R21 the
   default was on and only `off` was written, so a browser that never chose carries no value,
   gets the new default (off), and is never reported. One that switched it off stays off.
-- **Every transaction-outcome event is removed**, so no event, with its network, its time
-  and the IP every web request carries, can be matched to an on-chain transaction:
+- **Every transaction-outcome event is removed**, so that no event says how a transaction
+  ended:
   - `send_submitted`, `send_confirmed`, `send_failed` (the tracker watch that fed them is
     deleted);
   - `backup_keys_started` / `_done`;
   - a multisig proposal's approval;
   - a site's request whose kind becomes a transaction (`send_transaction`, `send_calls`).
   `catalog.ts` `TX_OUTCOME_EVENTS` and `TX_REQUEST_KINDS`, held by `payload.test.ts`.
+- **A site's approved request is counted bare** (final review, 2026-11-12):
+  `dapp_request_approved` carries no `kind` and no `chain`. An approved signature (a permit,
+  an order) is something a site may take on chain itself, and "a typed-data signature on
+  chain N at time T" would point at that transaction. A rejection signs nothing, so
+  `dapp_request_rejected` keeps both. The catalog drops the fields whatever a call site
+  passes (`payload.test.ts`, "a site's approved request says neither its kind nor its
+  network").
+- **What is still sent with every hit**: its time, and the IP and browser type every web
+  request carries. No event carries an address, an amount or a hash.
 - Words:
   - the Settings subtitle, fifteen locales: "Off unless you turn it on. Only which screens
     open and which steps finish — never addresses, amounts, names or transactions.";
@@ -204,10 +213,24 @@ every page (`publickey-credentials-get=(), publickey-credentials-create=()`, as 
 report's own CSP is kept, with framing appended).
 
 **Checked under the headers.** The whole e2e suite runs against `e2e/preview.mjs` (the
-Worker bundle on workerd with `_headers` applied). `e2e/security-headers.e2e.ts` asserts:
+Worker bundle on workerd with `_headers` applied), nightly. `e2e/security-headers.e2e.ts` also
+runs in CI's `web` job on every pull request (since the final review; before it, nightly only).
+It asserts:
 - a prerendered page and a Worker response carry the headers;
 - the page CSP is hash-based;
 - the wallet boots its wasm core with no CSP violation.
+
+The site's header list is pinned by `app-web/getvela.app/src/lib/security-headers.test.ts`,
+which runs in CI's `site` job on every pull request (since the final review; before it, by hand
+only) and before every `bun run deploy`.
+
+**Left open: getvela.app runs a third-party script with no `script-src`.** The site loads
+Rybbit's script (`https://tj.appsdata.org/api/script.js`, unpinned, no Subresource Integrity) on
+every page but `/chain-setup`, and its CSP is `frame-ancestors 'none'` alone. Recommended: remove
+it, or self-host a pinned copy with SRI, then add a `script-src` CSP (the site's inline SvelteKit
+scripts need kit's hash-mode CSP first, so this is not a one-line change). Leaving the tag off
+`/chain-setup` does not protect that page's deployer key, which is in the origin's
+`localStorage` (SECURITY-MODEL G27).
 
 **Go-live: the other `*.getvela.app` hosts** (in other repositories; not edited here). Each
 serves pages or responses under the passkeys' registrable domain. A script running on any
@@ -453,7 +476,9 @@ signable; a plain message is not a sign-in.
   (spender, token, amount, deadline; off-chain, signed verbatim under consent), the
   built-in descriptor reads them when Permit2 is the verifying contract and the four fields
   Permit2 defines are exactly there (the witness type is the dApp's), and the signing page
-  reads them too.
+  reads `PermitWitnessTransferFrom` the same way. It reads `PermitBatchWitnessTransferFrom`
+  (and `PermitBatch`, `PermitBatchTransferFrom`) as generic typed data ("Round 22: left
+  open"; SECURITY-MODEL G11).
 - **Carried calls** (`approval_guard::calldata_approvals`): an approval inside
   `multicall(bytes[])` (and its deadline / block-hash forms), Multicall3 `aggregate*`, or a
   Safe `multiSend` is detected, to four carriers deep, at most 64 calls a carrier. Whether a
@@ -1143,8 +1168,9 @@ PeerConnect client was a built `dist/` with a source commit that turned out to b
 
 **The signing page** was already reproducible: `build-single` concatenates with no minifier,
 timestamp or environment, and Bun and Node produce the same bytes. What was missing is that
-nothing enforced it. Its `--check` is now the blocking `signing-page` CI job on every PR, under
-Bun and under Node. It also checks `dist/sw.js` (R22-3).
+nothing enforced it. Its `--check` is now the `signing-page` CI job on every PR, under Bun and
+under Node; it blocks a merge once branch protection requires it (go-live). It also checks
+`dist/sw.js` (R22-3).
 
 **The web core.** The repository used to say the wasm bytes were "not reproducible across
 machines", and `build-web.mjs --check` compared a source fingerprint and the ABI only. Two
@@ -1180,16 +1206,25 @@ inside that image and compares every output byte for byte.
   `/rustc/<commit>/…`) shift every later offset in the data section, which fits most of that.
   The remap removes them. This is a likely explanation, not a proven one.
 - **Decision.** The local builds were reproducible twice from clean, so the CI compare is
-  byte-exact and blocking. If the first CI run shows that the Linux container's bytes differ
-  from a macOS build's, the job fails and uploads what it built (`web-core-container-build`).
+  byte-exact and fails the run (it blocks a merge once branch protection requires it). If the
+  first CI run shows that the Linux container's bytes differ from a macOS build's, the job
+  fails and uploads what it built (`web-core-container-build`).
   The fix is then to commit the container's output (`rust/scripts/reproduce-web.sh`'s tree),
   so the shipped module is the CI-built, attested one, and to make `build:wasm` run in the
   container. That is an owner item for the first CI run.
 
 **CI.** `web-core-reproducible` runs `reproduce-web.sh` on every PR, and fails when the
-committed module is not what the commit builds. On `main` it also attests the CI-built module
-and glue (`actions/attest-build-provenance`), so `gh attestation verify` can bind
-wallet.getvela.app's bytes to a workflow run and a commit.
+committed module is not what the commit builds. A failing job stops a merge only if branch
+protection lists it as a required check, which is an owner setting (go-live, "Branch
+protection"); this repository cannot show or enforce it, and the same holds for `signing-page`
+and every other job called blocking here.
+
+On a push to `main`, and only after its rebuild matched the committed bytes, the job also
+attests the CI-built module and glue (`actions/attest-build-provenance`), so
+`gh attestation verify` can bind wallet.getvela.app's bytes to a workflow run and a commit.
+That needs a merge to `main` whose container build matches. `main` (v0.9.8) predates the job,
+so no served module is attested today, and with Linux reproducibility unmeasured (G5 in
+SECURITY-MODEL) the first such run may instead fail and keep the container's build.
 
 ## R22-3. The signing page: check-then-open (review 0-5)
 
@@ -1425,8 +1460,10 @@ DNSSEC/CAA/registry lock) is done. The owner decides; nothing here depends on it
      lists. That version is not in `FROM_BYTES`, so it opens at its address, as before. Nothing
      breaks; the bytes-opening starts once `674b7333` is live.
    - `LAUNCH` is unchanged. Move it with R21's page, once both are deployed.
-2. **Branch protection:** add `supply-chain`, `signing-page` and `web-core-reproducible` to the
-   required checks.
+2. **Branch protection:** add `supply-chain`, `signing-page`, `web-core-reproducible`, `site`
+   and `web` to the required checks (and `rust` / `rust-macos`, as ci.yml notes). Until a job is
+   required, "blocking on every PR" in these documents means "runs and goes red on every PR";
+   a red job does not stop a merge. This repository cannot show which checks are required.
 3. **Turn on Dependabot alerts and security updates** (Settings → Code security). The file
    alone only schedules version updates.
 4. **Desktop release blocker:** move the gpui pin to zed `ac5af8b9` or later (the GPL-3.0
@@ -1439,8 +1476,21 @@ DNSSEC/CAA/registry lock) is done. The owner decides; nothing here depends on it
    artifact, and run `build:wasm` in the container from then on (R22-2).
 8. **The phones' page path end to end** (the R21 tester): build the harness for a page-signed
    send and a multisig approval on an emulator or simulator, using `VELA_PAGE_LAUNCH` (above).
-6. **Round 22 — signing page `e7ee3925…`** (first in `BUILD_ALLOWED`; `LAUNCH` unchanged):
+9. **Round 22 — signing page `e7ee3925…`** (first in `BUILD_ALLOWED`; `LAUNCH` unchanged):
    deploy `app-web/trusted-signer/dist/` with it.
-7. **Round 22 — the genesis service** (`sgr-mailbox`): review and commit the uncommitted
-   changes on a `mailbox-r22` branch (§10), push, deploy, and pin it for the nightly fork
-   job (`SGR_MAILBOX_REF`).
+10. **Round 22 — the genesis service** (`sgr-mailbox`): review and commit the uncommitted
+    changes on a `mailbox-r22` branch (§10), push, deploy, and pin it for the nightly fork
+    job (`SGR_MAILBOX_REF`). Until `vars.SGR_MAILBOX_REF` is set, the nightly `multisig-fork`
+    job skips itself, and with it every fork test (`multisig_fork`, `signing_truth_fork`,
+    `lying_index_fork`, `safe_op_window_fork`, `erc6492_fork`).
+11. **Merge to `main` before pointing anyone at the published links** (final review). These
+    link to files under `main` that exist only on `feat/multisig-account`, so they 404 until
+    the merge: security.txt's `Policy` (`…/blob/main/SECURITY.md`, served by both sites), the
+    audits page's links to SECURITY.md, SECURITY-MODEL.md, `docs/security/advisories` and
+    `incidents.md`, and the whitepaper's link to SECURITY-MODEL.md. The URLs are right for after the
+    merge and are not changed.
+12. **After that merge, read its `web-core-reproducible` run** (item 7). Only a `main` run whose
+    rebuild matches attests the web core; until one has, `gh attestation verify` on the
+    served module fails, and verify.md says so.
+13. **getvela.app's analytics script** (§4, "Left open"): remove it, or self-host a pinned copy
+    with Subresource Integrity, and add a `script-src` CSP.

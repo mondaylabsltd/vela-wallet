@@ -26,8 +26,10 @@ such as "wallet created", coarse properties) to Rybbit — **only if the person 
 (Settings → Advanced / Privacy, "Share anonymous usage statistics"). Off by default; a browser that
 never chose is off (before R21 the default was on, and nothing was stored for it). **No event tells how
 a transaction ended** — `send_submitted`, `send_confirmed`, `send_failed`, `backup_keys_*` and a
-site's transaction request are not counted — so no statistic, with its network, time and the IP every
-web request carries, can be matched to an on-chain transaction. The native apps carry none.
+site's transaction request are not counted — and a site's approved request (a signature the site may
+take on chain itself) is counted bare, with no kind and no network (final review, 2026-11-12). No event
+carries an address, an amount or a hash. Every hit still has a time and the IP every web request
+carries. The native apps carry none.
 
 ## 2. Background & context
 
@@ -63,7 +65,7 @@ No consent prompt interrupts anyone: the native apps have nothing to consent to,
 - [ ] **AC-1** — A dependency scan finds no analytics/crash/telemetry SDK in the app.
 - [ ] **AC-2** — Every permission in the native manifests traces to a shipped feature, and none to a tracker; `NSPrivacyTracking=false`.
 - [ ] **AC-3** — With no bug report filed, the app makes no request to any first-party telemetry endpoint; the web wallet sends no usage statistics from a browser where the person has not switched them on (`consent.svelte.test.ts`).
-- [ ] **AC-4** — No usage event can be linked to an on-chain transaction (`payload.test.ts` "transaction outcomes").
+- [ ] **AC-4** — No usage event tells a transaction's outcome, and a site's approved request carries neither its kind nor its network (`payload.test.ts` "transaction outcomes").
 
 ## 8. Out of scope / non-goals
 

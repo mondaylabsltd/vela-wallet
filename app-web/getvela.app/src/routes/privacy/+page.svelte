@@ -15,7 +15,7 @@
 
 <main class="container">
 	<h1>Privacy Policy</h1>
-	<p class="updated">Last updated: 8 November 2026</p>
+	<p class="updated">Last updated: 12 November 2026</p>
 
 	<section>
 		<h2>Who we are</h2>
@@ -175,9 +175,9 @@
 				>
 				(never in the iPhone, Android or desktop apps). They are off until you switch on
 				<strong>Share anonymous usage statistics</strong>
-				(Settings → Advanced on a phone-sized screen, Settings → Privacy on a wide one); a browser
-				that never chose is off, and switching it off again stops them at once. When on, they are
-				sent to Rybbit, the cookieless analytics tool the website uses, at
+				(Settings → Advanced on a phone-sized screen, Settings → Privacy on a wide one); a browser that
+				never chose is off, and switching it off again stops them at once. When on, they are sent to Rybbit,
+				the cookieless analytics tool the website uses, at
 				<code>tj.appsdata.org</code>, by the wallet's own code: no outside script runs in it. What
 				is sent: which screen is open, as its path with anything that could identify you masked;
 				named moments such as "wallet created", "send screen opened" or "network added", with only
@@ -186,11 +186,12 @@
 				any other part of the address — a payment link's recipient and amount stay out); your screen size,
 				your browser's language and the domain of the site that linked you there. Nothing about a transaction
 				is ever sent: no event says that a transaction was sent, confirmed or failed, and a site's request
-				to send one is not counted, so no statistic can be matched to a transaction on chain. Never your
-				addresses, amounts, transaction hashes, contact names or ENS names. Like any web request it reaches
-				Rybbit with your IP address and browser type, which it uses to count visits and tell countries
-				and devices apart. It sets no cookies and stores no identifier on your device, and we don't use
-				it for advertising or share it.
+				to send one is not counted. When you approve a site's other requests (a signature, for example,
+				which the site may later use on chain itself), only the approval is counted: not what kind of
+				request it was, and not its network. Never your addresses, amounts, transaction hashes, contact
+				names or ENS names. Like any web request it reaches Rybbit with your IP address and browser type,
+				which it uses to count visits and tell countries and devices apart. It sets no cookies and stores
+				no identifier on your device, and we don't use it for advertising or share it.
 			</li>
 		</ul>
 	</section>

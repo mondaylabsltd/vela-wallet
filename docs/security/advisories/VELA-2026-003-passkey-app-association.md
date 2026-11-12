@@ -79,9 +79,12 @@ for the store apps on release keys"). After it:
   release certificate `A3:8E:36:FE:…:9D:53`.
 - `getvela.app/.well-known/apple-app-site-association` lists one `webcredentials` app:
   `F9W689P9NE.app.getvela.VelaWallet`.
-- Tests pin both files exactly (`assetlinks.test.ts`, `association.test.ts`), so adding an
-  identity fails CI. The `wallet.getvela.app` links file (links only, no passkeys) was reduced to
-  the release key too.
+- Tests pin both files exactly (`assetlinks.test.ts`, `association.test.ts`). Since the final
+  review (2026-11-12) they run in CI's `site` job on every pull request and before every
+  `bun run deploy` of the site, so adding an identity fails CI and stops a deploy; a red `site`
+  job stops a merge only if branch protection requires it. Before that change the site's tests
+  ran only when run by hand. The `wallet.getvela.app` links file (links only, no passkeys) was
+  reduced to the release key too.
 - Moving test builds to a separate test RP ID, instead of `getvela.app`, is in progress.
 
 Google's and Apple's verifiers cache these files on their own schedules. A device may have kept
