@@ -161,6 +161,7 @@ window.VelaCS.i18n.register('zh-TW', {
   'refuse.safeTx': '這個請求要你的金鑰簽署一筆 Safe 交易（SafeTx），也就是一條 Safe 之後可以執行的指令。沒有任何網站需要 Vela 簽這種東西。不簽署。',
   'refuse.parentSafe': '這個網站要你的帳戶替另一個 Safe 執行 {fn}——可能是你作為擁有者的 Safe。Vela 從不允許網站替 Safe 做變更或核准；請在該 Safe 自己的應用程式裡操作。不簽署。',
   'refuse.parentSafeMessage': '這個請求要你的金鑰替另一個 Safe 簽署一則 Safe 訊息（SafeMessage）——可能是你作為擁有者的 Safe——那個 Safe 會把它當作你的核准。Vela 從不允許網站這樣做；請在該 Safe 自己的應用程式裡操作。不簽署。',
+  'refuse.parentSafeOp': '這個請求要你的金鑰替另一個 Safe 簽署一則 Safe 使用者操作（SafeOp）——可能是你作為擁有者的 Safe——那個 Safe 會把它當作你的核准。Vela 從不允許網站這樣做；請在該 Safe 自己的應用程式裡操作。不簽署。',
   'warn.nonCanonicalModule': '這筆操作指定的 EntryPoint 或 4337 模組不是 Vela 的——簽署它，等於為另一套合約背書。',
   'ui.digest': '簽署摘要 · {kind}',
   'ui.digestUnwrapped': '未包裝成 SafeMessage——這是 EOA 式的簽章，Safe 不會接受',

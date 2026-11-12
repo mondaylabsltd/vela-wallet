@@ -46,7 +46,7 @@ node samples/hostile-test.mjs   # 32 项：请求方能控制的字段全填毒�
 node samples/channels-test.mjs  # 19 项：URL 片段 → velawallet:// + 真 WebAuthn + 交易 + 篡改拒签；postMessage 上的签名被拒
 node samples/safeop-test.mjs    #  9 项：SafeOp / SafeMessage 对拍 vela-core
 node samples/identicon-test.mjs #  9 项：identicon 与 vela-core 逐字节一致（含 1000 随机地址）
-node samples/takeover-test.mjs  # 104 项：自调用 / delegatecall / SafeTx 拒签 —— 与 vela-core self_call_guard 同一规则；替其他 Safe 执行 / approveHash / 改配置、SafeMessage 一律拒签（VELA-2026-002，parent_safe_guard 的向量逐条重放）
+node samples/takeover-test.mjs  # 153 项：自调用 / delegatecall / SafeTx 拒签 —— 与 vela-core self_call_guard 同一规则；替其他 Safe 执行 / approveHash / 改配置、SafeMessage、SafeOp 一律拒签，不带 0x 的地址照样认（VELA-2026-002，parent_safe_guard 的向量逐条重放）
 node samples/unlimited-line-test.mjs # 11 项：「无限额」从哪里开始 —— 与 vela-core approval_guard 同一条线
 ```
 

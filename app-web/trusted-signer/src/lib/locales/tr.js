@@ -161,6 +161,7 @@ window.VelaCS.i18n.register('tr', {
   'refuse.safeTx': 'Bu istek, anahtarınızın bir Safe işlemi (SafeTx) imzalamasını istiyor; bu, bir Safe\'in sonradan yürütebileceği bir talimattır. Hiçbir sitenin Vela\'dan buna ihtiyacı yoktur. İmzalanmayacak.',
   'refuse.parentSafe': 'Bu site, hesabınızın başka bir Safe için {fn} çalıştırmasını istiyor — sahiplerinden biri olduğunuz bir Safe olabilir. Vela hiçbir sitenin bir Safe için bir şey değiştirmesine veya onaylamasına izin vermez; o Safe’in kendi uygulamasını kullanın. İmzalanmıyor.',
   'refuse.parentSafeMessage': 'Bu istek, anahtarınızın başka bir Safe için bir Safe mesajı (SafeMessage) imzalamasını istiyor — sahiplerinden biri olduğunuz bir Safe olabilir — ve o Safe bunu onayınız sayar. Vela buna hiçbir sitede izin vermez; o Safe’in kendi uygulamasını kullanın. İmzalanmıyor.',
+  'refuse.parentSafeOp': 'Bu istek, anahtarınızın başka bir Safe için bir Safe kullanıcı işlemi (SafeOp) imzalamasını istiyor — sahiplerinden biri olduğunuz bir Safe olabilir — ve o Safe bunu onayınız sayar. Vela buna hiçbir sitede izin vermez; o Safe’in kendi uygulamasını kullanın. İmzalanmıyor.',
   'warn.nonCanonicalModule': 'Bu işlem, Vela\'ya ait olmayan bir EntryPoint ya da 4337 modülü belirtiyor — bunu imzalamak, farklı bir sözleşme kümesine onay vermek demektir.',
   'ui.digest': 'İmzalanan özet · {kind}',
   'ui.digestUnwrapped': 'SafeMessage içine sarılmamış — bir Safe\'in kabul etmeyeceği EOA tarzı bir imza',

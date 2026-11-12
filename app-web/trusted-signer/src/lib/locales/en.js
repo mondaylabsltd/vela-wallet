@@ -162,6 +162,7 @@ window.VelaCS.i18n.register('en', {
   'refuse.safeTx': 'This asks your key to sign a Safe transaction (SafeTx), an instruction a Safe can carry out later. No site needs that from Vela. Not signing.',
   'refuse.parentSafe': 'This site asks your account to run {fn} for another Safe — one you may be an owner of. Vela never lets a site change or approve anything for a Safe; use that Safe’s own app. Not signing.',
   'refuse.parentSafeMessage': 'This asks your key to sign a Safe message (SafeMessage) for another Safe — one you may be an owner of — which that Safe would count as your approval. Vela never lets a site do that; use that Safe’s own app. Not signing.',
+  'refuse.parentSafeOp': 'This asks your key to sign a Safe user operation (SafeOp) for another Safe — one you may be an owner of — which that Safe would count as your approval. Vela never lets a site do that; use that Safe’s own app. Not signing.',
   'warn.nonCanonicalModule': "This operation names an EntryPoint or 4337 module that is not Vela's — signing it endorses a different set of contracts.",
   'ui.digest': 'Signed digest · {kind}',
   'ui.digestUnwrapped': 'not wrapped in SafeMessage — an EOA-style signature a Safe will not accept',

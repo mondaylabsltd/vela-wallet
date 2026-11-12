@@ -161,6 +161,7 @@ window.VelaCS.i18n.register('ja', {
   'refuse.safeTx': 'このリクエストは、あなたのキーに Safe トランザクション（SafeTx）への署名を求めています。これは Safe が後で実行できる指示です。そのような署名を Vela に求める必要のあるサイトはありません。署名しません。',
   'refuse.parentSafe': 'このサイトは、別の Safe（あなたがオーナーの Safe かもしれません）のために {fn} を実行するようアカウントに求めています。Vela はサイトに Safe の変更や承認を決して許しません。その Safe 自身のアプリを使ってください。署名しません。',
   'refuse.parentSafeMessage': 'このリクエストは、別の Safe（あなたがオーナーの Safe かもしれません）のための Safe メッセージ（SafeMessage）への署名をキーに求めています。その Safe はこれをあなたの承認として数えます。Vela はサイトにそれを決して許しません。その Safe 自身のアプリを使ってください。署名しません。',
+  'refuse.parentSafeOp': 'このリクエストは、別の Safe（あなたがオーナーの Safe かもしれません）のための Safe ユーザー操作（SafeOp）への署名をキーに求めています。その Safe はこれをあなたの承認として数えます。Vela はサイトにそれを決して許しません。その Safe 自身のアプリを使ってください。署名しません。',
   'warn.nonCanonicalModule': 'この操作は Vela のものではない EntryPoint または 4337 モジュールを指定しています — 署名すると、別のコントラクト一式を認めることになります。',
   'ui.digest': '署名するダイジェスト · {kind}',
   'ui.digestUnwrapped': 'SafeMessage で包まれていません — Safe が受け付けない EOA 形式の署名です',

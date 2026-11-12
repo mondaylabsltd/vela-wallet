@@ -161,6 +161,7 @@ window.VelaCS.i18n.register('ko', {
   'refuse.safeTx': '이 요청은 내 키로 Safe 트랜잭션(SafeTx)에 서명하라고 요구합니다. 이는 Safe가 나중에 실행할 수 있는 지시입니다. 어떤 사이트도 Vela에게 이것을 요구할 필요가 없습니다. 서명하지 않습니다.',
   'refuse.parentSafe': '이 사이트가 다른 Safe(내가 소유자인 Safe일 수 있음)를 대신해 {fn}을(를) 실행하도록 계정에 요청합니다. Vela는 사이트가 Safe를 변경하거나 승인하도록 절대 허용하지 않습니다. 그 Safe 자체 앱을 사용하세요. 서명하지 않습니다.',
   'refuse.parentSafeMessage': '이 요청은 다른 Safe(내가 소유자인 Safe일 수 있음)를 위한 Safe 메시지(SafeMessage)에 내 키로 서명하라고 요구합니다. 그 Safe는 이것을 내 승인으로 셉니다. Vela는 사이트가 그렇게 하도록 절대 허용하지 않습니다. 그 Safe 자체 앱을 사용하세요. 서명하지 않습니다.',
+  'refuse.parentSafeOp': '이 요청은 다른 Safe(내가 소유자인 Safe일 수 있음)를 위한 Safe 사용자 작업(SafeOp)에 내 키로 서명하라고 요구합니다. 그 Safe는 이것을 내 승인으로 셉니다. Vela는 사이트가 그렇게 하도록 절대 허용하지 않습니다. 그 Safe 자체 앱을 사용하세요. 서명하지 않습니다.',
   'warn.nonCanonicalModule': '이 작업은 Vela의 것이 아닌 EntryPoint 또는 4337 모듈을 지정합니다 — 서명하면 다른 컨트랙트 묶음을 보증하는 셈이 됩니다.',
   'ui.digest': '서명할 다이제스트 · {kind}',
   'ui.digestUnwrapped': 'SafeMessage로 감싸지 않음 — Safe가 받아들이지 않는 EOA 방식 서명',

@@ -161,6 +161,7 @@ window.VelaCS.i18n.register('id', {
   'refuse.safeTx': 'Permintaan ini meminta kunci Anda menandatangani transaksi Safe (SafeTx), yaitu instruksi yang bisa dijalankan Safe di kemudian hari. Tidak ada situs yang membutuhkan itu dari Vela. Tidak akan ditandatangani.',
   'refuse.parentSafe': 'Situs ini meminta akun Anda menjalankan {fn} untuk Safe lain — mungkin Safe yang Anda miliki. Vela tidak pernah membiarkan situs mengubah atau menyetujui apa pun untuk sebuah Safe; gunakan aplikasi Safe itu sendiri. Tidak ditandatangani.',
   'refuse.parentSafeMessage': 'Permintaan ini meminta kunci Anda menandatangani pesan Safe (SafeMessage) untuk Safe lain — mungkin Safe yang Anda miliki — yang akan dihitung Safe itu sebagai persetujuan Anda. Vela tidak pernah membiarkan situs melakukan itu; gunakan aplikasi Safe itu sendiri. Tidak ditandatangani.',
+  'refuse.parentSafeOp': 'Permintaan ini meminta kunci Anda menandatangani operasi pengguna Safe (SafeOp) untuk Safe lain — mungkin Safe yang Anda miliki — yang akan dihitung Safe itu sebagai persetujuan Anda. Vela tidak pernah membiarkan situs melakukan itu; gunakan aplikasi Safe itu sendiri. Tidak ditandatangani.',
   'warn.nonCanonicalModule': 'Operasi ini menyebut EntryPoint atau modul 4337 yang bukan milik Vela — menandatanganinya berarti menyetujui kumpulan kontrak yang berbeda.',
   'ui.digest': 'Digest yang ditandatangani · {kind}',
   'ui.digestUnwrapped': 'tidak dibungkus dalam SafeMessage — tanda tangan gaya EOA yang tidak akan diterima Safe',

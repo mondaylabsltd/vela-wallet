@@ -160,9 +160,9 @@ check('other typed data is not treated as SafeTx', !view.warnings.some((w) => w.
 
 import { readFileSync } from 'node:fs';
 const VECTOR = JSON.parse(readFileSync(new URL('../../../rust/crates/vela-core/tests/vectors/rules/parent-safe-guard.json', import.meta.url), 'utf8'));
-const PAGE_KEYS = ['refuse.parentSafe', 'refuse.parentSafeMessage', 'refuse.safeTx', 'refuse.typedShape', 'refuse.selfCall', 'refuse.delegateCall'];
+const PAGE_KEYS = ['refuse.parentSafe', 'refuse.parentSafeMessage', 'refuse.parentSafeOp', 'refuse.safeTx', 'refuse.typedShape', 'refuse.selfCall', 'refuse.delegateCall'];
 const parentRefused = (view) => view.refuse && view.warnings.some((w) => PAGE_KEYS.includes(w.key));
-const saysParent = (view) => view.warnings.some((w) => w.key === 'refuse.parentSafe' || w.key === 'refuse.parentSafeMessage');
+const saysParent = (view) => view.warnings.some((w) => w.key === 'refuse.parentSafe' || w.key === 'refuse.parentSafeMessage' || w.key === 'refuse.parentSafeOp');
 for (const c of VECTOR.cases) {
   const intent = { method: c.input.method, origin: 'https://evil.example', params: c.input.params };
   const pageCtx = { account: c.input.signer, chainId: c.input.chain_id, channel: 'url', callback: 'velawallet://sign-result' };
@@ -207,9 +207,45 @@ check('a SafeMessage under the account\'s own domain is not another Safe\'s', !s
 view = ns.resolve(tx(OTHER, '0xa9059cbb' + word(PARENT) + num(5)), ctx);
 check('a token sent TO a Safe is untouched', !saysParent(view));
 
+// VELA-2026-002 (0.9.10): a SafeOp for another Safe — under a Safe v1.5.0 the
+// account's approval of that Safe's user operation — and the address forms the
+// encoders read (bare, `0X`, under-width).
+const MODULE = '0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226';
+const safeOp = (safe, contract) => ({
+  method: 'eth_signTypedData_v4',
+  origin: 'https://site.test',
+  params: [ACCOUNT, JSON.stringify({
+    primaryType: 'SafeOp',
+    domain: { chainId: 100, verifyingContract: contract },
+    types: {
+      EIP712Domain: [{ name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' }],
+      SafeOp: [{ name: 'safe', type: 'address' }, { name: 'nonce', type: 'uint256' }, { name: 'callData', type: 'bytes' }],
+    },
+    message: { safe: safe, nonce: '0', callData: '0x' },
+  })],
+});
+view = ns.resolve(safeOp(PARENT, MODULE), ctx);
+check('a SafeOp for another Safe under the 4337 module\'s domain is refused', refusal(view, 'refuse.parentSafeOp'));
+view = ns.resolve(safeOp(PARENT.slice(2), MODULE), ctx);
+check('a SafeOp whose `safe` is written bare is refused', refusal(view, 'refuse.parentSafeOp'));
+view = ns.resolve(safeOp(ACCOUNT, PARENT), ctx);
+check('a SafeOp under another Safe\'s own domain is refused', refusal(view, 'refuse.parentSafeOp'));
+view = ns.resolve(safeOp(ACCOUNT, MODULE), ctx);
+check('a SafeOp for the account itself is not another Safe\'s', !saysParent(view));
+view = ns.resolve(safeOp(ACCOUNT.toUpperCase().replace('0X', ''), MODULE.toLowerCase()), ctx);
+check('the account written bare is still the account', !saysParent(view));
+view = ns.resolve(tx(PARENT.slice(2), approveHash), ctx);
+check('approveHash with a bare-hex `to` is refused', refusal(view, 'refuse.parentSafe'));
+view = ns.resolve(tx('0X' + PARENT.slice(2), approveHash), ctx);
+check('approveHash with an upper-case `0X` `to` is refused', refusal(view, 'refuse.parentSafe'));
+view = ns.resolve(safeMessage(PARENT.slice(2)), ctx);
+check('a SafeMessage under a bare verifyingContract is refused', refusal(view, 'refuse.parentSafeMessage'));
+view = ns.resolve(safeMessage(PARENT.slice(0, 38)), ctx);
+check('a SafeMessage under an under-width verifyingContract is refused', refusal(view, 'refuse.parentSafeMessage'));
+
 // --- words -------------------------------------------------------------------
 
-for (const key of ['refuse.selfCall', 'refuse.delegateCall', 'refuse.safeTx', 'refuse.parentSafe', 'refuse.parentSafeMessage']) {
+for (const key of ['refuse.selfCall', 'refuse.delegateCall', 'refuse.safeTx', 'refuse.parentSafe', 'refuse.parentSafeMessage', 'refuse.parentSafeOp']) {
   const phrase = ns.i18n ? ns.i18n.t(key, { fn: 'enableModule' }) : null;
   check(`"${key}" has English words`, typeof phrase === 'string' && phrase !== key && !phrase.includes('{'), phrase);
 }

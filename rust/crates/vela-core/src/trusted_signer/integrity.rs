@@ -61,6 +61,14 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // VELA-2026-002 (0.9.10; backport of feat/multisig-account f09326124): a
+    // site's `SafeOp` for a Safe other than the account — its `safe`, or a
+    // domain other than the account's and the 4337 module's — is refused
+    // (`refuse.parentSafeOp`, fifteen locales): under a Safe v1.5.0 it is the
+    // account's approval of that Safe's user operation. Addresses compared as
+    // the hasher reads them (bare, under-width). Otherwise 2494b941's page.
+    // Not LAUNCH.
+    "824bae691bbcb42a8a97c6574c12a191c3b232b392cd84c3b51fbb5cd1bb57d0",
     // VELA-2026-002 (the 0.9.9 hotfix; disclosure 2026-09-29, APPENDIX-PARENT):
     // a site's request that would act for a Safe other than the account —
     // `execTransaction`, `approveHash`, an owner / threshold / module / guard
