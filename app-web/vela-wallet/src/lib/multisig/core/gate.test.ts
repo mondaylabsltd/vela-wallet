@@ -48,3 +48,32 @@ describe('the gate a network makes — the core rule (§3.5, §3.6)', () => {
 		expect(gateOf([], 100, { allowed: true, anyway: true })).toEqual({ kind: 'open' });
 	});
 });
+
+/**
+ * §39 (r22-2): a member's action the core stopped because who can act for
+ * the multisig could not be read is said as that (`signUnchecked`) — never
+ * "Can't reach"; and one stopped because two independent nodes DISAGREED
+ * (`signingDisagreed`) is said as that (`signDisagreed`): nothing signed,
+ * no "… anyway".
+ */
+describe('a gate the chain could not settle, in its words (§39)', () => {
+	it('unchecked and disagreed are each said as themselves', async () => {
+		const { actionError } = await import('../shell/proposal-failure');
+		const { SigningUncheckedError } = await import('./gate.svelte');
+		const { uncheckedWords } = await import('./gate-words');
+		const words = {
+			signUnchecked: 'Unchecked on {{network}}',
+			signDisagreed: 'Disagreed on {{network}}'
+		};
+		const unchecked = actionError({ kind: 'signingUnchecked' }, 100);
+		expect(unchecked).toBeInstanceOf(SigningUncheckedError);
+		expect(uncheckedWords(words, unchecked as InstanceType<typeof SigningUncheckedError>)).toBe(
+			'Unchecked on Gnosis'
+		);
+		const disagreed = actionError({ kind: 'signingDisagreed' }, 100);
+		expect(disagreed).toBeInstanceOf(SigningUncheckedError);
+		expect(uncheckedWords(words, disagreed as InstanceType<typeof SigningUncheckedError>)).toBe(
+			'Disagreed on Gnosis'
+		);
+	});
+});

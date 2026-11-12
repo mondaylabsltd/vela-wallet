@@ -311,6 +311,12 @@ export interface MultisigMessages {
 		/** r4-7: the fee before the passkey (`{{fee}}`, `{{name}}`: who pays). */
 		feeLine: string;
 		/**
+		 * §39 (r22-4, KNOWN-BUGS R20-15): a fee stop, said whole — the fee went
+		 * up to `{{fee}}` since the press, nothing was signed, the next press
+		 * pays it (the core's `failure_said` key for `fee_moved`).
+		 */
+		feeRose: string;
+		/**
 		 * r18-5: the mark under the fee line while a press is out on it — the
 		 * figure on screen is the one being signed, fixed until the passkey's
 		 * confirm or cancel.
@@ -787,6 +793,8 @@ export interface MultisigMessages {
 		signRiskCancel: string;
 		/** Who can act for it on `{{network}}` could not be read: nothing is signed yet. */
 		signUnchecked: string;
+		/** §39: two independent nodes disagree about who can act on `{{network}}`: nothing signed. */
+		signDisagreed: string;
 	};
 	/** Changing the members and the approvals needed (Settings), one proposal per network. */
 	members: MemberMessages;
@@ -848,6 +856,13 @@ export interface ReviewMessages {
 	 */
 	stateUnconfirmed: string;
 	stateDisagreed: string;
+	/**
+	 * §39 (r22-2), `{{network}}`: the network's pool holds one provider, and
+	 * only that node could check (`reason: oneNode`) — never "checked".
+	 */
+	stateOneNode: string;
+	/** §39: the link beside it, to that network's RPC settings. */
+	addOwnNode: string;
 	/**
 	 * R22: "Refuse blind signing" is on and this review signs only "… anyway"
 	 * — the door's `reason_key` (`home.multisig.review.blindRefused`).
@@ -1235,6 +1250,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		unpricedReason: '',
 		uncheckedReason: '',
 		feeLine: '',
+		feeRose: '',
 		feeSigning: '',
 		feeChecking: '',
 		feeUnpriced: '',
@@ -1604,7 +1620,8 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		signRiskBody: '',
 		signRiskConfirm: '',
 		signRiskCancel: '',
-		signUnchecked: ''
+		signUnchecked: '',
+		signDisagreed: ''
 	},
 	members: {
 		title: '',
@@ -1695,6 +1712,8 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		stateUnread: '',
 		stateUnconfirmed: '',
 		stateDisagreed: '',
+		stateOneNode: '',
+		addOwnNode: '',
 		blindRefused: '',
 		sourceTrace: '',
 		sourceProbe: '',

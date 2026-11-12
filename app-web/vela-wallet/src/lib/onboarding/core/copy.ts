@@ -20,23 +20,6 @@ import type { SubmitLabel } from '../generated/SubmitLabel';
 /** Resolve one corpus key, with optional `{{var}}` fills. */
 export type Translate = (key: string, params?: Record<string, string | number>) => string;
 
-/**
- * r22-8: the sign-in failures whose `detail` is the CORE's own words, not a
- * platform's — a developer's sentence, never one to put in front of a person,
- * and no failure of a biometric. Each is said by its catalog sentence, with
- * no "Make sure your device has Face ID…" under it.
- *
- * - `login.rs`, the unit fetch: the members the passkey index listed do not
- *   recompute to the address it recorded. Nothing was saved on that guess:
- *   Vela could not check which wallet this passkey opens.
- *
- * Until the core names the sentence itself (`SignInFailed.words_key`, as it
- * does for a platform error), the detail it writes is matched here.
- */
-const CORE_SIGN_IN_WORDS: Readonly<Record<string, string>> = {
-	'registry group does not match its address': 'onboarding.login.registryUnreachableBody'
-};
-
 function unreachable(value: never): never {
 	// Cannot happen while the generated types are in sync; if the generator was
 	// skipped, fail loudly here rather than silently rendering nothing.
@@ -338,13 +321,13 @@ export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 								: // Issue #446: not "set up Face ID" when it was the phone link.
 									kind.phone_link
 									? t('onboarding.common.phoneLinkFailed')
-									: // Round 10: the core's sentence for the platform's error.
+									: // Round 10: the core's sentence for the error — the platform's,
+										// or (§39, r22-8) its own, such as a registry group that does
+										// not match its address — never the raw detail, and never the
+										// biometric advice under a failure no biometric had a part in.
 										kind.words_key
 										? t(kind.words_key)
-										: // r22-8: the core's own words — no platform's, no biometric's.
-											Object.hasOwn(CORE_SIGN_IN_WORDS, kind.detail)
-											? t(CORE_SIGN_IN_WORDS[kind.detail])
-											: t('onboarding.login.alertSignInFailedBody', { message: kind.detail })
+										: t('onboarding.login.alertSignInFailedBody', { message: kind.detail })
 			};
 		default:
 			return unreachable(kind);

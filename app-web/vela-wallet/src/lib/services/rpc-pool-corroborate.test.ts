@@ -85,6 +85,38 @@ describe('the pool’s corroborated read (R22)', () => {
 		expect(asked.filter((a) => a.method === 'eth_call')).toHaveLength(1);
 	});
 
+	/**
+	 * §39 (r22-2): a chain whose pool holds ONE provider has nobody else to
+	 * ask — configuration, not a failure. The pool's verdict says so
+	 * (`sole_provider`), and the envelope the core reads carries it
+	 * (`soleProvider`): the member's own multisig flows may then go on as an
+	 * explicit "… anyway", said "checked by one node".
+	 */
+	it('§39: one provider alone — the answer says so, and so does the core’s envelope', async () => {
+		world.ownOnly = false;
+		world.endpoints = [{ url: 'https://rpc.alpha.example/', source: 'default' as const }];
+		const { invalidateAllPools, poolCorroboratedCall } = await import('./rpc-pool');
+		invalidateAllPools();
+		const answer = await poolCorroboratedCall(
+			'eth_call',
+			[{ to: '0x01', data: '0x' }, 'latest'],
+			100
+		);
+		expect(answer.witnessBody).toBeNull();
+		expect(answer.soleProvider).toBe(true);
+		const { envelopeOf } = await import('./corroborated-read');
+		expect(JSON.parse(envelopeOf(answer))).toMatchObject({ soleProvider: true });
+		// Two providers: neither said.
+		world.endpoints = [
+			{ url: 'https://rpc.alpha.example/', source: 'default' as const },
+			{ url: 'https://node.beta.example/', source: 'default' as const }
+		];
+		invalidateAllPools();
+		const two = await poolCorroboratedCall('eth_call', [{ to: '0x01', data: '0x' }, 'latest'], 100);
+		expect(two.soleProvider).toBe(false);
+		expect(JSON.parse(envelopeOf(two))).not.toHaveProperty('soleProvider');
+	});
+
 	it('"Only use my node": the person’s node alone, said as such — nobody else asked', async () => {
 		world.ownOnly = true;
 		world.endpoints = [{ url: 'https://rpc.alpha.example/', source: 'user' as never }];

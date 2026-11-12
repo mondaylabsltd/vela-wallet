@@ -7,6 +7,7 @@
 	import StatusHero from '$lib/flows/ui/StatusHero.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import type { SigningModel } from './model';
+	import type { HoldPhase } from '$lib/ui/hold-confirm';
 
 	/**
 	 * The phone signing sheet (spec 022) — a bottom sheet over the page that
@@ -65,6 +66,8 @@
 		onmessageunread?: (unread: boolean) => void;
 		/** dapp-15: "Check again" on a could-not-check line whose node nobody reached. */
 		onrecheck?: () => void;
+		/** §39 (A1): the held confirm's phase (`SigningAction`'s `onphase`). */
+		onconfirmphase?: (phase: HoldPhase) => void;
 	}
 
 	let {
@@ -83,7 +86,8 @@
 		onretry,
 		onopenpage,
 		onmessageunread,
-		onrecheck
+		onrecheck,
+		onconfirmphase
 	}: Props = $props();
 
 	/** The ✕'s own path: the host reads the close's meaning, then the exit plays. */
@@ -237,7 +241,7 @@
      never under a fold and never moved by what is read above it. -->
 {#snippet foot()}
 	<div class="foot" data-signing-foot>
-		<SigningAction {model} {held} onconfirm={confirmNow} {onclose} />
+		<SigningAction {model} {held} onconfirm={confirmNow} {onclose} onphase={onconfirmphase} />
 	</div>
 {/snippet}
 

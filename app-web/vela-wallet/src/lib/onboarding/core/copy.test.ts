@@ -170,11 +170,13 @@ describe('a passkey failure the core named', () => {
 		const { promptCopy } = await import('./copy');
 		const t = (key: string, params?: Record<string, string | number>) =>
 			params ? `${key}:${JSON.stringify(params)}` : key;
+		// §39: the core names the sentence (`SignInFailed.words_key`).
 		const said = promptCopy(
 			{
 				type: 'sign_in_failed',
 				detail: 'registry group does not match its address',
-				phone_link: false
+				phone_link: false,
+				words_key: 'onboarding.login.registryUnreachableBody'
 			},
 			t
 		);

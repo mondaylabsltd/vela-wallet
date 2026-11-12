@@ -107,6 +107,7 @@
 		SigningRefusedError,
 		SigningUncheckedError
 	} from '../core/gate.svelte';
+	import { uncheckedWords } from '../core/gate-words';
 	import { refusalText } from './findings';
 	import AuthorityNotice from './AuthorityNotice.svelte';
 	import { ChainUnavailableError } from '../core/chain';
@@ -704,7 +705,14 @@
 		 * the figure of the moment it was said — and goes when the core
 		 * withdraws it.
 		 */
-		| { kind: 'failed'; reason: string; action?: 'approve' | 'execute'; expired?: boolean };
+		| {
+				kind: 'failed';
+				reason: string;
+				action?: 'approve' | 'execute';
+				expired?: boolean;
+				/** §39: the reason is a whole sentence (a fee stop's), never under "That didn't go through:". */
+				whole?: boolean;
+		  };
 	let phase = $state<Phase>({ kind: 'idle' });
 	/**
 	 * r5reg-20: executed (here, or anywhere: its number is used) — a past
@@ -752,9 +760,10 @@
 	function failedPhase(error: unknown, action?: 'approve' | 'execute'): Phase {
 		if (declinedRisk(error)) return { kind: 'idle' };
 		const expired = error instanceof ExecutionExpiredError;
+		const whole = saidWhole(error);
 		return action
-			? { kind: 'failed', reason: reasonOf(error), action, expired }
-			: { kind: 'failed', reason: reasonOf(error), expired };
+			? { kind: 'failed', reason: reasonOf(error), action, expired, whole }
+			: { kind: 'failed', reason: reasonOf(error), expired, whole };
 	}
 
 	/**
@@ -787,6 +796,26 @@
 		return reasonText(error);
 	});
 
+	/**
+	 * §39 (r22-4): a fee stop is said whole, in the core's words for it
+	 * (`proposal.feeRose`) — why it stopped and what the next press pays —
+	 * never under "That didn't go through:".
+	 */
+	function saidWhole(error: unknown): boolean {
+		return error instanceof ExecutionFeeMovedError && m.proposal.feeRose !== '';
+	}
+
+	/** The failed line as drawn: a whole sentence, or a reason under the one prefix. */
+	const failedLine = $derived.by((): string | null => {
+		if (failedReason === null || phase.kind !== 'failed') return null;
+		let whole = phase.whole === true;
+		if (phase.action) {
+			const now = actionOf(phase.action);
+			if (now !== null && now.kind !== 'working') whole = saidWhole(actionError(now, chainId));
+		}
+		return whole ? failedReason : fillTemplate(m.proposal.failed, { reason: failedReason });
+	});
+
 	function reasonOf(error: unknown): string {
 		console.warn('[multisig] not done:', error);
 		return reasonText(error);
@@ -811,10 +840,14 @@
 		if (error instanceof ExecutionWouldFailError) {
 			return fillTemplate(m.proposal.wouldFail, { reason: whyText(m, error.why) });
 		}
-		// r14-9: the fee moved since the press — nothing signed; said with the
-		// new figure (its fee line's own words), so the next press is on it.
-		// A reason, like every other: the failed line adds "That didn't go
-		// through:" once where it is drawn (r15-6 — it was said twice).
+		// r14-9 / §39 (r22-4): the fee moved since the press — nothing signed;
+		// said whole, why and with the new figure (as the fee line draws it),
+		// so the next press is on it: "The network fee went up to ≈ {{fee}}…".
+		if (error instanceof ExecutionFeeMovedError && m.proposal.feeRose !== '') {
+			return fillTemplate(m.proposal.feeRose, {
+				fee: feeCoin(error.amount, nativeSymbol(chainId))
+			});
+		}
 		if (error instanceof ExecutionFeeMovedError) {
 			return fillTemplate(m.proposal.feeLine, {
 				fee: feeCoin(error.amount, nativeSymbol(chainId)),
@@ -841,9 +874,7 @@
 				...new Set(why.filter(Boolean))
 			].join(' ');
 		}
-		if (error instanceof SigningUncheckedError) {
-			return fillTemplate(m.authority.signUnchecked, { network: chainName(error.chainId) });
-		}
+		if (error instanceof SigningUncheckedError) return uncheckedWords(m.authority, error);
 		// §3.6: read again right before the passkey, it changes who controls the multisig.
 		if (error instanceof SigningBlockedError) {
 			reviewAgain();
@@ -2143,7 +2174,7 @@
 					</div>
 				{:else}
 					<p class="warn" role="alert" data-testid="proposal-failed">
-						{fillTemplate(m.proposal.failed, { reason: failedReason })}
+						{failedLine}
 					</p>
 				{/if}
 			{/if}
@@ -2232,7 +2263,7 @@
 					</div>
 				{:else}
 					<p class="warn" role="alert" data-testid="proposal-failed">
-						{fillTemplate(m.proposal.failed, { reason: failedReason })}
+						{failedLine}
 					</p>
 				{/if}
 			{/if}

@@ -71,10 +71,22 @@ export class SigningRefusedError extends Error {
 	}
 }
 
-/** Who can act for it on `chainId` could not be read: nothing is signed yet. */
+/**
+ * Who can act for it on `chainId` could not be read: nothing is signed yet.
+ * §39 (r22-2): `disagreed` — two independent nodes answered differently
+ * (`ActionState::SigningDisagreed`), a real signal: nothing is signed, and
+ * there is no "… anyway".
+ */
 export class SigningUncheckedError extends Error {
-	constructor(readonly chainId: number) {
-		super(`who can act for this multisig on chain ${chainId} could not be checked`);
+	constructor(
+		readonly chainId: number,
+		readonly disagreed = false
+	) {
+		super(
+			disagreed
+				? `two nodes disagree about who can act for this multisig on chain ${chainId}`
+				: `who can act for this multisig on chain ${chainId} could not be checked`
+		);
 		this.name = 'SigningUncheckedError';
 	}
 }

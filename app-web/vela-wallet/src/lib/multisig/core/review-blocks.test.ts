@@ -148,6 +148,31 @@ describe('the state-diff guard, said (§3.6)', () => {
 		]);
 	});
 
+	/**
+	 * §39 (r22-2): on a network whose pool holds one provider, the state
+	 * check stood on one node's word (`unavailable`, `oneNode`): said as
+	 * that — never "checked" — with the way to add one's own node, opening
+	 * that network's RPC settings (the signing sheet's own destination).
+	 */
+	it('§39: one node could check — said so, with "Add your own node" to the network’s RPC settings', () => {
+		const base = multisigReview(vector('fork-transfer-probe-only'));
+		const review: MultisigReviewOut = {
+			...base,
+			state: { ...base.state, verdict: { kind: 'unavailable', reason: 'oneNode' } }
+		};
+		expect(m.review.stateOneNode).toContain('{{network}}');
+		expect(m.review.addOwnNode).not.toBe('');
+		const href = '/en/settings/networks/100';
+		expect(stateBlocks(review, { ...ctx, ownNodeHref: href })).toEqual([
+			{
+				kind: 'warning',
+				tone: 'caution',
+				text: m.review.stateOneNode.replace('{{network}}', 'Gnosis'),
+				ownNode: { text: '', action: m.review.addOwnNode, href }
+			}
+		]);
+	});
+
 	it('every write kind has its own words, none left as a template', () => {
 		const lines = [
 			{ kind: 'singleton', before: '0xA', after: '0xB' },

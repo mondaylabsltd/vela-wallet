@@ -1291,12 +1291,15 @@ export function signConfirmState(
 export function rpcCorroboratedEnvelope(
 	primary: unknown | null,
 	witness: unknown | null,
-	ownNode: boolean
+	ownNode: boolean,
+	/** §39 (r22-2): the pool holds no other provider for the chain (`sole_provider`). */
+	soleProvider = false
 ): string {
 	return wasm.rpcCorroboratedEnvelope(
 		primary === null || primary === undefined ? undefined : JSON.stringify(primary),
 		witness === null || witness === undefined ? undefined : JSON.stringify(witness),
-		ownNode
+		ownNode,
+		soleProvider
 	);
 }
 
@@ -1338,9 +1341,18 @@ export function feeFigure(units: string | bigint, decimals: number, shown: numbe
  * ("No asset changes") when nothing of theirs moves. `null` when the core's
  * answer does not read: nothing is known, and nothing is said.
  */
-export function simOutcome(user: string, replyJson: string): SimVerdict | null {
+export function simOutcome(
+	user: string,
+	replyJson: string,
+	/**
+	 * §39: the native value the request sends from the account, as the wallet
+	 * decoded it (decimal or hex; a batch's sum) — a node's "nothing moves"
+	 * never erases it (`sim_outcome::with_decoded_value`). Absent: zero or unknown.
+	 */
+	valueWei?: string
+): SimVerdict | null {
 	try {
-		return JSON.parse(wasm.simOutcome(user, replyJson)) as SimVerdict;
+		return JSON.parse(wasm.simOutcome(user, replyJson, valueWei)) as SimVerdict;
 	} catch {
 		return null;
 	}

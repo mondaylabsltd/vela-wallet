@@ -402,6 +402,42 @@ describe('one read, the core’s verdict — for the fee and for the sheet (devi
 		expect(sink.told).toEqual([[]]);
 	});
 
+	/**
+	 * §39: a node whose trace leaves out the native value said "No asset
+	 * changes" over a request that sends 1 xDAI out of the account. The value
+	 * the wallet decoded from the request (the calls' sum) goes to the core
+	 * with the reply (`simOutcome(user, reply, valueWei)`): a node never
+	 * erases it.
+	 */
+	it('§39: the native value the request sends is never erased by a node’s "nothing moves"', async () => {
+		const valued = {
+			...request,
+			calls: [
+				{ ...CALLS[0], value: '0xde0b6b3a7640000' },
+				{ ...CALLS[0], value: '0' }
+			]
+		};
+		const verdict = await checkRequest(
+			sinkOf(),
+			valued,
+			() => true,
+			async () => NOTHING_MOVED
+		);
+		expect(verdict?.kind).toBe('deltas');
+		expect(verdict?.no_change_key).toBeNull();
+		expect(verdict?.deltas).toEqual([
+			{ kind: 'native', token: null, delta: '-1000000000000000000' }
+		]);
+		// Nothing sent: the node's "nothing moves" stands.
+		const plain = await checkRequest(
+			sinkOf(),
+			request,
+			() => true,
+			async () => NOTHING_MOVED
+		);
+		expect(plain?.no_change_key).toBe('componentsUi.signing.simResultNoChange');
+	});
+
 	it('a check under which something moves carries no line', async () => {
 		const sink = sinkOf();
 		const verdict = await checkRequest(

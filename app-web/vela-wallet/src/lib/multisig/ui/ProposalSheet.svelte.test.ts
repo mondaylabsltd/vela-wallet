@@ -1296,8 +1296,12 @@ describe('an execution the relay refused (ms-3)', () => {
 	});
 });
 
-describe('a fee that moved before the press (r14-9, r15-6)', () => {
-	it('says "failed" once: the core’s new figure inside the one prefix', async () => {
+describe('a fee that moved before the press (r14-9, r15-6, §39 r22-4)', () => {
+	// §39 (KNOWN-BUGS R20-15): the stop says WHY — the fee went up since the
+	// press, nothing was signed, the next press pays it — in the core's words
+	// (`home.multisig.proposal.feeRose`, `{{fee}}` as the fee line draws it),
+	// never "That didn't go through: Network fee ≈ …".
+	it('says the fee rose to the core’s new figure — never "failed" over a fee line', async () => {
 		fake.chain.items = [
 			item({
 				approved: 1,
@@ -1317,13 +1321,14 @@ describe('a fee that moved before the press (r14-9, r15-6)', () => {
 		const m = words();
 		m.proposal.failed = 'Failed: {{reason}}';
 		m.proposal.feeLine = 'Fee {{fee}} by {{name}}';
+		m.proposal.feeRose = 'Rose to {{fee}}; press to pay {{fee}}';
 		const screen = show({ m });
 		await settle();
 		press('proposal.approveAndExecute');
 		await settle();
 		const said = document.querySelector('[data-testid="proposal-failed"]')?.textContent?.trim();
-		expect(said).toMatch(/^Failed: Fee 0\.186 xDAI by /);
-		expect(said?.match(/Failed:/g)).toHaveLength(1);
+		expect(said).toBe('Rose to 0.186 xDAI; press to pay 0.186 xDAI');
+		expect(said).not.toContain('Failed:');
 		await screen.unmount();
 	});
 });
@@ -2845,13 +2850,14 @@ describe('a fee stop follows the look the next press signs (r17-2)', () => {
 		const m = words();
 		m.proposal.failed = 'Failed: {{reason}}';
 		m.proposal.feeLine = 'Fee {{fee}} by {{name}}';
+		m.proposal.feeRose = 'Rose to {{fee}}';
 		const screen = show({ m });
 		await settle();
 		press('proposal.approveAndExecute');
 		await settle();
 		const said = () =>
 			document.querySelector('[data-testid="proposal-failed"]')?.textContent?.trim() ?? null;
-		expect(said()).toMatch(/^Failed: Fee 0\.3022 xDAI by /);
+		expect(said()).toBe('Rose to 0.3022 xDAI');
 		// The fee line re-quotes beside the stop: the core serves the stop with
 		// its look's figure now (`stops_follow_looks`) — the sheet says that.
 		const key = Object.keys(machineSeam.actions).find((k) => k.startsWith('execute:'))!;
@@ -2860,7 +2866,7 @@ describe('a fee stop follows the look the next press signs (r17-2)', () => {
 			[key]: stateOf(stop('232500000000000000'))
 		};
 		await settle();
-		expect(said()).toMatch(/^Failed: Fee 0\.2325 xDAI by /);
+		expect(said()).toBe('Rose to 0.2325 xDAI');
 		// A look with no figure withdraws the stop: nothing is said of it.
 		const rest = { ...machineSeam.actions };
 		delete rest[key];
