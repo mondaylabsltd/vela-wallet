@@ -583,6 +583,9 @@ fn main() {
         // N-D2: the wallet's own shortcuts, on every desktop (⌘ on macOS,
         // Ctrl on Windows and Linux) — README, "Keyboard shortcuts".
         cx.bind_keys(app_menu::wallet_key_bindings(cfg!(target_os = "macos")));
+        // R22 follow-up r22-5: Tab / ⇧Tab walk the window's tab stops — the
+        // held confirm's keyboard path (`ui::focus_walk`).
+        cx.bind_keys(app_menu::focus_key_bindings());
         app_menu::install(cx);
         // N-D3: ⌘Q skips the window's close hook; the window state is
         // written on the way out either way.

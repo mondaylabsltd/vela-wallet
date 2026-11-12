@@ -651,6 +651,35 @@ mod tests {
         );
     }
 
+    /// §39 (R22 follow-up, r22-8): a key-index group that does not make its
+    /// recorded address is said in the core's catalog words
+    /// (`login::REGISTRY_MISMATCH_WORDS`) — never the core's English detail,
+    /// and never the biometric advice, which is about the passkey and this
+    /// failure is not — in every language.
+    #[test]
+    fn a_registry_mismatch_is_said_in_catalog_words_without_biometric_advice() {
+        let detail = "registry group does not match its address";
+        let kind = PromptKind::SignInFailed {
+            detail: detail.to_owned(),
+            phone_link: false,
+            words_key: Some(vela_core::app::login::REGISTRY_MISMATCH_WORDS.to_owned()),
+        };
+        for (tag, loc) in Loc::every_language() {
+            let spec = prompt_spec(&kind, &loc);
+            assert_eq!(
+                spec.body,
+                loc.t("onboarding.login.registryUnreachableBody"),
+                "{tag}"
+            );
+            assert_ne!(
+                spec.body,
+                loc.t("onboarding.login.signInFailedBody"),
+                "{tag}: no biometric advice"
+            );
+            assert!(!spec.body.contains(detail), "{tag}: never the detail");
+        }
+    }
+
     /// r18-8 (§28, §32) and ob-4: a key kept because its member challenge
     /// was refused by this test build says the key is kept and the test
     /// build's sentence (`words_key`) — never the index, never the network,

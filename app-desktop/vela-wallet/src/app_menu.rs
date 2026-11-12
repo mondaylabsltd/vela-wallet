@@ -52,7 +52,9 @@ actions!(
         Refresh,
         OpenSettings,
         CommandPalette,
-        Find
+        Find,
+        FocusNext,
+        FocusPrev
     ]
 );
 
@@ -200,6 +202,20 @@ pub fn wallet_key_bindings(mac: bool) -> Vec<KeyBinding> {
         bindings.push(KeyBinding::new("f5", Refresh, None));
     }
     bindings
+}
+
+/// R22 follow-up r22-5 (S3): Tab and ⇧Tab walk the window's tab stops — a
+/// sheet's held confirm among them, whose keyboard path (Enter or Space,
+/// "Press again to confirm") starts here. Under the window root's key
+/// context, and never inside a form that walks its own fields
+/// (`ui::focus_walk`): not a shortcut, so not in the table above.
+#[must_use]
+pub fn focus_key_bindings() -> Vec<KeyBinding> {
+    let walk = Some(crate::ui::focus_walk::WALK_PREDICATE);
+    vec![
+        KeyBinding::new("tab", FocusNext, walk),
+        KeyBinding::new("shift-tab", FocusPrev, walk),
+    ]
 }
 
 /// Run `command` on the wallet's page, in its window — when there is one: a

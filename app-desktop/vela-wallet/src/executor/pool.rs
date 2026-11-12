@@ -167,6 +167,11 @@ pub struct Routed {
     /// R22, a corroborated read only: the person's own node answered alone,
     /// by their choice ("Only use my node").
     pub own_node: bool,
+    /// §39 (r22-2), a corroborated read only: nobody independent answered
+    /// because the pool holds no other provider for the chain at all
+    /// (`RpcCallVerdict::Respond::sole_provider`) — configuration, not a
+    /// failure. Carried into the envelope as the core's `soleProvider`.
+    pub sole_provider: bool,
 }
 
 impl Routed {
@@ -176,6 +181,7 @@ impl Routed {
             maybe_delivered: false,
             witness: None,
             own_node: false,
+            sole_provider: false,
         }
     }
 
@@ -188,6 +194,7 @@ impl Routed {
             self.answer.as_ref().ok(),
             self.witness.as_ref(),
             self.own_node,
+            self.sole_provider,
         )
     }
 }
@@ -1618,6 +1625,7 @@ fn routed_of(verdict: &RpcCallVerdict, bodies: &HashMap<String, Value>) -> Route
             maybe_delivered,
             witness_url,
             own_node,
+            sole_provider,
         } => Routed {
             answer: bodies.get(url).cloned().ok_or(PoolError::Failed {
                 rate_limited: false,
@@ -1627,6 +1635,9 @@ fn routed_of(verdict: &RpcCallVerdict, bodies: &HashMap<String, Value>) -> Route
             // URL like the first's — the caller hands both to the core.
             witness: witness_url.as_ref().and_then(|w| bodies.get(w).cloned()),
             own_node: *own_node,
+            // §39 (r22-2): the pool holds no other provider to ask — the
+            // core's envelope says so (`soleProvider`).
+            sole_provider: *sole_provider,
         },
         RpcCallVerdict::RangeCap { url, max_span } => Routed {
             answer: Err(PoolError::RangeCap {
@@ -2369,6 +2380,7 @@ pub(crate) mod tests {
                 maybe_delivered: false,
                 witness_url: None,
                 own_node: false,
+                sole_provider: false,
             }),
             Some(true)
         );
@@ -3178,6 +3190,20 @@ pub(crate) mod tests {
         assert_eq!(urls, [first, second]);
     }
 
+    /// One chain whose pool asks `only` and nobody else.
+    fn seed_one(chain_id: u32, only: &str) {
+        let seeded = storage::write_value(
+            storage::KEY_CUSTOM_NETWORKS,
+            json!([{ "chainId": chain_id, "rpcURL": only }]),
+        );
+        if seeded.is_err() {
+            unreachable!("could not seed the chain");
+        }
+        let (rpc, _) = collect_endpoints(chain_id);
+        let urls: Vec<&str> = rpc.iter().map(|endpoint| endpoint.url.as_str()).collect();
+        assert_eq!(urls, [only]);
+    }
+
     fn open_calls() -> usize {
         let (reply, answer) = channel();
         let sent = sender()
@@ -3889,6 +3915,40 @@ pub(crate) mod tests {
         });
     }
 
+    /// §39 (r22-2): a network whose pool holds ONE provider — nobody else to
+    /// ask, by its configuration — answers a corroborated read alone and
+    /// says so: the core's `soleProvider` rides in the envelope (the member's
+    /// own multisig flows may go on with it, "… anyway"). A read a witness
+    /// answered never carries it.
+    #[test]
+    fn one_provider_alone_is_said_sole_in_the_envelope() {
+        const CHAIN: u32 = 424_263;
+        storage::tests::with_temp_state("pool-corroborate-sole", || {
+            let only = format!("http://127.0.0.1:{}", fake_rpc(CHAIN, Duration::ZERO));
+            seed_one(CHAIN, &only);
+
+            let routed = corroborated_routed(CHAIN, "eth_call", json!([]), None, false);
+            assert!(routed.sole_provider, "{routed:?}");
+            assert_eq!(
+                routed.envelope(),
+                json!({"result": "0x1", "soleProvider": true})
+            );
+            assert_eq!(settle(Duration::from_secs(2)), 0, "a read was left open");
+        });
+        let two = Routed {
+            answer: Ok(json!({"result": "0x1"})),
+            maybe_delivered: false,
+            witness: Some(json!({"result": "0x1"})),
+            own_node: false,
+            sole_provider: true,
+        };
+        assert_eq!(
+            two.envelope(),
+            json!({"result": "0x1", "witness": {"result": "0x1"}}),
+            "a witness answered: never sole"
+        );
+    }
+
     /// R22: the pool giving up on a corroborated read is no first answer —
     /// `{"unreachable": true}`, from the core's own helper.
     #[test]
@@ -3900,6 +3960,7 @@ pub(crate) mod tests {
             maybe_delivered: false,
             witness: None,
             own_node: false,
+            sole_provider: false,
         };
         assert_eq!(routed.envelope(), json!({"unreachable": true}));
         let own = Routed {

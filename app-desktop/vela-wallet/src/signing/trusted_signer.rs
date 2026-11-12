@@ -450,6 +450,7 @@ pub fn handoff_card(
                 friction.hold_ms,
                 &friction.words,
                 fire,
+                None,
                 cx,
             )
         }

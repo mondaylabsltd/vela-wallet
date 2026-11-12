@@ -53,6 +53,25 @@ impl Simulated {
         }
     }
 
+    /// [`Self::of_envelope`], with the native value the wallet decoded from
+    /// the request (`value_wei`, [`decoded_value`]).
+    #[must_use]
+    pub fn of_envelope_valued(envelope: &Value, from: &str, value_wei: Option<&str>) -> Self {
+        let Self { outcome, verdict } = Self::of_envelope(envelope, from);
+        // §39: the core's rule — a checked answer with no native move while
+        // the request sends some is drawn with that outflow. What moves (the
+        // outcome the sheet judges and draws) is the verdict's own list, so
+        // the two never say different things.
+        let verdict = sim_outcome::with_decoded_value(verdict, value_wei);
+        let outcome = match outcome {
+            SimOutcome::Deltas { .. } if verdict.kind == "deltas" => SimOutcome::Deltas {
+                deltas: verdict.deltas.clone(),
+            },
+            other => other,
+        };
+        Self { outcome, verdict }
+    }
+
     /// An answer that needed no node (nothing to ask): the core's own
     /// reading of it.
     #[must_use]
@@ -127,7 +146,25 @@ pub fn simulate(from: &str, calls: &[FeeCall], chain_id: u32) -> Simulated {
         None,
         false,
     );
-    Simulated::of_envelope(&envelope, from)
+    // §39: the native value this request sends, as the wallet decoded it —
+    // never erased by a node that reports no native move.
+    Simulated::of_envelope_valued(&envelope, from, decoded_value(calls).as_deref())
+}
+
+/// The native value the request sends from the account, as the wallet
+/// decoded it: the sum of its calls' values (wei, decimal). `None` when it
+/// sends nothing, or a value cannot be read — the core then adds nothing.
+#[must_use]
+pub fn decoded_value(calls: &[FeeCall]) -> Option<String> {
+    let mut sum: u128 = 0;
+    for call in calls {
+        let value = call.value.trim();
+        if value.is_empty() {
+            continue;
+        }
+        sum = sum.checked_add(value.parse::<u128>().ok()?)?;
+    }
+    (sum > 0).then(|| sum.to_string())
 }
 
 /// `value` as the hex quantity `eth_simulateV1` wants. The wire carries wei as
@@ -158,6 +195,7 @@ mod tests {
         let envelope = vela_core::app::corroborate::corroborated_envelope(
             answer.as_ref(),
             answer.as_ref(),
+            false,
             false,
         );
         Simulated::of_envelope(&envelope, ME).outcome
@@ -217,7 +255,8 @@ mod tests {
     #[test]
     fn one_nodes_word_is_unconfirmed_and_the_own_node_says_so() {
         let ran = json!({"result": [{"calls": [{"status": "0x1", "logs": []}]}]});
-        let alone = vela_core::app::corroborate::corroborated_envelope(Some(&ran), None, false);
+        let alone =
+            vela_core::app::corroborate::corroborated_envelope(Some(&ran), None, false, false);
         let read = Simulated::of_envelope(&alone, ME);
         assert_eq!(read.outcome, SimOutcome::Unconfirmed { disagreed: false });
         assert_eq!(read.verdict.kind, "unconfirmed");
@@ -226,7 +265,7 @@ mod tests {
             read.verdict.notice_key.as_deref(),
             Some(sim_outcome::KEY_UNCONFIRMED)
         );
-        let own = vela_core::app::corroborate::corroborated_envelope(Some(&ran), None, true);
+        let own = vela_core::app::corroborate::corroborated_envelope(Some(&ran), None, true, false);
         let read = Simulated::of_envelope(&own, ME);
         assert_eq!(read.verdict.kind, "deltas");
         assert_eq!(read.verdict.source.as_deref(), Some("own_node"));
@@ -284,6 +323,53 @@ mod tests {
         assert_eq!(notice.risk, ClearRisk::Danger);
         assert_eq!(notice.key, sim_outcome::KEY_WILL_FAIL_REASON);
         assert_eq!(notice.reason.as_deref(), Some(reason));
+    }
+
+    /// §39 (R22 follow-up): a node that reports no native move at all (no
+    /// `traceTransfers`) never erases the value the wallet decoded from the
+    /// request itself — the sum of what the account's calls send. "No asset
+    /// changes" never stands beside a send of 0.2: the outflow is drawn, by
+    /// the core's rule (`sim_outcome::with_decoded_value`).
+    #[test]
+    fn a_node_never_erases_the_native_value_the_request_sends() {
+        let ran = json!({"result": [{"calls": [
+            {"status": "0x1", "logs": []},
+            {"status": "0x1", "logs": []},
+        ]}]});
+        let envelope = vela_core::app::corroborate::corroborated_envelope(
+            Some(&ran),
+            Some(&ran),
+            false,
+            false,
+        );
+        let call = |value: &str| FeeCall {
+            to: "0x000000000000000000000000000000000000dEaD".to_owned(),
+            value: value.to_owned(),
+            data: "0x".to_owned(),
+        };
+        // A batch sends the sum of its calls' values.
+        let calls = [call("150000000000000000"), call("50000000000000000")];
+        assert_eq!(decoded_value(&calls).as_deref(), Some("200000000000000000"));
+        let read = Simulated::of_envelope_valued(&envelope, ME, decoded_value(&calls).as_deref());
+        assert_eq!(read.verdict.no_change_key, None, "never 'No asset changes'");
+        let SimOutcome::Deltas { deltas } = &read.outcome else {
+            unreachable!("deltas: {:?}", read.outcome);
+        };
+        assert_eq!(deltas.len(), 1, "{deltas:?}");
+        assert_eq!(deltas[0].kind, TrustDeltaKind::Native);
+        assert_eq!(deltas[0].delta, "-200000000000000000");
+        assert_eq!(
+            read.verdict
+                .deltas
+                .iter()
+                .map(|d| d.delta.as_str())
+                .collect::<Vec<_>>(),
+            ["-200000000000000000"]
+        );
+        // Nothing sent: nothing added, and the node's word stands.
+        assert_eq!(decoded_value(&[call("0"), call("")]), None);
+        let none = Simulated::of_envelope_valued(&envelope, ME, None);
+        assert_eq!(none, Simulated::of_envelope(&envelope, ME));
     }
 
     /// Every call ran: the deltas, from the core's one parser.

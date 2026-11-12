@@ -266,6 +266,7 @@ pub(crate) fn door_press(
         hold_ms,
         hold_words,
         fire,
+        None,
         cx,
     )
 }
@@ -3017,11 +3018,9 @@ impl WalletPage {
             ActionState::SigningRefused { .. } | ActionState::SigningBlocked => {
                 words::t(loc, "review.blocked")
             }
-            ActionState::SigningUnchecked => words::tv(
-                loc,
-                "proposal.cantCheck",
-                &[("network", &network(chain_id))],
-            ),
+            ActionState::SigningUnchecked | ActionState::SigningDisagreed => {
+                return gate_words(loc, state, chain_id);
+            }
             ActionState::RiskDeclined => return None,
             // Round 16 leftover 4: a member change's refusal is the core's
             // JSON, worded; any other reason is the core's English — said as
@@ -3331,6 +3330,32 @@ impl WalletPage {
             };
             if let Some((text, tone)) = said {
                 col = col.child(ms_note(theme, &text, tone));
+            }
+            // §39 (r22-2): one node is all this network's pool holds — the
+            // way to have it checked twice is one press away: this network's
+            // RPC settings, where the person adds their own node (the
+            // signing sheet's `ownNodeHint` destination).
+            if matches!(
+                &state.verdict,
+                StateVerdict::Unavailable { reason } if reason == vela_core::app::corroborate::ONE_NODE
+            ) {
+                use crate::ui::Accessible as _;
+                let label = words::t(&loc, "review.addOwnNode");
+                let chain = u32::try_from(chain_id).unwrap_or(u32::MAX);
+                col = col.child(
+                    div().flex().child(
+                        div()
+                            .id("ms-review-add-own-node")
+                            .a11y_button(label.clone())
+                            .cursor_pointer()
+                            .text_size(theme::text_row_sub())
+                            .text_color(theme.accent)
+                            .child(crate::ui::prose(label))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.open_network_rpc_settings(chain, cx);
+                            })),
+                    ),
+                );
             }
         }
 
@@ -4845,10 +4870,13 @@ pub(crate) fn ms_moves_line(sim: &SimVerdict) -> Option<(&str, Tone)> {
 /// core's reason (`corroborate::UNCORROBORATED`, `corroborate::DISAGREED`),
 /// as `words::tv` keys under `home.multisig`.
 pub(crate) fn state_unread_key(reason: &str) -> &'static str {
-    use vela_core::app::corroborate::{DISAGREED, UNCORROBORATED};
+    use vela_core::app::corroborate::{DISAGREED, ONE_NODE, UNCORROBORATED};
     match reason {
         UNCORROBORATED => "review.stateUnconfirmed",
         DISAGREED => "review.stateDisagreed",
+        // §39 (r22-2): one node, on a network whose pool holds no other —
+        // "only one node could confirm…", never "checked".
+        ONE_NODE => "review.stateOneNode",
         _ => "review.stateUnread",
     }
 }
@@ -5116,14 +5144,15 @@ pub(crate) fn member_label(
 /// A kind the core keys is said in that key's words; the kinds worded from
 /// the detail's own facts (the fee that moved, what the executor has and
 /// needs, the network out of reach, the signing venue's block) are read
-/// from this shell's `live::ShellFailure` for those facts. A member it names
-/// (the executor a moved fee would have charged) is said by `name`, the fee
-/// line's own naming (`ms_member_name`).
+/// from this shell's `live::ShellFailure` for those facts. `_name` is the
+/// fee line's own naming of a member (`ms_member_name`); §39 (r22-4): the
+/// moved fee's line, the one that named its executor, is now the core's
+/// `feeRose`, which names nobody — kept for the next kind that does.
 pub(crate) fn failure_words(
     loc: &crate::loc::Loc,
     detail: &str,
     chain_id: u64,
-    name: &dyn Fn(&str) -> String,
+    _name: &dyn Fn(&str) -> String,
 ) -> String {
     use crate::multisig::live::{ShellFailure, read_failure};
     use vela_core::app::multisig_failure::{FailureKind, failure_said};
@@ -5142,15 +5171,12 @@ pub(crate) fn failure_words(
                 ],
             )
         }
-        // r14-9: the fee moved since the press — nothing signed; said with
-        // the new figure in its fee line's own words (the executor named as
-        // that line names it), so the next press is on it.
-        (
-            FailureKind::FeeMoved,
-            Some(ShellFailure::FeeMoved {
-                amount, executor, ..
-            }),
-        ) => fee_moved_words(loc, &amount, &name(&executor), chain_id),
+        // r14-9, §39 (r22-4): the fee went up since the press — nothing
+        // signed; said in the core's key with the new figure as the fee line
+        // draws it, so the next press is on it.
+        (FailureKind::FeeMoved, Some(ShellFailure::FeeMoved { amount, .. })) => {
+            fee_moved_words(loc, &amount, chain_id)
+        }
         // r16-18: a read before the passkey on a network that is failing.
         (FailureKind::ChainUnreachable, Some(ShellFailure::ChainUnreachable { chain_id })) => {
             words::tv(
@@ -5185,6 +5211,24 @@ pub(crate) fn failure_words(
             .filter(|text| !text.starts_with("home.") && !text.starts_with("componentsUi."))
             .unwrap_or_else(unknown),
     }
+}
+
+/// A signing gate that would not sign, worded (§39, r22-2): who may act for
+/// the multisig could not be read (`SigningUnchecked`) — the authority's own
+/// sentence, never "Can't reach {{network}}", which is reachability and this
+/// is not — or two independent nodes answered it differently
+/// (`SigningDisagreed`): nothing signed, no "… anyway".
+pub(crate) fn gate_words(
+    loc: &crate::loc::Loc,
+    state: &ActionState,
+    chain_id: u64,
+) -> Option<String> {
+    let key = match state {
+        ActionState::SigningUnchecked => "authority.signUnchecked",
+        ActionState::SigningDisagreed => "authority.signDisagreed",
+        _ => return None,
+    };
+    Some(words::tv(loc, key, &[("network", &network(chain_id))]))
 }
 
 /// r18-13 (r16-18's rule): an Execute — plain, or the one press — the look
@@ -5253,28 +5297,19 @@ pub(crate) fn outbox_words(
     }
 }
 
-pub(crate) fn fee_moved_words(
-    loc: &crate::loc::Loc,
-    amount: &str,
-    name: &str,
-    chain_id: u64,
-) -> String {
+/// §39 (R22 follow-up, r22-4, KNOWN-BUGS R20-15): an execution whose fee
+/// went up since the press — the core's key (`multisig_failure::FEE_ROSE_KEY`,
+/// "The network fee went up to ≈ {{fee}} since you pressed; nothing was
+/// signed. Press again to pay {{fee}}."), `{{fee}}` the new figure exactly as
+/// the fee line draws one (with its coin's symbol). Never "That didn't go
+/// through: Network fee ≈ …".
+pub(crate) fn fee_moved_words(loc: &crate::loc::Loc, amount: &str, chain_id: u64) -> String {
     let info = words::token_info(chain_id, None);
-    words::tv(
-        loc,
-        "proposal.failed",
-        &[(
-            "reason",
-            &words::tv(
-                loc,
-                "proposal.feeLine",
-                &[
-                    ("fee", &words::fee_words(loc, amount, &info)),
-                    ("name", name),
-                ],
-            ),
-        )],
+    loc.t_texts(
+        vela_core::app::multisig_failure::FEE_ROSE_KEY,
+        &[("fee", &words::fee_words(loc, amount, &info))],
     )
+    .to_string()
 }
 
 /// r16-19 (§22 r15-11): the multisig shown is not (yet) the one the
@@ -5467,14 +5502,91 @@ mod tests {
         };
         assert_eq!((amount.as_str(), chain_id), ("97200000000000000", 100));
         let loc = crate::loc::Loc::for_tag("en");
-        let line = super::fee_moved_words(&loc, &amount, "Ana", chain_id);
-        assert!(line.contains("0.0972"), "{line}");
-        assert!(line.contains("Ana"), "{line}");
+        let line = super::fee_moved_words(&loc, &amount, chain_id);
+        // §39 (r22-4): why it stopped — the fee went up since the press,
+        // nothing was signed, the next press pays the new figure — never
+        // "That didn't go through: Network fee ≈ …".
+        assert_eq!(
+            line,
+            "The network fee went up to ≈ 0.0972 xDAI since you pressed; nothing was \
+             signed. Press again to pay 0.0972 xDAI."
+        );
+        assert!(!line.contains("didn't go through"), "{line}");
     }
 
-    /// §19.12: the fee-moved line names the executor as the fee line does —
-    /// the core's member label (`member_labels`, then `names.label`) — never
-    /// by a short address the fee line above it does not use.
+    /// §39 (r22-4, KNOWN-BUGS R20-15): the core's key for a fee that moved
+    /// (`failure_said` → `home.multisig.proposal.feeRose`) is the line drawn,
+    /// `{{fee}}` filled as the fee line fills it, in every language.
+    #[test]
+    fn a_fee_that_rose_is_said_in_the_cores_key_with_the_new_figure() {
+        let detail = vela_core::app::multisig_proposals::fee_moved_detail(
+            5_042_002,
+            "0x00000000000000000000000000000000000000A1",
+            96_000_000_000_000_000,
+        );
+        let said = vela_core::app::multisig_failure::failure_said(&detail);
+        assert_eq!(
+            said.key.as_deref(),
+            Some(vela_core::app::multisig_failure::FEE_ROSE_KEY)
+        );
+        for lang in ["en", "zh", "de"] {
+            let loc = crate::loc::Loc::for_tag(lang);
+            let line = super::failure_words(&loc, &detail, 5_042_002, &|_: &str| "Ana".into());
+            let fee = super::words::fee_words(
+                &loc,
+                "96000000000000000",
+                &super::words::token_info(5_042_002, None),
+            );
+            let want = loc.t_texts(
+                vela_core::app::multisig_failure::FEE_ROSE_KEY,
+                &[("fee", &fee)],
+            );
+            assert_eq!(line, want.to_string(), "{lang}");
+            assert!(!line.contains("{{"), "{lang}: {line}");
+        }
+    }
+
+    /// §39 (r22-2): a signing gate that could not read who may act is never
+    /// "Can't reach {{network}}" — it is the authority's own sentence; two
+    /// nodes that disagreed are said as that.
+    #[test]
+    fn an_unread_authority_is_never_said_as_cant_reach() {
+        use vela_core::app::multisig_proposals::ActionState;
+        let loc = crate::loc::Loc::for_tag("en");
+        let net = super::network(100);
+        let unchecked =
+            super::gate_words(&loc, &ActionState::SigningUnchecked, 100).unwrap_or_default();
+        assert_eq!(
+            unchecked,
+            super::words::tv(&loc, "authority.signUnchecked", &[("network", &net)])
+        );
+        assert!(!unchecked.contains("Can't reach"), "{unchecked}");
+        let disagreed =
+            super::gate_words(&loc, &ActionState::SigningDisagreed, 100).unwrap_or_default();
+        assert_eq!(
+            disagreed,
+            super::words::tv(&loc, "authority.signDisagreed", &[("network", &net)])
+        );
+        assert!(!disagreed.contains("anyway"), "{disagreed}");
+    }
+
+    /// §39 (r22-2): a review whose state check stood on the one node a
+    /// network has is said as that — never "checked" — in its own words.
+    #[test]
+    fn a_state_check_on_one_node_is_said_as_one_node() {
+        assert_eq!(
+            super::state_unread_key(vela_core::app::corroborate::ONE_NODE),
+            "review.stateOneNode"
+        );
+        let loc = crate::loc::Loc::for_tag("en");
+        let line = super::words::tv(&loc, "review.stateOneNode", &[("network", "Arc Testnet")]);
+        assert!(line.starts_with("Only one node could confirm"), "{line}");
+    }
+
+    /// §19.12: the fee-moved line never names the executor by a short
+    /// address the fee line above it does not use. (§39: the line is now the
+    /// core's `feeRose` — the new figure, nobody named; the fee line above it
+    /// names the executor by the core's member label.)
     #[test]
     fn a_fee_that_moved_names_its_executor_by_the_cores_member_label() {
         let executor = "0x00000000000000000000000000000000000000A1";
@@ -5490,7 +5602,10 @@ mod tests {
             super::member_label(Some(&labels), a, None, None)
         });
         assert!(line.contains("0.0972"), "{line}");
-        assert!(line.contains("Ana"), "the core's label: {line}");
+        assert!(
+            line.starts_with("The network fee went up"),
+            "the core's feeRose: {line}"
+        );
         assert!(
             !line.contains(&super::words::short(executor)),
             "never the short address: {line}"

@@ -199,6 +199,10 @@ pub struct SigningStrings {
     pub status_signing: SharedString,
     pub status_submitted: SharedString,
     pub error_generic: SharedString,
+    /// §39 (r22-3 / A1): the fee quote rose above the figure the sheet
+    /// showed when the confirm began — nothing was signed, the new figure is
+    /// drawn, the next confirm pays it (`sign_request::FEE_ROSE_KEY`).
+    pub fee_rose: SharedString,
     /// Spec 096 F8: `send.txRetryBtn` — a failure that sent nothing, again.
     pub retry: SharedString,
     /// What a message signature that failed says in its place (083 H4): it
@@ -561,6 +565,7 @@ impl SigningStrings {
             // wallet, one way of saying "it did not go out, your funds are
             // safe" — and no raw relay text on a screen (SC-305).
             error_generic: loc.t("send.txErrorGeneric"),
+            fee_rose: loc.t(vela_core::app::sign_request::FEE_ROSE_KEY),
             retry: loc.t("send.txRetryBtn"),
             error_off_chain: loc.t("connect.detail.offChainNote"),
             error_network: loc.t("send.lock.netNotFound"),

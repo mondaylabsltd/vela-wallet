@@ -1586,6 +1586,7 @@ mod tests {
             maybe_delivered: false,
             witness: None,
             own_node: false,
+            sole_provider: false,
         }
     }
 
@@ -1598,6 +1599,7 @@ mod tests {
             maybe_delivered,
             witness: None,
             own_node: false,
+            sole_provider: false,
         }
     }
 
@@ -1698,6 +1700,7 @@ mod tests {
             maybe_delivered: true,
             witness: None,
             own_node: false,
+            sole_provider: false,
         };
         let refused = answered(json!({"error": {"message": "AA25 invalid account nonce"}}));
         let (verdict, _, posts, _) = run(vec![busy_after_a_lost_reply, refused]);

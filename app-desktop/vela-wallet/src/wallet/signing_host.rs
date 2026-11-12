@@ -137,9 +137,22 @@ fn back_on_form_of(view: &SignView, responded: bool) -> bool {
     view.surface == vela_core::app::sign_request::SignSurface::Sheet
         && !view.is_signing
         && !view.is_submitting
-        && view.error.is_none()
+        && view
+            .error
+            .as_ref()
+            .is_none_or(|error| error_keeps_the_form(error.kind))
         && view.pending_op_hash.is_none()
         && !responded
+}
+
+/// §39 (r22-3 / A1): the two errors the core sends the site nothing for and
+/// keeps the sheet for the person to confirm again — a fee that rose above
+/// the figure shown (`FeeRose`), a stale Tempo quote (`StaleFeeQuote`). The
+/// form is back: the fee row re-quotes, and the next confirm pays the new
+/// figure; nothing was approved.
+fn error_keeps_the_form(kind: vela_core::app::sign_request::SignErrorKind) -> bool {
+    use vela_core::app::sign_request::SignErrorKind;
+    matches!(kind, SignErrorKind::FeeRose | SignErrorKind::StaleFeeQuote)
 }
 
 /// Whether the core took the approve it was just sent: a pipeline runs, or
@@ -235,6 +248,9 @@ pub struct SigningHost {
     answers: Vec<TransportAnswer>,
     /// The fee coin list, open in the sheet (the web's `feeOpen`).
     pub fee_open: bool,
+    /// §39 (A1): the fee the sheet drew when its confirm began, held on the
+    /// row while the hold is under way or the confirm is armed ([`ShownFee`]).
+    shown_fee: ShownFee,
     sign: CoreHost<SignRequest>,
     pub view: SignView,
     clear: CoreHost<ClearSigning>,
@@ -452,6 +468,7 @@ impl SigningHost {
             responded: false,
             answers: Vec::new(),
             fee_open: false,
+            shown_fee: ShownFee::default(),
             origin: request.origin.clone(),
             chain_id: request.chain_id,
             facts: facts_of(&request),
@@ -825,10 +842,24 @@ impl SigningHost {
         // The dApp's answer window starts at the tap (spec 082 RA12).
         self.ctx.approved_at_ms = Some(now_ms());
         self.phone_stop = None;
-        let mut opts = approve_opts(self.speed.fee_view(), &self.clear_view, &self.guard_view);
+        // §39 (A1): the figure the sheet drew when the confirm began (a hold
+        // or an arm — the live one for a plain press), beside the live quote.
+        let live = self.speed.fee_view();
+        let mut opts = approve_opts(
+            self.shown_fee.drawn(live),
+            live,
+            &self.clear_view,
+            &self.guard_view,
+        );
         // 083 F1: the lines the sheet drew under "Balance changes" — none when
         // the simulation reverted or could not run (its notice stood there).
         opts.balance_changes = approved_changes(&self.sim.judgments, self.sim.notice.is_some());
+        // The confirm fired — the hold completed or the arm was pressed
+        // again, and either is over (`ui::hold_confirm`): the row is live
+        // again. On a fee that rose (`SignErrorKind::FeeRose`) the sheet
+        // stays, draws the new figure under the core's words, and the next
+        // confirm pays it.
+        self.shown_fee.release();
         self.dispatch_sign(SignEvent::ApproveTapped { opts }, cx);
         // An approve the core did not take approved nothing (`approve_taken`),
         // and this host must not go on saying it did: `approved` turns the
@@ -1104,9 +1135,29 @@ impl SigningHost {
 
     // -- the speed control (spec 069) ----------------------------------------
 
-    /// The fee in force, as the sheet's fee row reads it.
+    /// The fee in force — the fee machine's live quote.
     pub fn fee_view(&self) -> &FeeView {
         self.speed.fee_view()
+    }
+
+    /// §39 (A1): the fee the sheet's fee row draws — the figure shown when
+    /// the confirm began while a hold is under way or the confirm is armed
+    /// ([`ShownFee`]), else the live quote.
+    pub fn drawn_fee_view(&self) -> &FeeView {
+        self.shown_fee.drawn(self.speed.fee_view())
+    }
+
+    /// §39 (A1): the held confirm began (`true`: a hold's start, the
+    /// assistive path's first press) or was let go without firing (`false`:
+    /// released early, disarmed, no longer drawn) — the row holds the figure
+    /// drawn now still, or goes live again.
+    pub fn confirm_engaged(&mut self, engaged: bool, cx: &mut Context<Self>) {
+        if engaged {
+            self.shown_fee.engage(self.speed.fee_view());
+        } else if !self.shown_fee.release() {
+            return;
+        }
+        cx.notify();
     }
 
     /// The speed control, as the core decided it.
@@ -1784,9 +1835,11 @@ impl Simulation {
 
     /// Ask again: the verdict stays on the sheet, marked as being checked
     /// again, and the signing machine hears the simulation is out once more
-    /// (`SimStarted`) — a second run holds the confirm for its own wait, so
-    /// nobody signs over a verdict about to change. `None` when there is
-    /// nothing to ask again.
+    /// (`SimStarted`). §39 (r22-6): the core keeps the door of the verdict
+    /// already on the sheet — the confirm never flips to "Checking…" and
+    /// back, and a hold or an arm on it survives; a verdict that lands
+    /// different changes the door when it lands. This column shuts nothing
+    /// of its own meanwhile. `None` when there is nothing to ask again.
     pub(crate) fn again(&mut self, request_id: &str) -> Option<(SimAsk, SignEvent)> {
         let ask = self.ask.clone()?;
         if !self.recheck || self.rechecking || !self.announced {
@@ -1937,8 +1990,16 @@ pub fn known_chain_ids() -> Vec<u32> {
 /// The quote comes from the fee view that RENDERED the confirm card rather
 /// than from a fresh question, for the same reason spelled out in this cut's
 /// second lesson: a second question produces a second number, and the figure
-/// somebody agreed to would not be the figure that gets signed.
-fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> SignApproveOpts {
+/// somebody agreed to would not be the figure that gets signed. §39 (A1):
+/// `fee` is the figure the sheet drew when the confirm BEGAN ([`ShownFee`]),
+/// and `live` the fee machine's quote now — carried beside it as
+/// `current_fee`, for the core to sign the figure shown or nothing.
+fn approve_opts(
+    fee: &FeeView,
+    live: &FeeView,
+    clear: &ClearSigningView,
+    guard: &GuardView,
+) -> SignApproveOpts {
     SignApproveOpts {
         max_fee_per_gas: fee
             .fee
@@ -1949,19 +2010,11 @@ fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> S
         // priced in USDC and submitted without its fee leg is a different
         // operation from the one somebody agreed to.
         gas_fee_token: fee.fee_token.clone(),
-        // In the paying coin's own units — the send core's rule
-        // (`submit_user_op`): an ERC-20 fee is its `amount`, never
-        // `total_wei`, which is 0 for one.
-        quoted_fee: fee.fee.as_ref().map(|estimate| SignQuotedFee {
-            amount: match &estimate.fee_asset {
-                FeeAssetView::Erc20 { amount, .. } => amount.clone(),
-                FeeAssetView::Native => estimate.total_wei.clone(),
-            },
-            recipient: estimate.fee_recipient.clone().unwrap_or_default(),
-            // The speed this very estimate was priced at — named on the wire
-            // beside the amount (spec 069); the core drops a `rapid`.
-            tier: Some(estimate.tier),
-        }),
+        quoted_fee: quoted_fee_of(fee),
+        // §39 (r22-3 / A1): the live quote at the approve, in the same units
+        // — at or under the figure shown, the figure shown is signed; above
+        // it, nothing is (`SignErrorKind::FeeRose`).
+        current_fee: quoted_fee_of(live),
         fee_collector: None,
         params_override_json: guard.rewritten_params_json.clone(),
         // The verb the record keeps, which Activity titles the row with — the
@@ -1984,6 +2037,57 @@ fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> S
         // What the reading named — the contract and the coins (spec 097) —
         // so Activity names them as this sheet did. Copied, never decided.
         reading: clear.record_reading.clone(),
+    }
+}
+
+/// A fee view's quote as the approve carries it. In the paying coin's own
+/// units — the send core's rule (`submit_user_op`): an ERC-20 fee is its
+/// `amount`, never `total_wei`, which is 0 for one — with the speed this very
+/// estimate was priced at, named on the wire beside the amount (spec 069; the
+/// core drops a `rapid`).
+fn quoted_fee_of(fee: &FeeView) -> Option<SignQuotedFee> {
+    fee.fee.as_ref().map(|estimate| SignQuotedFee {
+        amount: match &estimate.fee_asset {
+            FeeAssetView::Erc20 { amount, .. } => amount.clone(),
+            FeeAssetView::Native => estimate.total_wei.clone(),
+        },
+        recipient: estimate.fee_recipient.clone().unwrap_or_default(),
+        tier: Some(estimate.tier),
+    })
+}
+
+/// §39 (R22 follow-up, r22-3 / A1): the fee the sheet DREW when its confirm
+/// began — the start of the hold, or the first press of the assistive
+/// two-press path — held still on the fee row while the hold is under way or
+/// the confirm is armed, and approved as `quoted_fee` beside the fee
+/// machine's live quote (`current_fee`). The core signs the figure shown when
+/// the live one is at or under it, and refuses (`SignErrorKind::FeeRose`)
+/// when it rose — never a charge above what was on the screen.
+#[derive(Debug, Default)]
+pub struct ShownFee {
+    held: Option<FeeView>,
+}
+
+impl ShownFee {
+    /// The confirm began: the figure drawn now is the one shown, from here
+    /// until the confirm fires or is let go. A second engage keeps the first.
+    pub fn engage(&mut self, live: &FeeView) {
+        if self.held.is_none() {
+            self.held = Some(live.clone());
+        }
+    }
+
+    /// The confirm was let go, disarmed, or fired: the row is live again.
+    /// `true` when a figure was held.
+    pub fn release(&mut self) -> bool {
+        self.held.take().is_some()
+    }
+
+    /// The fee the row draws: the one shown while the confirm is engaged,
+    /// else the live quote.
+    #[must_use]
+    pub fn drawn<'a>(&'a self, live: &'a FeeView) -> &'a FeeView {
+        self.held.as_ref().unwrap_or(live)
     }
 }
 
@@ -2701,14 +2805,14 @@ mod tests {
 
         // Nothing rewritten: the request stands as it arrived.
         assert_eq!(
-            approve_opts(&fee, &clear, &guard).params_override_json,
+            approve_opts(&fee, &fee, &clear, &guard).params_override_json,
             None
         );
 
         let capped = r#"[{"to":"0xtoken","data":"0x095ea7b3capped"}]"#;
         guard.rewritten_params_json = Some(capped.to_owned());
         assert_eq!(
-            approve_opts(&fee, &clear, &guard)
+            approve_opts(&fee, &fee, &clear, &guard)
                 .params_override_json
                 .as_deref(),
             Some(capped),
@@ -2724,10 +2828,10 @@ mod tests {
         let fee = crate::core_host::CoreHost::<FeePolicy>::new().view();
         let clear = crate::core_host::CoreHost::<ClearSigning>::new().view();
         let mut guard = crate::core_host::CoreHost::<ApprovalGuard>::new().view();
-        assert!(!approve_opts(&fee, &clear, &guard).unlimited_approved);
+        assert!(!approve_opts(&fee, &fee, &clear, &guard).unlimited_approved);
 
         guard.unlimited_consented = true;
-        let opts = approve_opts(&fee, &clear, &guard);
+        let opts = approve_opts(&fee, &fee, &clear, &guard);
         assert!(opts.unlimited_approved);
         assert!(opts.unlimited_approved_legs.is_empty(), "no batch, no leg");
 
@@ -2736,11 +2840,11 @@ mod tests {
         // view did not name.
         guard.unlimited_consented_legs = vec![0, 2];
         assert_eq!(
-            approve_opts(&fee, &clear, &guard).unlimited_approved_legs,
+            approve_opts(&fee, &fee, &clear, &guard).unlimited_approved_legs,
             vec![0, 2]
         );
         guard.unlimited_consented_legs.clear();
-        let opts = approve_opts(&fee, &clear, &guard);
+        let opts = approve_opts(&fee, &fee, &clear, &guard);
         assert_eq!(
             opts.params_override_json, None,
             "kept as asked: the site's own bytes, nothing rewritten"
@@ -2760,7 +2864,7 @@ mod tests {
         let fee = crate::core_host::CoreHost::<FeePolicy>::new().view();
         let mut guard = crate::core_host::CoreHost::<ApprovalGuard>::new().view();
         let mut clear = crate::core_host::CoreHost::<ClearSigning>::new().view();
-        assert_eq!(approve_opts(&fee, &clear, &guard).intent, None);
+        assert_eq!(approve_opts(&fee, &fee, &clear, &guard).intent, None);
 
         // A reading whose intent the core would not record: the shell does
         // not fall back to it.
@@ -2782,10 +2886,10 @@ mod tests {
             reading: vela_core::app::clear_signing::ClearReading::default(),
         });
         clear.record_intent = None;
-        assert_eq!(approve_opts(&fee, &clear, &guard).intent, None);
+        assert_eq!(approve_opts(&fee, &fee, &clear, &guard).intent, None);
         clear.record_intent = Some("Swap".to_owned());
         assert_eq!(
-            approve_opts(&fee, &clear, &guard).intent.as_deref(),
+            approve_opts(&fee, &fee, &clear, &guard).intent.as_deref(),
             Some("Swap"),
             "the core's word, not the reading's"
         );
@@ -2797,12 +2901,12 @@ mod tests {
             loading: false,
         };
         assert_eq!(
-            approve_opts(&fee, &clear, &guard).token_meta,
+            approve_opts(&fee, &fee, &clear, &guard).token_meta,
             Some(guard.meta.clone())
         );
 
         // Spec 097: what the reading named rides the approve verbatim.
-        assert_eq!(approve_opts(&fee, &clear, &guard).reading, None);
+        assert_eq!(approve_opts(&fee, &fee, &clear, &guard).reading, None);
         clear.record_reading = Some(vela_core::app::dapp_activity::DappReading {
             address: Some("0xe12e0f117d23a5ccc57f8935cd8c4e80cd91ff01".to_owned()),
             name: Some("NativeOrderFactory".to_owned()),
@@ -2810,7 +2914,7 @@ mod tests {
             tokens: Vec::new(),
         });
         assert_eq!(
-            approve_opts(&fee, &clear, &guard).reading,
+            approve_opts(&fee, &fee, &clear, &guard).reading,
             clear.record_reading
         );
     }
@@ -3212,6 +3316,7 @@ mod approve_tests {
             bundler_cost_wei: None,
             gas_fee_token: None,
             quoted_fee: quoted,
+            current_fee: None,
             fee_collector: None,
             params_override_json: None,
             intent: None,
@@ -3269,7 +3374,7 @@ mod approve_tests {
         let clear = crate::core_host::CoreHost::<ClearSigning>::new().view();
         let guard = crate::core_host::CoreHost::<ApprovalGuard>::new().view();
 
-        let opts = approve_opts(&fee, &clear, &guard);
+        let opts = approve_opts(&fee, &fee, &clear, &guard);
         assert_eq!(opts.gas_fee_token.as_deref(), Some(usdc.as_str()));
         let quoted = opts
             .quoted_fee
@@ -3283,12 +3388,61 @@ mod approve_tests {
             estimate.fee_asset = FeeAssetView::Native;
             estimate.total_wei = "91000000000000".to_owned();
         }
-        let opts = approve_opts(&fee, &clear, &guard);
+        let opts = approve_opts(&fee, &fee, &clear, &guard);
         assert_eq!(opts.gas_fee_token, None);
         assert_eq!(
             opts.quoted_fee.map(|quoted| quoted.amount).as_deref(),
             Some("91000000000000")
         );
+    }
+
+    /// §39 (r22-3 / A1): a held confirm approves the figure the sheet DREW
+    /// when it began (`quoted_fee`) beside the fee machine's live quote at
+    /// the approve (`current_fee`); the row holds the figure still while the
+    /// confirm is engaged, and is live again once it is let go. A quote that
+    /// moved under a hold never re-draws the row, and the figure signed is
+    /// the one shown — or nothing (the core's `FeeRose`).
+    #[test]
+    fn a_held_confirm_signs_the_fee_it_drew_beside_the_live_quote() {
+        let quote = |total: &str| {
+            let mut fee = crate::signing::fixtures::settled_fee();
+            if let Some(estimate) = fee.fee.as_mut() {
+                estimate.total_wei = total.to_owned();
+                estimate.fee_asset = FeeAssetView::Native;
+                estimate.fee_recipient = Some("0xee2c".to_owned());
+            }
+            fee
+        };
+        let clear = crate::core_host::CoreHost::<ClearSigning>::new().view();
+        let guard = crate::core_host::CoreHost::<ApprovalGuard>::new().view();
+        let (drawn, risen) = (quote("10000000000000000"), quote("12000000000000000"));
+
+        let mut shown = ShownFee::default();
+        // Nothing engaged: the row is the live quote.
+        assert_eq!(shown.drawn(&drawn), &drawn);
+        // The hold begins on the figure drawn; the quote rises under it.
+        shown.engage(&drawn);
+        assert_eq!(shown.drawn(&risen), &drawn, "the row holds still");
+        // A second engage (the arm's second press) keeps the first figure.
+        shown.engage(&risen);
+        assert_eq!(shown.drawn(&risen), &drawn);
+
+        let opts = approve_opts(shown.drawn(&risen), &risen, &clear, &guard);
+        let amount = |fee: Option<SignQuotedFee>| fee.map(|f| f.amount).unwrap_or_default();
+        assert_eq!(amount(opts.quoted_fee.clone()), "10000000000000000");
+        assert_eq!(amount(opts.current_fee.clone()), "12000000000000000");
+        assert!(vela_core::app::sign_request::fee_rose(
+            opts.quoted_fee.as_ref(),
+            opts.current_fee.as_ref()
+        ));
+
+        // Let go: the row is live again, and a plain approve carries one
+        // figure twice.
+        assert!(shown.release());
+        assert!(!shown.release(), "released once");
+        assert_eq!(shown.drawn(&risen), &risen);
+        let plain = approve_opts(shown.drawn(&risen), &risen, &clear, &guard);
+        assert_eq!(plain.quoted_fee, plain.current_fee);
     }
 
     /// A personal_sign on the machine the column drives, approved as far as
@@ -4161,6 +4315,146 @@ mod sim_wait_tests {
         assert_eq!(refused.key.as_deref(), Some(BLIND_REFUSED_KEY));
     }
 
+    /// §39 (R22 follow-up, r22-6): "Check again" under a verdict already on
+    /// the sheet keeps the confirm's door — it never flips to the shut
+    /// "Checking…" and back — and a hold or an arm made on it survives a
+    /// re-check that lands the same verdict: the confirm is still drawn held
+    /// for the same request, armed.
+    #[test]
+    fn a_recheck_of_a_landed_verdict_keeps_the_door_and_the_arm() {
+        use crate::ui::hold_confirm::{Activation, HoldState};
+        use std::time::{Duration, Instant};
+        use vela_core::app::sign_confirm::{CONFIRM_AGAIN_WINDOW_MS, HOLD_TO_CONFIRM_MS};
+        use vela_core::app::sim_outcome::{notice, verdict_of};
+
+        let unconfirmed = || {
+            SimVerdict::of_core(
+                verdict_of(SimOutcome::Unconfirmed { disagreed: false }),
+                notice(&SimOutcome::Unconfirmed { disagreed: false }),
+            )
+        };
+        let mut sheet = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+        let calls = sign_executor::calls_of(&sheet.request.method, &sheet.request.params_json)
+            .unwrap_or_default();
+        sheet.sim.ask = Some(SimAsk {
+            chain_id: 1,
+            wallet: ME.to_owned(),
+            calls,
+        });
+        sheet.lands(unconfirmed());
+        let door = sheet.gate(false);
+        assert!(door.enabled && door.anyway, "{door:?}");
+        assert_eq!(door.hold_ms, HOLD_TO_CONFIRM_MS);
+
+        // Armed from the keyboard on this request's confirm.
+        let subject = gpui::SharedString::from(sheet.request.id.clone());
+        let start = Instant::now();
+        let mut hold = HoldState::default();
+        assert_eq!(
+            hold.activate(start, CONFIRM_AGAIN_WINDOW_MS, &subject),
+            Activation::Armed
+        );
+
+        // Check again: the machine hears the simulation is out once more…
+        let id = sheet.request.id.clone();
+        let (_, event) = sheet.sim.again(&id).expect("asked again");
+        sheet.dispatch(event);
+        // …and the door is the one already drawn: never shut "Checking…".
+        assert!(!sheet.sign.view().sim_checking, "the door stays");
+        assert_eq!(sheet.gate(false), door);
+        assert_eq!(sheet.block(), None);
+        assert!(sheet.timers_asked().len() <= 1, "no second wait");
+        // The same verdict lands: the same door, and the arm stands.
+        sheet.lands(unconfirmed());
+        assert_eq!(sheet.gate(false), door);
+        let soon = start + Duration::from_millis(1_000);
+        assert!(hold.armed(soon, CONFIRM_AGAIN_WINDOW_MS, &subject));
+        assert_eq!(
+            hold.activate(soon, CONFIRM_AGAIN_WINDOW_MS, &subject),
+            Activation::Confirm,
+            "the second press confirms"
+        );
+    }
+
+    /// §39 (r22-3 / A1, core dfcc25c55): a site's send approved on a figure
+    /// the live quote has since risen above stops on the sheet — FeeRose,
+    /// nothing signed, nothing sent to the site — and then the column's close
+    /// (`SigningHost::close`: `close_plan`, `close_event` over the core's
+    /// `swipe_action`) answers the site 4001. It is never left waiting.
+    #[test]
+    fn a_fee_rose_stop_then_a_close_answers_the_site_4001() {
+        use vela_core::app::sign_request::{SignErrorKind, SignResponsePayload, SignSwipeAction};
+        let mut sheet = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+        sheet.lands(a_send());
+        let quote = |amount: &str| SignQuotedFee {
+            amount: amount.to_owned(),
+            recipient: "0xee2c".to_owned(),
+            tier: None,
+        };
+        let opts = SignApproveOpts {
+            quoted_fee: Some(quote("120000000000000000")),
+            current_fee: Some(quote("138000000000000000")),
+            ..SignApproveOpts::default()
+        };
+        let asked = sheet.sign.dispatch(SignEvent::ApproveTapped { opts });
+        assert!(asked.is_empty(), "nothing signed or sent");
+        let view = sheet.sign.view();
+        assert_eq!(
+            view.error.as_ref().map(|error| error.kind),
+            Some(SignErrorKind::FeeRose)
+        );
+        assert!(
+            !approve_taken(&view, false),
+            "the sheet stays for the person"
+        );
+        assert_eq!(view.swipe_action, SignSwipeAction::Reject);
+
+        // The ✕: what `SigningHost::close` tells the core now.
+        let facts = close_facts_of(&view, crate::signing::status::Signature::NotYet, false);
+        assert_eq!(
+            crate::signing::status::close_plan(&facts),
+            crate::signing::status::ClosePlan::Now
+        );
+        let answered: Vec<SignOperation> = sheet
+            .sign
+            .dispatch(close_event(&view))
+            .into_iter()
+            .map(|pending| pending.operation)
+            .collect();
+        assert!(
+            answered.iter().any(|op| matches!(
+                op,
+                SignOperation::SendResponse {
+                    payload: SignResponsePayload::Err { code: 4001, .. },
+                    ..
+                }
+            )),
+            "the site is answered 4001: {answered:?}"
+        );
+    }
+
+    /// §39 (an R22 observation against §37): an unbounded grant held the
+    /// confirm only where the reading graded it — a Multicall3-carried
+    /// approval or a witness permit was a plain Confirm. The sheet reads the
+    /// core's whole gate (`sign_confirm::confirm_state`), so the approval
+    /// guard's one verdict (`GuardView::unlimited_warning`) makes it a held
+    /// danger however it arrives.
+    #[test]
+    fn an_unlimited_grant_holds_the_confirm_however_it_arrives() {
+        use vela_core::app::sign_confirm::HOLD_TO_CONFIRM_MS;
+        let mut sheet = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+        sheet.lands(a_send());
+        let plain = sheet.gate(false);
+        assert!(
+            plain.enabled && !plain.danger && plain.hold_ms == 0,
+            "{plain:?}"
+        );
+        sheet.guard.unlimited_warning = true;
+        let held = sheet.gate(false);
+        assert!(held.enabled && held.danger, "{held:?}");
+        assert_eq!(held.hold_ms, HOLD_TO_CONFIRM_MS);
+    }
+
     /// (b) The simulation never answers. Nothing of this column's opens the
     /// confirm: it stays shut for as long as the clock is stopped. When the
     /// core's deadline passes, the confirm is armed and the verdict's place
@@ -4285,8 +4579,9 @@ mod sim_wait_tests {
     /// dapp-15: a could-not-check because no node answered is the
     /// network's, by the core's `recheck` — "Check again" is offered, and
     /// pressed it asks the same question again: the machine hears the
-    /// simulation is out once more (the confirm waits for the new verdict),
-    /// the last verdict stays marked as being checked, and the new one lands
+    /// simulation is out once more (§39 r22-6: the confirm keeps the door of
+    /// the verdict on the sheet — it no longer waits again), the last
+    /// verdict stays marked as being checked, and the new one lands
     /// as any other. A node that answered "not offered", a revert, or a
     /// checked answer is never asked again: it would say the same.
     #[test]
@@ -4309,7 +4604,10 @@ mod sim_wait_tests {
         assert_eq!(ask.chain_id, 1);
         assert!(matches!(event, SignEvent::SimStarted { .. }));
         sheet.dispatch(event);
-        assert!(sheet.sign.view().sim_checking, "the confirm waits again");
+        assert!(
+            !sheet.sign.view().sim_checking,
+            "§39 r22-6: the landed verdict's door stays"
+        );
         assert_eq!(
             sheet.sim.recheck_offer(&sheet.sign.view()),
             Some(true),

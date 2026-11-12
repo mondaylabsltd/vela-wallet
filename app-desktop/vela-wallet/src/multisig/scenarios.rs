@@ -738,7 +738,7 @@ fn an_execute_over_no_drawn_figure_signs_nothing_and_says_the_fee() {
     let line =
         crate::wallet::page::multisig::failure_words(&loc, &detail, 100, &|_| "Ana".to_owned());
     assert!(
-        line.starts_with("That didn't go through: Network fee"),
+        line.starts_with("The network fee went up to ≈ "),
         "the figure is said first: {line}"
     );
     // Pressed on the figure now drawn: signed at exactly it.
@@ -824,12 +824,9 @@ fn a_fee_that_moved_after_it_was_drawn_stops_the_press_and_names_its_executor() 
     let loc = crate::loc::Loc::for_tag("en");
     let line =
         crate::wallet::page::multisig::failure_words(&loc, &detail, 100, &|_| "Ana".to_owned());
-    assert!(
-        line.starts_with("That didn't go through: Network fee"),
-        "{line}"
-    );
-    assert!(line.contains("paid by Ana"), "{line}");
-    assert_eq!(line.matches("That didn't go through").count(), 1, "{line}");
+    assert!(line.starts_with("The network fee went up to ≈ "), "{line}");
+    assert!(line.contains("Press again to pay"), "§39 r22-4: {line}");
+    assert_eq!(line.matches("nothing was signed").count(), 1, "{line}");
     // r16-1: the sheet's re-quote moves the figure again while the stop is
     // shown — the stop said beside the press is the figure the fee line and
     // the next press carry, read from the view at this render.
