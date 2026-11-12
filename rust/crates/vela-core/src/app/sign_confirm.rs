@@ -343,9 +343,32 @@ pub fn confirm_state(input: &ConfirmInput) -> ConfirmState {
     let state = message_read_gate(state, &input.clear, input.message_unread);
     with_posture(
         state,
-        posture(&input.sign, &input.clear, input.sim.as_ref()),
+        guarded_posture(
+            posture(&input.sign, &input.clear, input.sim.as_ref()),
+            &input.guard,
+        ),
         input.refuse_blind,
     )
+}
+
+/// §39 (R22 follow-up, an R22 observation against §37): an unbounded grant
+/// is a danger however it arrives — a top-level `approve`, a batch leg, one
+/// carried inside `multicall` / Multicall3 / `multiSend`, or an off-chain
+/// permit (EIP-2612, Permit2, its witness transfer). The reading's own risk
+/// grades only what a descriptor reads, so a Multicall3-carried approval or
+/// a witness permit was a plain Confirm while a two-leg batch was held. The
+/// approval guard's one verdict (`GuardView::unlimited_warning`, the same
+/// red sentence every shell draws) now makes the confirm a held danger.
+#[must_use]
+pub fn guarded_posture(posture: Posture, guard: &GuardView) -> Posture {
+    if !guard.unlimited_warning {
+        return posture;
+    }
+    Posture {
+        danger: true,
+        hold_ms: HOLD_TO_CONFIRM_MS,
+        ..posture
+    }
 }
 
 /// R22: the gate's state with its friction, and — the person refusing blind

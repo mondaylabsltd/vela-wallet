@@ -365,6 +365,26 @@ fn a_wait_belongs_to_its_request_and_its_round() {
     assert_eq!(gate(view), open());
 }
 
+/// §39 (R22 follow-up, r22-6): an unconfirmed verdict is re-checked every
+/// few seconds, and each re-check shut the confirm ("Checking…") and opened
+/// it again — "Sign anyway" and a disabled "Confirm send" in turn, a hold or
+/// an arm started late in a cycle cut. A re-check of a verdict already on
+/// the sheet keeps its door.
+#[test]
+fn a_recheck_of_a_landed_verdict_keeps_the_door() {
+    let mut sut = boot();
+    arrive_tx(&mut sut, "r1");
+    started(&mut sut, "r1");
+    settled(&mut sut, "r1");
+    assert_eq!(gate(sut.view()), open(), "the verdict landed: \"… anyway\"");
+    // The shell checks again.
+    let ops = started(&mut sut, "r1");
+    assert!(ops.is_empty(), "no new wait: {ops:?}");
+    let view = sut.view();
+    assert!(!view.sim_checking, "never shut again by a re-check");
+    assert_eq!(gate(view), open(), "the same door, held still");
+}
+
 /// The line is the gate's LAST: a request still being read, an amount to
 /// choose or a fee being worked out says its own line first, and "checking"
 /// stands only when the verdict is all that is missing.

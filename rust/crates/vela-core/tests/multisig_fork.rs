@@ -152,7 +152,15 @@ impl Shell {
         };
         let first = ask(self.rpcs.get(&chain));
         let witness = ask(self.witnesses.get(&chain));
-        vela_core::app::corroborate::corroborated_envelope(first.as_ref(), witness.as_ref(), false)
+        // §39: a chain this shell holds no second node for is a pool of one
+        // provider (Arc with its default RPC) — said as such.
+        let sole = !self.witnesses.contains_key(&chain);
+        vela_core::app::corroborate::corroborated_envelope(
+            first.as_ref(),
+            witness.as_ref(),
+            false,
+            sole,
+        )
     }
 
     /// The executor's user operation, stood in for: each call sent from its

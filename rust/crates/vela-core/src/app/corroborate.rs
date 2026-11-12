@@ -10,7 +10,9 @@
 //! ```text
 //! { "result" | "error" | "unreachable": …,     the first node's answer
 //!   "witness": { "result" | "error": … },       a second, independent node's
-//!   "ownNode": true }                            "Only use my node": trusted alone
+//!   "ownNode": true,                             "Only use my node": trusted alone
+//!   "soleProvider": true }                       §39: the pool holds no other
+//!                                                provider to ask
 //! ```
 //!
 //! Pure. What "independent" means ([`provider_of`]), how two answers are
@@ -31,6 +33,12 @@ pub const WITNESS_KEY: &str = "witness";
 /// The envelope's member saying the person's own node answered alone, by
 /// their choice ("Only use my node").
 pub const OWN_NODE_KEY: &str = "ownNode";
+/// §39 (R22 follow-up, r22-2): the envelope's member saying the network's
+/// pool holds no other, independent provider — one node is all there is to
+/// ask, by the network's configuration, not by a failure. Such a read is
+/// still never plain ([`Standing::Single`]); only the member's own multisig
+/// flows may go on with it, as an explicit "… anyway" ([`ONE_NODE`]).
+pub const SOLE_PROVIDER_KEY: &str = "soleProvider";
 
 /// Who stands behind a read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -70,6 +78,10 @@ impl Standing {
 pub const UNCORROBORATED: &str = "uncorroborated";
 /// The reason of a check two independent nodes answered differently.
 pub const DISAGREED: &str = "disagreed";
+/// §39 (r22-2): the reason of a check one node answered on a network whose
+/// pool holds no other provider ([`SOLE_PROVIDER_KEY`]): said as "only one
+/// node could check", with the way to add one's own node.
+pub const ONE_NODE: &str = "oneNode";
 
 // ---------------------------------------------------------------------------
 // Independence
@@ -181,13 +193,16 @@ pub fn envelope_of_body(body: &Value) -> Value {
 
 /// The one envelope a shell hands the core for a corroborated read: the
 /// first node's body (`None`: the pool gave up — `{"unreachable": true}`),
-/// the witness's body when a second, independent node answered, and whether
-/// the pool holds the person's own node alone by their choice.
+/// the witness's body when a second, independent node answered, whether
+/// the pool holds the person's own node alone by their choice, and (§39)
+/// whether the pool holds no other provider at all
+/// (`RpcCallVerdict::Respond::sole_provider`).
 #[must_use]
 pub fn corroborated_envelope(
     primary: Option<&Value>,
     witness: Option<&Value>,
     own_node: bool,
+    sole_provider: bool,
 ) -> Value {
     let mut envelope = match primary {
         Some(body) => envelope_of_body(body),
@@ -199,6 +214,9 @@ pub fn corroborated_envelope(
     if own_node {
         envelope[OWN_NODE_KEY] = Value::Bool(true);
     }
+    if sole_provider && witness.is_none() && !own_node {
+        envelope[SOLE_PROVIDER_KEY] = Value::Bool(true);
+    }
     envelope
 }
 
@@ -209,6 +227,7 @@ pub fn corroborated_envelope_json(
     primary_json: Option<&str>,
     witness_json: Option<&str>,
     own_node: bool,
+    sole_provider: bool,
 ) -> String {
     let parse = |text: &str| {
         serde_json::from_str::<Value>(text)
@@ -216,7 +235,7 @@ pub fn corroborated_envelope_json(
     };
     let primary = primary_json.map(parse);
     let witness = witness_json.map(parse);
-    corroborated_envelope(primary.as_ref(), witness.as_ref(), own_node).to_string()
+    corroborated_envelope(primary.as_ref(), witness.as_ref(), own_node, sole_provider).to_string()
 }
 
 /// The witness's envelope, when one rides in `envelope`.
@@ -231,13 +250,74 @@ pub fn own_node(envelope: &Value) -> bool {
     envelope.get(OWN_NODE_KEY).and_then(Value::as_bool) == Some(true)
 }
 
-/// `envelope` without its witness and own-node members: what one node said.
+/// §39 (r22-2): did one node answer on a network whose pool holds no other
+/// provider to ask? Never with a witness or the person's own node.
+#[must_use]
+pub fn sole_provider(envelope: &Value) -> bool {
+    envelope.get(SOLE_PROVIDER_KEY).and_then(Value::as_bool) == Some(true)
+        && witness_of(envelope).is_none()
+        && !own_node(envelope)
+}
+
+/// §39 (r22-2): the reason a could-not-check carries for `standing` read
+/// from `envelope`: [`ONE_NODE`] for one node's word where the pool holds no
+/// other provider, else [`Standing::unread_reason`].
+#[must_use]
+pub fn unread_reason_of(envelope: &Value, standing: Standing) -> Option<&'static str> {
+    match standing {
+        Standing::Single if sole_provider(envelope) => Some(ONE_NODE),
+        other => other.unread_reason(),
+    }
+}
+
+/// §39 (R22 follow-up, r22-2): what an exact authority read (a multisig's
+/// owners, threshold, modules, guard, nonce; an unlisted Safe's `isOwner`)
+/// lets a flow do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthorityRead {
+    /// Two independent nodes agreed, or the person's own node answered
+    /// alone by their choice: believed.
+    Believed,
+    /// One node answered on a network whose pool holds no other provider,
+    /// in the member's OWN multisig flow: it goes on — as an explicit
+    /// "… anyway", held, said "checked by one node" with the way to add
+    /// one's own node.
+    OneNode,
+    /// Nobody independent confirmed it (a witness that did not answer, or a
+    /// guard against a site — §31's `isOwner` — on one provider): couldn't
+    /// check; nothing is signed.
+    Unchecked,
+    /// Two independent nodes answered differently: a real signal; nothing
+    /// is signed, not even "… anyway".
+    Disagreed,
+}
+
+/// §39: [`AuthorityRead`] of an exact read's `envelope`. `own_flow`: the
+/// member's own multisig flow (approve, execute, propose, a member change,
+/// the outside page's signature) — one node on a single-provider network
+/// goes on there; a guard against a site (`own_flow` false) stays strict,
+/// because refusing a site's request locks nobody out.
+#[must_use]
+pub fn authority_read(envelope: &Value, own_flow: bool) -> AuthorityRead {
+    let standing = standing_exact(envelope);
+    match unread_reason_of(envelope, standing) {
+        None => AuthorityRead::Believed,
+        Some(ONE_NODE) if own_flow => AuthorityRead::OneNode,
+        Some(DISAGREED) => AuthorityRead::Disagreed,
+        Some(_) => AuthorityRead::Unchecked,
+    }
+}
+
+/// `envelope` without its witness, own-node and sole-provider members: what
+/// one node said.
 #[must_use]
 pub fn first_answer(envelope: &Value) -> Value {
     let mut e = envelope.clone();
     if let Some(map) = e.as_object_mut() {
         map.remove(WITNESS_KEY);
         map.remove(OWN_NODE_KEY);
+        map.remove(SOLE_PROVIDER_KEY);
     }
     e
 }

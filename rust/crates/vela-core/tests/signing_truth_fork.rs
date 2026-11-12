@@ -173,6 +173,7 @@ fn corroborated_simulation(nodes: &[(&str, RpcSource)], params: &Value) -> Value
             url,
             witness_url,
             own_node,
+            sole_provider,
             ..
         } => {
             eprintln!("  first {url} · witness {witness_url:?} · own node {own_node}");
@@ -180,6 +181,7 @@ fn corroborated_simulation(nodes: &[(&str, RpcSource)], params: &Value) -> Value
                 bodies.get(&url),
                 witness_url.as_ref().and_then(|w| bodies.get(w)),
                 own_node,
+                sole_provider,
             )
         }
         other => panic!("the pool gave up: {other:?}"),

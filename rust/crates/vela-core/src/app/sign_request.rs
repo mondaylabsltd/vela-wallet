@@ -289,6 +289,30 @@ pub struct SignQuotedFee {
     pub tier: Option<FeeTier>,
 }
 
+/// §39 (r22-3 / A1): the words a [`SignErrorKind::FeeRose`] is said in.
+pub const FEE_ROSE_KEY: &str = "componentsUi.signing.feeRose";
+
+/// §39 (R22 follow-up, r22-3 / A1): did the fee quote at the approve
+/// (`now`) rise above the figure the sheet showed (`shown`), or go to
+/// another recipient? Both must be there to be weighed; an unparseable
+/// figure is a rise (fail closed).
+#[must_use]
+pub fn fee_rose(shown: Option<&SignQuotedFee>, now: Option<&SignQuotedFee>) -> bool {
+    let (Some(shown), Some(now)) = (shown, now) else {
+        return false;
+    };
+    if !shown.recipient.eq_ignore_ascii_case(&now.recipient) {
+        return true;
+    }
+    match (
+        shown.amount.trim().parse::<u128>(),
+        now.amount.trim().parse::<u128>(),
+    ) {
+        (Ok(shown), Ok(now)) => now > shown,
+        _ => true,
+    }
+}
+
 /// The approve-tap payload — `approveRequest(opts)` (`dapp-connection.tsx:623`),
 /// bigints as decimal strings.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -301,6 +325,16 @@ pub struct SignApproveOpts {
     /// `None` = native (the `gasFeeToken` selection).
     pub gas_fee_token: Option<String>,
     pub quoted_fee: Option<SignQuotedFee>,
+    /// §39 (R22 follow-up, r22-3 / A1): the fee machine's quote at the
+    /// approve handler — read beside `quoted_fee`, which is now the figure
+    /// the sheet DREW when the confirm began (the hold's start, or the
+    /// assistive path's first press; the fee row is held still while armed).
+    /// At or under `quoted_fee`: `quoted_fee` is signed (charged = shown, the
+    /// relay gets at least its quote). Above it, or to another recipient:
+    /// nothing is signed ([`SignErrorKind::FeeRose`]). `None` (a shell that
+    /// predates it): `quoted_fee` is signed as before.
+    #[serde(default)]
+    pub current_fee: Option<SignQuotedFee>,
     /// The Tempo fee collector the fee machine currently displays — the
     /// submit-side staleness reference for `tempo_quote_is_stale`. `None`
     /// skips the recipient half of the check (floor still enforced).
@@ -410,6 +444,13 @@ pub enum SignErrorKind {
     /// stale pre-submit (`fee_policy::tempo_quote_is_stale`) — the sheet must
     /// re-quote, never silently re-price.
     StaleFeeQuote,
+    /// §39 (R22 follow-up, r22-3 / A1): no response is sent for this one.
+    /// The fee quote at the approve (`SignApproveOpts::current_fee`) is ABOVE
+    /// the figure the sheet showed when the confirm began
+    /// (`SignApproveOpts::quoted_fee`): nothing was signed; the sheet draws
+    /// the new figure and says why ([`FEE_ROSE_KEY`]); the next confirm pays
+    /// it. A quote at or under the figure shown signs the figure shown.
+    FeeRose,
     /// -32603 — no passkey can be used here: the platform authenticator is
     /// not available to this app (an unsigned build, a device without one)
     /// (spec 099 R8, `FailureKind::NotSupported`). Nothing was signed.
@@ -3415,6 +3456,16 @@ fn approve_with(
         }
     }
 
+    // §39 (R22 follow-up, r22-3 / A1): the figure shown is signed when the
+    // quote now charges no more; a quote that rose above it signs nothing,
+    // and the sheet says why — never a charge above what was shown.
+    if fee_rose(opts.quoted_fee.as_ref(), opts.current_fee.as_ref()) {
+        model.sign_error_refused = false;
+        model.sign_error_refusal_key = None;
+        model.sign_error = Some(SignErrorNotice::new(SignErrorKind::FeeRose, None));
+        return render();
+    }
+
     let record_origin = pending
         .dapp
         .as_ref()
@@ -4277,6 +4328,14 @@ fn on_sim_started(model: &mut Model, id: &str) -> Command<SignEffect, Event> {
     let Some(pending) = model.pending.as_mut().filter(|p| p.id == id) else {
         return Command::done();
     };
+    // §39 (R22 follow-up, r22-6): a re-check of a verdict already on the
+    // sheet keeps that verdict's door — the confirm never flips to the shut
+    // "Checking…" and back every few seconds, and a hold or an arm made on
+    // it is not cut by a re-check that lands the same. A verdict that lands
+    // different changes the door when it lands.
+    if pending.sim == SimWait::Landed {
+        return Command::done();
+    }
     model.sim_round = model.sim_round.wrapping_add(1);
     let round = model.sim_round;
     pending.sim = SimWait::Checking { round };

@@ -462,7 +462,7 @@ test.describe('the Chrome extension (a real site, its request window)', () => {
 		const answer = await asked;
 		expect(answer.ok).toBe(false);
 		expect(answer.code).toBe(-32603);
-		expect(answer.message).toMatch(/act for a multisig this account is a member of/);
+		expect(answer.message).toMatch(/act for a multisig \(Safe\) on this account.s behalf/);
 		await context.close();
 	});
 

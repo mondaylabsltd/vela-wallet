@@ -327,9 +327,9 @@
       "expect": { "kind": "page_refused", "key": "componentsUi.signing.trustedSignerRefused" }
     },
     {
-      "name": "the fee moved since the press: worded by the shell from its figure and executor",
+      "name": "the fee moved since the press (§39): said why, with the new figure the shell fills in as {{fee}}",
       "args": { "detail": "{\"kind\":\"fee_moved\",\"amount\":\"12\",\"chainId\":100,\"executor\":\"0xab\"}" },
-      "expect": { "kind": "fee_moved", "key": null }
+      "expect": { "kind": "fee_moved", "key": "home.multisig.proposal.feeRose" }
     },
     {
       "name": "the executor cannot pay: worded from its amounts",

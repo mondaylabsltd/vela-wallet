@@ -95,6 +95,28 @@ const BUNDLER_MARGIN_DEN: u128 = 100;
 /// price ([`IN_BAND_PRICE`]), and this one is not applied on top.
 const INBAND_MARKUP: u128 = 3;
 
+/// §39 (R22 follow-up, r22-3): the headroom a fee priced at the relay's
+/// PUBLISHED per-gas price carries over that price, in basis points — one
+/// eighth, the most EIP-1559 lets a base fee rise in one block. The relay's
+/// per-gas figure follows the next block's base fee, so a quote shown for a
+/// block or two moves by about this much either way; with the headroom
+/// inside the figure on screen, the relay's quote at the signature still
+/// fits under it, and the press signs exactly what was shown (`send`'s
+/// press rule, the multisig execution's, the signing sheet's). It is charged
+/// — the fee leg pays the figure shown and the relay keeps it — so it is
+/// kept to one block, not the 3× bound ([`INBAND_MARKUP`]) a relay that
+/// publishes no price is paid on, which already carries far more and gets
+/// none on top. It does not touch the gas: the settlementGas cap
+/// ([`settlement_gas_cap`]) bounds what a relay may bill, before this.
+pub const FEE_HEADROOM_BPS: u128 = 1_250;
+
+/// `charged` with [`FEE_HEADROOM_BPS`] on top, rounded up. `None` only for a
+/// figure no chain could charge.
+fn with_headroom(charged: U256) -> Option<U256> {
+    let extra = ceil_div_wide(charged.checked_mul(w(FEE_HEADROOM_BPS))?, w(BPS))?;
+    charged.checked_add(extra)
+}
+
 /// A bundler gas quote is refused, not signed, when it exceeds the client's
 /// OWN on-chain gas measurement (`derive_chain_gas_price`) by more than this
 /// multiple. A quote that far above real cost is not one we pay 3× on top of;
@@ -2296,7 +2318,7 @@ impl Charge {
     fn amount(self, gas: u128, fee_row: &ParsedQuote, native_row: &ParsedQuote) -> Option<u128> {
         let charged = match self {
             Charge::Marked { basis } => mul_wide(gas, basis).checked_mul(w(INBAND_MARKUP))?,
-            Charge::Published { per_gas } => mul_wide(gas, per_gas),
+            Charge::Published { per_gas } => with_headroom(mul_wide(gas, per_gas))?,
         };
         in_band_amount_with(
             charged,

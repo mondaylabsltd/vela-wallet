@@ -22,6 +22,17 @@ bundler_cost_wei: string | null,
  */
 gas_fee_token: string | null, quoted_fee: SignQuotedFee | null, 
 /**
+ * §39 (R22 follow-up, r22-3 / A1): the fee machine's quote at the
+ * approve handler — read beside `quoted_fee`, which is now the figure
+ * the sheet DREW when the confirm began (the hold's start, or the
+ * assistive path's first press; the fee row is held still while armed).
+ * At or under `quoted_fee`: `quoted_fee` is signed (charged = shown, the
+ * relay gets at least its quote). Above it, or to another recipient:
+ * nothing is signed ([`SignErrorKind::FeeRose`]). `None` (a shell that
+ * predates it): `quoted_fee` is signed as before.
+ */
+current_fee: SignQuotedFee | null, 
+/**
  * The Tempo fee collector the fee machine currently displays — the
  * submit-side staleness reference for `tempo_quote_is_stale`. `None`
  * skips the recipient half of the check (floor still enforced).

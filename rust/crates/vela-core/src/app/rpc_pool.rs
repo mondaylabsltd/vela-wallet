@@ -234,11 +234,16 @@ pub const UNREACHED_MIN_SILENCE_MS: f64 = 5_000.0;
 /// (the most trusted first, then the oldest failure). A read is never failed
 /// without asking anyone; writes are not bound this way.
 pub const OUTAGE_PROBE_ENDPOINTS: usize = 2;
-/// R22: how many independent endpoints a corroborated read asks, at most,
-/// for the second answer (one pass, no backoff). Two bounds the extra load to
-/// two POSTs and two chain-id probes per read, and survives one witness that
-/// is down.
-pub const WITNESS_MAX_ASKS: usize = 2;
+/// R22, §39 (r22-2): how long a corroborated read keeps looking for its
+/// second answer, from the first answer in: one pass, no backoff, over every
+/// OTHER provider in the pool — one endpoint each, the best-scored first — and
+/// past this budget the first answer goes back alone. A budget, not a count
+/// (R22 asked at most two): Arc's chain index lists two hosts that answer
+/// nothing from many places ahead of the one that does, and two asks never
+/// reached it. Ten seconds is a chain-id probe that hangs (3 s) twice and
+/// one more answer, and stays under the review's own read bound. The extra
+/// load is at most one POST and one chain-id probe per other provider.
+pub const WITNESS_BUDGET_MS: f64 = 10_000.0;
 /// Bundler JSON-RPC timeout — `NET_TIMEOUTS.bundlerRpc` (`net.ts:27`).
 pub const BUNDLER_RPC_TIMEOUT_MS: u32 = 15_000;
 /// Per-endpoint `eth_chainId` ping timeout — `NET_TIMEOUTS.rpcPing` (`net.ts:29`).
@@ -478,6 +483,16 @@ pub enum RpcCallVerdict {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         #[cfg_attr(feature = "bindings", ts(as = "Option<bool>", optional))]
         own_node: bool,
+        /// §39 (R22 follow-up, r22-2), a corroborated read only: nobody
+        /// independent answered BECAUSE the pool holds no other provider for
+        /// this chain (every endpoint is the first one's provider, or was
+        /// proven another chain's) — not because one failed. The shell passes
+        /// it into the envelope (`corroborate::SOLE_PROVIDER_KEY`): still
+        /// never a plain verdict, but the member's own multisig flows may go
+        /// on with it as an explicit "… anyway".
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        #[cfg_attr(feature = "bindings", ts(as = "Option<bool>", optional))]
+        sole_provider: bool,
     },
     /// `eth_getLogs` range/size cap (invariant ⑤): the caller splits the
     /// block range. `max_span` is the endpoint's stated block span, or 0 for
@@ -1199,6 +1214,9 @@ struct CallSession {
     /// R22: the endpoint whose answer is being witnessed — set once the
     /// first answer is in; the queue then holds the witness candidates.
     witness_of: Option<String>,
+    /// §39 (r22-2): past this moment (epoch ms) no other witness is asked
+    /// ([`WITNESS_BUDGET_MS`] from the first answer).
+    witness_until: Option<f64>,
 }
 
 /// The fastest-RPC ping race (`pickFastestRpcUrl`), run at most once per
@@ -1420,6 +1438,7 @@ impl App for RpcPool {
                         person,
                         corroborate: corroborate && kind == RpcKind::Rpc,
                         witness_of: None,
+                        witness_until: None,
                     },
                 );
                 if person && kind == RpcKind::Rpc {
@@ -1949,7 +1968,10 @@ fn handle_probe(
                 .or_default()
                 .insert(url.to_owned());
         }
-        None => {}
+        // §39 (r22-2): a node that would not say which chain it serves (a
+        // hang, a refusal) scores as a failure — the next witness looks for
+        // a second answer past it first, not through it again.
+        None => touch_failure(model, chain_id, RpcKind::Rpc, url, now_ms),
     }
     let waiting: Vec<String> = model
         .calls
@@ -2309,6 +2331,13 @@ fn next_endpoint(model: &mut Model, call_id: &str, now_ms: f64) -> Command<RpcEf
     let Some(session) = model.calls.get_mut(call_id) else {
         return Command::done();
     };
+    // §39 (r22-2): a witness is looked for within its budget, not for ever.
+    if session
+        .witness_until
+        .is_some_and(|until| session.witness_of.is_some() && now_ms >= until)
+    {
+        session.queue.clear();
+    }
     if let Some(url) = session.queue.pop_front() {
         let (corroborate, chain_id) = (session.corroborate, session.chain_id);
         if corroborate {
@@ -2353,6 +2382,7 @@ fn next_endpoint(model: &mut Model, call_id: &str, now_ms: f64) -> Command<RpcEf
                 maybe_delivered,
                 witness_url: None,
                 own_node: false,
+                sole_provider: false,
             },
         );
     }
@@ -2658,6 +2688,7 @@ pub fn early_verdict(
             maybe_delivered: false,
             witness_url: None,
             own_node: false,
+            sole_provider: false,
         }),
         _ => None,
     }
@@ -2726,6 +2757,7 @@ fn handle_outcome(
                     maybe_delivered,
                     witness_url: None,
                     own_node: false,
+                    sole_provider: false,
                 },
             )
         }
@@ -2742,6 +2774,7 @@ fn handle_outcome(
                     maybe_delivered,
                     witness_url: None,
                     own_node: false,
+                    sole_provider: false,
                 },
             )
         }
@@ -2819,33 +2852,45 @@ fn begin_witness(
     let Some(chain_id) = model.calls.get(call_id).map(|s| s.chain_id) else {
         return Command::done();
     };
-    let alone = |own_node| RpcCallVerdict::Respond {
+    let alone = |own_node, sole_provider| RpcCallVerdict::Respond {
         url: url.to_owned(),
         maybe_delivered,
         witness_url: None,
         own_node,
+        sole_provider,
     };
     let Some(pool) = model.pools.get(&chain_id) else {
-        return conclude(model, call_id, alone(false));
+        return conclude(model, call_id, alone(false, false));
     };
     if pool.own_only {
-        return conclude(model, call_id, alone(true));
+        return conclude(model, call_id, alone(true, false));
     }
-    let bans: Vec<RpcBanEntry> = model.bans.values().cloned().collect();
     let wrong = model.wrong_chain.get(&chain_id);
+    let other = |candidate: &str| {
+        super::corroborate::independent(candidate, url)
+            && !wrong.is_some_and(|w| w.contains(candidate))
+    };
+    // §39 (r22-2): the pool holds no other provider at all — by its
+    // configuration, not by a failure (a ban or a silence is a failure).
+    let sole = !pool.list(RpcKind::Rpc).iter().any(|ep| other(&ep.url));
+    if sole {
+        return conclude(model, call_id, alone(false, true));
+    }
+    // Every other provider, once — its best-scored endpoint — best first:
+    // an endpoint that failed lately scores low and is asked last.
+    let bans: Vec<RpcBanEntry> = model.bans.values().cloned().collect();
+    let mut providers = BTreeSet::new();
     let candidates: VecDeque<String> = select_urls(pool.list(RpcKind::Rpc), &bans, now_ms)
         .into_iter()
-        .filter(|candidate| {
-            super::corroborate::independent(candidate, url)
-                && !wrong.is_some_and(|w| w.contains(candidate))
-        })
-        .take(WITNESS_MAX_ASKS)
+        .filter(|candidate| other(candidate))
+        .filter(|candidate| providers.insert(super::corroborate::provider_of(candidate)))
         .collect();
     if candidates.is_empty() {
-        return conclude(model, call_id, alone(false));
+        return conclude(model, call_id, alone(false, false));
     }
     if let Some(session) = model.calls.get_mut(call_id) {
         session.witness_of = Some(url.to_owned());
+        session.witness_until = Some(now_ms + WITNESS_BUDGET_MS);
         session.queue = candidates;
     }
     next_endpoint(model, call_id, now_ms)
@@ -2883,6 +2928,7 @@ fn handle_witness(
                     maybe_delivered,
                     witness_url: Some(url.to_owned()),
                     own_node: false,
+                    sole_provider: false,
                 },
             )
         }

@@ -381,7 +381,9 @@ pub fn read_proposal(
 pub fn mark_cancellations(items: &mut [ProposalItem]) {
     let cancels: Vec<(u128, String)> = items
         .iter()
-        .filter(|c| matches!(c.review.action, Some(Action::Cancel)))
+        // §39: a stranger's cancellation (no member vouches for it) voids
+        // nothing a member sees.
+        .filter(|c| matches!(c.review.action, Some(Action::Cancel)) && !c.from_non_member)
         .map(|c| (c.nonce, c.safe_tx_hash.clone()))
         .collect();
     for (nonce, hash) in &cancels {
@@ -391,19 +393,26 @@ pub fn mark_cancellations(items: &mut [ProposalItem]) {
             }
         }
     }
-    let open: Vec<(u128, String)> = items
+    // §39 (R22 follow-up, r22 S4): a proposal no member vouches for is
+    // hidden behind the disclosure and counts for nothing (§37) — nor for a
+    // member's "Only one of these can run" note. A stranger's own item still
+    // names the members' proposals at its number.
+    let open: Vec<(u128, String, bool)> = items
         .iter()
         .filter(|i| i.status != ProposalStatus::Done)
-        .map(|i| (i.nonce, i.safe_tx_hash.clone()))
+        .map(|i| (i.nonce, i.safe_tx_hash.clone(), i.from_non_member))
         .collect();
     for i in items.iter_mut() {
         if i.status == ProposalStatus::Done {
             continue;
         }
+        let counts_strangers = i.from_non_member;
         i.same_nonce = open
             .iter()
-            .filter(|(n, h)| *n == i.nonce && *h != i.safe_tx_hash)
-            .map(|(_, h)| h.clone())
+            .filter(|(n, h, stranger)| {
+                *n == i.nonce && *h != i.safe_tx_hash && (counts_strangers || !*stranger)
+            })
+            .map(|(_, h, _)| h.clone())
             .collect();
     }
 }
@@ -881,8 +890,13 @@ pub enum ActionState {
     },
     /// Vela does not sign this transaction.
     SigningBlocked,
-    /// Not checked yet: try again later.
+    /// Not checked yet: try again later. Words: `home.multisig.signUnchecked`
+    /// (who can act could not be checked) — never "can't reach" (§39).
     SigningUnchecked,
+    /// §39 (r22-2): two independent nodes answered differently about who can
+    /// act for the multisig — a real signal: nothing is signed, not even
+    /// "… anyway". Words: `home.multisig.signDisagreed`.
+    SigningDisagreed,
     /// The person declined the risk.
     RiskDeclined,
     /// The core refused it (an unreadable transaction, a member change it will not build).
@@ -2931,7 +2945,11 @@ async fn authorize_signing(
     // members and nonce, and the review's checks — each read of two
     // independent nodes (or the person's own node alone) before a signature.
     // One node's word, or two that differ, is "couldn't check".
-    let io = &io.corroborating();
+    // §39 (r22-2): the member's own multisig — where the network's pool holds
+    // no other provider, one node's word goes on as "… anyway" (said "checked
+    // by one node"); a witness that did not answer is still "couldn't
+    // check", and two that differ refuse ([`ActionState::SigningDisagreed`]).
+    let io = &io.corroborating_own();
     let chain = lock(st).chain.clone();
     let found = async { shell::judge(io, chain_id, &account.address, &account.genesis).await };
     let rule = async {
@@ -2958,7 +2976,7 @@ async fn authorize_signing(
     };
     let (found, review) = futures::join!(found, rule);
     let (Some(found), Some(review)) = (found, review) else {
-        return Err(Stop::State(ActionState::SigningUnchecked));
+        return Err(Stop::State(unchecked_state(io, chain_id)));
     };
     io.notice(Notice::Account {
         address: account.address.clone(),
@@ -2968,10 +2986,12 @@ async fn authorize_signing(
         },
     })
     .await;
-    let anyway = review.as_ref().is_some_and(|r| r.sign.anyway);
+    // §39: a read that stood on one node makes it "… anyway", whatever the
+    // review's own rule says — never a plain signature on one node's word.
+    let anyway = review.as_ref().is_some_and(|r| r.sign.anyway) || io.read_on_one_node(chain_id);
     match multisig_gather::decide(chain_id, &account.address, tx, Some(found), review.as_ref()) {
         multisig_review::Gate::Open => Ok(anyway),
-        multisig_review::Gate::Unchecked => Err(Stop::State(ActionState::SigningUnchecked)),
+        multisig_review::Gate::Unchecked => Err(Stop::State(unchecked_state(io, chain_id))),
         multisig_review::Gate::Refused { findings } => {
             Err(Stop::State(ActionState::SigningRefused { findings }))
         }
@@ -2987,6 +3007,17 @@ async fn authorize_signing(
             MultisigShellResult::RiskAnswered { signs: true } => Ok(anyway),
             _ => Err(Stop::State(ActionState::RiskDeclined)),
         },
+    }
+}
+
+/// §39: why the gate could not read who can act — two independent nodes
+/// that differ ([`ActionState::SigningDisagreed`]: a real signal), or a read
+/// nobody independent confirmed ([`ActionState::SigningUnchecked`]).
+fn unchecked_state(io: &Io<Event>, chain_id: u64) -> ActionState {
+    if io.nodes_disagreed(chain_id) {
+        ActionState::SigningDisagreed
+    } else {
+        ActionState::SigningUnchecked
     }
 }
 
@@ -4825,23 +4856,56 @@ async fn execute_as(
         )
     };
     let requoted = shown.is_none();
-    let preview = match shown {
+    let mut preview = match shown {
         Some(p) => p,
         None => look_now(io, st, &input).await,
     };
-    // r14-9 (§20 left open): the fee signed is the fee shown. A new quote
-    // whose fee is not the one on screen signs nothing: the execution fails
-    // with the new figure (`fee_moved`), the new look is the sheet's now, and
-    // the next press — inside the window — signs exactly it.
-    // r15: with the pressed figure carried, ANY look whose fee is another
-    // stops — also a fresh one that replaced the figure after it was drawn.
-    if let (true, Some(was), Preview::Priced { fee, .. }) =
-        (requoted || shown_fee.is_some(), said_fee, &preview)
+    // r14-9 (§20 left open): the fee signed is the fee shown.
+    // r15: the pressed figure carried, ANY look whose fee is another is
+    // weighed against it — also a fresh one that replaced the figure after
+    // it was drawn.
+    // §39 (R22 follow-up, r22-3 — six presses on Android, each stopped by a
+    // quote that moved between the look and the press): the relay's quote at
+    // the signature at or under the figure shown signs EXACTLY the figure
+    // shown — the fee leg pays it, so charged = shown and the relay gets at
+    // least its quote. Only a quote ABOVE the figure shown stops: nothing is
+    // signed, the stop names the new figure (`fee_moved`), and the next press
+    // carries it — and signs it, if the quote then is at or under it.
+    if let (
+        true,
+        Some(was),
+        Preview::Priced {
+            fee,
+            can_pay,
+            balance,
+            ..
+        },
+    ) = (requoted || shown_fee.is_some(), said_fee, &mut preview)
     {
-        if let Some(now) = fee_amount(fee).filter(|now| *now != was) {
-            return ActionState::Failed {
-                detail: fee_moved_detail(chain_id, &input.executor.address, now),
-            };
+        match fee_amount(fee) {
+            Some(now) if now > was => {
+                return ActionState::Failed {
+                    detail: fee_moved_detail(chain_id, &input.executor.address, now),
+                };
+            }
+            Some(now) if now < was => {
+                // Paid in the chain's coin, the shown figure must still be
+                // payable; when it is not, the lower quote is signed (never
+                // more than shown).
+                let native = fee.get("token").is_none_or(Value::is_null);
+                let pays = !native || balance.is_none_or(|b| b >= was);
+                if pays {
+                    // In the form the shell quoted it (hex or decimal).
+                    let hex = fee["amount"].as_str().is_some_and(|a| a.starts_with("0x"));
+                    fee["amount"] = Value::String(if hex {
+                        format!("0x{was:x}")
+                    } else {
+                        was.to_string()
+                    });
+                    *can_pay = true;
+                }
+            }
+            _ => {}
         }
     }
     // r16-4: a press over no figure at all (its look could not price it) —

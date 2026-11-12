@@ -1097,7 +1097,8 @@ pub fn sign_confirm_state(
 /// R22: the one envelope a corroborated read hands the core — the first
 /// node's JSON-RPC body (`undefined`: the pool gave up), the second,
 /// independent node's (`undefined`: none answered) and whether the pool holds
-/// the person's own node alone ("Only use my node"). Pass it to `simOutcome`,
+/// the person's own node alone ("Only use my node"), and (§39, r22-2) whether the pool
+/// holds no other provider to ask (`sole_provider` on the verdict). Pass it to `simOutcome`,
 /// or as a multisig `rpc_corroborated` answer. See `vela_core::app::corroborate`.
 #[wasm_bindgen(js_name = rpcCorroboratedEnvelope)]
 #[must_use]
@@ -1105,11 +1106,13 @@ pub fn rpc_corroborated_envelope(
     primary_json: Option<String>,
     witness_json: Option<String>,
     own_node: bool,
+    sole_provider: Option<bool>,
 ) -> String {
     vela_core::app::corroborate::corroborated_envelope_json(
         primary_json.as_deref(),
         witness_json.as_deref(),
         own_node,
+        sole_provider.unwrap_or(false),
     )
 }
 
@@ -1162,8 +1165,10 @@ pub fn confirm_again_window_ms() -> u32 {
 /// which nothing of theirs moves. See `vela_core::app::sim_outcome`.
 #[wasm_bindgen(js_name = simOutcome)]
 #[must_use]
-pub fn sim_outcome(user: &str, reply_json: &str) -> String {
-    vela_core::app::sim_outcome::verdict_json(user, reply_json)
+pub fn sim_outcome(user: &str, reply_json: &str, value_wei: Option<String>) -> String {
+    // §39: `value_wei` — the native value the request sends, as the wallet
+    // decoded it (`sim_outcome::with_decoded_value`): a node never erases it.
+    vela_core::app::sim_outcome::verdict_json_valued(user, reply_json, value_wei.as_deref())
 }
 
 /// Every operation in flight on this device: the tracker's view (JSON) in, an

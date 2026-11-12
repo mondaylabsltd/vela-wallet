@@ -370,7 +370,7 @@ fn run(func: &str, i: &Value) -> Value {
             u32_of(i, "chain_id")
         )),
         "sim_outcome" => {
-            let record = crate::sim_outcome(s(i, "user"), s(i, "reply_json"));
+            let record = crate::sim_outcome(s(i, "user"), s(i, "reply_json"), None);
             let mut value = json!({
                 "kind": record.kind,
                 "deltas": json_text(&record.deltas_json),

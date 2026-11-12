@@ -3983,7 +3983,7 @@ pub mod page {
     ) -> Result<(), Stop> {
         set_step(st, run, OutsideStep::Checking { what });
         // R22: the gate's reads are corroborated, as a Vela member's are.
-        let io = &io.corroborating();
+        let io = &io.corroborating_own(); // §39: one node, where the pool holds no other, goes on as "… anyway"
         let deployed = shell::Chain::has_code(io, v.chain_id, &v.safe)
             .await
             .map_err(|_| Stop::reason(FailReason::Unchecked))?;

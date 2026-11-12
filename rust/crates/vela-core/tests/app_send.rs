@@ -7398,19 +7398,24 @@ fn a_max_filled_again_says_it_moved() {
             to: "0.156382".to_owned()
         })
     );
-    // Moved again: still from what the person first saw.
+    // Moved again: §39 (R22 follow-up, r22-1) — said from the figure drawn
+    // NOW, not the one first shown.
     sut.dispatch(Event::FeeUpdated {
         estimate: native_fee(1, 24_875_000_000_000_000),
     });
     assert_eq!(
-        sut.view().max_moved.map(|m| m.from),
-        Some("0.156387".to_owned())
+        sut.view().max_moved.map(|m| (m.from, m.to)),
+        Some(("0.156382".to_owned(), "0.156377".to_owned()))
     );
-    // Back to where it was: nothing to say.
+    // Back to where it was: a move too, and said — never a silent flip
+    // (r22-1: the figures went back while the sentence vanished).
     sut.dispatch(Event::FeeUpdated {
         estimate: native_fee(1, 24_865_000_000_000_000),
     });
-    assert_eq!(sut.view().max_moved, None);
+    assert_eq!(
+        sut.view().max_moved.map(|m| (m.from, m.to)),
+        Some(("0.156377".to_owned(), "0.156387".to_owned()))
+    );
     sut.dispatch(Event::FeeUpdated {
         estimate: native_fee(1, 24_870_000_000_000_000),
     });

@@ -56,6 +56,11 @@ const HEALTH_PROBE_GAP_MS: u32 = 2000;
 /// Fallback when a credential carries no name this app can trust.
 const FALLBACK_ACCOUNT_NAME: &str = "Wallet";
 
+/// §39 (R22 follow-up, r22-8): the words a key-index group that does not
+/// make its recorded address is said in — Vela could not check which wallet
+/// the passkey opens, nothing was saved.
+pub const REGISTRY_MISMATCH_WORDS: &str = "onboarding.login.registryUnreachableBody";
+
 /// The Safe deployment this wallet uses, recorded in the registry metadata.
 const WALLET_VERSION: &str = "safe-1.4.1";
 
@@ -551,11 +556,16 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
                 Some(account) => resolve_name_then(model, account, AfterName::Save),
                 // The fetched members do not recompute to the recorded
                 // address. Nothing is persisted on a guess.
+                // §39 (r22-8): said in the catalog's words — never the core's
+                // English, never the biometric advice for a failure that is
+                // not the passkey's.
                 None => idle_with_prompt(
                     model,
-                    PromptKind::sign_in_failed(
-                        "registry group does not match its address".to_owned(),
-                    ),
+                    PromptKind::SignInFailed {
+                        detail: "registry group does not match its address".to_owned(),
+                        phone_link: false,
+                        words_key: Some(REGISTRY_MISMATCH_WORDS.to_owned()),
+                    },
                 ),
             }
         }

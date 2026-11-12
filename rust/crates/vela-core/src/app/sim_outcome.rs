@@ -675,23 +675,76 @@ pub fn verdict_of_envelope_json(envelope_json: &str, user: &str) -> SimVerdict {
     }
 }
 
+/// §39 (R22 follow-up, S4): the native value the wallet decoded itself from
+/// the request (`value_wei`, decimal or hex — the sum of what the account's
+/// calls send) is never erased by a node. A checked answer (`deltas`) with
+/// no move of the native coin at all, while the request sends some, is drawn
+/// with that outflow — "No asset changes" never stands beside "Send −0.2".
+/// With "Only use my node" a node that leaves it out is still the person's
+/// trusted node (a node without `traceTransfers` reports no native moves at
+/// all), so the figure is reconciled, not refused. A node that names a
+/// native move keeps its own net figure.
+#[must_use]
+pub fn with_decoded_value(mut verdict: SimVerdict, value_wei: Option<&str>) -> SimVerdict {
+    let Some(value) = value_wei.and_then(parse_quantity).filter(|v| *v > 0) else {
+        return verdict;
+    };
+    if verdict.kind != "deltas"
+        || verdict
+            .deltas
+            .iter()
+            .any(|d| d.kind == TrustDeltaKind::Native)
+    {
+        return verdict;
+    }
+    verdict.deltas.insert(
+        0,
+        TrustAssetDelta {
+            kind: TrustDeltaKind::Native,
+            token: None,
+            delta: format!("-{value}"),
+        },
+    );
+    verdict.no_change_key = None;
+    verdict
+}
+
+fn parse_quantity(text: &str) -> Option<u128> {
+    let text = text.trim();
+    match text.strip_prefix("0x").or_else(|| text.strip_prefix("0X")) {
+        Some("") => Some(0),
+        Some(hex) => u128::from_str_radix(hex, 16).ok(),
+        None => text.parse().ok(),
+    }
+}
+
 /// [`verdict_of_envelope`] over the reply's wire form (a corroborated
 /// envelope, R22), as JSON — the wasm client's export. A record that cannot be written out is an
 /// answer nobody can read: the could-not-check line, never an empty list
 /// that reads "nothing moves".
 #[must_use]
 pub fn verdict_json(user: &str, reply_json: &str) -> String {
-    serde_json::to_string(&verdict_of_envelope_json(reply_json, user))
-        .or_else(|_| {
-            serde_json::to_string(&verdict(
-                SimReply::Error {
-                    code: None,
-                    message: None,
-                },
-                user,
-            ))
-        })
-        .unwrap_or_default()
+    verdict_json_valued(user, reply_json, None)
+}
+
+/// [`verdict_json`] with the native value the wallet decoded from the
+/// request ([`with_decoded_value`], §39).
+#[must_use]
+pub fn verdict_json_valued(user: &str, reply_json: &str, value_wei: Option<&str>) -> String {
+    serde_json::to_string(&with_decoded_value(
+        verdict_of_envelope_json(reply_json, user),
+        value_wei,
+    ))
+    .or_else(|_| {
+        serde_json::to_string(&verdict(
+            SimReply::Error {
+                code: None,
+                message: None,
+            },
+            user,
+        ))
+    })
+    .unwrap_or_default()
 }
 
 /// What one call result says about itself.

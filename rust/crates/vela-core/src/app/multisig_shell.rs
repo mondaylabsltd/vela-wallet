@@ -705,6 +705,15 @@ pub struct Io<Ev: Send + 'static> {
     person: bool,
     /// R22: this command's reads are a guard's ([`Io::corroborating`]).
     corroborate: bool,
+    /// §39 (r22-2): this command is the member's own multisig flow
+    /// ([`Io::corroborating_own`]): one node's word on a network whose pool
+    /// holds no other provider goes on, as "… anyway".
+    sole_ok: bool,
+    /// §39: the networks a read of this command stood on one node for
+    /// ([`Io::corroborating_own`]), and those two nodes disagreed on —
+    /// shared by its clones.
+    one_node: Shared<BTreeSet<u64>>,
+    disagreed: Shared<BTreeSet<u64>>,
 }
 
 impl<Ev: Send + 'static> Clone for Io<Ev> {
@@ -714,6 +723,9 @@ impl<Ev: Send + 'static> Clone for Io<Ev> {
             limited: self.limited.clone(),
             person: self.person,
             corroborate: self.corroborate,
+            sole_ok: self.sole_ok,
+            one_node: self.one_node.clone(),
+            disagreed: self.disagreed.clone(),
         }
     }
 }
@@ -725,6 +737,9 @@ impl<Ev: Send + 'static> Io<Ev> {
             limited: Arc::default(),
             person: false,
             corroborate: false,
+            sole_ok: false,
+            one_node: Arc::default(),
+            disagreed: Arc::default(),
         }
     }
 
@@ -754,10 +769,49 @@ impl<Ev: Send + 'static> Io<Ev> {
         }
     }
 
+    /// §39 (R22 follow-up, r22-2): [`Io::corroborating`] for the member's OWN
+    /// multisig flows — approve, execute, propose, a member change, the
+    /// outside page's signature. One rule is added: where the network's pool
+    /// holds no other provider at all (`corroborate::sole_provider`), one
+    /// node's answer is taken — and remembered ([`Io::read_on_one_node`]), so
+    /// the flow goes on only as an explicit "… anyway", said as "checked by
+    /// one node". A witness that did not answer, or two that differ, is still
+    /// no answer. Never for a guard against a site (§31's `isOwner`, the
+    /// self-call rule): refusing a site's request locks nobody out.
+    #[must_use]
+    pub fn corroborating_own(&self) -> Self {
+        Self {
+            corroborate: true,
+            sole_ok: true,
+            ..self.clone()
+        }
+    }
+
     /// Whether this command's reads are corroborated ([`Io::corroborating`]).
     #[must_use]
     pub fn corroborates(&self) -> bool {
         self.corroborate
+    }
+
+    /// §39: whether one node's word on a single-provider network is taken
+    /// ([`Io::corroborating_own`]).
+    #[must_use]
+    pub fn takes_one_node(&self) -> bool {
+        self.sole_ok
+    }
+
+    /// §39: whether a read of this command on `chain_id` stood on one node
+    /// (a single-provider network, [`Io::corroborating_own`]).
+    #[must_use]
+    pub fn read_on_one_node(&self, chain_id: u64) -> bool {
+        lock(&self.one_node).contains(&chain_id)
+    }
+
+    /// §39: whether two independent nodes answered a read of this command on
+    /// `chain_id` differently — a real signal, never "… anyway".
+    #[must_use]
+    pub fn nodes_disagreed(&self, chain_id: u64) -> bool {
+        lock(&self.disagreed).contains(&chain_id)
     }
 
     /// r14-5: the networks that rate-limited a read of this command since
@@ -866,11 +920,21 @@ impl<Ev: Send + 'static> Io<Ev> {
         if !self.corroborate || matches!(answer, Err(RpcFail::Unanswered(_))) {
             return answer;
         }
-        let standing = crate::app::corroborate::standing_exact(&envelope);
-        match standing.unread_reason() {
-            None => answer,
-            Some(reason) => Err(RpcFail::Unanswered(format!(
-                "{reason}: {method} on {chain_id}"
+        use crate::app::corroborate::{authority_read, AuthorityRead};
+        match authority_read(&envelope, self.sole_ok) {
+            AuthorityRead::Believed => answer,
+            AuthorityRead::OneNode => {
+                lock(&self.one_node).insert(chain_id);
+                answer
+            }
+            AuthorityRead::Disagreed => {
+                lock(&self.disagreed).insert(chain_id);
+                Err(RpcFail::Unanswered(format!(
+                    "disagreed: {method} on {chain_id}"
+                )))
+            }
+            AuthorityRead::Unchecked => Err(RpcFail::Unanswered(format!(
+                "uncorroborated: {method} on {chain_id}"
             ))),
         }
     }

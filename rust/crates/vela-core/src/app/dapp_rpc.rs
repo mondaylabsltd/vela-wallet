@@ -1032,7 +1032,9 @@ pub fn sign_error_message(kind: SignErrorKind) -> &'static str {
         // a Safe it owns (a multisig it is a member of), or whether it owns
         // that Safe could not be read. The detail names the call and the Safe.
         SignErrorKind::ParentSafeBlocked => {
-            "The wallet refused a request to act for a multisig this account is a member of"
+            // §39 (r22-9): never claims a membership it could not check — the
+            // detail says whether it owns the Safe or whether that is unread.
+            "The wallet refused a request to act for a multisig (Safe) on this account's behalf"
         }
         // §37: a sign-in (EIP-4361) whose domain, URI or chain does not bind
         // to the site asking and its network.
@@ -1042,6 +1044,9 @@ pub fn sign_error_message(kind: SignErrorKind) -> &'static str {
         SignErrorKind::FundingCancelled => "Gas account funding cancelled",
         SignErrorKind::SubmitFailed => "The transaction could not be submitted",
         SignErrorKind::StaleFeeQuote => "The fee quote expired",
+        SignErrorKind::FeeRose => {
+            "The network fee went up since the person pressed; nothing was signed"
+        }
         SignErrorKind::SignerUnavailable => "No passkey can be used on this device",
         SignErrorKind::SignerNotDiscoverable => "The passkey is not available for signing",
         SignErrorKind::SignerFailed => "The passkey prompt failed",
@@ -1288,6 +1293,15 @@ pub fn provider_script(host: ProviderHost, debug_mode: bool) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    /// §39 (R22 follow-up, r22-9): the refusal a site is sent never claims a
+    /// membership the wallet could not check (`isOwner` unread is refused too).
+    #[test]
+    fn a_parent_safe_refusal_claims_no_membership() {
+        let words = sign_error_message(SignErrorKind::ParentSafeBlocked);
+        assert!(!words.contains("member of"), "{words}");
+        assert!(words.contains("refused"), "{words}");
+    }
 
     /// Spec 081, device-found: a refusal must say what happened AND carry the
     /// kind. The page used to be answered with the refused function's name on

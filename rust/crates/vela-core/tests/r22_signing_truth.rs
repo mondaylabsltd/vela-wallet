@@ -361,6 +361,15 @@ fn the_signing_truth_vectors_hold() {
         );
         assert_eq!(json!(got), case["reading"], "{name}");
     }
+    // §39 (r22-2): one provider vs two agreeing vs two disagreeing — the
+    // member's own flow and a guard against a site.
+    for case in v["authority"].as_array().expect("authority") {
+        let name = case["name"].as_str().expect("name");
+        for (flow, own) in [("own", true), ("site", false)] {
+            let got = vela_core::app::corroborate::authority_read(&case["envelope"], own);
+            assert_eq!(json!(got), case[flow], "{name} ({flow})");
+        }
+    }
     for case in v["provider"].as_array().expect("provider") {
         let url = case["url"].as_str().expect("url");
         assert_eq!(json!(provider_of(url)), case["provider"], "{url}");
@@ -376,7 +385,7 @@ mod pool {
     use vela_core::app::rpc_pool::{
         Event, RpcCallVerdict, RpcEndpointSeed, RpcKind, RpcOperation as Op, RpcPool,
         RpcShellResult as Res, RpcSource, RpcTransportOutcome as Out, PING_TIMEOUT_MS,
-        RPC_READ_TIMEOUT_MS,
+        RPC_READ_TIMEOUT_MS, WITNESS_BUDGET_MS,
     };
 
     type Sut = DomainDriver<RpcPool>;
@@ -446,6 +455,16 @@ mod pool {
         }
     }
 
+    fn probed_at(url: &str, reported: Option<u32>, now_ms: f64) -> Res {
+        Res::ChainIdProbed {
+            chain_id: CHAIN,
+            url: url.to_owned(),
+            reported,
+            latency_ms: 10.0,
+            now_ms,
+        }
+    }
+
     fn answered(id: &str, url: &str) -> Res {
         Res::PostOutcome {
             call_id: id.to_owned(),
@@ -494,6 +513,7 @@ mod pool {
                 maybe_delivered: false,
                 witness_url: Some(B.to_owned()),
                 own_node: false,
+                sole_provider: false,
             })
         );
     }
@@ -525,8 +545,92 @@ mod pool {
         assert_eq!(ops, vec![post("c2", B)]);
     }
 
+    /// §39 (r22-2): Arc's chain index lists two hosts that answer nothing
+    /// ahead of the one that does. The witness looks past them — every other
+    /// provider, within its time budget, not two asks — and finds dRPC.
+    #[test]
+    fn a_witness_is_looked_for_past_dead_providers_within_the_budget() {
+        const Q: &str = "https://rpc.quicknode.example";
+        const BD: &str = "https://rpc.blockdaemon.example";
+        const D: &str = "https://arc-testnet.drpc.example";
+        let mut sut = Sut::new();
+        sut.dispatch(call("c1", true));
+        sut.resolve(config(
+            vec![
+                seed(A1, RpcSource::Default),
+                seed(Q, RpcSource::Public),
+                seed(BD, RpcSource::Public),
+                seed(D, RpcSource::Public),
+            ],
+            false,
+        ));
+        sut.resolve(probed(A1, Some(CHAIN)));
+        assert_eq!(sut.resolve(answered("c1", A1)), vec![probe(Q)]);
+        // Two hosts that never say which chain they serve…
+        assert_eq!(
+            sut.resolve(probed_at(Q, None, T0 + 3_000.0)),
+            vec![probe(BD)]
+        );
+        assert_eq!(
+            sut.resolve(probed_at(BD, None, T0 + 6_000.0)),
+            vec![probe(D)]
+        );
+        // …and the third provider answers: a witness.
+        assert_eq!(
+            sut.resolve(probed_at(D, Some(CHAIN), T0 + 6_100.0)),
+            vec![post("c1", D)]
+        );
+        let ops = sut.resolve(answered("c1", D));
+        assert_eq!(
+            concluded(&ops),
+            Some(RpcCallVerdict::Respond {
+                url: A1.to_owned(),
+                maybe_delivered: false,
+                witness_url: Some(D.to_owned()),
+                own_node: false,
+                sole_provider: false,
+            })
+        );
+        sut.resolve(Res::Concluded);
+        // The next corroborated read asks the dead hosts last.
+        sut.dispatch(call("c2", true));
+        assert_eq!(sut.resolve(answered("c2", A1)), vec![post("c2", D)]);
+    }
+
+    /// §39: past the budget, the first answer goes back alone — and it is
+    /// NOT "the only provider": others exist, they did not answer in time
+    /// ("couldn't check", never "… anyway").
+    #[test]
+    fn past_the_budget_the_answer_is_alone_but_not_the_sole_provider() {
+        let mut sut = Sut::new();
+        sut.dispatch(call("c1", true));
+        sut.resolve(config(
+            vec![
+                seed(A1, RpcSource::Default),
+                seed(B, RpcSource::Public),
+                seed(C, RpcSource::Public),
+            ],
+            false,
+        ));
+        sut.resolve(probed(A1, Some(CHAIN)));
+        assert_eq!(sut.resolve(answered("c1", A1)), vec![probe(B)]);
+        let ops = sut.resolve(probed_at(B, None, T0 + WITNESS_BUDGET_MS + 1.0));
+        assert_eq!(
+            concluded(&ops),
+            Some(RpcCallVerdict::Respond {
+                url: A1.to_owned(),
+                maybe_delivered: false,
+                witness_url: None,
+                own_node: false,
+                sole_provider: false,
+            })
+        );
+    }
+
     /// Only one provider in the pool: the answer goes back alone — the core
-    /// then believes no plain verdict on it.
+    /// then believes no plain verdict on it. §39: and it says so — the pool
+    /// holds no other provider (`sole_provider`), which only the member's
+    /// own multisig flows may go on with, as "… anyway".
     #[test]
     fn one_provider_alone_is_no_witness() {
         let mut sut = Sut::new();
@@ -544,6 +648,32 @@ mod pool {
                 maybe_delivered: false,
                 witness_url: None,
                 own_node: false,
+                sole_provider: true,
+            })
+        );
+    }
+
+    /// §39: a node proven another chain's is no provider of this one — the
+    /// pool with it and one default holds a sole provider.
+    #[test]
+    fn a_wrong_chain_node_leaves_the_sole_provider() {
+        let mut sut = Sut::new();
+        sut.dispatch(call("c1", true));
+        sut.resolve(config(
+            vec![seed(MINE, RpcSource::User), seed(B, RpcSource::Default)],
+            false,
+        ));
+        assert_eq!(sut.resolve(probed(MINE, Some(1))), vec![probe(B)]);
+        sut.resolve(probed(B, Some(CHAIN)));
+        let ops = sut.resolve(answered("c1", B));
+        assert_eq!(
+            concluded(&ops),
+            Some(RpcCallVerdict::Respond {
+                url: B.to_owned(),
+                maybe_delivered: false,
+                witness_url: None,
+                own_node: false,
+                sole_provider: true,
             })
         );
     }
@@ -569,6 +699,7 @@ mod pool {
                 maybe_delivered: false,
                 witness_url: None,
                 own_node: true,
+                sole_provider: false,
             })
         );
     }
@@ -593,6 +724,7 @@ mod pool {
                 maybe_delivered: false,
                 witness_url: Some(B.to_owned()),
                 own_node: false,
+                sole_provider: false,
             })
         );
     }
@@ -615,9 +747,49 @@ mod pool {
                 maybe_delivered: false,
                 witness_url: None,
                 own_node: false,
+                sole_provider: false,
             })
         );
     }
+}
+
+/// §39 (R22 follow-up, S4, desktop): with "Only use my node" and a node that
+/// dropped the logs, a drain of 0.2 native read "Balance changes / No asset
+/// changes / Checked by your own node only" beside "Send −0.2". The value
+/// the wallet decoded itself is never erased: it is drawn as the outflow.
+#[test]
+fn a_node_never_erases_the_value_the_wallet_decoded() {
+    use vela_core::app::sim_outcome::{verdict_of_envelope, with_decoded_value};
+    let user = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+    let nothing_moves = json!({
+        "result": [{"number": "0x10", "calls": [{"status": "0x1", "returnData": "0x", "gasUsed": "0x5208", "logs": []}]}],
+        "ownNode": true
+    });
+    let read = verdict_of_envelope(&nothing_moves, user);
+    assert_eq!(read.kind, "deltas");
+    assert!(
+        read.deltas.is_empty() && read.no_change_key.is_some(),
+        "the node's word: {read:?}"
+    );
+    let shown = with_decoded_value(read.clone(), Some("200000000000000000"));
+    assert_eq!(
+        shown.no_change_key, None,
+        "never \"No asset changes\" beside a value sent"
+    );
+    assert_eq!(shown.deltas.len(), 1);
+    assert_eq!(shown.deltas[0].token, None);
+    assert_eq!(shown.deltas[0].delta, "-200000000000000000");
+    assert_eq!(
+        shown.source_key, read.source_key,
+        "still said as the own node's check"
+    );
+    // No value: the node's word stands; hex reads the same as decimal.
+    assert_eq!(with_decoded_value(read.clone(), Some("0x0")), read);
+    assert_eq!(with_decoded_value(read.clone(), None), read);
+    assert_eq!(
+        with_decoded_value(read, Some("0x2c68af0bb140000")).deltas[0].delta,
+        "-200000000000000000"
+    );
 }
 
 // ---------------------------------------------------------------------------

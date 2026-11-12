@@ -401,7 +401,14 @@ async fn read_codes<Ev: Send + 'static>(
         let e = bounded(io, chain_id, "eth_getCode", json!([a, "latest"])).await;
         // R22: code the state checks are built from is believed only as two
         // independent nodes (or the person's own node) gave it.
-        let believed = !io.corroborates() || crate::app::corroborate::standing_exact(&e).believed();
+        // §39 (r22-2): on a network whose pool holds no other provider, one
+        // node's code is taken to BUILD the checks — it decides which state
+        // reads are asked, never a verdict: each check it builds is itself
+        // one node's word, said as such ("oneNode"), and signed only
+        // "… anyway".
+        let believed = !io.corroborates()
+            || crate::app::corroborate::standing_exact(&e).believed()
+            || crate::app::corroborate::sole_provider(&e);
         let code = e
             .get("result")
             .and_then(Value::as_str)

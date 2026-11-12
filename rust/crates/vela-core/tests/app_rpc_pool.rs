@@ -211,6 +211,7 @@ fn respond(id: &str, url: &str) -> Op {
             maybe_delivered: false,
             witness_url: None,
             own_node: false,
+            sole_provider: false,
         },
     }
 }
@@ -225,6 +226,7 @@ fn respond_after_loss(id: &str, url: &str) -> Op {
             maybe_delivered: true,
             witness_url: None,
             own_node: false,
+            sole_provider: false,
         },
     }
 }
@@ -2487,6 +2489,7 @@ fn not_connected_fails_over_like_network() {
                     maybe_delivered: delivered,
                     witness_url: None,
                     own_node: false,
+                    sole_provider: false,
                 }
             )],
             "{out:?}"
@@ -2510,6 +2513,7 @@ fn old_json_without_the_new_fields_still_decodes() {
             maybe_delivered: false,
             witness_url: None,
             own_node: false,
+            sole_provider: false,
         }
     );
     let gave_up: RpcCallVerdict = serde_json::from_str(r#"{"type":"failed","rate_limited":true}"#)
