@@ -483,10 +483,16 @@
 	 * Run request `requestId`'s simulation and put its verdict on the sheet.
 	 * A verdict the core marks as about the network (`recheck` — no node
 	 * answered) is asked again, by itself, once the chain answers a plain read
-	 * again, and on the person's "Check again" (dapp-15). The core is told of
-	 * every run (`sim_started` / `sim_settled`): a second run holds the confirm
-	 * again for its own short wait, so nobody signs over a verdict about to
-	 * change.
+	 * again, and on the person's "Check again" (dapp-15).
+	 *
+	 * The core is told of the FIRST run (`sim_started` / `sim_settled`): until
+	 * a verdict is on the sheet the confirm is shut, "Checking…". A re-check
+	 * of a verdict already on the sheet is not told as a new wait (r22-6): an
+	 * unconfirmed verdict is asked again every few seconds, and each re-check
+	 * that shut the confirm flipped the door between "Sign anyway" and a shut
+	 * "Confirm send", cancelling a hold or a "Press again to confirm" begun
+	 * late in a cycle. The landed verdict — drawn stale meanwhile — keeps its
+	 * door until the re-check lands; only a verdict that changes changes it.
 	 */
 	function simulateOnSheet(
 		requestId: string,
@@ -497,7 +503,8 @@
 	): void {
 		stopNodeWatch();
 		if (again) recheckingFor = requestId;
-		signRequest.dispatch({ type: 'sim_started', id: requestId });
+		const landed = again && untrack(() => checked?.requestId) === requestId;
+		if (!landed) signRequest.dispatch({ type: 'sim_started', id: requestId });
 		// However the read ends — a verdict, no reply to read, or a throw — the
 		// verdict's place is no longer "Checking…": what ended with nothing to
 		// report is "could not check" (`landedVerdict`), never a place left
