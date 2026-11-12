@@ -1946,10 +1946,11 @@ export function rpcCooldownMs(consecutive_failures: number): number;
  * R22: the one envelope a corroborated read hands the core — the first
  * node's JSON-RPC body (`undefined`: the pool gave up), the second,
  * independent node's (`undefined`: none answered) and whether the pool holds
- * the person's own node alone ("Only use my node"). Pass it to `simOutcome`,
+ * the person's own node alone ("Only use my node"), and (§39, r22-2) whether the pool
+ * holds no other provider to ask (`sole_provider` on the verdict). Pass it to `simOutcome`,
  * or as a multisig `rpc_corroborated` answer. See `vela_core::app::corroborate`.
  */
-export function rpcCorroboratedEnvelope(primary_json: string | null | undefined, witness_json: string | null | undefined, own_node: boolean): string;
+export function rpcCorroboratedEnvelope(primary_json: string | null | undefined, witness_json: string | null | undefined, own_node: boolean, sole_provider?: boolean | null): string;
 
 /**
  * The answer a hedge's outcome may hand the caller before the pool reaches
@@ -2190,7 +2191,7 @@ export function signingVenueChoices(domain: string, active_json: string, saved_j
  * "nothing moves"). `no_change_key` is "No asset changes" for a check under
  * which nothing of theirs moves. See `vela_core::app::sim_outcome`.
  */
-export function simOutcome(user: string, reply_json: string): string;
+export function simOutcome(user: string, reply_json: string, value_wei?: string | null): string;
 
 /**
  * The chain a site with no chain of its own starts on (dapp-17):
@@ -2942,7 +2943,7 @@ export interface InitOutput {
     readonly relyingPartyJson: (a: number, b: number) => [number, number];
     readonly resolvedNameStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly rpcCooldownMs: (a: number) => number;
-    readonly rpcCorroboratedEnvelope: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+    readonly rpcCorroboratedEnvelope: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly rpcEarlyVerdict: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly rpcIsHedgedRead: (a: number, b: number, c: number, d: number) => number;
     readonly rpcNodeStanding: (a: number, b: number, c: number) => [number, number];
@@ -2996,7 +2997,7 @@ export interface InitOutput {
     readonly signrequestcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly signrequestcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly signrequestcore_view: (a: number) => [number, number, number, number];
-    readonly simOutcome: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly simOutcome: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly siteStartChain: (a: number, b: number, c: number) => number;
     readonly siteStartChainFor: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly storageBytesDisplay: (a: number) => [number, number];
