@@ -437,7 +437,32 @@ pub fn verdict_of(outcome: SimOutcome) -> SimVerdict {
     }
 }
 
-/// r9-2: one line per balance. A chain whose native coin also wears an
+/// §41 (P2-3): the checked answer carries a log of an asset or approval
+/// event naming the account that Vela could not read
+/// ([`TrustDeltaKind::Unread`]): the confirm is "… anyway".
+#[must_use]
+pub fn changes_unread(verdict: &SimVerdict) -> bool {
+    verdict
+        .deltas
+        .iter()
+        .any(|d| d.kind == TrustDeltaKind::Unread)
+}
+
+/// §41 (P2-4): the checked answer grants a spender every coin or NFT of a
+/// kind — `ApprovalForAll(true)`, or an amount at or above the wallet's one
+/// unlimited line (2^128, `approval_guard`'s) — whatever carried the call.
+#[must_use]
+pub fn grants_unlimited(verdict: &SimVerdict) -> bool {
+    let line = U256::from(1u8) << 128;
+    verdict.deltas.iter().any(|d| {
+        d.kind == TrustDeltaKind::Approval
+            && d.token_id.is_none()
+            && U256::from_str_radix(d.delta.trim(), 10).map_or(true, |amount| amount >= line)
+    })
+}
+
+/// r9-2: one line per balance.
+/// A chain whose native coin also wears an
 /// ERC-20 interface (`manage_tokens::native_alias_token`: Arc's USDC at
 /// `0x3600…0000`, Stable's USDT0) moves ONE balance when either is used:
 /// the coin's line says it, and the interface's line — the same money in
@@ -503,23 +528,32 @@ fn signed(delta: &str) -> Option<(bool, U256)> {
     Some((neg && !v.is_zero(), v))
 }
 
-fn delta_key(d: &TrustAssetDelta) -> (u8, String) {
+/// One balance (or grant, or unread emitter) as the agreement compares it:
+/// its kind, its token, and — §41 — the NFT's id and the grant's spender,
+/// so two NFTs of one collection are two balances, and two nodes must agree
+/// on every NFT and every approval as they do on every coin.
+fn delta_key(d: &TrustAssetDelta) -> DeltaKey {
     let kind = match d.kind {
         TrustDeltaKind::Native => 0,
         TrustDeltaKind::Erc20 => 1,
+        TrustDeltaKind::Erc721 => 2,
+        TrustDeltaKind::Erc1155 => 3,
+        TrustDeltaKind::Approval => 4,
+        TrustDeltaKind::Unread => 5,
     };
-    (
-        kind,
-        d.token.clone().unwrap_or_default().to_ascii_lowercase(),
-    )
+    let lower = |s: &Option<String>| s.clone().unwrap_or_default().to_ascii_lowercase();
+    (kind, lower(&d.token), lower(&d.token_id), lower(&d.spender))
 }
+
+/// [`delta_key`]'s shape.
+type DeltaKey = (u8, String, String, String);
 
 /// The two nodes' moves agree ([`SIM_AGREE_BPS`]); `Some` with what the
 /// sheet shows — each balance's worse figure — or `None`.
 pub fn agreed_deltas(a: &[TrustAssetDelta], b: &[TrustAssetDelta]) -> Option<Vec<TrustAssetDelta>> {
     use std::collections::BTreeMap;
     /// Each balance once: (negative, magnitude, the delta as given).
-    type Moves = BTreeMap<(u8, String), (bool, U256, TrustAssetDelta)>;
+    type Moves = BTreeMap<DeltaKey, (bool, U256, TrustAssetDelta)>;
     let read = |list: &[TrustAssetDelta]| -> Option<Moves> {
         let mut out = BTreeMap::new();
         for d in list {
@@ -567,7 +601,8 @@ pub fn agreed_deltas(a: &[TrustAssetDelta], b: &[TrustAssetDelta]) -> Option<Vec
         merged.push(worse.clone());
     }
     // In the first node's order.
-    let order: Vec<(u8, String)> = a.iter().map(delta_key).collect();
+    let order: Vec<DeltaKey> = a.iter().map(delta_key).collect();
+
     merged.sort_by_key(|d| {
         order
             .iter()
@@ -703,6 +738,8 @@ pub fn with_decoded_value(mut verdict: SimVerdict, value_wei: Option<&str>) -> S
             kind: TrustDeltaKind::Native,
             token: None,
             delta: format!("-{value}"),
+            token_id: None,
+            spender: None,
         },
     );
     verdict.no_change_key = None;
@@ -882,25 +919,44 @@ fn sanitise(raw: &str) -> Option<String> {
 // The deltas (moved from app-desktop/vela-wallet/src/executor/sim.rs)
 // ---------------------------------------------------------------------------
 
-/// Net every `Transfer` log that touches `user` into one signed delta per
-/// asset, in first-seen order, zeros dropped.
+/// Net every asset log that touches `user` into one signed delta per asset,
+/// in first-seen order, zeros dropped — and every approval `user` grants.
 ///
-/// In and out of the same token nets to nothing — printing a pair of moves
-/// that cancel is how a swap looks like a theft. A log from one of the native
-/// sentinels ([`NATIVE_LOG_ADDRESSES`]; `traceTransfers` reports value moves
-/// from `0xeeee…`) is the native coin — once: where the traced logs are
-/// there, a chain's own native log of the same move (Arc's `0xffff…fffe`) is
-/// its copy and is not counted again (r5reg-1). Malformed logs contribute nothing,
-/// silently: a simulation is untrusted input by definition. The arithmetic is
-/// exact over 256-bit values (the shells' own copies used big integers; the
-/// desktop's saturated at `i128`).
+/// - **Coins.** An ERC-20 `Transfer` (three topics) — in and out of the same
+///   token nets to nothing: printing a pair of moves that cancel is how a
+///   swap looks like a theft. A log from one of the native sentinels
+///   ([`NATIVE_LOG_ADDRESSES`]; `traceTransfers` reports value moves from
+///   `0xeeee…`) is the native coin — once: where the traced logs are there,
+///   a chain's own native log of the same move (Arc's `0xffff…fffe`) is its
+///   copy and is not counted again (r5reg-1).
+/// - **NFTs** (§41, P2-3). An ERC-721 `Transfer` (four topics: the id is the
+///   last) and ERC-1155 `TransferSingle` / `TransferBatch`, netted per
+///   (collection, id): [`TrustDeltaKind::Erc721`] / [`TrustDeltaKind::Erc1155`].
+///   Two honest nodes no longer agree on "No asset changes" for an NFT sweep.
+/// - **Approvals** (§41, P2-3) the account grants: ERC-20 `Approval` (three
+///   topics), ERC-721 `Approval` of one token (four), `ApprovalForAll(true)`,
+///   and Permit2's `Approval` / `Permit` — the last grant per (token,
+///   spender[, id]) stands, a zero or `false` one is a revocation and no
+///   change: [`TrustDeltaKind::Approval`]. Whatever carried the call
+///   (Universal Router, `execTransaction`, a router nobody decodes) cannot
+///   hide the grant from its own log.
+/// - **What cannot be read** (§41, P2-3): a log of one of those events that
+///   names the account (in a topic or a data word) in a shape none of the
+///   rows above reads — a wrong topic count, a missing word, batch arrays
+///   that do not decode — is [`TrustDeltaKind::Unread`], one per emitter:
+///   "This changes something Vela can't read", never "No asset changes".
+///
+/// Any other event is no asset change of the account's and is not read. A
+/// log nobody can parse at all (no topics array) contributes nothing: a
+/// simulation is untrusted input by definition, and what it may not do is
+/// make a change disappear — a malformed log of a known event that names the
+/// account is the unread row, not silence. The arithmetic is exact over
+/// 256-bit values.
 pub fn derive_deltas(logs: &[&Value], user: &str) -> Vec<TrustAssetDelta> {
     let user = user.trim().to_lowercase();
     if user.is_empty() {
         return Vec::new();
     }
-    // (key, received, sent) in first-seen order.
-    let mut totals: Vec<(String, U256, U256)> = Vec::new();
     // r5reg-1: a node that ran `traceTransfers` reports EVERY value move
     // from `0xeeee…`; a chain that logs its own native moves (Arc's EIP-7708
     // log from `0xffff…fffe`) reports the same move again in the same answer.
@@ -911,90 +967,463 @@ pub fn derive_deltas(logs: &[&Value], user: &str) -> Vec<TrustAssetDelta> {
     let traced = logs
         .iter()
         .any(|log| log_address(log) == NATIVE_LOG_ADDRESSES[2]);
+    let topics_of = Topics::new();
+    let mut book = Book::default();
 
     for log in logs {
         let Some(topics) = log.get("topics").and_then(Value::as_array) else {
             continue;
         };
-        if topics.len() != 3 {
-            continue;
-        }
-        if !topics[0]
-            .as_str()
-            .is_some_and(|topic| topic.eq_ignore_ascii_case(TRANSFER_TOPIC))
-        {
-            continue;
-        }
-        // A topic that is not an address makes the whole log malformed —
-        // never half a transfer.
-        let (Some(from), Some(to)) = (topic_address(&topics[1]), topic_address(&topics[2])) else {
+        let Some(t0) = topics.first().and_then(Value::as_str) else {
             continue;
         };
-        let (sent, received) = (from == user, to == user);
-        if !sent && !received {
-            continue;
-        }
-        let Some(value) = first_word(log.get("data").and_then(Value::as_str).unwrap_or("")) else {
+        let t0 = t0.to_ascii_lowercase();
+        let Some(event) = topics_of.event(&t0) else {
             continue;
         };
-        if value.is_zero() {
-            continue;
-        }
         let address = log_address(log);
-        if address.is_empty() {
-            continue;
-        }
-        let native = NATIVE_LOG_ADDRESSES.contains(&address.as_str());
-        if native && traced && address != NATIVE_LOG_ADDRESSES[2] {
-            continue;
-        }
-        let key = if native {
-            NATIVE_KEY.to_owned()
-        } else {
-            address
-        };
-        let index = match totals.iter().position(|(k, _, _)| *k == key) {
-            Some(index) => index,
-            None => {
-                totals.push((key, U256::ZERO, U256::ZERO));
-                totals.len() - 1
-            }
-        };
-        let entry = &mut totals[index];
-        // A self-transfer (from == to == user) adds to both sides and nets to
-        // zero, which is the truth about it.
-        if received {
-            entry.1 = entry.1.saturating_add(value);
-        }
-        if sent {
-            entry.2 = entry.2.saturating_add(value);
+        let data = log.get("data").and_then(Value::as_str).unwrap_or("");
+        let read = read_log(event, topics, data, &address, &user, traced, &mut book);
+        if read == Read::Unreadable && names(topics, data, &user) {
+            book.unread(&address);
         }
     }
+    book.into_deltas()
+}
 
-    totals
-        .into_iter()
-        .filter_map(|(key, received, sent)| {
-            let delta = match received.cmp(&sent) {
-                std::cmp::Ordering::Equal => return None,
-                std::cmp::Ordering::Greater => (received - sent).to_string(),
-                std::cmp::Ordering::Less => format!("-{}", sent - received),
+/// The events [`derive_deltas`] reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AssetEvent {
+    Transfer,
+    TransferSingle,
+    TransferBatch,
+    Approval,
+    ApprovalForAll,
+    Permit2Approval,
+    Permit2Permit,
+}
+
+/// Their topic0s.
+struct Topics(Vec<(String, AssetEvent)>);
+
+impl Topics {
+    fn new() -> Self {
+        let of = |signature: &str| {
+            crate::primitives::to_hex(&crate::primitives::keccak256(signature.as_bytes()), true)
+        };
+        Self(vec![
+            (TRANSFER_TOPIC.to_owned(), AssetEvent::Transfer),
+            (
+                of("TransferSingle(address,address,address,uint256,uint256)"),
+                AssetEvent::TransferSingle,
+            ),
+            (
+                of("TransferBatch(address,address,address,uint256[],uint256[])"),
+                AssetEvent::TransferBatch,
+            ),
+            (
+                of("Approval(address,address,uint256)"),
+                AssetEvent::Approval,
+            ),
+            (
+                of("ApprovalForAll(address,address,bool)"),
+                AssetEvent::ApprovalForAll,
+            ),
+            (
+                of("Approval(address,address,address,uint160,uint48)"),
+                AssetEvent::Permit2Approval,
+            ),
+            (
+                of("Permit(address,address,address,uint160,uint48,uint48)"),
+                AssetEvent::Permit2Permit,
+            ),
+        ])
+    }
+
+    fn event(&self, topic0: &str) -> Option<AssetEvent> {
+        self.0
+            .iter()
+            .find(|(topic, _)| topic.eq_ignore_ascii_case(topic0))
+            .map(|(_, event)| *event)
+    }
+}
+
+/// What reading one log came to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Read {
+    /// Read: counted, or nothing of the account's.
+    Done,
+    /// Its shape is none this reads.
+    Unreadable,
+}
+
+/// The most ids one `TransferBatch` may carry and still be read: past it the
+/// log is unread (a crafted batch must not cost more to read than to emit).
+const MAX_BATCH_IDS: usize = 256;
+
+/// `2^256 − 1`: "all of them", as an `ApprovalForAll` grant is written.
+fn all_of_them() -> U256 {
+    U256::MAX
+}
+
+#[allow(clippy::too_many_lines)]
+fn read_log(
+    event: AssetEvent,
+    topics: &[Value],
+    data: &str,
+    address: &str,
+    user: &str,
+    traced: bool,
+    book: &mut Book,
+) -> Read {
+    let topic = |i: usize| topics.get(i).and_then(topic_address);
+    let word_topic = |i: usize| topics.get(i).and_then(topic_word);
+    if address.is_empty() {
+        return Read::Unreadable;
+    }
+    match (event, topics.len()) {
+        (AssetEvent::Transfer, 3) => {
+            // A topic that is not an address makes the whole log malformed —
+            // never half a transfer.
+            let (Some(from), Some(to)) = (topic(1), topic(2)) else {
+                return Read::Unreadable;
             };
-            let native = key == NATIVE_KEY;
-            Some(TrustAssetDelta {
-                kind: if native {
-                    TrustDeltaKind::Native
-                } else {
-                    TrustDeltaKind::Erc20
-                },
-                token: (!native).then_some(key),
-                delta,
-            })
-        })
+            let (sent, received) = (from == user, to == user);
+            if !sent && !received {
+                return Read::Done;
+            }
+            let Some(value) = first_word(data) else {
+                return Read::Unreadable;
+            };
+            if value.is_zero() {
+                return Read::Done;
+            }
+            let native = NATIVE_LOG_ADDRESSES.contains(&address);
+            if native && traced && address != NATIVE_LOG_ADDRESSES[2] {
+                return Read::Done;
+            }
+            let key = if native {
+                Key::Native
+            } else {
+                Key::Erc20(address.to_owned())
+            };
+            book.moved(key, received.then_some(value), sent.then_some(value));
+            Read::Done
+        }
+        (AssetEvent::Transfer, 4) => {
+            let (Some(from), Some(to), Some(id)) = (topic(1), topic(2), word_topic(3)) else {
+                return Read::Unreadable;
+            };
+            let (sent, received) = (from == user, to == user);
+            if sent || received {
+                let one = U256::from(1u8);
+                book.moved(
+                    Key::Nft(TrustDeltaKind::Erc721, address.to_owned(), id.to_string()),
+                    received.then_some(one),
+                    sent.then_some(one),
+                );
+            }
+            Read::Done
+        }
+        (AssetEvent::TransferSingle, 4) => {
+            let (Some(from), Some(to)) = (topic(2), topic(3)) else {
+                return Read::Unreadable;
+            };
+            let (sent, received) = (from == user, to == user);
+            if !sent && !received {
+                return Read::Done;
+            }
+            let words = words(data);
+            let (Some(id), Some(value)) = (words.first(), words.get(1)) else {
+                return Read::Unreadable;
+            };
+            if !value.is_zero() {
+                book.moved(
+                    Key::Nft(TrustDeltaKind::Erc1155, address.to_owned(), id.to_string()),
+                    received.then_some(*value),
+                    sent.then_some(*value),
+                );
+            }
+            Read::Done
+        }
+        (AssetEvent::TransferBatch, 4) => {
+            let (Some(from), Some(to)) = (topic(2), topic(3)) else {
+                return Read::Unreadable;
+            };
+            let (sent, received) = (from == user, to == user);
+            if !sent && !received {
+                return Read::Done;
+            }
+            let Some((ids, values)) = batch_arrays(data) else {
+                return Read::Unreadable;
+            };
+            for (id, value) in ids.iter().zip(&values) {
+                if !value.is_zero() {
+                    book.moved(
+                        Key::Nft(TrustDeltaKind::Erc1155, address.to_owned(), id.to_string()),
+                        received.then_some(*value),
+                        sent.then_some(*value),
+                    );
+                }
+            }
+            Read::Done
+        }
+        (AssetEvent::Approval, 3) => {
+            let (Some(owner), Some(spender)) = (topic(1), topic(2)) else {
+                return Read::Unreadable;
+            };
+            if owner != user {
+                return Read::Done;
+            }
+            let Some(value) = first_word(data) else {
+                return Read::Unreadable;
+            };
+            book.granted(address, &spender, None, value);
+            Read::Done
+        }
+        (AssetEvent::Approval, 4) => {
+            let (Some(owner), Some(approved), Some(id)) = (topic(1), topic(2), word_topic(3))
+            else {
+                return Read::Unreadable;
+            };
+            if owner != user {
+                return Read::Done;
+            }
+            // `approve(0x0, id)` clears the approval: no grant.
+            let granted = if approved == ZERO_ADDRESS {
+                U256::ZERO
+            } else {
+                U256::from(1u8)
+            };
+            book.granted(address, &approved, Some(id.to_string()), granted);
+            Read::Done
+        }
+        (AssetEvent::ApprovalForAll, 3) => {
+            let (Some(owner), Some(operator)) = (topic(1), topic(2)) else {
+                return Read::Unreadable;
+            };
+            if owner != user {
+                return Read::Done;
+            }
+            let grant = match first_word(data) {
+                Some(flag) if flag.is_zero() => U256::ZERO,
+                Some(flag) if flag == U256::from(1u8) => all_of_them(),
+                _ => return Read::Unreadable,
+            };
+            book.granted(address, &operator, None, grant);
+            Read::Done
+        }
+        (AssetEvent::Permit2Approval | AssetEvent::Permit2Permit, 4) => {
+            let (Some(owner), Some(token), Some(spender)) = (topic(1), topic(2), topic(3)) else {
+                return Read::Unreadable;
+            };
+            if owner != user {
+                return Read::Done;
+            }
+            let Some(amount) = first_word(data) else {
+                return Read::Unreadable;
+            };
+            book.granted(&token, &spender, None, amount);
+            Read::Done
+        }
+        _ => Read::Unreadable,
+    }
+}
+
+/// The zero address, as [`topic_address`] writes it.
+const ZERO_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
+
+/// The log names `user` somewhere it could be read from: a topic, or a
+/// 32-byte word of its data holding the address.
+fn names(topics: &[Value], data: &str, user: &str) -> bool {
+    let word = format!("{:0>64}", user.trim_start_matches("0x"));
+    topics
+        .iter()
+        .skip(1)
+        .filter_map(Value::as_str)
+        .any(|t| t.trim_start_matches("0x").eq_ignore_ascii_case(&word))
+        || data
+            .trim_start_matches("0x")
+            .as_bytes()
+            .chunks(64)
+            .any(|chunk| chunk.eq_ignore_ascii_case(word.as_bytes()))
+}
+
+/// Every whole 32-byte word of a log's data; empty when it is not hex.
+fn words(data: &str) -> Vec<U256> {
+    let hex = data.strip_prefix("0x").unwrap_or(data);
+    if !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Vec::new();
+    }
+    hex.as_bytes()
+        .chunks_exact(64)
+        .filter_map(|chunk| std::str::from_utf8(chunk).ok())
+        .filter_map(|chunk| U256::from_str_radix(chunk, 16).ok())
         .collect()
 }
 
-/// The totals' key for the native coin (never a lowercased address).
-const NATIVE_KEY: &str = "native";
+/// `TransferBatch`'s `(uint256[] ids, uint256[] values)`, every bound checked:
+/// both arrays present, the same length, at most [`MAX_BATCH_IDS`].
+fn batch_arrays(data: &str) -> Option<(Vec<U256>, Vec<U256>)> {
+    let words = words(data);
+    let index = |byte_offset: &U256| -> Option<usize> {
+        let offset = usize::try_from(*byte_offset).ok()?;
+        (offset % 32 == 0).then_some(offset / 32)
+    };
+    let array = |at: usize| -> Option<Vec<U256>> {
+        let len = usize::try_from(*words.get(at)?).ok()?;
+        if len > MAX_BATCH_IDS {
+            return None;
+        }
+        words.get(at + 1..at + 1 + len).map(<[U256]>::to_vec)
+    };
+    let ids = array(index(words.first()?)?)?;
+    let values = array(index(words.get(1)?)?)?;
+    (ids.len() == values.len()).then_some((ids, values))
+}
+
+/// What one balance is, in the book.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Key {
+    Native,
+    Erc20(String),
+    /// (standard, collection, id).
+    Nft(TrustDeltaKind, String, String),
+}
+
+/// One line of the book, in first-seen order.
+#[derive(Clone, Debug)]
+enum Line {
+    /// (received, sent).
+    Moved(Key, U256, U256),
+    /// The grant standing for (token, spender, id).
+    Granted {
+        token: String,
+        spender: String,
+        token_id: Option<String>,
+        amount: U256,
+    },
+    /// Unread logs of one emitter.
+    Unread(String, u64),
+}
+
+#[derive(Default)]
+struct Book(Vec<Line>);
+
+impl Book {
+    fn moved(&mut self, key: Key, received: Option<U256>, sent: Option<U256>) {
+        let at = self
+            .0
+            .iter()
+            .position(|line| matches!(line, Line::Moved(k, _, _) if *k == key));
+        let at = at.unwrap_or_else(|| {
+            self.0.push(Line::Moved(key, U256::ZERO, U256::ZERO));
+            self.0.len() - 1
+        });
+        if let Line::Moved(_, r, s) = &mut self.0[at] {
+            // A self-transfer (from == to == user) adds to both sides and
+            // nets to zero, which is the truth about it.
+            if let Some(v) = received {
+                *r = r.saturating_add(v);
+            }
+            if let Some(v) = sent {
+                *s = s.saturating_add(v);
+            }
+        }
+    }
+
+    fn granted(&mut self, token: &str, spender: &str, token_id: Option<String>, amount: U256) {
+        let found = self.0.iter_mut().find_map(|line| match line {
+            Line::Granted {
+                token: t,
+                spender: s,
+                token_id: id,
+                amount,
+            } if t == token && s == spender && *id == token_id => Some(amount),
+            _ => None,
+        });
+        match found {
+            // The last grant is the one that stands (a re-approve replaces).
+            Some(standing) => *standing = amount,
+            None => self.0.push(Line::Granted {
+                token: token.to_owned(),
+                spender: spender.to_owned(),
+                token_id,
+                amount,
+            }),
+        }
+    }
+
+    fn unread(&mut self, emitter: &str) {
+        for line in &mut self.0 {
+            if let Line::Unread(e, n) = line {
+                if e == emitter {
+                    *n += 1;
+                    return;
+                }
+            }
+        }
+        self.0.push(Line::Unread(emitter.to_owned(), 1));
+    }
+
+    fn into_deltas(self) -> Vec<TrustAssetDelta> {
+        self.0
+            .into_iter()
+            .filter_map(|line| match line {
+                Line::Moved(key, received, sent) => {
+                    let delta = match received.cmp(&sent) {
+                        std::cmp::Ordering::Equal => return None,
+                        std::cmp::Ordering::Greater => (received - sent).to_string(),
+                        std::cmp::Ordering::Less => format!("-{}", sent - received),
+                    };
+                    let (kind, token, token_id) = match key {
+                        Key::Native => (TrustDeltaKind::Native, None, None),
+                        Key::Erc20(token) => (TrustDeltaKind::Erc20, Some(token), None),
+                        Key::Nft(kind, token, id) => (kind, Some(token), Some(id)),
+                    };
+                    Some(TrustAssetDelta {
+                        kind,
+                        token,
+                        delta,
+                        token_id,
+                        spender: None,
+                    })
+                }
+                Line::Granted {
+                    token,
+                    spender,
+                    token_id,
+                    amount,
+                } => (!amount.is_zero()).then(|| TrustAssetDelta {
+                    kind: TrustDeltaKind::Approval,
+                    token: Some(token),
+                    delta: amount.to_string(),
+                    token_id,
+                    spender: Some(spender),
+                }),
+                Line::Unread(emitter, n) => Some(TrustAssetDelta {
+                    kind: TrustDeltaKind::Unread,
+                    token: (!emitter.is_empty()).then_some(emitter),
+
+                    delta: n.to_string(),
+                    token_id: None,
+                    spender: None,
+                }),
+            })
+            .collect()
+    }
+}
+
+/// A 32-byte topic as a number (an NFT's id); `None` when it is not one
+/// 64-digit hex word.
+fn topic_word(topic: &Value) -> Option<U256> {
+    let raw = topic.as_str()?;
+    let hex = raw.strip_prefix("0x").unwrap_or(raw);
+    if hex.len() != 64 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    U256::from_str_radix(hex, 16).ok()
+}
 
 /// A log's emitting address, lowercased (`""` when it has none).
 fn log_address(log: &Value) -> String {

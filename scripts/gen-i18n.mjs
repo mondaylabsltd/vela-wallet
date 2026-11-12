@@ -1456,8 +1456,14 @@ for (let i = 1; i < PATHS.length; i++) {
 //   confirm began: nothing signed, said why — r22-3 / A1). `send.feeMoved`
 //   and `send.feeMovedMax` change value only (a stop now happens only when
 //   the fee went up, and says so). 2329 + 1 = 2330 paths, 2206 leaves.
-if (PATHS.length !== 2330) fail(`expected 2330 paths (2206 leaf + 124 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2206) fail(`expected 2206 leaf paths, got ${leafSet.size}`);
+// 2334 (final review, §41, 2026-11-12): + `componentsUi.signing.{balanceNft,
+//   balanceApproval, balanceApprovalAll, balanceUnread}` — the simulation's
+//   NFT moves, the approvals it found and a log naming the account Vela
+//   could not read, each drawn as its own balance row (never "No asset
+//   changes"). 2330 + 4 = 2334 paths, 2210 leaves.
+if (PATHS.length !== 2334) fail(`expected 2334 paths (2210 leaf + 124 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2210) fail(`expected 2210 leaf paths, got ${leafSet.size}`);
+
 if (branchSet.size !== 124) fail(`expected 124 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.

@@ -2990,8 +2990,13 @@ fn recorded_changes(t: &FeedTxRecord) -> Vec<RecordedChange> {
                     symbol.trim().to_owned(),
                     Some(*decimals),
                 ),
-                // No figure was ever kept for it: a direction, or no line.
-                TrustSimJudgment::Erc20Unverified { direction, .. } => {
+                // §41: a grant and an unread log moved no balance — the
+                // record's balance lines say only what moved.
+                TrustSimJudgment::Approval { .. } | TrustSimJudgment::Unread { .. } => return None,
+                // No figure was ever kept for it: a direction, or no line —
+                // an NFT nobody vouches for is the same (§41).
+                TrustSimJudgment::Erc20Unverified { direction, .. }
+                | TrustSimJudgment::Nft { direction, .. } => {
                     let out = match direction {
                         TrustSimDirection::In => false,
                         TrustSimDirection::Out => true,

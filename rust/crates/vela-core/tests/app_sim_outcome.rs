@@ -420,11 +420,15 @@ fn a_clean_run_is_deltas_with_no_notice() {
                     kind: TrustDeltaKind::Erc20,
                     token: Some(USDC.to_lowercase()),
                     delta: "-5".to_owned(),
+                    token_id: None,
+                    spender: None,
                 },
                 TrustAssetDelta {
                     kind: TrustDeltaKind::Native,
                     token: None,
                     delta: "7".to_owned(),
+                    token_id: None,
+                    spender: None,
                 },
             ],
         }
@@ -666,6 +670,8 @@ fn the_outcome_on_the_wire() {
             kind: TrustDeltaKind::Native,
             token: None,
             delta: "-1".to_owned(),
+            token_id: None,
+            spender: None,
         }],
     };
     let wire = serde_json::to_value(&deltas).unwrap();
@@ -815,12 +821,16 @@ fn transfers_net_per_token_in_first_seen_order() {
                 kind: TrustDeltaKind::Erc20,
                 token: Some(USDC.to_lowercase()),
                 delta: "-20".to_owned(),
+                token_id: None,
+                spender: None,
             },
             // The sentinel is the NATIVE coin, not a contract.
             TrustAssetDelta {
                 kind: TrustDeltaKind::Native,
                 token: None,
                 delta: "7".to_owned(),
+                token_id: None,
+                spender: None,
             },
         ]
     );
@@ -928,7 +938,9 @@ fn transfers_that_miss_the_wallet_are_ignored() {
 }
 
 /// iOS `onlyWellFormedTransfersCount`: not a `Transfer`, too few topics, no
-/// address, no data word, a topic that is not an address.
+/// address, no data word, a topic that is not an address — none of them
+/// moves a balance. §41 (P2-3): but a malformed `Transfer` that names the
+/// account is no silence either: it is something Vela can't read.
 #[test]
 fn only_well_formed_transfers_count() {
     let logs = [
@@ -940,8 +952,23 @@ fn only_well_formed_transfers_count() {
         json!({ "address": USDC, "topics": [TRANSFER_TOPIC, topic(USDC), topic(ME)], "data": format!("0x{}", "z".repeat(64)) }),
         json!("not a log"),
     ];
-    assert!(deltas_of(&logs).is_empty());
+    let deltas = deltas_of(&logs);
+    assert!(
+        deltas.iter().all(|d| d.kind == TrustDeltaKind::Unread),
+        "{deltas:?}"
+    );
+    let usdc = USDC.to_lowercase();
+    assert_eq!(
+        deltas
+            .iter()
+            .map(|d| (d.token.as_deref(), d.delta.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(Some(usdc.as_str()), "4"), (None, "1")]
+    );
+    // The event that is not a known one, alone, is nothing of the account's.
+    assert!(deltas_of(&logs[..1]).is_empty());
     // An empty user owns nothing — a malformed topic must not match it.
+
     let refs: Vec<&Value> = logs.iter().collect();
     assert!(derive_deltas(&refs, "").is_empty());
 }
@@ -1040,4 +1067,37 @@ fn a_revert_reason_cannot_draw_a_wallet_sentence() {
     .expect("the drawn line");
     assert!(!drawn.contains(&unavailable), "{drawn}");
     assert_eq!(line.risk, ClearRisk::Danger);
+}
+
+/// §41 (P2-3): Permit2's own grant (`Approval(owner, token, spender, amount,
+/// expiration)`) is the account's approval of `token` — read from the log a
+/// carrier cannot hide — and a re-approval replaces the grant before it.
+#[test]
+fn a_permit2_grant_is_an_approval_of_the_token() {
+    let topic0 = vela_core::primitives::to_hex(
+        &vela_core::primitives::keccak256(b"Approval(address,address,address,uint160,uint48)"),
+        true,
+    );
+    let permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
+    let grant = |amount: u128| {
+        json!({
+            "address": permit2,
+            "topics": [topic0, topic(ME), topic(USDC), topic(OTHER)],
+            "data": format!("{}{:064x}", word(amount), 1_900_000_000u64),
+        })
+    };
+    let deltas = deltas_of(&[grant(7), grant(9)]);
+    assert_eq!(deltas.len(), 1, "{deltas:?}");
+    assert_eq!(deltas[0].kind, TrustDeltaKind::Approval);
+    assert_eq!(
+        deltas[0].token.as_deref(),
+        Some(USDC.to_lowercase().as_str())
+    );
+    assert_eq!(
+        deltas[0].spender.as_deref(),
+        Some(OTHER.to_lowercase().as_str())
+    );
+    assert_eq!(deltas[0].delta, "9");
+    // Revoked to zero: no change at all.
+    assert!(deltas_of(&[grant(7), grant(0)]).is_empty());
 }

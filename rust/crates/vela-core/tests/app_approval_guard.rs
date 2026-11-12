@@ -2129,3 +2129,59 @@ fn a_permit2_witness_transfer_is_an_approval() {
         assert_eq!(d.deadline.as_deref(), Some("1900000000"));
     }
 }
+
+/// §41 (P2-4): a single `setApprovalForAll(true)` is the held danger it is
+/// as a batch leg — before the deliberate tap and after it; revoked, it is
+/// not.
+#[test]
+fn a_single_set_approval_for_all_is_a_held_danger() {
+    use vela_core::app::sign_confirm::{guarded_posture, Posture, HOLD_TO_CONFIRM_MS};
+    let mut sut = guard_for(
+        TX,
+        &tx_params(USDC, &set_approval_for_all_calldata(SPENDER, true)),
+    );
+    assert!(sut.view().unlimited_warning, "as asked");
+    let held = guarded_posture(Posture::default(), &sut.view());
+    assert!(held.danger && held.hold_ms == HOLD_TO_CONFIRM_MS);
+    sut.dispatch(Event::GrantDeliberatelyChosen);
+    assert!(sut.view().unlimited_warning, "granted");
+    sut.dispatch(Event::RevokeChosen);
+    assert!(!sut.view().unlimited_warning, "revoked");
+}
+
+/// §41 (P2-4): past the carriers this guard reads — nested deeper than it
+/// follows, or more calls than it reads — a call is not "no approval": the
+/// guard says it did not read it, and the confirm is "… anyway", held.
+#[test]
+fn a_carrier_past_the_limits_reads_as_blind() {
+    use vela_core::app::sign_confirm::{guarded_posture, Posture, HOLD_TO_CONFIRM_MS};
+    let inner = approve_calldata(SPENDER, U256::from(5u8));
+    // Five multicalls deep: the guard follows four.
+    let mut deep = inner.clone();
+    for _ in 0..5 {
+        deep = multicall(std::slice::from_ref(&deep));
+    }
+    // Sixty-five calls: the guard reads sixty-four.
+    let wide = multicall(&vec![inner.clone(); 65]);
+    for data in [deep, wide] {
+        let view = guard_for(TX, &tx_params(USDC, &data)).view();
+        assert!(view.carrier_unread, "{data}");
+        let posture = guarded_posture(Posture::default(), &view);
+        assert!(posture.anyway && posture.hold_ms == HOLD_TO_CONFIRM_MS);
+        // As a batch leg too.
+        let leg = guard_for(
+            "wallet_sendCalls",
+            &batch_params(vec![json!({ "to": USDC, "data": data })]),
+        )
+        .view();
+        assert!(leg.carrier_unread);
+    }
+    // Within the limits it reads, and says so.
+    let shallow = multicall(&vec![inner; 3]);
+    let view = guard_for(TX, &tx_params(USDC, &shallow)).view();
+    assert!(!view.carrier_unread);
+    assert_eq!(
+        guarded_posture(Posture::default(), &view),
+        Posture::default()
+    );
+}

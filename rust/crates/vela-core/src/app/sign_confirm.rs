@@ -248,7 +248,16 @@ pub fn posture(sign: &SignView, clear: &ClearSigningView, sim: Option<&SimVerdic
         && (sign.sim_waited_out_key.is_some()
             || sim.is_none_or(|verdict| verdict.kind != "deltas"));
     let reverts = transaction && sim.is_some_and(|verdict| verdict.kind == "reverts");
-    let anyway = clear.sign_anyway || sim_unread;
+    // §41 (P2-3 / P2-4): what the checked answer itself says. A log of an
+    // asset or approval event naming the account that Vela could not read is
+    // a check Vela could not read — "… anyway". An unbounded grant the
+    // simulation found (ApprovalForAll, or an amount at the wallet's one
+    // unlimited line) is a danger however the call carried it — a Universal
+    // Router `execute`, an `execTransaction`, a router nobody decodes.
+    let checked = sim.filter(|verdict| transaction && verdict.kind == "deltas");
+    let changes_unread = checked.is_some_and(super::sim_outcome::changes_unread);
+    let grants_unlimited = checked.is_some_and(super::sim_outcome::grants_unlimited);
+    let anyway = clear.sign_anyway || sim_unread || changes_unread;
     let reading_danger = clear
         .result
         .as_ref()
@@ -257,8 +266,12 @@ pub fn posture(sign: &SignView, clear: &ClearSigningView, sim: Option<&SimVerdic
             .batch
             .as_ref()
             .is_some_and(|batch| batch.risk == ClearRisk::Danger);
-    let danger =
-        reverts || reading_danger || clear.danger_haptic || clear.surface == ClearSurface::EthSign;
+    let danger = reverts
+        || reading_danger
+        || grants_unlimited
+        || clear.danger_haptic
+        || clear.surface == ClearSurface::EthSign;
+
     Posture {
         anyway,
         danger,
@@ -359,8 +372,22 @@ pub fn confirm_state(input: &ConfirmInput) -> ConfirmState {
 /// a witness permit was a plain Confirm while a two-leg batch was held. The
 /// approval guard's one verdict (`GuardView::unlimited_warning`, the same
 /// red sentence every shell draws) now makes the confirm a held danger.
+///
+/// §41 (P2-4): a request whose carried calls the guard could not read
+/// (`GuardView::carrier_unread`: nested past its depth, more than it reads,
+/// an encoding that does not hold together) is not "no approval" — it is
+/// "… anyway", held, and refused by Refuse blind signing.
 #[must_use]
 pub fn guarded_posture(posture: Posture, guard: &GuardView) -> Posture {
+    let posture = if guard.carrier_unread {
+        Posture {
+            anyway: true,
+            hold_ms: HOLD_TO_CONFIRM_MS,
+            ..posture
+        }
+    } else {
+        posture
+    };
     if !guard.unlimited_warning {
         return posture;
     }

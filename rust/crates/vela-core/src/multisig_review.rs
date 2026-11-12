@@ -1658,6 +1658,8 @@ fn probe_moves(p: &ProbeAnswer, tokens: &[Address]) -> SimVerdict {
             kind: TrustDeltaKind::Native,
             token: None,
             delta: signed(p.before.balance, p.after.balance),
+            token_id: None,
+            spender: None,
         });
     }
     for (i, t) in tokens.iter().enumerate() {
@@ -1667,6 +1669,8 @@ fn probe_moves(p: &ProbeAnswer, tokens: &[Address]) -> SimVerdict {
                     kind: TrustDeltaKind::Erc20,
                     token: Some(format!("{t:#x}")),
                     delta: signed(*b, *a),
+                    token_id: None,
+                    spender: None,
                 });
             }
         }
@@ -2041,7 +2045,29 @@ pub fn multisig_review(input: &ReviewInput) -> Result<MultisigReview, CoreError>
     }
     match simulation.kind.as_str() {
         "reverts" => concerns.push(Concern::Reverts),
-        "deltas" => {}
+        "deltas" => {
+            // §41 (P2-3 / P2-4): what the answer itself says — a log naming
+            // the multisig that Vela could not read is a check it could not
+            // read; an unbounded grant the simulation found is a danger
+            // however the call carried it.
+            if crate::app::sim_outcome::changes_unread(&simulation) {
+                concerns.push(Concern::Unsimulated);
+            }
+            let line = alloy_primitives::U256::from(1u8) << 128;
+            for d in &simulation.deltas {
+                let unlimited = d.kind == crate::app::token_trust::TrustDeltaKind::Approval
+                    && d.token_id.is_none()
+                    && alloy_primitives::U256::from_str_radix(d.delta.trim(), 10)
+                        .map_or(true, |amount| amount >= line);
+                if unlimited {
+                    concerns.push(Concern::UnlimitedApproval {
+                        token: d.token.clone().unwrap_or_default(),
+                        spender: d.spender.clone().unwrap_or_default(),
+                    });
+                }
+            }
+        }
+
         _ => {
             if state.verdict == StateVerdict::Reverts {
                 concerns.push(Concern::Reverts);

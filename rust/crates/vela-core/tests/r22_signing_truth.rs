@@ -343,6 +343,36 @@ fn the_signing_truth_vectors_hold() {
         if let Some(key) = expect.get("source_key") {
             assert_eq!(json!(got.source_key), *key, "{name}");
         }
+        // §41 (P2-3): what each move is — an NFT and its id, a grant, a log
+        // nobody could read — and what the sheet may say of it.
+        if let Some(kinds) = expect.get("kinds") {
+            let got_kinds: Vec<serde_json::Value> =
+                got.deltas.iter().map(|d| json!(d.kind)).collect();
+            assert_eq!(json!(got_kinds), *kinds, "{name}");
+        }
+        if let Some(ids) = expect.get("token_ids") {
+            let got_ids: Vec<Option<&str>> =
+                got.deltas.iter().map(|d| d.token_id.as_deref()).collect();
+            assert_eq!(json!(got_ids), *ids, "{name}");
+        }
+        if let Some(key) = expect.get("no_change_key") {
+            assert_eq!(json!(got.no_change_key), *key, "{name}");
+        }
+        if let Some(unlimited) = expect.get("grants_unlimited") {
+            assert_eq!(
+                json!(vela_core::app::sim_outcome::grants_unlimited(&got)),
+                *unlimited,
+                "{name}"
+            );
+        }
+        if let Some(unread) = expect.get("changes_unread") {
+            assert_eq!(
+                json!(vela_core::app::sim_outcome::changes_unread(&got)),
+                *unread,
+                "{name}"
+            );
+        }
+
         // The wasm/UniFFI export reads the same envelope as text.
         let text = vela_core::app::sim_outcome::verdict_json(user, &case["envelope"].to_string());
         let again: serde_json::Value = serde_json::from_str(&text).expect("verdict json");
@@ -817,6 +847,7 @@ mod posture {
     };
     use vela_core::app::sign_request::SignRequest;
     use vela_core::app::sim_outcome::{verdict_of, SimOutcome, SimVerdict};
+    use vela_core::app::token_trust::{TrustAssetDelta, TrustDeltaKind};
 
     fn input(surface: ClearSurface, sim: Option<SimVerdict>, refuse_blind: bool) -> ConfirmInput {
         let mut sign = DomainDriver::<SignRequest>::new().view();
@@ -907,6 +938,47 @@ mod posture {
                 "{unread:?}"
             );
         }
+    }
+
+    /// §41 (P2-3 / P2-4): what a corroborated answer says decides too — a log
+    /// naming the account that nobody could read is "… anyway"; an unbounded
+    /// grant the simulation found (whatever carried it) is a held danger; a
+    /// bounded one is shown and is not.
+    #[test]
+    fn what_the_simulation_found_sets_the_posture() {
+        use vela_core::app::sign_confirm::posture;
+        let base = input(ClearSurface::ClearSign, None, false);
+        let p = |deltas: Vec<TrustAssetDelta>| {
+            posture(
+                &base.sign,
+                &base.clear,
+                Some(&corroborated(SimOutcome::Deltas { deltas })),
+            )
+        };
+        let delta = |kind: TrustDeltaKind, delta: &str, spender: Option<&str>| TrustAssetDelta {
+            kind,
+            token: Some("0x5af0d9827e0c53e4799bb226655a1de152a425a5".into()),
+            delta: delta.into(),
+            token_id: None,
+            spender: spender.map(str::to_owned),
+        };
+        let thief = Some("0x76875e38fc6bc2dedcaed807ce00782db5c0d141");
+        let unread = p(vec![delta(TrustDeltaKind::Unread, "1", None)]);
+        assert!(
+            unread.anyway && unread.hold_ms == HOLD_TO_CONFIRM_MS,
+            "{unread:?}"
+        );
+        let all = p(vec![delta(
+            TrustDeltaKind::Approval,
+            &alloy_primitives::U256::MAX.to_string(),
+            thief,
+        )]);
+        assert!(
+            all.danger && !all.anyway && all.hold_ms == HOLD_TO_CONFIRM_MS,
+            "{all:?}"
+        );
+        let bounded = p(vec![delta(TrustDeltaKind::Approval, "5000000", thief)]);
+        assert!(!bounded.danger && bounded.hold_ms == 0, "{bounded:?}");
     }
 }
 

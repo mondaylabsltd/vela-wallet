@@ -114,6 +114,8 @@ fn erc20_delta(token: &str, delta: &str) -> TrustAssetDelta {
         kind: TrustDeltaKind::Erc20,
         token: Some(token.to_owned()),
         delta: delta.to_owned(),
+        token_id: None,
+        spender: None,
     }
 }
 
@@ -122,6 +124,8 @@ fn native_delta(delta: &str) -> TrustAssetDelta {
         kind: TrustDeltaKind::Native,
         token: None,
         delta: delta.to_owned(),
+        token_id: None,
+        spender: None,
     }
 }
 
@@ -543,6 +547,8 @@ fn judge_delta_edges_fail_toward_unverified() {
         kind: TrustDeltaKind::Erc20,
         token: None,
         delta: "50".to_owned(),
+        token_id: None,
+        spender: None,
     };
     assert_eq!(
         judge_delta(&no_token, Some(&m), true),
@@ -1630,6 +1636,8 @@ fn an_unverified_token_is_a_direction_and_never_a_figure() {
                 kind: TrustDeltaKind::Erc20,
                 token: None,
                 delta: delta.to_owned(),
+                token_id: None,
+                spender: None,
             }],
         });
         sut.view().sim.expect("judged at once: no token to name")
