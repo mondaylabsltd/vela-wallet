@@ -157,7 +157,11 @@ fn a_draft_is_loading_until_its_review_is_read_and_only_then_signable() {
     run_holding(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
         simulate,
     );
     assert!(world.passkeys.is_empty(), "no passkey on a review not read");
@@ -169,7 +173,11 @@ fn a_draft_is_loading_until_its_review_is_read_and_only_then_signable() {
     run(
         &mut sut2,
         &mut world2,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     assert!(matches!(
         sut2.view().actions["propose"],
@@ -199,7 +207,11 @@ fn a_draft_review_that_times_out_fails_blocks_signing_and_recovers_on_try_again(
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     assert_eq!(
         sut.view().actions["propose"],
@@ -223,7 +235,11 @@ fn a_draft_review_that_times_out_fails_blocks_signing_and_recovers_on_try_again(
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     assert!(matches!(
         sut.view().actions["propose"],
@@ -291,7 +307,11 @@ fn a_proposal_is_approved_only_once_its_review_is_ready() {
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     let ActionState::Done { safe_tx_hash, .. } = sut.view().actions["propose"].clone() else {
         panic!("proposed");
@@ -309,6 +329,8 @@ fn a_proposal_is_approved_only_once_its_review_is_ready() {
         chain_id: 100,
         safe_tx_hash: safe_tx_hash.clone(),
         owner: fixture(1).address,
+        anyway_confirmed: true,
+        refuse_blind: false,
     };
     run(&mut other, &mut world, approve.clone());
     assert_eq!(
@@ -348,7 +370,11 @@ fn a_proposal_review_is_bounded_kept_once_read_and_gone_when_unlisted() {
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     let ActionState::Done { safe_tx_hash, .. } = sut.view().actions["propose"].clone() else {
         panic!("proposed");
@@ -424,7 +450,11 @@ fn a_proposed_draft_keeps_its_ready_review() {
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     let ActionState::Done { safe_tx_hash, .. } = sut.view().actions["propose"].clone() else {
         panic!("proposed");
@@ -518,7 +548,11 @@ fn a_review_neither_check_read_is_ready_but_every_press_signs_only_anyway() {
     let purposes = run_purposes(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     assert!(approve_anyway(&purposes), "{purposes:?}");
     let ActionState::Done { safe_tx_hash, .. } = sut.view().actions["propose"].clone() else {
@@ -590,6 +624,8 @@ fn a_review_neither_check_read_is_ready_but_every_press_signs_only_anyway() {
             safe_tx_hash: safe_tx_hash.clone(),
             executor: fixture(1).address,
             shown_fee: shown,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     assert!(matches!(
@@ -652,7 +688,11 @@ fn a_refused_node_reads_neither_check_and_signs_only_anyway() {
     let purposes = run_purposes(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     assert!(approve_anyway(&purposes), "{purposes:?}");
 }
@@ -681,7 +721,11 @@ fn one_check_unread_alone_signs_only_anyway() {
     let purposes = run_purposes(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     assert!(!purposes.is_empty());
     assert!(
@@ -702,7 +746,11 @@ fn proposed_on_another_device() -> (World, Sut, String, String) {
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     let ActionState::Done { safe_tx_hash, .. } = sut.view().actions["propose"].clone() else {
         panic!("proposed");
@@ -764,6 +812,8 @@ fn a_review_its_network_answered_nothing_of_fails_never_anyway() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             owner: fixture(1).address,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     assert!(world.passkeys.is_empty(), "no passkey on a review not read");
@@ -1071,7 +1121,11 @@ fn a_review_asked_before_the_list_is_read_waits_for_it_never_gone() {
         run(
             &mut sut,
             &mut world,
-            Event::ConfirmDraft { as_member: None },
+            Event::ConfirmDraft {
+                as_member: None,
+                anyway_confirmed: true,
+                refuse_blind: false,
+            },
         );
         let ActionState::Done { safe_tx_hash, .. } = sut.view().actions["propose"].clone() else {
             panic!("proposed");

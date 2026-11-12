@@ -236,7 +236,9 @@ struct DappActivityTests {
          {"type":"native","delta":"30000000000000000"}]
         """#.utf8))
         var opts = SigningController.approveOpts(
-            fee: nil, clear: clear, guard: .empty, balanceChanges: judgments
+            fee: nil, clear: clear, guard: .empty, balanceChanges: judgments,
+            // §41 (P2-5): the sheet the person saw — no review, nothing signed.
+            review: try ApproveReviewFixture.plain()
         )
         // The fee is not what this test is about; the core needs one to go on.
         opts["quoted_fee"] = ["amount": "1000", "recipient": F.me, "tier": "fast"]

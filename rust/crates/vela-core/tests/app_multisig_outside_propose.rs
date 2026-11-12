@@ -117,7 +117,11 @@ fn no_member_here_proposes_through_an_outside_wallet() {
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     let (hash, owners) = asked(&sut);
     assert_eq!(owners, account.owners, "every plain account may sign");
@@ -165,7 +169,11 @@ fn an_answer_that_does_not_check_out_is_not_submitted() {
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     let (hash, owners) = asked(&sut);
     // Signed by another key in the owner's name.
@@ -198,7 +206,11 @@ fn a_stranger_is_not_one_of_those_asked() {
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     let (hash, _) = asked(&sut);
     let stranger = eoa(9).1;
@@ -224,7 +236,11 @@ fn a_closed_session_or_a_withdrawn_draft_sends_nothing() {
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     let (hash, owners) = asked(&sut);
     run(
@@ -238,7 +254,11 @@ fn a_closed_session_or_a_withdrawn_draft_sends_nothing() {
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     let (hash, _) = asked(&sut);
     run(&mut sut, &mut world, Event::Withdraw);
@@ -268,7 +288,11 @@ fn no_outside_signer_proposes_nothing() {
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     assert_eq!(sut.view().actions["propose"], ActionState::NoOutsideSigner);
     assert!(!world
@@ -298,6 +322,8 @@ fn an_open_proposal_is_approved_from_an_outside_wallet() {
         Event::ApproveOutside {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     let key = format!("approve:{hash}");
@@ -340,7 +366,11 @@ fn a_dapps_transaction_proposed_through_an_outside_wallet_is_held() {
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     let (hash, owners) = asked(&sut);
     assert_eq!(sut.view().dapp["r"].stage, HeldStage::Reviewing);

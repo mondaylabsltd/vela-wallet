@@ -375,7 +375,7 @@ fn a_record_reads_the_whole_request_and_keeps_a_clipped_copy() {
         &params,
         SignApproveOpts {
             token_meta: Some(resolved("USDC", 6)),
-            ..SignApproveOpts::default()
+            ..support::reviewed_opts()
         },
     );
     assert_eq!(record.kind, SignRecordKind::SignTypedData);
@@ -402,7 +402,7 @@ fn a_request_within_eight_kilobytes_is_kept_whole() {
     let message = hex_text(&"x".repeat(2_500));
     let params = json!([message, ACCT]);
     assert!(params.to_string().len() > 4_096);
-    let record = signature_record("personal_sign", &params, SignApproveOpts::default());
+    let record = signature_record("personal_sign", &params, support::reviewed_opts());
     assert!(!record.request_truncated);
     assert_eq!(record.stored_request, params.to_string());
     assert!(!stored_request(&record.stored_request).1);
@@ -413,7 +413,7 @@ fn a_request_within_eight_kilobytes_is_kept_whole() {
 #[test]
 fn the_record_matches_a_sign_in_to_the_origin() {
     let params = json!([hex_text(&siwe("app.uniswap.org")), ACCT]);
-    let record = signature_record("personal_sign", &params, SignApproveOpts::default());
+    let record = signature_record("personal_sign", &params, support::reviewed_opts());
     assert_eq!(record.dapp_url, UNISWAP);
     let summary = record.summary.expect("a summary");
     assert_eq!(summary.action, DappAction::SignIn);
@@ -432,7 +432,7 @@ fn a_transaction_record_summarizes_the_final_params() {
         opts: SignApproveOpts {
             params_override_json: Some(capped.to_string()),
             token_meta: Some(resolved("USDC", 6)),
-            ..SignApproveOpts::default()
+            ..support::reviewed_opts()
         },
     });
     sut.resolve(Res::PreCheck { funding: None });
@@ -528,12 +528,12 @@ fn a_signed_permit_and_sign_in_read_as_rows() {
     let permit = signature_record(
         "eth_signTypedData_v4",
         &typed_params(&permit_single(MAX_U160, (1 << 48) - 1)),
-        SignApproveOpts::default(),
+        support::reviewed_opts(),
     );
     let signin = signature_record(
         "personal_sign",
         &json!([hex_text(&siwe("app.uniswap.org")), ACCT]),
-        SignApproveOpts::default(),
+        support::reviewed_opts(),
     );
     let mut later = stored(&signin);
     later.timestamp += 60.0;

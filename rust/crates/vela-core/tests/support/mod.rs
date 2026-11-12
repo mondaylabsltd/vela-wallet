@@ -454,3 +454,37 @@ where
         Self::new()
     }
 }
+
+/// §41 (P2-5): approve options carrying a review the signing machine admits
+/// on a plain press — a request read in full (no blind surface, nothing
+/// resolving), no approval guard concern, and a simulation two independent
+/// nodes agreed on. A test that is about the posture builds its own.
+#[cfg(feature = "crux")]
+#[allow(dead_code)]
+pub fn reviewed_opts() -> vela_core::app::sign_request::SignApproveOpts {
+    vela_core::app::sign_request::SignApproveOpts {
+        review: Some(plain_review()),
+        ..vela_core::app::sign_request::SignApproveOpts::default()
+    }
+}
+
+/// The review [`reviewed_opts`] carries.
+#[cfg(feature = "crux")]
+#[allow(dead_code)]
+pub fn plain_review() -> vela_core::app::sign_request::ApproveReview {
+    use vela_core::app::approval_guard::ApprovalGuard;
+    use vela_core::app::clear_signing::{ClearSigning, ClearSurface};
+    use vela_core::app::sim_outcome::{verdict_of, SimOutcome};
+    let mut clear = DomainDriver::<ClearSigning>::new().view();
+    clear.resolving = false;
+    clear.surface = ClearSurface::ClearSign;
+    clear.sign_anyway = false;
+    let mut sim = verdict_of(SimOutcome::Deltas { deltas: Vec::new() });
+    sim.source = Some("corroborated".to_owned());
+    vela_core::app::sign_request::ApproveReview {
+        clear,
+        guard: DomainDriver::<ApprovalGuard>::new().view(),
+        sim: Some(sim),
+        refuse_blind: false,
+    }
+}

@@ -2226,10 +2226,11 @@ fn a_saved_key_becomes_the_rpc_of_every_network_it_served() {
     assert_eq!(gnosis.explorer_url, builtin.explorer_url);
     assert_eq!(gnosis.bundler_url, "");
     assert!(!gnosis.only_mine);
-    // Shown at once: the network's RPC is the one it was asking.
+    // Shown at once: the network's RPC is the one it was asking — and, §41
+    // (P2-8), a third party's keyed endpoint is not the person's own node.
     assert_eq!(shown_rpc(&sut, 100), gnosis.rpc_url);
     assert!(
-        sut.view()
+        !sut.view()
             .networks
             .iter()
             .find(|r| r.chain_id == 100)
@@ -3555,4 +3556,79 @@ fn a_record_without_the_multisig_service_reads_as_its_default() {
     }))
     .unwrap();
     assert_eq!(stored.genesis_service_url, None);
+}
+
+/// §41 (P2-8): a URL Vela made from a retired provider key is a third
+/// party's endpoint, not the person's node: the network keeps it as its RPC,
+/// but it is not "your own node" — "Only use my node" is not offered for it,
+/// a switch turned on for it before is turned off and written so, and a
+/// pressed switch changes nothing. A node the person entered stays theirs.
+#[test]
+fn a_retired_key_url_is_not_your_chosen_node() {
+    use vela_core::app::network_admin::is_provider_key_url;
+    let keys = provider_keys(Some(FAKE_ALCHEMY), None, None);
+    let (mut sut, ops) = load_with_keys(vec![], vec![], keys);
+    let configs = retired_configs(&ops).expect("configs");
+    let migrated = configs.first().expect("one network served").clone();
+    assert!(
+        is_provider_key_url(&migrated.rpc_url),
+        "{}",
+        migrated.rpc_url
+    );
+    sut.resolve(written(true, true));
+    sut.resolve(Res::Invalidated);
+    let row = |sut: &Sut| {
+        sut.view()
+            .networks
+            .into_iter()
+            .find(|r| r.chain_id == migrated.chain_id)
+            .expect("listed")
+    };
+    assert_eq!(row(&sut).rpc_url, migrated.rpc_url, "kept as its RPC");
+    assert!(!row(&sut).own_rpc, "not the person's node");
+    let ops = sut.dispatch(Event::OnlyMineChanged {
+        chain_id: migrated.chain_id,
+        on: true,
+    });
+    assert!(ops.is_empty(), "nothing to keep to: {ops:?}");
+
+    // A switch turned on for it before this rule: off, written, pools read again.
+    let mut before = migrated.clone();
+    before.only_mine = true;
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Started);
+    let ops = sut.resolve(Res::StoreLoaded {
+        custom_networks: vec![],
+        network_configs: vec![before],
+        endpoints: NetStoredEndpoints::default(),
+        provider_keys: NetProviderKeys::default(),
+        multisig_service: false,
+        shown_networks: None,
+    });
+    let written_off = ops.iter().any(|op| {
+        matches!(op, Op::WriteNetworkConfigs { configs }
+            if configs.iter().all(|c| !c.only_mine))
+    });
+    assert!(written_off, "{ops:?}");
+    assert!(ops.iter().any(|op| matches!(
+        op,
+        Op::InvalidatePools { chain_id: Some(id) } if *id == migrated.chain_id
+    )));
+    assert!(!row(&sut).only_mine);
+
+    // The URL shapes, and a node the person typed.
+    for url in [
+        "https://eth-mainnet.g.alchemy.com/v2/abc",
+        "https://lb.drpc.org/ogrpc?network=ethereum&dkey=abc",
+        "https://rpc.ankr.com/eth/abc",
+    ] {
+        assert!(is_provider_key_url(url), "{url}");
+    }
+    for url in [
+        "https://my-node.example/rpc",
+        "https://rpc.ankr.com/eth",
+        "http://eth-mainnet.g.alchemy.com/v2/abc",
+    ] {
+        assert!(!is_provider_key_url(url), "{url}");
+    }
 }

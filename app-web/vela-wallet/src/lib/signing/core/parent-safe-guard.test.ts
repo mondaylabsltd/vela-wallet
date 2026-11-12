@@ -311,7 +311,8 @@ const APPROVE = {
 		params_override_json: null,
 		intent: null,
 		unlimited_approved: false,
-		unlimited_approved_legs: [] as number[]
+		unlimited_approved_legs: [] as number[],
+		anyway_confirmed: false
 	}
 } as const;
 

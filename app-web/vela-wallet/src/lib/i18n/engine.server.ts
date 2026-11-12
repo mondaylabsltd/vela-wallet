@@ -1595,6 +1595,10 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		holdToConfirm: k('componentsUi.signing.holdToConfirm'),
 		confirmAgain: k('componentsUi.signing.confirmAgain'),
 		balanceUnverifiedToken: k('componentsUi.signing.balanceUnverifiedToken'),
+		balanceNft: k('componentsUi.signing.balanceNft'),
+		balanceApproval: k('componentsUi.signing.balanceApproval'),
+		balanceApprovalAll: k('componentsUi.signing.balanceApprovalAll'),
+		balanceUnread: k('componentsUi.signing.balanceUnread'),
 		// PR 3 device round: the verdict's quiet line, by the key the core names.
 		simSaid: Object.fromEntries(SIM_SAID_KEYS.map((key) => [key, k(key)])),
 		balancesMatchHero: k('componentsUi.signing.balanceMatchesHero'),

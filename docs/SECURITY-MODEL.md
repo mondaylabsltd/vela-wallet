@@ -195,7 +195,10 @@ replayed by the core and by every shell through the real core.
   Typed-data requests are read as exactly one document; a request with more than one is refused
   (`rust/crates/vela-core/src/typed_data_request.rs`, the VELA-2026-001 fix).
 - **Guarantees.** The sheet shows Vela's own decoding of the bytes that will be signed, with the
-  provenance said. A compromised descriptor service cannot make a call "verified" or green.
+  provenance said. A compromised descriptor service cannot make a call "verified" or green. A
+  reading whose only source is the selector database (4byte) or a fetched descriptor lifts nothing
+  out of "… anyway" (§41, P2-6, `sign_confirm::posture`): a transaction it describes is a plain
+  press only when its simulation is corroborated, and a signature it describes is "… anyway".
 - **Does not guarantee.** That a Fetched or SelectorDb description is true: fetched descriptors are
   neither signed by a publisher nor pinned by hash in the build, and the only fetched one called
   verified is one equal to a built-in (`ClearProvenance::PinnedMatch`; G25). That an EIP-712
@@ -213,30 +216,32 @@ replayed by the core and by every shell through the real core.
   leg, and a `SafeTx` typed-data signature, recursing through `multiSend` and `execTransaction`
   to depth 4 (`SelfCallFunction`). Empty-calldata self-calls are allowed (the fee leg and the
   estimator use them). `parent_safe_guard::verdict` extends this to **every Safe the account
-  owns**: `execTransaction`, `approveHash` (`parent_safe_guard::APPROVE_HASH`), the admin list, and
-  `SafeTx` / `SafeMessage` typed data under that Safe's domain. "Owns" is the device's multisig
+  owns**: `execTransaction`, `approveHash` (`parent_safe_guard::APPROVE_HASH`), the admin list,
+  `SafeTx` / `SafeMessage` typed data under that Safe's domain, and — §41, because a Safe v1.5.0
+  checks an owner contract with `isValidSignature(bytes32)`, the very form a site's wrapped
+  signature answers — `SafeOp` typed data for that Safe (its `safe`, under the 4337 module's domain
+  or any other), whatever the Safe's version (`SelfCallFunction::SafeOpTypedData`). Every address
+  is taken in one form: at arrival a transaction's `to`, every `wallet_sendCalls` leg's `to` and a
+  typed-data `verifyingContract` that is not `0x` and exactly 40 hex digits is refused -32602
+  (`tx_request::is_canonical_address`, `TxRequestError::BadAddress`); and the guards themselves
+  read an address the way the encoders do — bare, `0X`, or under-width and left-padded
+  (`self_call_guard::normalise_address`). "Owns" is the device's multisig
   list, or an `isOwner(account)` read (`SignOperation::ReadSafeOwner`) that must be corroborated
   by two providers; `true`, an unreadable answer or a disagreement refuses. The submit step
   checks the final params again (`parent_safe_guard::enforce`). The same self-call rule holds at
   a connected multisig's own address (`multisig_dapp::self_call_refusal`, SEC-PARENT-2).
 - **Guarantees.** A connected site cannot obtain a signature that changes who controls the
-  account or a Safe it owns, through any of these shapes **when the target is written as `0x` and
-  40 hex digits**, on any shell or the signing page.
-- **Does not guarantee.** **A target written another way (G24, open).** The walk
-  (`parent_safe_guard::parent_targets`) considers a call's `to` and a typed-data
-  `verifyingContract` only when they are `0x` followed by exactly 40 hex digits
-  (`parent_safe_guard::is_address`); anything else is skipped, not refused. The core reads
-  addresses more loosely elsewhere: `primitives::parse_address` takes one with or without `0x`,
-  and the EIP-712 encoder left-pads a short one to 20 bytes
-  (`rust/crates/vela-core/src/eip712.rs#pad_scalar`). A request that names a parent Safe in such a
-  spelling is not checked by this guard. The fix (canonicalising every address before the walk) is
-  in progress on a separate branch and is to be recorded as `docs/multisig-machines.md` §41; until
-  it lands, VELA-2026-002's fix is incomplete for these spellings.
+  account or a Safe it owns, through any of these shapes, however the target address is written
+  (a non-canonical spelling is refused at arrival; G24, closed by §41), on any shell or the
+  signing page.
+- **Does not guarantee.**
   Protection against a shape outside the list (a future Safe version's
   new admin function, a module's own admin calls on a Safe that has one). An `isOwner` read for a
   Safe on another chain is made on the request's chain only. The signing page cannot read the
   chain, so it refuses these shapes on **any** Safe but the account, which is stricter.
-- **Tests.** Vectors `tests/vectors/rules/parent-safe-guard.json` (39 cases),
+- **Tests.** Vectors `tests/vectors/rules/parent-safe-guard.json` (59 cases, `at_arrival` among
+  them),
+
   `tests/vectors/rules/multisig-self-call.json` (13); `tests/app_self_call_guard.rs`,
   `tests/app_parent_safe_guard.rs`; fork `tests/multisig_fork.rs`
   (`parent_safe_takeover_is_refused_while_the_multisigs_own_flow_runs`); the page's
@@ -254,7 +259,11 @@ replayed by the core and by every shell through the real core.
   dApp asked unless the person caps it, and the submit guard lets it through only with consent
   for that one approval, in that one leg (`SignApproveOpts.unlimited_approved_legs`).
 - **Guarantees.** No unbounded approval is signed without the sheet having shown it as such, and
-  consent for one does not cover another.
+  consent for one does not cover another. A whole-collection grant (`setApprovalForAll(true)`) is
+  a held danger alone as in a batch, and a carrier past the guard's limits (deeper than four,
+  more than 64 calls, an encoding that does not hold together) is "… anyway", never "no approval"
+  (`GuardView::carrier_unread`; §41, P2-4). A grant an unread carrier makes is caught by its own
+  log in the simulation (§6.4).
 - **Does not guarantee.** That a bounded approval is safe. Signed permits cannot be capped (they
   are signed as asked or refused). Batch legs are judged by the 2^128 line only (no per-leg
   balance). There is no allowance list or revoke screen (KNOWN-BUGS R22-PLAN-1). The signing page
@@ -284,7 +293,14 @@ replayed by the core and by every shell through the real core.
   (`home.multisig.review.stateOneNode`, with the way to add one's own node); a site's guard
   (`isOwner`) stays strict; two that disagree refuse (`ActionState::SigningDisagreed`).
 - **Guarantees.** One lying or compromised node cannot produce a plain verdict: alone it gives
-  "unconfirmed" ("… anyway"); beside an honest node it gives "disagreed". A lie can make Vela
+  "unconfirmed" ("… anyway"); beside an honest node it gives "disagreed". The verdict counts NFTs
+  (ERC-721, ERC-1155) and the approvals the account grants (ERC-20 / ERC-721 `Approval`,
+  `ApprovalForAll`, Permit2) as changes, inside the two-node agreement; a log of those events
+  naming the account that Vela cannot read is "This changes something Vela can't read" and
+  "… anyway", never "No asset changes"; an unbounded grant the simulation finds is a held danger
+  whatever carried it (`sim_outcome::derive_deltas`, `grants_unlimited`, `changes_unread`; §41,
+  P2-3). "Only use my node" trusts a node the person chose, never a URL built from a retired
+  provider key (`network_admin::has_own_rpc`; §41, P2-8). A lie can make Vela
   refuse; it cannot make a multisig member change look declared. A network with one public
   provider never locks a member out of their own multisig.
 - **Does not guarantee.** Independence beyond a registrable-domain heuristic (two brands reselling
@@ -294,7 +310,8 @@ replayed by the core and by every shell through the real core.
   transactions: there is none; those rest on simulation and the guards. Ordinary display reads
   (balances, history) are one node's word. On a single-provider network, who can act for a
   multisig is one node's word (held "… anyway"; G22).
-- **Tests.** Vector `tests/vectors/rules/signing-truth.json` (13 simulation envelopes, 9 `isOwner`
+- **Tests.** Vector `tests/vectors/rules/signing-truth.json` (23 simulation envelopes, 9 `isOwner`
+
   readings, 12 provider URLs, 8 `authority` reads); `tests/r22_signing_truth.rs`; fork `tests/signing_truth_fork.rs`
   (a real drain behind a lying proxy, `tests/fork_proxy`) and `tests/multisig_fork.rs`
   (`a_lying_node_never_gives_a_member_change_a_plain_review`,
@@ -325,8 +342,17 @@ replayed by the core and by every shell through the real core.
   (`sign_confirm::guarded_posture`, §39). A re-check of a verdict already on the sheet keeps its
   door, so a hold or an arm is not cut by it.
 - **Guarantees.** No unread check is confirmed by a tap, a double tap or a press made while the
-  sheet is arriving. With the setting on, nothing unread is signed at all.
-- **Does not guarantee.** That a person reads a held warning. The default is off on purpose
+  sheet is arriving. With the setting on, nothing unread is signed at all. The signing machines
+  hold the gate themselves (§41, P2-5): `sign_request` works the posture out again at approve
+  time from the views the sheet showed (`SignApproveOpts::review`) and takes an "… anyway" only on
+  the person's explicit "… anyway" press (`anyway_confirmed`), never with the setting on, and
+  nothing with no review; the multisig machine does the same in `authorize_signing`
+  (`anyway_confirmed`, `refuse_blind` on every signing event). A transaction whose reading never
+  started cannot be confirmed (`sign_confirm::is_transaction`, §41, P2-7).
+- **Does not guarantee.** That a person reads a held warning. The hold's duration: the core
+  cannot observe a press, only what the shell reports of it (`anyway_confirmed`); a shell that
+  lies about its own views is outside this model.
+ The default is off on purpose
   ([hardening §13](security/hardening.md#13-every-check-vela-could-not-read-is--anyway-review-1-3)):
   networks with one provider or no `eth_simulateV1` would otherwise refuse ordinary transactions.
   The signing page draws "… anyway" as the app's word and has no hold of its own. Hold and the
@@ -518,6 +544,9 @@ blind signing" unless marked otherwise.
 | **… anyway: simulation says it reverts** | the simulation reverts | danger, held | a simulation is one block's view on one or two nodes, not the execution; the decision (review 1-3) was "a revert blocks unless the person goes through … anyway" |
 | **… anyway: multisig state diff or simulation unread** | `Concern::StateUnread` or `Concern::Unsimulated` in a multisig review | held; door `blindRefused` with the setting on | networks without `debug_traceCall`, or one provider |
 | **… anyway: one provider says who can act** (§39) | the member's own multisig flow on a network whose pool holds no other provider (`corroborate::authority_read` → `one_node`): owners, threshold, modules, guard and nonce are one node's word; the review says `home.multisig.review.stateOneNode`, never "checked" | held; every signature asked "… anyway"; refused with Refuse blind signing; "Add your own node" one link away. **Not** for a site's request (§6.2 stays strict) | a network with one public provider would otherwise lock its members out of their own multisig with no way forward |
+| **… anyway: a reading only 4byte or a fetched descriptor gave** (§41, P2-6) | `ClearProvenance::SelectorDb` / `Fetched` and no corroborated simulation (every signature such a reading describes) | held; refused with Refuse blind signing | anyone can register a selector name; a fetched descriptor is the service's word (G25) |
+| **… anyway: something Vela can't read in the simulation** (§41, P2-3) | a log of an asset or approval event naming the account in a shape Vela does not read (`TrustDeltaKind::Unread`, `sim_outcome::changes_unread`) | held; "This changes something Vela can't read"; refused with Refuse blind signing | an unknown event shape must not read as "No asset changes" |
+| **… anyway: a carrier past the guard's limits** (§41, P2-4) | a call nested deeper than four carriers, carrying more than 64 calls, or whose encoding does not hold together (`GuardView::carrier_unread`) | held; refused with Refuse blind signing | the guard bounds its own work; what it did not read is not "no approval" |
 | **eth_sign** | `eth_sign` (signed as EIP-191 wrapped in the account's `SafeMessage`, `rust/crates/vela-core/src/sign_message.rs`) | blind, held; the signing page refuses `eth_sign` | dApp compatibility |
 | **Unlimited approval kept** | an unbounded amount the person does not cap | red line, cap one chip away; consent per approval per leg. **Not** gated by Refuse blind signing (it is read, not blind) | Permit2 and EIP-5792 bundles revert if the approve leg is re-encoded |
 | **Multisig account risk** | a deployed multisig has a module, guard, unknown singleton or unknown fallback handler (`multisig::Risk`, `Gate::Risk`) | a confirmation before **every** signature (`MultisigOperation::AskRisk`). Not gated by Refuse blind signing. **The design document said "stop signing"; the code asks** (`docs/multisig-vault-design.md` §5.2 note). **Decided 2026-11-09: the code's behaviour stands.** Vela never creates a multisig with a module or guard, so one exists only after the members approved adding it (and the state-diff guard flags that write); stopping would lock the funds with no way out, while a held confirmation that names the risk keeps the members informed and the Safe recoverable | members may knowingly use a module; the chain read itself is corroborated |
@@ -728,7 +757,7 @@ Each item is open at the commit above. "Accepted" means decided and recorded; th
 | G21 | The phones' page path has no end-to-end harness; hold-to-confirm and the assistive path have not been walked on real hardware. | open | [hardening R22-3](security/hardening.md#r22-3-the-signing-page-check-then-open-review-0-5) |
 | G22 | **On a network whose pool holds one provider, who can act for a multisig is one node's word** in the member's own flows (held "… anyway", said, refused with Refuse blind signing). A lying sole node can hide a module or guard from the review; it cannot move funds (the Safe enforces its owners on chain; the state-diff guard's refusal stands alone). A provider-diverse default pool is the fix. | accepted, documented | [hardening §18](security/hardening.md#18-round-22-follow-ups-one-provider-a-fee-that-moves-39) |
 | G23 | **The fee headroom is paid, not refunded**: a fee at the relay's published price is shown and signed 12.5 % above the quote (`fee_policy::FEE_HEADROOM_BPS`), and the relay keeps it. | accepted, documented | [hardening §18](security/hardening.md#18-round-22-follow-ups-one-provider-a-fee-that-moves-39) |
-| G24 | **The parent-Safe guard skips a target address it does not recognise as canonical.** A call's `to` or a typed-data `verifyingContract` that is not `0x` and exactly 40 hex digits is not walked (`parent_safe_guard::is_address`), while `primitives::parse_address` (no `0x` needed) and the EIP-712 encoder (`rust/crates/vela-core/src/eip712.rs#pad_scalar`, short addresses left-padded) still read it as an address. A site that writes a parent Safe that way is not refused by this guard, so VELA-2026-002's fix does not cover those spellings yet. | open; fix in progress (to be `docs/multisig-machines.md` §41) | [§6.2](#62-the-self-call-and-parent-safe-guards) |
+| G24 | **Closed by §41 (`f09326124`).** The parent-Safe guard walked a call's `to` or a typed-data `verifyingContract` only when it was `0x` and exactly 40 hex digits, while `primitives::parse_address` and the EIP-712 encoder (`rust/crates/vela-core/src/eip712.rs#pad_scalar`) read other spellings as addresses. Now arrival refuses every non-canonical spelling -32602 (`tx_request::is_canonical_address`) and the guards read addresses as the encoders do (`self_call_guard::normalise_address`); the vector's `at_arrival` cases replay it on every shell. | closed | [§6.2](#62-the-self-call-and-parent-safe-guards) |
 | G25 | **Fetched ERC-7730 descriptors are neither signed nor hash-pinned.** One equal to a built-in descriptor is `ClearProvenance::PinnedMatch`; every other is `ClearProvenance::Fetched`, floored at Normal risk and said as unauthenticated, but what it says a call does is the chain-data service's word. No publisher signature or build-time hash list exists. | open | [§6.1](#61-clear-signing-and-provenance) |
 | G26 | **On a network Vela's own RPC lists do not cover with two providers, the chain index supplies the other source.** The pool's tiers are the person's own, Vela's built-in and curated public lists, then the chain index (`RpcSource::Builtin`, `RpcSource::Fallback`), which the chain-data service serves. Where Vela's lists name one provider, the corroborating source comes from that index; where they name none (a network added from the index), both do. Two endpoints one compromised service names under two registrable domains pass `corroborate::independent`, so a "two-provider" verdict there rests on the chain-data service. | open | [§6.4](#64-two-provider-simulation-and-the-state-diff-guard); G1 |
 | G27 | **getvela.app loads a third-party analytics script, and has no `script-src` CSP.** Rybbit's `https://tj.appsdata.org/api/script.js` is loaded, unpinned and without Subresource Integrity, on every page but `/chain-setup` (`app-web/getvela.app/src/routes/+layout.svelte`), and the site's CSP is `frame-ancestors 'none'` alone (`app-web/getvela.app/src/lib/security-headers.ts`). The Permissions-Policy keeps that script from using `getvela.app` passkeys, but whoever controls it can rewrite any page it runs on, including the download links and the docs that say how to verify a build. Leaving the tag off `/chain-setup` does not keep the script from that page's deployer key: the key is in the origin's `localStorage` (`app-web/getvela.app/src/lib/chain-setup/deployer-wallet.ts#STORAGE_KEY`), which the script can read from any other page of the site, and a client-side navigation to `/chain-setup` from a page that loaded the script keeps it running there. Recommended: remove it, or self-host a pinned copy with SRI, and add a `script-src` CSP. Not changed here: the site's inline SvelteKit scripts would first need kit's hash-mode CSP. | open | [§11](#11-privacy); [hardening §4](security/hardening.md#4-origin-hardening-review-1-1) |
@@ -748,7 +777,7 @@ key yet; **no bug bounty**). `security.txt` is served by both sites
 | ID | Issue | Fixed in | Published |
 | --- | --- | --- | --- |
 | [VELA-2026-001](security/advisories/VELA-2026-001-typed-data-preview-mismatch.md) | A typed-data request could preview one EIP-712 message and sign another | v0.9.6 | not yet |
-| [VELA-2026-002](security/advisories/VELA-2026-002-parent-safe-authority.md) | A site connected to a Vela account could act for a Safe that account owns | `64da454d3`, not released; incomplete for a target address in a non-canonical spelling (G24, fix in progress) | not yet; after the release |
+| [VELA-2026-002](security/advisories/VELA-2026-002-parent-safe-authority.md) | A site connected to a Vela account could act for a Safe that account owns | `64da454d3`, not released; completed for non-canonical spellings by `f09326124` (G24, closed) | not yet; after the release |
 | [VELA-2026-003](security/advisories/VELA-2026-003-passkey-app-association.md) | getvela.app's app-association files let development and demo apps request users' passkeys | site `0562c17bb`, deployed 2026-11-07 | not yet |
 
 Internal incidents that put no user at risk: [`docs/security/incidents.md`](security/incidents.md).

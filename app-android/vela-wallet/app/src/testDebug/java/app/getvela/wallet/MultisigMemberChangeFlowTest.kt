@@ -118,10 +118,21 @@ class MultisigMemberChangeFlowTest {
             withTimeout(30_000) { while (s.hub.sheet.value != MultisigSheet.Review(chainId)) delay(20) }
             assertNotNull("the review is drawn before anything is signed", s.hub.proposalsView.value.draft)
             assertTrue("no passkey before the review is confirmed", s.world.passkeys.isEmpty() || out.isNotEmpty())
-            s.hub.confirmDraft(null)
+            s.hub.confirmDraft(null, anywayConfirmed = app.getvela.wallet.feature.multisig.draftDoor(s.hub.proposalsView.value.draft!!, refuseBlind = false).anyway, refuseBlind = false)
             out[chainId] = withTimeout(60_000) { settled.await() }
         }
         return out
+    }
+
+    /**
+     * §41 (P2-5): a press on [hash]'s sheet, as the sheet sends it — "… anyway"
+     * exactly when the core's sign door over its review says so.
+     */
+    private fun pressOf(s: Setup, hash: String): Array<Pair<String, Any?>> {
+        val view = s.hub.proposalsView.value
+        val item = view.item(100, hash)
+        val door = item?.let { app.getvela.wallet.feature.multisig.core.MsRules.reviewDoor(view.reviewState(it), view.review(it), false) }
+        return arrayOf("anyway_confirmed" to (door?.anyway ?: false), "refuse_blind" to false)
     }
 
     @Test
@@ -171,7 +182,7 @@ class MultisigMemberChangeFlowTest {
         assertEquals(listOf(s.owners[1].lowercase()), item.canApprove.map { it.lowercase() })
 
         // The second member here approves: ready.
-        s.hub.sendProposal(ev("approve", "chain_id" to 100, "safe_tx_hash" to hash, "owner" to s.owners[1]))
+        s.hub.sendProposal(ev("approve", "chain_id" to 100, "safe_tx_hash" to hash, "owner" to s.owners[1], *pressOf(s, hash!!)))
         val ready = poll(what = "ready") { s.hub.proposalsView.value.item(100, hash!!)?.takeIf { it.status == "ready" } }
         assertEquals(2, ready.approved)
 
@@ -187,7 +198,7 @@ class MultisigMemberChangeFlowTest {
             s.hub.proposalsView.value.let { v -> v.item(100, hash)?.let { v.preview(it, s.owners[0]) } }?.takeIf { it.kind == "priced" }
         }
         s.hub.sendProposal(
-            ev("execute", "chain_id" to 100, "safe_tx_hash" to hash, "executor" to s.owners[0], "shown_fee" to look["fee"]["amount"].str),
+            ev("execute", "chain_id" to 100, "safe_tx_hash" to hash, "executor" to s.owners[0], "shown_fee" to look["fee"]["amount"].str, *pressOf(s, hash)),
         )
         val verdict = poll(60_000, "executed") {
             s.hub.proposalsView.value.let { v -> v.lookup(v.executions, 100, hash)?.takeIf { it.kind != "working" } }

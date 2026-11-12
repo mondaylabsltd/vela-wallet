@@ -1285,6 +1285,10 @@ describe('the verdict’s place: there from the first frame, and nothing moves f
 		simChecking: 'Checking…',
 		simSaid: { 'componentsUi.signing.simResultNoChange': 'No asset changes' },
 		balanceUnverifiedToken: 'Unverified token',
+		balanceNft: 'NFT #{{id}}',
+		balanceApproval: 'Spending approval for {{spender}}',
+		balanceApprovalAll: 'Unlimited spending approval for {{spender}}',
+		balanceUnread: 'This changes something Vela can’t read',
 		warnUnverifiedAmount:
 			'Token amount couldn’t be verified on-chain — double-check it before approving.',
 		warnSimUnavailable:

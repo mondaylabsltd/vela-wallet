@@ -469,7 +469,7 @@ struct R22ConfirmTests {
         context.simSourceKey = "componentsUi.signing.simOwnNode"
         let blocks = SigningLive.balanceBlocks(isTransaction: true, context: context)
         let said = blocks.contains {
-            if case .source(let text, _) = $0 { return text == "Checked by your own node only" }
+            if case .source(let text, _) = $0 { return text == "Checked by your chosen node only" }
             return false
         }
         #expect(said, "\(blocks.map(\.id))")
@@ -588,7 +588,7 @@ struct R22MultisigDoorTests {
             "kind": "deltas", "deltas": [[String: Any]](), "no_change_key": "componentsUi.signing.simResultNoChange",
             "source": "own_node", "source_key": "componentsUi.signing.simOwnNode",
         ]])
-        #expect(MsReviewBody.sourceLine(own, words: words) == "Checked by your own node only")
+        #expect(MsReviewBody.sourceLine(own, words: words) == "Checked by your chosen node only")
         #expect(MsReviewBody.sourceLine(unconfirmed, words: words) == nil)
     }
 }

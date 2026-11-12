@@ -30,7 +30,10 @@
 //!   whitespace, `"0X"`, an overflow — is refused, never guessed.
 //!
 //! At arrival (`sign_request`) a request whose value breaks the rule is
-//! refused `-32602` before any sheet ([`canonical_params_json`]), and a
+//! refused `-32602` before any sheet ([`canonical_params_json`]) — and so is
+//! one whose `to` is not exactly `0x` and 40 hex characters (§41, P1-1: the
+//! encoders read bare hex too, and a guard that only knew the canonical form
+//! did not see the call at all) — and a
 //! readable one not already written canonically (`0x`, lower-case, no leading
 //! zeros) is rewritten so — every later reader holds the same text. The
 //! calls a submit sends are [`calls_of`], for every shell.
@@ -111,6 +114,21 @@ pub enum TxRequestError {
     /// A call's `value` is not a hex quantity. `leg` is the call's index in a
     /// `wallet_sendCalls` batch, `None` for an `eth_sendTransaction`.
     BadValue { leg: Option<usize> },
+    /// §41 (P1-1): a call's `to` is not exactly `0x` and 40 hex characters
+    /// (bare hex, an upper-case `0X`, under- or over-width, whitespace, not
+    /// text). Every guard reads the address the encoders sign, and the
+    /// encoders accept more than the canonical form; the request is refused
+    /// before any guard has to agree with them on what else it might mean.
+    BadAddress { leg: Option<usize> },
+}
+
+/// `0x` and exactly 40 hex characters (either case) — the one form a site's
+/// address is taken in (§41). Nothing trimmed, nothing padded.
+#[must_use]
+pub fn is_canonical_address(text: &str) -> bool {
+    text.len() == 42
+        && text.starts_with("0x")
+        && text.as_bytes()[2..].iter().all(u8::is_ascii_hexdigit)
 }
 
 impl TxRequestError {
@@ -123,6 +141,12 @@ impl TxRequestError {
             }
             Self::BadValue { leg: Some(leg) } => {
                 format!("Invalid value in call {leg}: expected a 0x-prefixed hex quantity")
+            }
+            Self::BadAddress { leg: None } => {
+                "Invalid transaction `to`: expected 0x followed by 40 hex characters".to_owned()
+            }
+            Self::BadAddress { leg: Some(leg) } => {
+                format!("Invalid `to` in call {leg}: expected 0x followed by 40 hex characters")
             }
         }
     }
@@ -165,8 +189,16 @@ pub fn canonical_params_json(
     Ok(changed.then(|| params.to_string()))
 }
 
-/// One call's `value` made canonical in place; `true` when it changed.
+/// One call's `value` made canonical in place; `true` when it changed. Its
+/// `to`, when it has one, must already be canonical ([`is_canonical_address`]):
+/// absent or `null` is left to the readers that refuse a call with no
+/// recipient; anything else is refused here.
 fn canonicalize(call: &mut Value, leg: Option<usize>) -> Result<bool, TxRequestError> {
+    match call.get("to") {
+        None | Some(Value::Null) => {}
+        Some(Value::String(to)) if is_canonical_address(to) => {}
+        Some(_) => return Err(TxRequestError::BadAddress { leg }),
+    }
     let Some(value) = call.as_object_mut().and_then(|call| call.get_mut("value")) else {
         return Ok(false);
     };
@@ -346,6 +378,60 @@ mod tests {
             canonical_params_json("wallet_sendCalls", &batch),
             Err(TxRequestError::BadValue { leg: Some(1) })
         );
+    }
+
+    /// §41 (P1-1): the one form a site's `to` is taken in, and what is
+    /// refused. Every shell's arrival is this rule (the core's
+    /// `sign_request`); `tests/vectors/rules/parent-safe-guard.json` replays
+    /// it through every shell's door (`at_arrival`).
+    const ADDRESS_TABLE: &[(&str, bool)] = &[
+        ("\"0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe\"", true),
+        ("\"0x13f4EA83D0bd40E75C8222255bc855a974568Dd4\"", true),
+        ("\"0x13F4EA83D0BD40E75C8222255BC855A974568DD4\"", true),
+        // Bare hex: `from_hex` / `parse_address` read it; the guards did not.
+        ("\"5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe\"", false),
+        ("\"0X5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe\"", false),
+        // Under- and over-width, padded or cut by someone downstream.
+        ("\"0x5afe5afe5afe5afe5afe5afe5afe5afe5afe\"", false),
+        ("\"0x005afe5afe5afe5afe5afe5afe5afe5afe5afe5afe\"", false),
+        ("\" 0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe\"", false),
+        ("\"0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afg\"", false),
+        ("\"\"", false),
+        ("\"0x\"", false),
+        ("42", false),
+        ("{}", false),
+    ];
+
+    #[test]
+    fn the_address_table() {
+        for (json_text, passes) in ADDRESS_TABLE {
+            let to: Value = serde_json::from_str(json_text).unwrap_or_else(|_| unreachable!());
+            let single = json!([{ "to": to, "value": "0x1", "data": "0xd4d9bdcd" }]).to_string();
+            let refused = canonical_params_json("eth_sendTransaction", &single)
+                == Err(TxRequestError::BadAddress { leg: None });
+            assert_eq!(!refused, *passes, "to {json_text}");
+            let batch = json!([{ "calls": [
+                { "to": ROUTER, "data": "0x" },
+                { "to": to, "data": "0xd4d9bdcd" }
+            ] }])
+            .to_string();
+            let refused = canonical_params_json("wallet_sendCalls", &batch)
+                == Err(TxRequestError::BadAddress { leg: Some(1) });
+            assert_eq!(!refused, *passes, "leg to {json_text}");
+        }
+        // No `to` (a deployment) and `null` are the recipient readers' to refuse.
+        for params in [
+            r#"[{"value":"0x0","data":"0x60"}]"#,
+            r#"[{"to":null,"data":"0x60"}]"#,
+        ] {
+            assert_eq!(
+                canonical_params_json("eth_sendTransaction", params),
+                Ok(None)
+            );
+        }
+        assert!(TxRequestError::BadAddress { leg: Some(2) }
+            .message()
+            .contains("call 2"));
     }
 
     #[test]

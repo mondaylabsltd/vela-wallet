@@ -789,7 +789,7 @@ fun SigningBalances(
     note: String?,
     noteTone: SigningTone,
     modifier: Modifier = Modifier,
-    /** R22: the core's `source_key` line ("Checked by your own node only"), or `null`. */
+    /** R22: the core's `source_key` line ("Checked by your chosen node only"), or `null`. */
     source: String? = null,
 ) {
     val colors = VelaTheme.colors
@@ -819,7 +819,9 @@ fun SigningBalances(
             ) {
                 Text(
                     text = row.symbol,
-                    color = colors.fgBase,
+                    // §41: a row with no figure (a grant, a change Vela can't
+                    // read) says its tone in its words — there is no figure to.
+                    color = if (row.delta.isEmpty() && row.tone != SigningTone.Neutral) row.tone.color(colors) else colors.fgBase,
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.lg,
                 )
@@ -848,7 +850,7 @@ fun SigningBalances(
             )
         }
         // R22: who stood behind the check, when it was the person's own node
-        // alone ("Checked by your own node only") — quiet, under the rows.
+        // alone ("Checked by your chosen node only") — quiet, under the rows.
         source?.let {
             Text(
                 text = it,

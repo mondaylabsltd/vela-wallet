@@ -330,7 +330,7 @@ fn a_blocked_request_cannot_be_signed_even_if_the_shell_asks() {
     // A shell that ignores the gate gets the fail-closed answer from the
     // submit chokepoint instead of a signature.
     let ops = sut.dispatch(Event::ApproveTapped {
-        opts: SignApproveOpts::default(),
+        opts: support::reviewed_opts(),
     });
     assert!(
         !ops.iter().any(|op| matches!(op, Op::SignAndSubmit { .. })),
@@ -433,7 +433,7 @@ fn a_rewritten_batch_with_a_self_call_in_a_later_call_is_never_signed() {
     sut.dispatch(Event::ApproveTapped {
         opts: SignApproveOpts {
             params_override_json: Some(rewritten.to_string()),
-            ..SignApproveOpts::default()
+            ..support::reviewed_opts()
         },
     });
     // The funding pre-check comes first; the chokepoint follows it.

@@ -415,6 +415,37 @@ data class SignApproveOpts(
     val token_meta: GuardTokenMetaView? = null,
     /** Spec 097: `ClearSigningView.record_reading` — what the reading named — copied verbatim. */
     val reading: app.getvela.wallet.feature.wallet.core.DappReading? = null,
+    /**
+     * §41 (P2-5): what the sheet showed when the confirm fired — the views
+     * the confirm gate read (the reading, the guard, the verdict, as the
+     * core wrote them) and "Refuse blind signing" — from which the signing
+     * machine works its posture out again. `null` is no review: the core
+     * signs nothing.
+     */
+    val review: SignApproveReview? = null,
+    /**
+     * §41 (P2-5): the confirm completed was the "… anyway" one
+     * (`ConfirmState.anyway` at the press: the held press, or the assistive
+     * path's second one). The core takes an "… anyway" posture only on it,
+     * and never with Refuse blind signing on.
+     */
+    val anyway_confirmed: Boolean = false,
+)
+
+/**
+ * §41 (P2-5): `sign_request::ApproveReview` — the core machines' own views,
+ * handed back verbatim (JSON exactly as the machines wrote them, never a
+ * re-encoded mirror), and the person's "Refuse blind signing".
+ */
+@Serializable
+data class SignApproveReview(
+    /** `ClearSigningView`, as the clear-signing machine wrote it. */
+    val clear: JsonElement,
+    /** `GuardView`, as the approval guard wrote it. */
+    val guard: JsonElement,
+    /** The sheet's `SimVerdict` (the one the confirm gate read); `null` before one landed. */
+    val sim: JsonElement? = null,
+    val refuse_blind: Boolean = false,
 )
 
 @Serializable

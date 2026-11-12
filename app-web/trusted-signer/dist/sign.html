@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-3t018ZU8LVngM/jGkHaOB5acNtS5KIjroV00HUQsLso='; style-src 'sha256-IvjEd3Od02b8rk0e1KtXxPCSfUrwsnqsHIkMkYUW80A='; img-src data:; font-src data:; worker-src 'self'; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-/vp7x98DDqauFpMtBd0CjHoT4bLGlAv4hDdXbT1QEq4='; style-src 'sha256-IvjEd3Od02b8rk0e1KtXxPCSfUrwsnqsHIkMkYUW80A='; img-src data:; font-src data:; worker-src 'self'; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vela</title>
     <style>
@@ -1583,6 +1583,7 @@ window.VelaCS.i18n.register('en', {
   'refuse.safeTx': 'This asks your key to sign a Safe transaction (SafeTx), an instruction a Safe can carry out later. No site needs that from Vela. Not signing.',
   'refuse.parentSafe': 'This site asks your account to run {fn} for another Safe — a multisig you may be a member of. Vela never lets a site change or approve anything for a multisig; use the multisig’s own screen. Not signing.',
   'refuse.parentSafeMessage': 'This asks your key to sign a Safe message (SafeMessage) for another Safe — a multisig you may be a member of — which that Safe would count as your approval. Vela never lets a site do that; use the multisig’s own screen. Not signing.',
+  'refuse.parentSafeOp': 'This asks your key to sign a Safe user operation (SafeOp) for another Safe — a multisig you may be a member of — which that Safe would count as your approval. Vela never lets a site do that; use the multisig’s own screen. Not signing.',
   'warn.nonCanonicalModule': "This operation names an EntryPoint or 4337 module that is not Vela's — signing it endorses a different set of contracts.",
   'ui.digest': 'Signed digest · {kind}',
   'ui.digestUnwrapped': 'not wrapped in SafeMessage — an EOA-style signature a Safe will not accept',
@@ -2034,6 +2035,7 @@ window.VelaCS.i18n.register('zh', {
   'refuse.safeTx': '这个请求要你的钥匙签一笔 Safe 交易（SafeTx），也就是一条 Safe 以后可以执行的指令。没有哪个网站需要 Vela 签这个。不签。',
   'refuse.parentSafe': '这个网站要你的账户替另一个 Safe 执行 {fn}——可能是你所在的多签。Vela 从不允许网站替多签做变更或批准；请在该多签自己的页面操作。不签。',
   'refuse.parentSafeMessage': '这个请求要你的钥匙替另一个 Safe 签一条 Safe 消息（SafeMessage）——可能是你所在的多签——那个 Safe 会把它当作你的批准。Vela 从不允许网站这样做；请在该多签自己的页面操作。不签。',
+  'refuse.parentSafeOp': '这个请求要你的钥匙替另一个 Safe 签一条 Safe 用户操作（SafeOp）——可能是你所在的多签——那个 Safe 会把它当作你的批准。Vela 从不允许网站这样做；请在该多签自己的页面操作。不签。',
   'warn.nonCanonicalModule': '这笔操作指向的不是 Vela 的 EntryPoint 或 4337 模块 —— 签了它，等于为另一套合约背书。',
   'ui.digest': '签名摘要 · {kind}',
   'ui.digestUnwrapped': '未包 SafeMessage：这是 EOA 式签名，Safe 的 EIP-1271 不会认',
@@ -2468,6 +2470,7 @@ window.VelaCS.i18n.register('zh-TW', {
   'refuse.safeTx': '這個請求要你的金鑰簽署一筆 Safe 交易（SafeTx），也就是一條 Safe 之後可以執行的指令。沒有任何網站需要 Vela 簽這種東西。不簽署。',
   'refuse.parentSafe': '這個網站要你的帳戶替另一個 Safe 執行 {fn}——可能是你所在的多簽。Vela 從不允許網站替多簽做變更或核准；請在該多簽自己的頁面操作。不簽署。',
   'refuse.parentSafeMessage': '這個請求要你的金鑰替另一個 Safe 簽署一則 Safe 訊息（SafeMessage）——可能是你所在的多簽——那個 Safe 會把它當作你的核准。Vela 從不允許網站這樣做；請在該多簽自己的頁面操作。不簽署。',
+  'refuse.parentSafeOp': '這個請求要你的金鑰替另一個 Safe 簽署一則 Safe 使用者操作（SafeOp）——可能是你所在的多簽——那個 Safe 會把它當作你的核准。Vela 從不允許網站這樣做；請在該多簽自己的頁面操作。不簽署。',
   'warn.nonCanonicalModule': '這筆操作指定的 EntryPoint 或 4337 模組不是 Vela 的——簽署它，等於為另一套合約背書。',
   'ui.digest': '簽署摘要 · {kind}',
   'ui.digestUnwrapped': '未包裝成 SafeMessage——這是 EOA 式的簽章，Safe 不會接受',
@@ -2888,6 +2891,7 @@ window.VelaCS.i18n.register('zh-HK', {
   'refuse.safeTx': '這個請求要你的鎖匙簽署一筆 Safe 交易（SafeTx），即一條 Safe 日後可以執行的指令。沒有任何網站需要 Vela 簽署這種東西。不會簽署。',
   'refuse.parentSafe': '這個網站要你的帳戶替另一個 Safe 執行 {fn}——可能是你所在的多簽。Vela 從不容許網站替多簽做變更或批准；請在該多簽自己的頁面操作。不會簽署。',
   'refuse.parentSafeMessage': '這個請求要你的鎖匙替另一個 Safe 簽署一則 Safe 訊息（SafeMessage）——可能是你所在的多簽——那個 Safe 會把它當作你的批准。Vela 從不容許網站這樣做；請在該多簽自己的頁面操作。不會簽署。',
+  'refuse.parentSafeOp': '這個請求要你的鎖匙替另一個 Safe 簽署一則 Safe 用戶操作（SafeOp）——可能是你所在的多簽——那個 Safe 會把它當作你的批准。Vela 從不容許網站這樣做；請在該多簽自己的頁面操作。不會簽署。',
   'warn.nonCanonicalModule': '這項操作指定的 EntryPoint 或 4337 模組並非 Vela 的——簽署它，等於為另一套合約背書。',
   'ui.digest': '簽署摘要 · {kind}',
   'ui.digestUnwrapped': '沒有包裝在 SafeMessage 內——這是 EOA 式簽名，Safe 不會接受',
@@ -3308,6 +3312,7 @@ window.VelaCS.i18n.register('ja', {
   'refuse.safeTx': 'このリクエストは、あなたのキーに Safe トランザクション（SafeTx）への署名を求めています。これは Safe が後で実行できる指示です。そのような署名を Vela に求める必要のあるサイトはありません。署名しません。',
   'refuse.parentSafe': 'このサイトは、別の Safe（あなたがメンバーのマルチシグかもしれません）のために {fn} を実行するようアカウントに求めています。Vela はサイトにマルチシグの変更や承認を決して許しません。マルチシグ自身の画面を使ってください。署名しません。',
   'refuse.parentSafeMessage': 'このリクエストは、別の Safe（あなたがメンバーのマルチシグかもしれません）のための Safe メッセージ（SafeMessage）への署名をキーに求めています。その Safe はこれをあなたの承認として数えます。Vela はサイトにそれを決して許しません。マルチシグ自身の画面を使ってください。署名しません。',
+  'refuse.parentSafeOp': 'このリクエストは、別の Safe（あなたがメンバーのマルチシグかもしれません）のための Safe ユーザー操作（SafeOp）への署名をキーに求めています。その Safe はこれをあなたの承認として数えます。Vela はサイトにそれを決して許しません。マルチシグ自身の画面を使ってください。署名しません。',
   'warn.nonCanonicalModule': 'この操作は Vela のものではない EntryPoint または 4337 モジュールを指定しています — 署名すると、別のコントラクト一式を認めることになります。',
   'ui.digest': '署名するダイジェスト · {kind}',
   'ui.digestUnwrapped': 'SafeMessage で包まれていません — Safe が受け付けない EOA 形式の署名です',
@@ -3726,6 +3731,7 @@ window.VelaCS.i18n.register('ko', {
   'refuse.safeTx': '이 요청은 내 키로 Safe 트랜잭션(SafeTx)에 서명하라고 요구합니다. 이는 Safe가 나중에 실행할 수 있는 지시입니다. 어떤 사이트도 Vela에게 이것을 요구할 필요가 없습니다. 서명하지 않습니다.',
   'refuse.parentSafe': '이 사이트가 다른 Safe(내가 멤버인 멀티시그일 수 있음)를 대신해 {fn}을(를) 실행하도록 계정에 요청합니다. Vela는 사이트가 멀티시그를 변경하거나 승인하도록 절대 허용하지 않습니다. 멀티시그 자체 화면을 사용하세요. 서명하지 않습니다.',
   'refuse.parentSafeMessage': '이 요청은 다른 Safe(내가 멤버인 멀티시그일 수 있음)를 위한 Safe 메시지(SafeMessage)에 내 키로 서명하라고 요구합니다. 그 Safe는 이것을 내 승인으로 셉니다. Vela는 사이트가 그렇게 하도록 절대 허용하지 않습니다. 멀티시그 자체 화면을 사용하세요. 서명하지 않습니다.',
+  'refuse.parentSafeOp': '이 요청은 다른 Safe(내가 멤버인 멀티시그일 수 있음)를 위한 Safe 사용자 작업(SafeOp)에 내 키로 서명하라고 요구합니다. 그 Safe는 이것을 내 승인으로 셉니다. Vela는 사이트가 그렇게 하도록 절대 허용하지 않습니다. 멀티시그 자체 화면을 사용하세요. 서명하지 않습니다.',
   'warn.nonCanonicalModule': '이 작업은 Vela의 것이 아닌 EntryPoint 또는 4337 모듈을 지정합니다 — 서명하면 다른 컨트랙트 묶음을 보증하는 셈이 됩니다.',
   'ui.digest': '서명할 다이제스트 · {kind}',
   'ui.digestUnwrapped': 'SafeMessage로 감싸지 않음 — Safe가 받아들이지 않는 EOA 방식 서명',
@@ -4144,6 +4150,7 @@ window.VelaCS.i18n.register('vi', {
   'refuse.safeTx': 'Yêu cầu này muốn khóa của bạn ký một giao dịch Safe (SafeTx) — một chỉ thị mà Safe có thể thực hiện về sau. Không trang web nào cần Vela ký điều đó. Không ký.',
   'refuse.parentSafe': 'Trang này yêu cầu tài khoản của bạn chạy {fn} cho một Safe khác — có thể là multisig mà bạn là thành viên. Vela không bao giờ cho trang web thay đổi hay phê duyệt gì cho một multisig; hãy dùng màn hình của chính multisig đó. Không ký.',
   'refuse.parentSafeMessage': 'Yêu cầu này muốn khóa của bạn ký một thông điệp Safe (SafeMessage) cho một Safe khác — có thể là multisig mà bạn là thành viên — và Safe đó sẽ tính nó là phê duyệt của bạn. Vela không bao giờ cho trang web làm vậy; hãy dùng màn hình của chính multisig đó. Không ký.',
+  'refuse.parentSafeOp': 'Yêu cầu này muốn khóa của bạn ký một thao tác người dùng Safe (SafeOp) cho một Safe khác — có thể là multisig mà bạn là thành viên — và Safe đó sẽ tính nó là sự chấp thuận của bạn. Vela không bao giờ cho trang web làm vậy; hãy dùng màn hình của chính multisig. Không ký.',
   'warn.nonCanonicalModule': 'Thao tác này chỉ định một EntryPoint hoặc module 4337 không phải của Vela — ký nó tức là bảo chứng cho một bộ hợp đồng khác.',
   'ui.digest': 'Mã băm được ký · {kind}',
   'ui.digestUnwrapped': 'không được bọc trong SafeMessage — đây là chữ ký kiểu EOA mà Safe sẽ không chấp nhận',
@@ -4562,6 +4569,7 @@ window.VelaCS.i18n.register('id', {
   'refuse.safeTx': 'Permintaan ini meminta kunci Anda menandatangani transaksi Safe (SafeTx), yaitu instruksi yang bisa dijalankan Safe di kemudian hari. Tidak ada situs yang membutuhkan itu dari Vela. Tidak akan ditandatangani.',
   'refuse.parentSafe': 'Situs ini meminta akun Anda menjalankan {fn} untuk Safe lain — mungkin multisig yang Anda ikuti. Vela tidak pernah membiarkan situs mengubah atau menyetujui apa pun untuk sebuah multisig; gunakan layar multisig itu sendiri. Tidak akan ditandatangani.',
   'refuse.parentSafeMessage': 'Permintaan ini meminta kunci Anda menandatangani pesan Safe (SafeMessage) untuk Safe lain — mungkin multisig yang Anda ikuti — yang akan dihitung Safe itu sebagai persetujuan Anda. Vela tidak pernah membiarkan situs melakukan itu; gunakan layar multisig itu sendiri. Tidak akan ditandatangani.',
+  'refuse.parentSafeOp': 'Permintaan ini meminta kunci Anda menandatangani operasi pengguna Safe (SafeOp) untuk Safe lain — mungkin multisig yang Anda ikuti — yang akan dihitung Safe itu sebagai persetujuan Anda. Vela tidak pernah mengizinkan situs melakukannya; gunakan layar multisig itu sendiri. Tidak ditandatangani.',
   'warn.nonCanonicalModule': 'Operasi ini menyebut EntryPoint atau modul 4337 yang bukan milik Vela — menandatanganinya berarti menyetujui kumpulan kontrak yang berbeda.',
   'ui.digest': 'Digest yang ditandatangani · {kind}',
   'ui.digestUnwrapped': 'tidak dibungkus dalam SafeMessage — tanda tangan gaya EOA yang tidak akan diterima Safe',
@@ -4980,6 +4988,7 @@ window.VelaCS.i18n.register('tr', {
   'refuse.safeTx': 'Bu istek, anahtarınızın bir Safe işlemi (SafeTx) imzalamasını istiyor; bu, bir Safe\'in sonradan yürütebileceği bir talimattır. Hiçbir sitenin Vela\'dan buna ihtiyacı yoktur. İmzalanmayacak.',
   'refuse.parentSafe': 'Bu site, hesabınızın başka bir Safe için {fn} çalıştırmasını istiyor — üyesi olduğunuz bir multisig olabilir. Vela hiçbir sitenin bir multisig için bir şeyi değiştirmesine veya onaylamasına izin vermez; multisig’in kendi ekranını kullanın. İmzalanmayacak.',
   'refuse.parentSafeMessage': 'Bu istek, anahtarınızın başka bir Safe için bir Safe mesajı (SafeMessage) imzalamasını istiyor — üyesi olduğunuz bir multisig olabilir — ve o Safe bunu sizin onayınız sayar. Vela buna hiçbir sitenin izin vermez; multisig’in kendi ekranını kullanın. İmzalanmayacak.',
+  'refuse.parentSafeOp': 'Bu istek, anahtarınızın başka bir Safe için bir Safe kullanıcı işlemi (SafeOp) imzalamasını istiyor — üyesi olduğunuz bir multisig olabilir — ve o Safe bunu sizin onayınız sayar. Vela bir sitenin bunu yapmasına asla izin vermez; multisig’in kendi ekranını kullanın. İmzalanmıyor.',
   'warn.nonCanonicalModule': 'Bu işlem, Vela\'ya ait olmayan bir EntryPoint ya da 4337 modülü belirtiyor — bunu imzalamak, farklı bir sözleşme kümesine onay vermek demektir.',
   'ui.digest': 'İmzalanan özet · {kind}',
   'ui.digestUnwrapped': 'SafeMessage içine sarılmamış — bir Safe\'in kabul etmeyeceği EOA tarzı bir imza',
@@ -5398,6 +5407,7 @@ window.VelaCS.i18n.register('es-MX', {
   'refuse.safeTx': 'Esto le pide a tu llave firmar una transacción de Safe (SafeTx), una instrucción que un Safe puede ejecutar después. Ningún sitio necesita eso de Vela. No se firmará nada.',
   'refuse.parentSafe': 'Este sitio le pide a tu cuenta ejecutar {fn} para otro Safe, quizá un multisig del que eres miembro. Vela nunca deja que un sitio cambie o apruebe algo para un multisig; usa la pantalla del propio multisig. No se firmará nada.',
   'refuse.parentSafeMessage': 'Esto le pide a tu llave firmar un mensaje de Safe (SafeMessage) para otro Safe, quizá un multisig del que eres miembro, que ese Safe contaría como tu aprobación. Vela nunca deja que un sitio haga eso; usa la pantalla del propio multisig. No se firmará nada.',
+  'refuse.parentSafeOp': 'Esto le pide a tu llave firmar una operación de usuario de Safe (SafeOp) para otro Safe, quizá un multisig del que eres miembro, que ese Safe contaría como tu aprobación. Vela nunca deja que un sitio haga eso; usa la pantalla del propio multisig. No se firma.',
   'warn.nonCanonicalModule': 'Esta operación indica un EntryPoint o un módulo 4337 que no es de Vela — firmarla respalda un conjunto de contratos distinto.',
   'ui.digest': 'Resumen firmado · {kind}',
   'ui.digestUnwrapped': 'no está envuelto en SafeMessage — una firma estilo EOA que un Safe no aceptará',
@@ -5816,6 +5826,7 @@ window.VelaCS.i18n.register('pt-BR', {
   'refuse.safeTx': 'Isto pede que sua chave assine uma transação Safe (SafeTx), uma instrução que um Safe pode executar depois. Nenhum site precisa disso da Vela. Nada será assinado.',
   'refuse.parentSafe': 'Este site pede que sua conta execute {fn} para outro Safe — talvez um multisig do qual você é membro. A Vela nunca deixa um site alterar ou aprovar nada para um multisig; use a tela do próprio multisig. Nada será assinado.',
   'refuse.parentSafeMessage': 'Isto pede que sua chave assine uma mensagem Safe (SafeMessage) para outro Safe — talvez um multisig do qual você é membro — que esse Safe contaria como sua aprovação. A Vela nunca deixa um site fazer isso; use a tela do próprio multisig. Nada será assinado.',
+  'refuse.parentSafeOp': 'Isto pede que sua chave assine uma operação de usuário Safe (SafeOp) para outro Safe — talvez um multisig do qual você é membro — que esse Safe contaria como sua aprovação. A Vela nunca deixa um site fazer isso; use a tela do próprio multisig. Não será assinado.',
   'warn.nonCanonicalModule': 'Esta operação indica um EntryPoint ou módulo 4337 que não é da Vela — assiná-la endossa outro conjunto de contratos.',
   'ui.digest': 'Resumo assinado · {kind}',
   'ui.digestUnwrapped': 'não envolvido em SafeMessage — uma assinatura no estilo EOA que um Safe não aceita',
@@ -6234,6 +6245,7 @@ window.VelaCS.i18n.register('fr', {
   'refuse.safeTx': 'Cette demande veut que votre clé signe une transaction Safe (SafeTx), une instruction qu’un Safe peut exécuter plus tard. Aucun site n’a besoin de cela de la part de Vela. Signature refusée.',
   'refuse.parentSafe': 'Ce site demande à votre compte d’exécuter {fn} pour un autre Safe — peut-être un multisig dont vous êtes membre. Vela ne laisse jamais un site modifier ou approuver quoi que ce soit pour un multisig ; utilisez l’écran du multisig lui-même. Signature refusée.',
   'refuse.parentSafeMessage': 'Cette demande veut que votre clé signe un message Safe (SafeMessage) pour un autre Safe — peut-être un multisig dont vous êtes membre — que ce Safe compterait comme votre approbation. Vela ne laisse jamais un site faire cela ; utilisez l’écran du multisig lui-même. Signature refusée.',
+  'refuse.parentSafeOp': 'Cette demande veut que votre clé signe une opération utilisateur Safe (SafeOp) pour un autre Safe — peut-être un multisig dont vous êtes membre — que ce Safe compterait comme votre approbation. Vela ne laisse jamais un site faire cela ; utilisez l’écran du multisig lui-même. Pas de signature.',
   'warn.nonCanonicalModule': 'Cette opération désigne un EntryPoint ou un module 4337 qui n’est pas celui de Vela — la signer revient à cautionner un autre ensemble de contrats.',
   'ui.digest': 'Condensé signé · {kind}',
   'ui.digestUnwrapped': 'non encapsulé dans SafeMessage — une signature de type EOA qu’un Safe n’acceptera pas',
@@ -6654,6 +6666,7 @@ window.VelaCS.i18n.register('de', {
   'refuse.safeTx': 'Diese Anfrage will, dass dein Schlüssel eine Safe-Transaktion (SafeTx) signiert — eine Anweisung, die ein Safe später ausführen kann. Keine Seite braucht das von Vela. Wird nicht signiert.',
   'refuse.parentSafe': 'Diese Website will, dass dein Konto {fn} für einen anderen Safe ausführt – vielleicht ein Multisig, dessen Mitglied du bist. Vela lässt keine Website etwas für ein Multisig ändern oder freigeben; nutze die eigene Ansicht des Multisigs. Wird nicht signiert.',
   'refuse.parentSafeMessage': 'Diese Anfrage will, dass dein Schlüssel eine Safe-Nachricht (SafeMessage) für einen anderen Safe signiert – vielleicht ein Multisig, dessen Mitglied du bist –, die dieser Safe als deine Freigabe zählen würde. Vela lässt das keine Website tun; nutze die eigene Ansicht des Multisigs. Wird nicht signiert.',
+  'refuse.parentSafeOp': 'Diese Anfrage will, dass dein Schlüssel eine Safe-Nutzeroperation (SafeOp) für einen anderen Safe signiert – vielleicht ein Multisig, dessen Mitglied du bist –, die dieser Safe als deine Freigabe zählen würde. Vela lässt das keine Website tun; nutze die eigene Ansicht des Multisigs. Wird nicht signiert.',
   'warn.nonCanonicalModule': 'Diese Operation nennt einen EntryPoint oder ein 4337-Modul, das nicht zu Vela gehört — wer sie signiert, bürgt für einen anderen Satz von Contracts.',
   'ui.digest': 'Signierter Digest · {kind}',
   'ui.digestUnwrapped': 'nicht in SafeMessage verpackt — eine EOA-artige Signatur, die ein Safe nicht akzeptiert',
@@ -7074,6 +7087,7 @@ window.VelaCS.i18n.register('ru', {
   'refuse.safeTx': 'Этот запрос просит ваш ключ подписать транзакцию Safe (SafeTx) — инструкцию, которую Safe может выполнить позже. Ни одному сайту это от Vela не нужно. Подписи не будет.',
   'refuse.parentSafe': 'Этот сайт просит ваш аккаунт выполнить {fn} для другого Safe — возможно, мультисига, в котором вы участник. Vela никогда не позволяет сайту что-либо менять или одобрять для мультисига; используйте экран самого мультисига. Подписи не будет.',
   'refuse.parentSafeMessage': 'Этот запрос просит ваш ключ подписать сообщение Safe (SafeMessage) для другого Safe — возможно, мультисига, в котором вы участник, — и этот Safe засчитает его как ваше одобрение. Vela никогда не позволяет сайту так делать; используйте экран самого мультисига. Подписи не будет.',
+  'refuse.parentSafeOp': 'Этот запрос просит ваш ключ подписать пользовательскую операцию Safe (SafeOp) для другого Safe — возможно, мультисига, в котором вы участник, — и этот Safe засчитает её как ваше одобрение. Vela никогда не позволяет сайту так делать; используйте экран самого мультисига. Подпись не ставится.',
   'warn.nonCanonicalModule': 'Эта операция указывает EntryPoint или модуль 4337, который не принадлежит Vela, — подписав её, вы поручитесь за другой набор контрактов.',
   'ui.digest': 'Подписываемый дайджест · {kind}',
   'ui.digestUnwrapped': 'не обёрнут в SafeMessage — подпись в стиле EOA, которую Safe не примет',
@@ -7494,6 +7508,7 @@ window.VelaCS.i18n.register('it', {
   'refuse.safeTx': 'Questa richiesta chiede alla tua chiave di firmare una transazione Safe (SafeTx), un’istruzione che un Safe può eseguire più tardi. Nessun sito ha bisogno di questo da Vela. Non verrà firmato nulla.',
   'refuse.parentSafe': 'Questo sito chiede al tuo account di eseguire {fn} per un altro Safe, forse un multisig di cui sei membro. Vela non permette mai a un sito di modificare o approvare qualcosa per un multisig: usa la schermata del multisig stesso. Non verrà firmato nulla.',
   'refuse.parentSafeMessage': 'Questa richiesta chiede alla tua chiave di firmare un messaggio Safe (SafeMessage) per un altro Safe, forse un multisig di cui sei membro, che quel Safe conterebbe come tua approvazione. Vela non lo permette mai a un sito: usa la schermata del multisig stesso. Non verrà firmato nulla.',
+  'refuse.parentSafeOp': 'Questa richiesta chiede alla tua chiave di firmare un’operazione utente Safe (SafeOp) per un altro Safe, forse un multisig di cui sei membro, che quel Safe conterebbe come tua approvazione. Vela non lo permette mai a un sito; usa la schermata del multisig stesso. Non viene firmato.',
   'warn.nonCanonicalModule': 'Questa operazione indica un EntryPoint o un modulo 4337 che non è di Vela — firmarla significa avallare un altro insieme di contratti.',
   'ui.digest': 'Digest firmato · {kind}',
   'ui.digestUnwrapped': 'non racchiuso in SafeMessage — una firma in stile EOA che un Safe non accetterà',
@@ -11347,6 +11362,34 @@ window.VelaCS = window.VelaCS || {};
     });
   }
 
+  // §41 (P1-2): a Safe v1.5.0 checks an owner contract's signature with
+  // `isValidSignature(bytes32 hash)`, which a Vela account answers with the
+  // very `SafeMessage(keccak256(hash))` wrap a site's typed data gets — so
+  // under such a Safe, its `SafeOp` (a user operation the 4337 module has it
+  // check) signed here is the account's approval of that operation. Refused
+  // for any Safe but the account, under the module's domain or another's.
+  var SAFE_4337_MODULE = '0x75cf11467937ce3f2f357ce24ffc3dbf8fd5c226';
+
+  /** An address as the hasher reads it (bare or under-width), or ''. */
+  function addressKey(value) {
+    var t = String(value || '').trim().toLowerCase();
+    var body = t.indexOf('0x') === 0 ? t.slice(2) : t;
+    if (!body || body.length > 40 || !/^[0-9a-f]+$/.test(body)) return '';
+    return '0x' + ('0'.repeat(40 - body.length)) + body;
+  }
+
+  /** A `SafeOp` for a Safe other than the account. */
+  function isParentSafeOp(intent, account) {
+    var me = addressKey(account);
+    return typedDocuments(intent).some(function (doc) {
+      if (doc.primaryType !== 'SafeOp') return false;
+      var safe = addressKey(doc.message && doc.message.safe);
+      var contract = addressKey(doc.domain && doc.domain.verifyingContract);
+      return (safe !== '' && safe !== me) ||
+        (contract !== '' && contract !== me && contract !== SAFE_4337_MODULE);
+    });
+  }
+
   /** A `SafeTx` is an instruction to a Safe, executable by anyone later. */
   function isSafeTx(intent) {
     var params = intent.params || [];
@@ -12167,6 +12210,12 @@ window.VelaCS = window.VelaCS || {};
       view.risk = 'danger';
       view.warnings.push({ tone: 'danger', key: 'refuse.parentSafeMessage' });
     }
+    if (intent.method && intent.method.indexOf('signTypedData') >= 0 && isParentSafeOp(intent, account)) {
+      view.refuse = true;
+      view.risk = 'danger';
+      view.warnings.push({ tone: 'danger', key: 'refuse.parentSafeOp' });
+    }
+
 
     if (!view.dapp.originVerified && view.dapp.origin) {
       // About the requester line, so drawn under it (`near`), not as a banner.

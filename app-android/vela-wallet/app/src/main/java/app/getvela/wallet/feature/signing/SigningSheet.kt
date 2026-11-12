@@ -93,7 +93,7 @@ const val OPEN_SIGNER_TAG = "signing-open-signer"
 /** R22: the "Hold to confirm" / "Press again to confirm" line under a held confirm. */
 const val CONFIRM_HOLD_HINT_TAG = "signing-confirm-hold-hint"
 
-/** R22: the quiet "Checked by your own node only" line under the balance changes. */
+/** R22: the quiet "Checked by your chosen node only" line under the balance changes. */
 const val SIM_SOURCE_TAG = "signing-sim-source"
 
 /** R22: "To check with a node you trust…" under a check one node answered alone — opens the network's RPC settings. */

@@ -2544,7 +2544,7 @@ impl WalletPage {
                     rule::approve_label(sign),
                     door.enabled && !executing,
                     approving,
-                    door.hold_ms,
+                    door,
                     cx,
                 ));
                 foot = foot.children(failures.take().unwrap_or_default());
@@ -2583,7 +2583,7 @@ impl WalletPage {
                                 rule::approve_label(sign),
                                 door.enabled && !executing,
                                 approving,
-                                door.hold_ms,
+                                door,
                                 cx,
                             ),
                         ));
@@ -2602,7 +2602,7 @@ impl WalletPage {
                                     rule::approve_label(sign),
                                     door.enabled && !executing,
                                     approving,
-                                    door.hold_ms,
+                                    door,
                                     cx,
                                 )
                                 .min_h(px(crate::theme::BTN_H_PRIMARY)),
@@ -2622,6 +2622,9 @@ impl WalletPage {
                     let executor = actor.clone();
                     // r15: the press carries the fee drawn under it.
                     let shown_fee = look.as_ref().and_then(rule::Look::shown_fee);
+                    // §41 (P2-5): the press through this door is its
+                    // "… anyway" (held) exactly when the door says so.
+                    let anyway_confirmed = door.anyway;
                     let hold_words = self.signing.hold_words();
                     presses = presses.child(div().flex_1().min_w(px(0.)).child(door_press(
                         "ms-execute",
@@ -2636,6 +2639,7 @@ impl WalletPage {
                             let host = this.ms_host(cx);
                             let (hash, executor) = (hash.clone(), executor.clone());
                             let shown_fee = shown_fee.clone();
+                            let refuse_blind = crate::executor::preferences::refuse_blind_signing();
                             // "Approve and execute" is the machine's one press,
                             // both or nothing (§26 r16-4): stopped before its
                             // signature, nothing is approved either and the
@@ -2647,6 +2651,8 @@ impl WalletPage {
                                     safe_tx_hash: hash,
                                     executor,
                                     shown_fee,
+                                    anyway_confirmed,
+                                    refuse_blind,
                                 }
                             } else {
                                 ms_proposals::Event::Execute {
@@ -2654,6 +2660,8 @@ impl WalletPage {
                                     safe_tx_hash: hash,
                                     executor,
                                     shown_fee,
+                                    anyway_confirmed,
+                                    refuse_blind,
                                 }
                             };
                             host.update(cx, |host, cx| host.proposals(event, cx));
@@ -2778,7 +2786,9 @@ impl WalletPage {
         let outside = matches!(plan.kind, FootKind::Nothing)
             && !crate::multisig::sheet::outside_members(view.signers.get(&key), &|_| false)
                 .is_empty();
-        if outside && next_is_asking {
+        // §41 (P2-5): a quiet link is a plain press — never an "… anyway";
+        // an "… anyway" review is asked through the held press below.
+        if outside && next_is_asking && !door.anyway {
             let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
             foot = foot.child(
                 text_action(
@@ -2796,6 +2806,8 @@ impl WalletPage {
                             ms_proposals::Event::ApproveOutside {
                                 chain_id,
                                 safe_tx_hash: hash,
+                                anyway_confirmed: false,
+                                refuse_blind: crate::executor::preferences::refuse_blind_signing(),
                             },
                             cx,
                         );
@@ -2807,6 +2819,7 @@ impl WalletPage {
                 theme,
                 item,
                 crate::ui::ButtonVariant::Secondary,
+                door,
                 cx,
             ));
         }
@@ -2913,7 +2926,7 @@ impl WalletPage {
         label: &'static str,
         enabled: bool,
         busy: bool,
-        hold_ms: u32,
+        door: &SignDoor,
         cx: &mut Context<Self>,
     ) -> Div {
         let loc = self.ms_loc();
@@ -2924,13 +2937,15 @@ impl WalletPage {
         };
         let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
         let hold_words = self.signing.hold_words();
+        // §41 (P2-5): held through the door, and "… anyway" when it is.
+        let anyway_confirmed = door.anyway;
         door_press(
             "ms-approve",
             hash.clone().into(),
             variant,
             words::t(&loc, label).into(),
             state,
-            hold_ms,
+            door.hold_ms,
             &hold_words,
             theme,
             cx.listener(move |this, _, _, cx| {
@@ -2942,6 +2957,8 @@ impl WalletPage {
                             chain_id,
                             safe_tx_hash: hash,
                             owner,
+                            anyway_confirmed,
+                            refuse_blind: crate::executor::preferences::refuse_blind_signing(),
                         },
                         cx,
                     );
@@ -2952,20 +2969,30 @@ impl WalletPage {
     }
 
     /// "Approve with another wallet": the machine's gate, then an outside
-    /// member's wallet over a live session (`approve_outside`).
+    /// member's wallet over a live session (`approve_outside`). §41 (P2-5):
+    /// an "… anyway" review is asked of another wallet only through the same
+    /// friction as any approval (the door's hold, or the accessible path's
+    /// second press), and the press says so (`anyway_confirmed`).
     fn ms_outside_press(
         &mut self,
         theme: &Theme,
         item: &ProposalItem,
         variant: crate::ui::ButtonVariant,
+        door: &SignDoor,
         cx: &mut Context<Self>,
-    ) -> gpui::Stateful<Div> {
+    ) -> Div {
         let loc = self.ms_loc();
         let (chain_id, hash) = (item.chain_id, item.safe_tx_hash.clone());
-        crate::ui::vela_button(
+        let anyway_confirmed = door.anyway;
+        let hold_words = self.signing.hold_words();
+        door_press(
             "ms-outside",
+            hash.clone().into(),
             variant,
             words::t(&loc, "external.signWithWallet").into(),
+            crate::ui::ButtonState::Enabled,
+            door.hold_ms,
+            &hold_words,
             theme,
             cx.listener(move |this, _, _, cx| {
                 let host = this.ms_host(cx);
@@ -2975,11 +3002,14 @@ impl WalletPage {
                         ms_proposals::Event::ApproveOutside {
                             chain_id,
                             safe_tx_hash: hash,
+                            anyway_confirmed,
+                            refuse_blind: crate::executor::preferences::refuse_blind_signing(),
                         },
                         cx,
                     );
                 });
             }),
+            cx,
         )
     }
 
@@ -3467,7 +3497,7 @@ impl WalletPage {
                     ));
                 }
                 // R22: who stood behind what moves — the person's own node
-                // alone ("Checked by your own node only"), a quiet line.
+                // alone ("Checked by your chosen node only"), a quiet line.
                 if let Some(key) = sim.source_key.as_deref() {
                     col = col.child(ms_note(theme, &self.loc.t(key), Tone::Neutral));
                 }
@@ -3843,10 +3873,16 @@ impl WalletPage {
                                     let host = this.ms_host(cx);
                                     let hash = hash.clone();
                                     host.update(cx, |host, cx| {
+                                        // §41 (P2-5): a quiet link is a plain
+                                        // press — the core asks an "… anyway"
+                                        // review only through the held one.
                                         host.proposals(
                                             ms_proposals::Event::ApproveOutside {
                                                 chain_id,
                                                 safe_tx_hash: hash,
+                                                anyway_confirmed: false,
+                                                refuse_blind:
+                                                    crate::executor::preferences::refuse_blind_signing(),
                                             },
                                             cx,
                                         );
@@ -4564,6 +4600,9 @@ impl WalletPage {
         }
         // Its words and fill as the door says them; pressable only through it.
         let sign = crate::multisig::sheet::press_rule(&door);
+        // §41 (P2-5): the press through this door is its "… anyway" (held)
+        // exactly when the door says so.
+        let anyway_confirmed = door.anyway;
         let working = matches!(view.actions.get("propose"), Some(ActionState::Working));
         let leave = site.as_ref().map(|(rid, _)| rid.clone());
         // core-ms-2: a site's transaction its proposer's own approval makes
@@ -4619,14 +4658,24 @@ impl WalletPage {
                         cx.listener(move |this, _, _, cx| {
                             let host = this.ms_host(cx);
                             let as_member = as_member.clone();
+                            let refuse_blind = crate::executor::preferences::refuse_blind_signing();
                             host.update(cx, |host, cx| {
                                 if execute_now {
                                     host.proposals(
-                                        ms_proposals::Event::ProposeExecute { as_member },
+                                        ms_proposals::Event::ProposeExecute {
+                                            as_member,
+                                            anyway_confirmed,
+                                            refuse_blind,
+                                        },
                                         cx,
                                     );
                                 } else {
-                                    host.confirm_draft(as_member, cx);
+                                    host.confirm_draft(
+                                        as_member,
+                                        anyway_confirmed,
+                                        refuse_blind,
+                                        cx,
+                                    );
                                 }
                             });
                         }),
@@ -6109,11 +6158,15 @@ mod tests {
                     kind: TrustDeltaKind::Native,
                     token: None,
                     delta: "-10000000000000000".to_owned(),
+                    token_id: None,
+                    spender: None,
                 },
                 TrustAssetDelta {
                     kind: TrustDeltaKind::Erc20,
                     token: Some("0x3600000000000000000000000000000000000000".to_owned()),
                     delta: "-10000".to_owned(),
+                    token_id: None,
+                    spender: None,
                 },
             ],
             revert_reason: None,

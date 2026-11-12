@@ -2629,3 +2629,97 @@ fn a_record_the_test_build_refused_is_said_so_once_and_never_retried_by_itself()
         Some("common.testBuild.productionWriteRefused")
     );
 }
+
+/// §41 (§40 review), the mainnet case: a member that is a Safe on Ethereum
+/// and has no code on Base, where the multisig is about to be used. Its
+/// genesis is read from its own creation on Ethereum (Blockscout's
+/// `eth.blockscout.com` names the transaction, the chain gives it), and it
+/// makes exactly that member: Verified, added. A creation whose
+/// `createProxyWithNonce` makes another address binds nothing: still refused.
+#[test]
+fn a_member_deployed_on_mainnet_is_bound_by_its_creation_there() {
+    let creation_input = |g: &vela_core::multisig::Genesis| -> String {
+        let word = |hex: &str| format!("{:0>64}", hex.trim_start_matches("0x"));
+        let init = g.initializer.trim_start_matches("0x");
+        let padded = format!("{init:0<width$}", width = init.len().div_ceil(64) * 64);
+        format!(
+            "0x1688f0b9{}{}{}{}{padded}",
+            word(&g.singleton),
+            word("60"),
+            word(&g.salt_nonce),
+            word(&format!("{:x}", init.len() / 2)),
+        )
+    };
+    for (made_by_its_own, expect_added) in [(true, true), (false, false)] {
+        let member = genesis(&[A, B], 1, "0x51");
+        let other = genesis(&[B], 1, "0x52");
+        let team = genesis(&[&member.address, B], 2, "0x53");
+        let mut world = World::default();
+        world.record(&team.address, &team.genesis, false);
+        // Used on Base and Ethereum (its proposals are there).
+        for chain in [8453, 1] {
+            world.mailbox.push(json!({
+                "chainId": chain, "safe": team.address, "safeTxHash": format!("0x0{chain}"),
+                "safeTx": cancel(&team.address), "approvals": []
+            }));
+        }
+        // The member is a Safe on Ethereum, nothing on Base.
+        world.codes.insert(
+            (1, member.address.to_ascii_lowercase()),
+            vela_core::safe::safe_proxy_runtime_code().unwrap(),
+        );
+        let tx = format!("0x{}", "ab".repeat(32));
+        world.explorer.insert(
+            format!(
+                "https://eth.blockscout.com/api/v2/addresses/{}",
+                vela_core::primitives::checksum_address(&member.address).unwrap()
+            ),
+            (200, json!({ "creation_transaction_hash": tx })),
+        );
+        let made = if made_by_its_own { &member } else { &other };
+        let input = creation_input(&made.genesis);
+        let factory = made.genesis.factory.clone();
+        let wanted = tx.clone();
+        world.rpc_hooks.push(Box::new(move |chain, method, params| {
+            (chain == 1
+                && method == "eth_getTransactionByHash"
+                && params[0].as_str() == Some(wanted.as_str()))
+            .then(
+                || vela_core::app::multisig_shell::MultisigShellResult::RpcResult {
+                    result: json!({ "hash": wanted, "to": factory, "input": input }),
+                },
+            )
+        }));
+        let mut sut = started(&mut world, vec![1, 8453]);
+        run(&mut sut, &mut world, add(&team.address, None, false));
+        let outcome = sut.view().add.outcome;
+        if expect_added {
+            assert_eq!(
+                outcome,
+                Some(AddOutcome::Added {
+                    address: team.address.clone()
+                }),
+                "bound by its creation on Ethereum"
+            );
+        } else {
+            let Some(AddOutcome::Refused { findings }) = outcome else {
+                panic!("a creation of another address binds nothing: {outcome:?}");
+            };
+            assert!(
+                findings
+                    .iter()
+                    .any(|f| f["reason"]["kind"] == "ownerNotBound"),
+                "{findings:?}"
+            );
+            assert!(world.stored_accounts().is_empty());
+        }
+        assert!(
+            world
+                .http_log
+                .iter()
+                .any(|l| l.starts_with("GET https://eth.blockscout.com/api/v2/addresses/")),
+            "asked Ethereum's Blockscout: {:?}",
+            world.http_log
+        );
+    }
+}

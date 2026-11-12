@@ -103,7 +103,7 @@ type Browser = DomainDriver<DappBrowser>;
 /// The batch, approved, through the write-ahead: signed as `op`, its record
 /// on disk, cleared to POST — the in-app browsers' order (spec 082 RJ1).
 fn batch_cleared_to_post(id: &str, op: &str) -> Signer {
-    batch_cleared_to_post_with(id, op, &batch_params(), SignApproveOpts::default())
+    batch_cleared_to_post_with(id, op, &batch_params(), support::reviewed_opts())
 }
 
 fn batch_cleared_to_post_with(
@@ -409,7 +409,7 @@ fn a_transaction_still_waits_for_its_receipt() {
         first_party: false,
     });
     signer.dispatch(Event::ApproveTapped {
-        opts: SignApproveOpts::default(),
+        opts: support::reviewed_opts(),
     });
     signer.resolve(Res::PreCheck { funding: None });
     signer.dispatch(Event::OpSigned {
@@ -571,7 +571,7 @@ fn kept_as_asked() -> SignApproveOpts {
         // §37: consent is per leg — the USDT approve to Permit2 and
         // Permit2's own approve, each kept on Requested.
         unlimited_approved_legs: vec![0, 1],
-        ..SignApproveOpts::default()
+        ..support::reviewed_opts()
     }
 }
 

@@ -57,7 +57,8 @@ export const INITIAL_GUARD_VIEW: GuardView = {
 	increase_total: null,
 	decimals_unverified: false,
 	expired: false,
-	batch: null
+	batch: null,
+	carrier_unread: false
 };
 
 class SigningSheet {

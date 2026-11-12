@@ -295,7 +295,7 @@ fn an_approve_ahead_of_the_verdict_is_not_taken() {
     started(&mut sut, "r1");
 
     let ops = sut.dispatch(Event::ApproveTapped {
-        opts: SignApproveOpts::default(),
+        opts: support::reviewed_opts(),
     });
     assert!(ops.is_empty(), "held: {ops:?}");
     let view = sut.view();
@@ -303,7 +303,7 @@ fn an_approve_ahead_of_the_verdict_is_not_taken() {
 
     settled(&mut sut, "r1");
     let ops = sut.dispatch(Event::ApproveTapped {
-        opts: SignApproveOpts::default(),
+        opts: support::reviewed_opts(),
     });
     assert!(
         matches!(ops.as_slice(), [Op::CheckBundlerFunding { .. }]),
@@ -498,4 +498,79 @@ fn the_line_is_in_the_corpus_and_the_fields_default() {
         serde_json::to_value(ConfirmBlock::SimChecking).expect("serialises"),
         serde_json::json!("sim_checking")
     );
+}
+
+/// §41 (P2-5): the signing machine works out the posture itself at approve
+/// time, from the views the sheet showed. No review: nothing is signed. An
+/// "… anyway" posture (a blind reading, a verdict nobody confirmed): only the
+/// person's explicit "… anyway" starts the pipeline — and with Refuse blind
+/// signing on, nothing does. A transaction whose reading never started is
+/// not taken at all.
+#[test]
+fn the_machine_holds_the_anyway_gate_itself() {
+    use vela_core::app::sim_outcome::{verdict_of, SimOutcome};
+    let pipeline = |ops: &[Op]| matches!(ops, [Op::CheckBundlerFunding { .. }]);
+    let ready = || {
+        let mut sut = boot();
+        arrive_tx(&mut sut, "r1");
+        sut
+    };
+    let opts = |review: Option<vela_core::app::sign_request::ApproveReview>, anyway: bool| {
+        SignApproveOpts {
+            review,
+            anyway_confirmed: anyway,
+            ..SignApproveOpts::default()
+        }
+    };
+    // No review at all.
+    let mut sut = ready();
+    let ops = sut.dispatch(Event::ApproveTapped {
+        opts: opts(None, true),
+    });
+    assert!(ops.is_empty(), "no review: {ops:?}");
+
+    // A plain reading and a corroborated verdict: a plain press.
+    let mut sut = ready();
+    let ops = sut.dispatch(Event::ApproveTapped {
+        opts: opts(Some(support::plain_review()), false),
+    });
+    assert!(pipeline(&ops), "plain: {ops:?}");
+
+    // "… anyway" twice over: a blind reading, and a verdict one node gave.
+    let mut blind = support::plain_review();
+    blind.clear.surface = ClearSurface::BlindTransaction;
+    blind.clear.sign_anyway = true;
+    let mut unconfirmed = support::plain_review();
+    unconfirmed.sim = Some(verdict_of(SimOutcome::Unconfirmed { disagreed: false }));
+    for review in [blind, unconfirmed] {
+        let mut sut = ready();
+        let ops = sut.dispatch(Event::ApproveTapped {
+            opts: opts(Some(review.clone()), false),
+        });
+        assert!(
+            ops.is_empty(),
+            "a plain approve of an anyway posture: {ops:?}"
+        );
+        let mut refusing = review.clone();
+        refusing.refuse_blind = true;
+        let ops = sut.dispatch(Event::ApproveTapped {
+            opts: opts(Some(refusing), true),
+        });
+        assert!(ops.is_empty(), "Refuse blind signing: {ops:?}");
+        let ops = sut.dispatch(Event::ApproveTapped {
+            opts: opts(Some(review), true),
+        });
+        assert!(pipeline(&ops), "anyway, confirmed: {ops:?}");
+    }
+
+    // A transaction whose reading never started, or is still out.
+    for surface in [ClearSurface::None, ClearSurface::Loading] {
+        let mut review = support::plain_review();
+        review.clear.surface = surface;
+        let mut sut = ready();
+        let ops = sut.dispatch(Event::ApproveTapped {
+            opts: opts(Some(review), true),
+        });
+        assert!(ops.is_empty(), "{surface:?}: {ops:?}");
+    }
 }

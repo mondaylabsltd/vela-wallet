@@ -343,6 +343,36 @@ fn the_signing_truth_vectors_hold() {
         if let Some(key) = expect.get("source_key") {
             assert_eq!(json!(got.source_key), *key, "{name}");
         }
+        // §41 (P2-3): what each move is — an NFT and its id, a grant, a log
+        // nobody could read — and what the sheet may say of it.
+        if let Some(kinds) = expect.get("kinds") {
+            let got_kinds: Vec<serde_json::Value> =
+                got.deltas.iter().map(|d| json!(d.kind)).collect();
+            assert_eq!(json!(got_kinds), *kinds, "{name}");
+        }
+        if let Some(ids) = expect.get("token_ids") {
+            let got_ids: Vec<Option<&str>> =
+                got.deltas.iter().map(|d| d.token_id.as_deref()).collect();
+            assert_eq!(json!(got_ids), *ids, "{name}");
+        }
+        if let Some(key) = expect.get("no_change_key") {
+            assert_eq!(json!(got.no_change_key), *key, "{name}");
+        }
+        if let Some(unlimited) = expect.get("grants_unlimited") {
+            assert_eq!(
+                json!(vela_core::app::sim_outcome::grants_unlimited(&got)),
+                *unlimited,
+                "{name}"
+            );
+        }
+        if let Some(unread) = expect.get("changes_unread") {
+            assert_eq!(
+                json!(vela_core::app::sim_outcome::changes_unread(&got)),
+                *unread,
+                "{name}"
+            );
+        }
+
         // The wasm/UniFFI export reads the same envelope as text.
         let text = vela_core::app::sim_outcome::verdict_json(user, &case["envelope"].to_string());
         let again: serde_json::Value = serde_json::from_str(&text).expect("verdict json");
@@ -817,6 +847,7 @@ mod posture {
     };
     use vela_core::app::sign_request::SignRequest;
     use vela_core::app::sim_outcome::{verdict_of, SimOutcome, SimVerdict};
+    use vela_core::app::token_trust::{TrustAssetDelta, TrustDeltaKind};
 
     fn input(surface: ClearSurface, sim: Option<SimVerdict>, refuse_blind: bool) -> ConfirmInput {
         let mut sign = DomainDriver::<SignRequest>::new().view();
@@ -907,6 +938,140 @@ mod posture {
                 "{unread:?}"
             );
         }
+    }
+
+    /// §41 (P2-6): a reading only the public selector database (4byte) or a
+    /// fetched descriptor gave describes; it vouches for nothing. A plain
+    /// press needs the simulation corroborated; otherwise "… anyway" (held,
+    /// refused by Refuse blind signing). A signature has no simulation: such
+    /// a reading of one is "… anyway". A built-in reading is unchanged.
+    #[test]
+    fn a_fetched_or_selector_db_reading_lifts_nothing_out_of_anyway() {
+        use vela_core::app::sign_confirm::posture;
+        let reading = |provenance: &str,
+                       sign_type: &str|
+         -> vela_core::app::clear_signing::ClearSigningView {
+            let mut clear = input(ClearSurface::ClearSign, None, false).clear;
+            clear.result = Some(
+                serde_json::from_value(serde_json::json!({
+                    "intent": "Contract call", "contract_name": null, "owner": null,
+                    "fields": [], "risk": "caution", "contract_address": null,
+                    "verified": false, "provenance": provenance, "sign_type": sign_type,
+                    "partial": false, "best_effort": provenance == "selector_db",
+                    "to_own_token": false
+                }))
+                .expect("a reading"),
+            );
+            clear
+        };
+        let base = input(ClearSurface::ClearSign, None, false);
+        let ok = corroborated(SimOutcome::Deltas { deltas: vec![] });
+        let unconfirmed = verdict_of(SimOutcome::Unconfirmed { disagreed: false });
+        for provenance in ["selector_db", "fetched"] {
+            let clear = reading(provenance, "transaction");
+            let plain = posture(&base.sign, &clear, Some(&ok));
+            assert!(
+                !plain.anyway && plain.hold_ms == 0,
+                "{provenance}: {plain:?}"
+            );
+            let held = posture(&base.sign, &clear, Some(&unconfirmed));
+            assert!(
+                held.anyway && held.hold_ms == HOLD_TO_CONFIRM_MS,
+                "{provenance}"
+            );
+        }
+        // A fetched descriptor reading a signature: nothing corroborates it.
+        let signature = reading("fetched", "signature");
+        let p = posture(&base.sign, &signature, None);
+        assert!(p.anyway && p.hold_ms == HOLD_TO_CONFIRM_MS, "{p:?}");
+        let mut input_refused = input(ClearSurface::ClearSign, None, true);
+        input_refused.clear = signature;
+        assert_eq!(
+            confirm_state(&input_refused).block,
+            Some(ConfirmBlock::BlindRefused)
+        );
+        // Vela's own reading of the same signature: a plain press.
+        let built_in = posture(&base.sign, &reading("built_in", "signature"), None);
+        assert!(!built_in.anyway && built_in.hold_ms == 0, "{built_in:?}");
+    }
+
+    /// §41 (P2-7): a transaction whose reading never started
+    /// (`ClearSurface::None`) is not "not a transaction": the confirm stays
+    /// shut "Reading…" until it reads, and its posture is not a plain press.
+    #[test]
+    fn a_transaction_whose_reading_never_started_is_unconfirmable() {
+        use vela_core::app::sign_confirm::posture;
+        use vela_core::app::sign_request::SignRequestView;
+        let request = |method: &str, kind: &str| -> SignRequestView {
+            serde_json::from_value(serde_json::json!({
+                "id": "rid-1", "method": method, "kind": kind,
+                "params_json": "[{\"to\":\"0x76875e38fc6bc2dedcaed807ce00782db5c0d141\",\"value\":\"0x1\"}]",
+                "origin": "https://site.example", "dapp": null, "chain_id": 8453,
+                "signer_address": null, "first_party": false
+            }))
+            .expect("a request view")
+        };
+        for (method, kind) in [
+            ("eth_sendTransaction", "transaction"),
+            ("wallet_sendCalls", "batch"),
+        ] {
+            let mut never = input(ClearSurface::None, None, false);
+            never.sign.request = Some(request(method, kind));
+
+            let state = confirm_state(&never);
+            assert!(!state.enabled, "{method}: {state:?}");
+            assert_eq!(state.block, Some(ConfirmBlock::Reading), "{method}");
+            let p = posture(&never.sign, &never.clear, None);
+            assert!(
+                p.anyway && p.hold_ms == HOLD_TO_CONFIRM_MS,
+                "{method}: {p:?}"
+            );
+        }
+        // A message with nothing drawn is the reading's own matter, as before.
+        let mut message = input(ClearSurface::None, None, false);
+        message.sign.request = Some(request("personal_sign", "personal_sign"));
+        assert_ne!(confirm_state(&message).block, Some(ConfirmBlock::Reading));
+    }
+
+    /// §41 (P2-3 / P2-4): what a corroborated answer says decides too — a log
+    /// naming the account that nobody could read is "… anyway"; an unbounded
+    /// grant the simulation found (whatever carried it) is a held danger; a
+    /// bounded one is shown and is not.
+    #[test]
+    fn what_the_simulation_found_sets_the_posture() {
+        use vela_core::app::sign_confirm::posture;
+        let base = input(ClearSurface::ClearSign, None, false);
+        let p = |deltas: Vec<TrustAssetDelta>| {
+            posture(
+                &base.sign,
+                &base.clear,
+                Some(&corroborated(SimOutcome::Deltas { deltas })),
+            )
+        };
+        let delta = |kind: TrustDeltaKind, delta: &str, spender: Option<&str>| TrustAssetDelta {
+            kind,
+            token: Some("0x5af0d9827e0c53e4799bb226655a1de152a425a5".into()),
+            delta: delta.into(),
+            token_id: None,
+            spender: spender.map(str::to_owned),
+        };
+        let thief = Some("0x76875e38fc6bc2dedcaed807ce00782db5c0d141");
+        let unread = p(vec![delta(TrustDeltaKind::Unread, "1", None)]);
+        assert!(
+            unread.anyway && unread.hold_ms == HOLD_TO_CONFIRM_MS,
+            "{unread:?}"
+        );
+        let all = p(vec![delta(
+            TrustDeltaKind::Approval,
+            &alloy_primitives::U256::MAX.to_string(),
+            thief,
+        )]);
+        assert!(
+            all.danger && !all.anyway && all.hold_ms == HOLD_TO_CONFIRM_MS,
+            "{all:?}"
+        );
+        let bounded = p(vec![delta(TrustDeltaKind::Approval, "5000000", thief)]);
+        assert!(!bounded.danger && bounded.hold_ms == 0, "{bounded:?}");
     }
 }
 

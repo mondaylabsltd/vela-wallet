@@ -52,6 +52,18 @@ enum class TrustDeltaKind {
     @SerialName("native") Native,
 
     @SerialName("erc20") Erc20,
+
+    /** §41 (P2-3): an ERC-721 token (`token_id`) entering or leaving the account. */
+    @SerialName("erc721") Erc721,
+
+    /** §41 (P2-3): an ERC-1155 balance of `token_id` moving by `delta`. */
+    @SerialName("erc1155") Erc1155,
+
+    /** §41 (P2-3): the account lets `spender` spend `token` (an amount, one NFT, or all of them). */
+    @SerialName("approval") Approval,
+
+    /** §41 (P2-3): an asset or approval log naming the account that Vela could not read. */
+    @SerialName("unread") Unread,
 }
 
 @Serializable
@@ -60,6 +72,10 @@ data class TrustAssetDelta(
     val token: String? = null,
     /** Signed decimal string in the asset's smallest unit. */
     val delta: String,
+    /** §41: the NFT's id, decimal (an ERC-721 / ERC-1155 move, or an ERC-721 `Approval`); absent otherwise. */
+    val token_id: String? = null,
+    /** §41: who an [TrustDeltaKind.Approval] lets spend, lowercased; absent otherwise. */
+    val spender: String? = null,
 )
 
 @Serializable
@@ -374,6 +390,46 @@ sealed class TrustSimJudgment {
         val token: String? = null,
         val direction: TrustSimDirection,
     ) : TrustSimJudgment()
+
+    /**
+     * §41 (P2-3): an NFT entering or leaving the account (`standard`
+     * [TrustDeltaKind.Erc721] or [TrustDeltaKind.Erc1155]): its collection,
+     * its id, which way, and how many ([amount], the magnitude — `1` for an
+     * ERC-721). Nobody vouches for an NFT: drawn with its id and the
+     * caution, never a price.
+     */
+    @Serializable
+    @SerialName("nft")
+    data class Nft(
+        val token: String,
+        val token_id: String,
+        val standard: TrustDeltaKind,
+        val direction: TrustSimDirection,
+        val amount: String,
+    ) : TrustSimJudgment()
+
+    /**
+     * §41 (P2-3): the account lets [spender] spend [token] — an amount
+     * ([unlimited] at or above the wallet's unlimited line, and for
+     * `ApprovalForAll`), or one NFT ([token_id]). Always shown, in danger.
+     */
+    @Serializable
+    @SerialName("approval")
+    data class Approval(
+        val token: String,
+        val spender: String,
+        val unlimited: Boolean,
+        val token_id: String? = null,
+    ) : TrustSimJudgment()
+
+    /**
+     * §41 (P2-3): an asset or approval log naming the account that Vela
+     * could not read ([token] its emitter): "This changes something Vela
+     * can't read" — never "No asset changes".
+     */
+    @Serializable
+    @SerialName("unread")
+    data class Unread(val token: String? = null) : TrustSimJudgment()
 }
 
 /**

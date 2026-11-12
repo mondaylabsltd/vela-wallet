@@ -369,7 +369,18 @@ export interface SigningMessages {
 	 */
 	balanceUnverifiedToken: string;
 	/**
+	 * §41 (P2-3): an NFT's row label (`componentsUi.signing.balanceNft`,
+	 * `{{id}}`), a grant's (`balanceApproval` / `balanceApprovalAll`,
+	 * `{{spender}}`) and a log naming the account that Vela could not read
+	 * (`balanceUnread`).
+	 */
+	balanceNft: string;
+	balanceApproval: string;
+	balanceApprovalAll: string;
+	balanceUnread: string;
+	/**
 	 * The verdict's quiet line by the corpus key the core names for it
+
 	 * (`SimVerdict.no_change_key` — {@link SIM_SAID_KEYS}): "No asset changes"
 	 * when the sheet's simulation was a check and nothing of the person's
 	 * moves. The shell never picks the sentence, or the case; it only looks

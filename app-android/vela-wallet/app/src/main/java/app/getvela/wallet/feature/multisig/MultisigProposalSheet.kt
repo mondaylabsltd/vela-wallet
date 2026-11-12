@@ -336,7 +336,7 @@ fun MultisigProposalSheet(
                                 if (ran.kind == "done") haptic(VelaHaptic.Success) else settledHaptic(ran.kind)?.let(haptic)
                                 return@launch
                             }
-                            val settled = hub.proposals.request(ev("approve", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "owner" to owner)) { v -> settledOf(v, "approve") }
+                            val settled = hub.proposals.request(model.approveEvent(owner)) { v -> settledOf(v, "approve") }
                             // r9-5: what the machine said is logged, and drawn under this
                             // button (`approveFailure`) — a refusal is never a haptic alone.
                             VelaLog.event("multisig.approve", "settled", "kind" to (settled.kind ?: "none"))
@@ -401,7 +401,7 @@ fun MultisigProposalSheet(
                             val owner = chosen ?: return@MsSignButton
                             haptic(VelaHaptic.Press)
                             scope.launch {
-                                val settled = hub.proposals.request(ev("approve", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash, "owner" to owner)) { v ->
+                                val settled = hub.proposals.request(model.approveEvent(owner)) { v ->
                                     val s = (v["actions"] as? JsonObject)?.entries?.firstOrNull { it.key.equals("approve:${item.safeTxHash}", ignoreCase = true) }?.value
                                     if (s == null || s.kind == "working") null else s
                                 }
@@ -545,9 +545,17 @@ fun MultisigProposalSheet(
                 for (line in model.signerLines) MsNote(line.text, tag = "multisig.proposal.signers.${line.id}")
                 if (model.showVelaLink) model.link?.let { link -> ShareRow(words, link, "multisig.proposal") }
                 if (model.outsideCanSign) {
-                    VelaSecondaryButton(
+                    // §41 (P2-5): an "… anyway" review is asked of another wallet
+                    // only through the same friction (the door's hold / second
+                    // confirmation), and the press says so (`anyway_confirmed`).
+                    MsSignButton(
                         text = words.t("external.signWithWallet"),
-                        onClick = { hub.sendProposal(ev("approve_outside", "chain_id" to chainId, "safe_tx_hash" to item.safeTxHash)) },
+                        anyway = model.signAnyway,
+                        holdMs = model.door.holdMs,
+                        dangerLines = model.dangerLines,
+                        words = words,
+                        secondary = true,
+                        onConfirm = { hub.sendProposal(model.approveOutsideEvent) },
                         modifier = Modifier.fillMaxWidth().testTag("multisig.proposal.outside"),
                         // §12: an approval asked of another wallet is still an approval — the same door.
                         enabled = model.canSign,

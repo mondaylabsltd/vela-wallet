@@ -951,11 +951,15 @@ mod tests {
                         kind: TrustDeltaKind::Erc20,
                         token: Some(USDC.to_owned()),
                         delta: "-271741".to_owned(),
+                        token_id: None,
+                        spender: None,
                     },
                     TrustAssetDelta {
                         kind: TrustDeltaKind::Native,
                         token: None,
                         delta: "101000000000000".to_owned(),
+                        token_id: None,
+                        spender: None,
                     },
                 ];
                 control.balance_changes = Some((

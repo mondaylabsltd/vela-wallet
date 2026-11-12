@@ -100,7 +100,15 @@ fn propose(
         return state;
     }
     assert!(sut.view().draft.is_some());
-    run(sut, world, Event::ConfirmDraft { as_member });
+    run(
+        sut,
+        world,
+        Event::ConfirmDraft {
+            as_member,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
+    );
     sut.view().actions["propose"].clone()
 }
 
@@ -152,7 +160,11 @@ fn a_transfer_is_reviewed_first_then_proposed_with_one_passkey() {
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     let done = sut.view().actions["propose"].clone();
     let hash = hash_of(&done);
@@ -195,7 +207,11 @@ fn a_withdrawn_draft_asks_no_passkey() {
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     assert!(world.passkeys.is_empty());
     assert!(world.mailbox.is_empty());
@@ -635,7 +651,11 @@ fn a_busy_mailbox_keeps_the_approval_and_sends_it_again() {
         },
     );
     // The mailbox comes back while the approval waits its 3 s.
-    sut.dispatch(Event::ConfirmDraft { as_member: None });
+    sut.dispatch(Event::ConfirmDraft {
+        as_member: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
     let mut answered = 0;
     while answered < 20_000 {
         let Some(op) = sut.outstanding().first().cloned() else {
@@ -695,7 +715,11 @@ fn a_kept_approval_is_sent_when_a_page_comes_up() {
         },
     );
     world.service_down = true;
-    sut.dispatch(Event::ConfirmDraft { as_member: None });
+    sut.dispatch(Event::ConfirmDraft {
+        as_member: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
     settle(&mut sut, &mut world, 400);
     assert!(world.store.contains_key("vela.multisigOutbox"));
     let item = sut.view().items.into_iter().next().unwrap();
@@ -768,7 +792,11 @@ fn an_unchecked_network_signs_nothing_yet() {
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     assert_eq!(sut.view().actions["propose"], ActionState::SigningUnchecked);
     assert!(world.passkeys.is_empty());
@@ -803,7 +831,11 @@ fn one_provider_lets_a_member_sign_only_anyway_said_as_one_node() {
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     let done = sut.view().actions["propose"].clone();
     hash_of(&done);
@@ -813,6 +845,45 @@ fn one_provider_lets_a_member_sign_only_anyway_said_as_one_node() {
         "signed as \"… anyway\": {}",
         world.passkey_purposes[0]
     );
+}
+
+/// §41 (P2-5): the "… anyway" is the core's to hold. The same one-provider
+/// draft: a plain press (no `anyway_confirmed`) signs nothing, and with
+/// Refuse blind signing on not even the "… anyway" press does — the
+/// multisig machine refuses, whatever the shell's door let through.
+#[test]
+fn an_anyway_review_signs_only_on_the_persons_anyway() {
+    for (anyway_confirmed, refuse_blind, reason) in [
+        (false, false, "anyway_not_confirmed"),
+        (true, true, "blind_refused"),
+    ] {
+        let (mut world, mut sut, _) = setup(&[0, 1]);
+        world.one_provider.insert(100);
+        run(
+            &mut sut,
+            &mut world,
+            Event::Draft {
+                chain_id: 100,
+                proposal: transfer("1"),
+            },
+        );
+        let review = sut.view().draft.expect("a draft").review.expect("drawn");
+        assert_eq!(review["sign"]["anyway"], true);
+        run(
+            &mut sut,
+            &mut world,
+            Event::ConfirmDraft {
+                as_member: None,
+                anyway_confirmed,
+                refuse_blind,
+            },
+        );
+        match sut.view().actions["propose"].clone() {
+            ActionState::Failed { detail } => assert!(detail.contains(reason), "{detail}"),
+            other => panic!("{reason}: {other:?}"),
+        }
+        assert!(world.passkeys.is_empty(), "{reason}: nothing signed");
+    }
 }
 
 /// §39: two independent nodes that answer who can act differently are a
@@ -833,7 +904,11 @@ fn two_disagreeing_nodes_sign_nothing() {
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     assert_eq!(sut.view().actions["propose"], ActionState::SigningDisagreed);
     assert!(world.passkeys.is_empty());
@@ -857,7 +932,11 @@ fn two_agreeing_nodes_sign_plainly() {
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     hash_of(&sut.view().actions["propose"]);
     assert_eq!(world.passkeys.len(), 1);
@@ -877,6 +956,8 @@ fn a_second_approval_makes_it_ready() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             owner: fixture(1).address,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     assert!(matches!(
@@ -913,6 +994,8 @@ fn an_execution_never_signs_a_fee_other_than_the_one_shown() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             owner: fixture(1).address,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     let preview = Event::Preview {
@@ -936,6 +1019,8 @@ fn an_execution_never_signs_a_fee_other_than_the_one_shown() {
         safe_tx_hash: hash.clone(),
         executor: fixture(0).address,
         shown_fee: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
     };
     run(&mut sut, &mut world, execute.clone());
     let ActionState::Failed { detail } = sut.view().actions[&format!("execute:{hash}")].clone()
@@ -974,6 +1059,8 @@ fn a_press_signs_only_the_fee_it_carries_even_on_a_fresh_look() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             owner: fixture(1).address,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     let preview = Event::Preview {
@@ -1014,6 +1101,8 @@ fn a_press_signs_only_the_fee_it_carries_even_on_a_fresh_look() {
         safe_tx_hash: hash.clone(),
         executor: fixture(0).address,
         shown_fee: Some(shown),
+        anyway_confirmed: true,
+        refuse_blind: false,
     };
     // §39 (r22-3): a figure drawn BELOW the quote now (the quote rose under
     // the press) signs nothing — the stop names the new figure.
@@ -1068,6 +1157,8 @@ fn a_fee_moved_stop_names_the_figure_the_next_press_signs() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             owner: fixture(1).address,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     let preview = || Event::Preview {
@@ -1098,6 +1189,8 @@ fn a_fee_moved_stop_names_the_figure_the_next_press_signs() {
             safe_tx_hash: hash.clone(),
             executor: fixture(0).address,
             shown_fee: Some("255".to_owned()),
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     let said = stop(&sut).expect("the stop is said");
@@ -1122,6 +1215,8 @@ fn a_fee_moved_stop_names_the_figure_the_next_press_signs() {
             safe_tx_hash: hash.clone(),
             executor: fixture(0).address,
             shown_fee: Some("512".to_owned()),
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     assert_eq!(world.sent.len(), 1, "signed at the figure the stop named");
@@ -1141,6 +1236,8 @@ fn a_fee_moved_stop_is_withdrawn_when_the_look_has_no_figure() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             owner: fixture(1).address,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     let preview = || Event::Preview {
@@ -1157,7 +1254,10 @@ fn a_fee_moved_stop_is_withdrawn_when_the_look_has_no_figure() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             executor: fixture(0).address,
-            shown_fee: Some("0".to_owned()), // §39: a figure under the quote: the stop
+            // §39: a figure under the quote: the stop
+            shown_fee: Some("0".to_owned()),
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     let key = format!("execute:{hash}");
@@ -1199,6 +1299,8 @@ fn a_deploy_whose_safe_contracts_went_unread_is_unverified_never_refused() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             owner: fixture(1).address,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     world.rpc_hooks.push(Box::new(|_, method, _| {
@@ -1257,6 +1359,8 @@ fn executed_and_followed_until_it_landed() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             owner: fixture(1).address,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     run(
@@ -1294,6 +1398,8 @@ fn executed_and_followed_until_it_landed() {
             safe_tx_hash: hash.clone(),
             executor: fixture(0).address,
             shown_fee: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     assert_eq!(world.sent.len(), 1, "one user operation");
@@ -1369,6 +1475,8 @@ fn a_page_executor_signs_one_operation_and_its_page_is_told_what_runs() {
             safe_tx_hash: hash.clone(),
             executor: fixture(0).address,
             shown_fee,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     assert_eq!(
@@ -1436,6 +1544,8 @@ fn an_unread_balance_is_unchecked_never_zero() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             owner: fixture(1).address,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     let safe = account.address.to_ascii_lowercase();
@@ -1461,6 +1571,8 @@ fn an_unread_balance_is_unchecked_never_zero() {
                 safe_tx_hash: hash.clone(),
                 executor: fixture(0).address,
                 shown_fee: None,
+                anyway_confirmed: true,
+                refuse_blind: false,
             },
         );
         let state = sut.view().actions[&format!("execute:{hash}")].clone();
@@ -1486,6 +1598,8 @@ fn an_execution_that_would_fail_stops_before_the_passkey() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             owner: fixture(1).address,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     world
@@ -1500,6 +1614,8 @@ fn an_execution_that_would_fail_stops_before_the_passkey() {
             safe_tx_hash: hash.clone(),
             executor: fixture(0).address,
             shown_fee: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     let ActionState::Stopped { preview } = sut.view().actions[&format!("execute:{hash}")].clone()
@@ -1538,6 +1654,8 @@ fn approved_twice(world: &mut World, sut: &mut Sut) -> String {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             owner: fixture(1).address,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     hash
@@ -1909,6 +2027,8 @@ fn execute_landed(
             safe_tx_hash: hash.to_owned(),
             executor: executor.to_owned(),
             shown_fee,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
 }
@@ -2099,6 +2219,8 @@ fn a_ready_one_that_would_fail_says_why_on_the_home() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             owner: fixture(1).address,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     world
@@ -2549,6 +2671,8 @@ fn approve_and_execute_stopped_before_signing_approves_nothing() {
             safe_tx_hash: hash.clone(),
             executor: b,
             shown_fee: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     let lower = hash.to_ascii_lowercase();
@@ -2593,6 +2717,8 @@ fn an_approval_that_went_through_ends_the_one_press_stop_before_it() {
             safe_tx_hash: hash.clone(),
             executor: b.clone(),
             shown_fee: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     let lower = hash.to_ascii_lowercase();
@@ -2608,6 +2734,8 @@ fn an_approval_that_went_through_ends_the_one_press_stop_before_it() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             owner: b,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     assert!(matches!(
@@ -2655,6 +2783,8 @@ fn a_one_press_whose_fee_is_unknown_at_the_press_signs_nothing_and_says_why() {
             safe_tx_hash: hash.clone(),
             executor: b.clone(),
             shown_fee: Some(shown),
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     let ActionState::Stopped { preview } = sut.view().actions[&format!("execute:{lower}")].clone()
@@ -2721,6 +2851,8 @@ fn a_one_press_over_no_figure_signs_nothing_until_a_figure_is_shown() {
         safe_tx_hash: hash.clone(),
         executor: b.clone(),
         shown_fee: shown,
+        anyway_confirmed: true,
+        refuse_blind: false,
     };
     run(&mut sut, &mut world, press(None));
     let ActionState::Failed { detail } = sut.view().actions[&format!("execute:{lower}")].clone()
@@ -2774,6 +2906,8 @@ fn a_plain_execute_over_no_figure_signs_nothing_until_a_figure_is_shown() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             owner: b.clone(),
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     world.quote_answer = Some(
@@ -2793,6 +2927,8 @@ fn a_plain_execute_over_no_figure_signs_nothing_until_a_figure_is_shown() {
         safe_tx_hash: hash.clone(),
         executor: a.clone(),
         shown_fee: shown,
+        anyway_confirmed: true,
+        refuse_blind: false,
     };
     run(&mut sut, &mut world, press(None));
     let ActionState::Failed { detail } = sut.view().actions[&format!("execute:{lower}")].clone()
@@ -2847,6 +2983,8 @@ fn failures_are_stable_kinds_never_english_text() {
             safe_tx_hash: hash.clone(),
             executor: a.clone(),
             shown_fee: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     let ActionState::Failed { detail } = sut.view().actions[&format!("execute:{lower}")].clone()
@@ -2870,6 +3008,8 @@ fn failures_are_stable_kinds_never_english_text() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             owner: b,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     let look = preview_of(&mut sut, &mut world, &hash, &a);
@@ -2892,6 +3032,8 @@ fn failures_are_stable_kinds_never_english_text() {
                     .unwrap()
                     .to_string(),
             ),
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     let ActionState::Failed { detail } = sut.view().actions[&format!("execute:{lower}")].clone()
@@ -2962,6 +3104,8 @@ fn approve_execute_landed(
             safe_tx_hash: hash.to_owned(),
             executor: executor.to_owned(),
             shown_fee: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
 }
@@ -3134,6 +3278,8 @@ fn a_no_figure_stop_follows_the_requote_and_the_next_press_signs_it() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             owner: fixture(1).address,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     let quote = |amount: &str| vela_core::app::multisig_shell::MultisigShellResult::Quoted {
@@ -3156,6 +3302,8 @@ fn a_no_figure_stop_follows_the_requote_and_the_next_press_signs_it() {
         safe_tx_hash: hash.clone(),
         executor: a.clone(),
         shown_fee: shown.map(str::to_owned),
+        anyway_confirmed: true,
+        refuse_blind: false,
     };
     run(&mut sut, &mut world, press(None));
     let key = format!("execute:{}", hash.to_ascii_lowercase());
@@ -3261,6 +3409,8 @@ fn the_fee_on_screen_at_the_passkey_is_the_fee_signed() {
                     chain_id: 100,
                     safe_tx_hash: hash.clone(),
                     owner: fixture(1).address,
+                    anyway_confirmed: true,
+                    refuse_blind: false,
                 },
             );
             fixture(0).address
@@ -3300,6 +3450,8 @@ fn the_fee_on_screen_at_the_passkey_is_the_fee_signed() {
                 safe_tx_hash: hash.clone(),
                 executor: executor.clone(),
                 shown_fee: shown.clone(),
+                anyway_confirmed: true,
+                refuse_blind: false,
             }
         } else {
             Event::Execute {
@@ -3307,6 +3459,8 @@ fn the_fee_on_screen_at_the_passkey_is_the_fee_signed() {
                 safe_tx_hash: hash.clone(),
                 executor: executor.clone(),
                 shown_fee: shown.clone(),
+                anyway_confirmed: true,
+                refuse_blind: false,
             }
         };
         sut.dispatch(press);

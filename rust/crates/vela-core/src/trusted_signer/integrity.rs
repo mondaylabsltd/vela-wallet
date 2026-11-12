@@ -66,6 +66,12 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // §41 (P1-2): a site's `SafeOp` for a Safe other than the account — under
+    // the 4337 module's domain or another Safe's — is refused
+    // (`refuse.parentSafeOp`, fifteen locales): under a Safe v1.5.0 it is the
+    // account's approval of that Safe's user operation. Otherwise e95fb59d's
+    // page. Not LAUNCH.
+    "a6e62e42794203f16d35b9edbbd39e10602991e7d4e4413f79a99a5749d15358",
     // §37 + §38 merged: 674b7333's opening from the hashed bytes and its
     // Service Worker pin, with e7ee3925's Permit2 witness reading and 2^128
     // unlimited line — one page carrying both. Not LAUNCH.
@@ -383,6 +389,7 @@ pub const BUILD_ALLOWED: &[&str] = &[
 /// for an empty relying party). Every other version opens at its address, as
 /// before.
 pub const FROM_BYTES: &[&str] = &[
+    "a6e62e42794203f16d35b9edbbd39e10602991e7d4e4413f79a99a5749d15358",
     "e95fb59d2eefffeea361786616ee719eb4db6f7df8e0737dd7278200b8dd79fb",
     "674b73334dda36410fd5cecdaddd462a8193398328743ba2263d419d6be53b56",
 ];

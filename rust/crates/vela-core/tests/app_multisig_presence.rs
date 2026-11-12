@@ -724,7 +724,11 @@ fn the_followed_ones_presence_standing_and_timeline() {
     run(
         &mut sut,
         &mut world,
-        Event::ConfirmDraft { as_member: None },
+        Event::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        },
     );
     let view = sut.view();
     let hash = view.items[0].safe_tx_hash.clone();
@@ -744,6 +748,8 @@ fn the_followed_ones_presence_standing_and_timeline() {
             chain_id: 100,
             safe_tx_hash: hash.clone(),
             owner: fixture(1).address,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     let view = sut.view();
@@ -792,6 +798,8 @@ fn the_followed_ones_presence_standing_and_timeline() {
             safe_tx_hash: hash.clone(),
             executor: fixture(0).address,
             shown_fee,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     assert!(world.store.contains_key("vela.multisig.executed"));

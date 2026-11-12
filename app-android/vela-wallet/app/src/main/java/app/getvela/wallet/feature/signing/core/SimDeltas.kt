@@ -172,6 +172,9 @@ object SimDeltas {
         when (delta.kind) {
             TrustDeltaKind.Native -> FeeBalanceChange(token = null, delta = delta.delta)
             TrustDeltaKind.Erc20 -> delta.token?.let { FeeBalanceChange(token = it, delta = delta.delta) }
+            // §41 (P2-3): an NFT, a grant or a log nobody could read is no
+            // coin balance the fee can be paid from — the fee machine reads none.
+            TrustDeltaKind.Erc721, TrustDeltaKind.Erc1155, TrustDeltaKind.Approval, TrustDeltaKind.Unread -> null
         }
     }
 

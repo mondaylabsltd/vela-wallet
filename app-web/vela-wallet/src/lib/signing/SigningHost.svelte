@@ -804,7 +804,16 @@
 	 */
 	function approveOpts() {
 		// §39 (A1): the figure drawn when the confirm began, and the quote now.
-		return approveOptsOf(feeDrawn, signingSheet.clear, signingSheet.guard, fee.view);
+		// §41 (P2-5): the core checks the posture again from what the sheet
+		// showed, and takes an "… anyway" only on this press's "… anyway".
+		return approveOptsOf(feeDrawn, signingSheet.clear, signingSheet.guard, fee.view, {
+			sim:
+				checked !== null && checked.requestId === signView.request?.id
+					? (checked.sim.verdict ?? null)
+					: null,
+			refuseBlind: refuseBlind.current(),
+			anyway: model?.confirm.anyway === true
+		});
 	}
 
 	/** The chip ids the drawn editor emits, in the guard's vocabulary. */

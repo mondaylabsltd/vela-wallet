@@ -318,7 +318,7 @@ sealed interface SigningBlock {
         val rows: List<BalanceDeltaRow>,
         val note: String? = null,
         val noteTone: SigningTone = SigningTone.Neutral,
-        /** R22: the core's `source_key` line ("Checked by your own node only"), quiet, under the rows. */
+        /** R22: the core's `source_key` line ("Checked by your chosen node only"), quiet, under the rows. */
         val source: String? = null,
     ) : SigningBlock
 

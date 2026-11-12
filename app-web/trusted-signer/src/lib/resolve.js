@@ -2193,6 +2193,34 @@ window.VelaCS = window.VelaCS || {};
     });
   }
 
+  // §41 (P1-2): a Safe v1.5.0 checks an owner contract's signature with
+  // `isValidSignature(bytes32 hash)`, which a Vela account answers with the
+  // very `SafeMessage(keccak256(hash))` wrap a site's typed data gets — so
+  // under such a Safe, its `SafeOp` (a user operation the 4337 module has it
+  // check) signed here is the account's approval of that operation. Refused
+  // for any Safe but the account, under the module's domain or another's.
+  var SAFE_4337_MODULE = '0x75cf11467937ce3f2f357ce24ffc3dbf8fd5c226';
+
+  /** An address as the hasher reads it (bare or under-width), or ''. */
+  function addressKey(value) {
+    var t = String(value || '').trim().toLowerCase();
+    var body = t.indexOf('0x') === 0 ? t.slice(2) : t;
+    if (!body || body.length > 40 || !/^[0-9a-f]+$/.test(body)) return '';
+    return '0x' + ('0'.repeat(40 - body.length)) + body;
+  }
+
+  /** A `SafeOp` for a Safe other than the account. */
+  function isParentSafeOp(intent, account) {
+    var me = addressKey(account);
+    return typedDocuments(intent).some(function (doc) {
+      if (doc.primaryType !== 'SafeOp') return false;
+      var safe = addressKey(doc.message && doc.message.safe);
+      var contract = addressKey(doc.domain && doc.domain.verifyingContract);
+      return (safe !== '' && safe !== me) ||
+        (contract !== '' && contract !== me && contract !== SAFE_4337_MODULE);
+    });
+  }
+
   /** A `SafeTx` is an instruction to a Safe, executable by anyone later. */
   function isSafeTx(intent) {
     var params = intent.params || [];
@@ -3013,6 +3041,12 @@ window.VelaCS = window.VelaCS || {};
       view.risk = 'danger';
       view.warnings.push({ tone: 'danger', key: 'refuse.parentSafeMessage' });
     }
+    if (intent.method && intent.method.indexOf('signTypedData') >= 0 && isParentSafeOp(intent, account)) {
+      view.refuse = true;
+      view.risk = 'danger';
+      view.warnings.push({ tone: 'danger', key: 'refuse.parentSafeOp' });
+    }
+
 
     if (!view.dapp.originVerified && view.dapp.origin) {
       // About the requester line, so drawn under it (`near`), not as a banner.

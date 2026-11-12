@@ -1665,6 +1665,13 @@ object SigningLive {
                             unverified = true
                             BalanceDeltaRow(s.s("balanceUnverifiedToken"), sign, SigningTone.Caution)
                         }
+                        // §41 (P2-3): an NFT nobody vouches for — its id, which way,
+                        // and how many when more than one; the unverified caution.
+                        is TrustSimJudgment.Nft -> nftRow(judgment, ctx)?.also { unverified = true }
+                        // §41 (P2-3): a grant — whom, unlimited or not; no figure, in danger.
+                        is TrustSimJudgment.Approval -> approvalRow(judgment, ctx)
+                        // §41 (P2-3): a log naming the account Vela could not read.
+                        is TrustSimJudgment.Unread -> BalanceDeltaRow(s.t(I18nKeys.Flows.BALANCE_UNREAD), "", SigningTone.Caution)
                     }
                 }
                 // No row to draw and no line from the core: moves nobody
@@ -1695,6 +1702,29 @@ object SigningLive {
         val text = uniffi.vela_core_uniffi.formatSignedTokenAmount(delta, decimals.coerceAtLeast(0).toUInt(), preset) ?: return null
         val negative = text.startsWith("\u2212")
         return BalanceDeltaRow(symbol, text, if (negative) SigningTone.Neutral else SigningTone.Success)
+    }
+
+    /**
+     * §41 (P2-3): an NFT's row — "NFT #7" (`balanceNft`), "+" coming in,
+     * "−" (U+2212) going out, followed by how many when more than one
+     * ("−3"); no sign for a direction nobody could read; no row for a move
+     * of nothing. In the unverified token's caution: nobody vouches for it.
+     */
+    internal fun nftRow(nft: TrustSimJudgment.Nft, ctx: Context): BalanceDeltaRow? {
+        val sign = unverifiedSign(nft.direction) ?: return null
+        val count = nft.amount.takeIf { it != "1" }.orEmpty()
+        return BalanceDeltaRow(ctx.strings.t(I18nKeys.Flows.BALANCE_NFT, mapOf("id" to nft.token_id)), sign + count, SigningTone.Caution)
+    }
+
+    /**
+     * §41 (P2-3): a grant's row — "Spending approval for 0x1234…abcd", or
+     * "Unlimited spending approval for …" — the spender in the app's one
+     * short form; no figure; in danger.
+     */
+    internal fun approvalRow(approval: TrustSimJudgment.Approval, ctx: Context): BalanceDeltaRow {
+        val key = if (approval.unlimited) I18nKeys.Flows.BALANCE_APPROVAL_ALL else I18nKeys.Flows.BALANCE_APPROVAL
+        val spender = app.getvela.wallet.core.format.ShortAddress.of(approval.spender)
+        return BalanceDeltaRow(ctx.strings.t(key, mapOf("spender" to spender)), "", SigningTone.Danger)
     }
 
     /**

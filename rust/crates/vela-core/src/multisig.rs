@@ -17,8 +17,19 @@
 //!   `SafeMessage(keccak256(txHashData))` — i.e. `SafeMessage(safeTxHash)` —
 //!   under the OWNER's domain, which is what the owner's passkey signs. NOT
 //!   [`crate::user_op::compute_safe_message_hash`], whose extra keccak is the
-//!   dApp path (`isValidSignature(bytes32, …)`): a dApp signature can never
-//!   pass for an approval.
+//!   dApp path (`isValidSignature(bytes32, …)`): under a v1.4.1 Safe a dApp
+//!   signature never passes for an approval.
+//!
+//!   **A Safe v1.5.0 is weaker** (§41, P1-2; read from safe-smart-account
+//!   v1.5.0 `Safe.sol`, `checkContractSignature`): it calls the owner's
+//!   `isValidSignature(bytes32 dataHash, …)` — the dApp path's own form. So
+//!   a site's typed data whose digest is a v1.5.0 Safe's hash — its `SafeTx`,
+//!   its `SafeMessage`, or its `SafeOp` under the 4337 module — signed by a
+//!   Vela owner IS that owner's approval. The parent-Safe guard
+//!   (`app::parent_safe_guard`) refuses all three for every Safe the account
+//!   owns, whatever its version; nothing relies on the version. (Vela creates
+//!   v1.4.1 multisigs; a v1.5.0 one would not accept [`approval_challenge`]'s
+//!   signature either, which is the v1.4.1 form.)
 //! - **Execution** ([`execution_calls`]): the executor — an owner that is a
 //!   Vela account on this device — sends ONE user operation: deploy the
 //!   multisig and any approving owner that has no code there yet (both are
@@ -3204,23 +3215,35 @@ fn vet_genesis(g: &Genesis, safe: Address) -> Result<Vetted, Vec<Refusal>> {
 /// before the selector. A candidate is kept only if it makes exactly `safe`
 /// ([`genesis_address`]), so a wrong or forged transaction binds nothing:
 /// whoever pointed at the transaction is never trusted, the address is.
+///
+/// §41 (§40 review): bounded and total — an input past
+/// [`MAX_CREATION_INPUT_HEX`] hex digits, or that is not hex at all, reads as
+/// nothing; at most [`MAX_CREATION_CANDIDATES`] selector hits are tried; and
+/// every offset and length is checked, so no input can panic or cost more
+/// than it bounds.
 pub fn genesis_in_creation_input(input: &str, to: Option<&str>, safe: &str) -> Option<Genesis> {
     const SELECTOR: &str = "1688f0b9"; // createProxyWithNonce(address,bytes,uint256)
-    let hex = input
-        .trim()
-        .strip_prefix("0x")
-        .unwrap_or(input.trim())
-        .to_ascii_lowercase();
+    let body = input.trim();
+    let body = body.strip_prefix("0x").unwrap_or(body);
+    if body.len() > MAX_CREATION_INPUT_HEX || !body.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let hex = body.to_ascii_lowercase();
     let want = addr(safe).ok()?;
+    let mut tried = 0usize;
     fn word(s: &str, i: usize) -> Option<&str> {
         s.get(i * 64..(i + 1) * 64)
     }
     let mut from = 0;
-    while let Some(found) = hex[from..].find(SELECTOR) {
+    while let Some(found) = hex.get(from..).and_then(|rest| rest.find(SELECTOR)) {
         let at = from + found;
         from = at + 2;
         if at % 2 != 0 {
             continue;
+        }
+        tried += 1;
+        if tried > MAX_CREATION_CANDIDATES {
+            return None;
         }
         let args = &hex[at + SELECTOR.len()..];
         let (Some(single), Some(off), Some(salt)) = (word(args, 0), word(args, 1), word(args, 2))
@@ -3233,13 +3256,18 @@ pub fn genesis_in_creation_input(input: &str, to: Option<&str>, safe: &str) -> O
         if off % 32 != 0 || off > args.len() / 2 {
             continue;
         }
-        let Some(len) = word(&args[off * 2..], 0)
+        let Some(len) = args
+            .get(off * 2..)
+            .and_then(|rest| word(rest, 0))
             .and_then(|w| usize::from_str_radix(w.trim_start_matches('0').max("0"), 16).ok())
         else {
             continue;
         };
-        let start = off * 2 + 64;
-        let Some(init) = args.get(start..start + len * 2) else {
+        let Some(init) = (off * 2)
+            .checked_add(64)
+            .and_then(|start| Some((start, start.checked_add(len.checked_mul(2)?)?)))
+            .and_then(|(start, end)| args.get(start..end))
+        else {
             continue;
         };
         let Ok(salt) = U256::from_str_radix(salt, 16) else {
@@ -3249,8 +3277,8 @@ pub fn genesis_in_creation_input(input: &str, to: Option<&str>, safe: &str) -> O
         if let Some(t) = to {
             factories.push(t.to_owned());
         }
-        if at >= 40 {
-            factories.push(format!("0x{}", &hex[at - 40..at]));
+        if let Some(before) = at.checked_sub(40).and_then(|s| hex.get(s..at)) {
+            factories.push(format!("0x{before}"));
         }
         for factory in factories {
             let Ok(f) = addr(&factory) else { continue };
@@ -3272,6 +3300,13 @@ pub fn genesis_in_creation_input(input: &str, to: Option<&str>, safe: &str) -> O
     }
     None
 }
+
+/// §41: the longest creation input [`genesis_in_creation_input`] reads, in
+/// hex digits (256 KiB of calldata — a `handleOps` bundle of a few
+/// deployments is a few KiB).
+pub const MAX_CREATION_INPUT_HEX: usize = 512 * 1024;
+/// §41: the most `createProxyWithNonce` selector hits it tries.
+pub const MAX_CREATION_CANDIDATES: usize = 32;
 
 /// What a Safe not deployed on a chain holds the moment its genesis' setup
 /// has run there — for a simulation that puts it in place with a state
@@ -5488,6 +5523,45 @@ mod tests {
         assert!(genesis_in_creation_input(s("input"), Some(s("to")), A).is_none());
         // Garbage binds nothing.
         assert!(genesis_in_creation_input("0x1688f0b9", None, s("safe")).is_none());
+    }
+
+    /// §41 (§40 review): the creation reader is total and bounded — no input
+    /// panics it, and none costs more than its bounds: not hex (a multibyte
+    /// character beside the selector), a length word that overflows, an
+    /// offset past the end, an input past the size bound, more selector hits
+    /// than it tries.
+    #[test]
+    fn the_creation_reader_is_total_and_bounded() {
+        let fx: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/vectors/multisig/creation-4337.json"))
+                .unwrap();
+        let safe = fx["safe"].as_str().unwrap();
+        let word = |w: &str| format!("{w:0>64}");
+        let max = "f".repeat(64);
+        for input in [
+            "0x1688f0b9é".to_owned(),
+            format!("0x1688f0b9{}{}{}", word("1"), word("60"), word("1")) + &max,
+            format!("0x1688f0b9{}{}{}", word("1"), max.clone(), word("1")),
+            format!(
+                "0x1688f0b9{}{}{}{}",
+                word("1"),
+                word("60"),
+                word("1"),
+                word("ff")
+            ),
+            format!("0x{}", "1688f0b9".repeat(40)),
+            format!("0x{}", "0".repeat(MAX_CREATION_INPUT_HEX + 2)),
+            "not hex at all".to_owned(),
+            String::new(),
+        ] {
+            assert!(
+                genesis_in_creation_input(&input, Some(fx["to"].as_str().unwrap()), safe).is_none(),
+                "{}",
+                &input[..input.len().min(80)]
+            );
+        }
+        // The real creation is still read inside the bound.
+        assert!(fx["input"].as_str().unwrap().len() < MAX_CREATION_INPUT_HEX);
     }
 
     /// §37 (review 1-13 c; the registry README's step 3): a member that is a

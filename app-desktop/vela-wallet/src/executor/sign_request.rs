@@ -1334,6 +1334,16 @@ fn stored_changes(
                 }
                 line
             }
+            // §41 (P2-3): an NFT, a grant, a change Vela can't read — kept
+            // verbatim (the judgment's own shape, its `type` as the line's
+            // `kind`), and read back the same way (`activity_feed`).
+            J::Nft { .. } | J::Approval { .. } | J::Unread { .. } => {
+                let mut line = serde_json::to_value(change).unwrap_or(Value::Null);
+                if let Some(kind) = line.get("type").cloned() {
+                    line["kind"] = kind;
+                }
+                line
+            }
         })
         .collect();
     json!({ "engine": "rpc", "changes": lines })
@@ -1877,7 +1887,7 @@ mod tests {
     /// The desktop's host with one account and one plain dApp send on Gnosis
     /// from an in-app browser tab, approved: the pre-check is out.
     fn approved_send(id: &str) -> (Host, Ops) {
-        use vela_core::app::sign_request::{SignAccountRef, SignApproveOpts};
+        use vela_core::app::sign_request::SignAccountRef;
         let mut host = Host::new();
         host.dispatch(Event::NetworksChanged {
             chain_ids: vec![100],
@@ -1907,7 +1917,7 @@ mod tests {
             first_party: false,
         });
         let ops = host.dispatch(Event::ApproveTapped {
-            opts: SignApproveOpts::default(),
+            opts: crate::signing::fixtures::admitted_opts(),
         });
         (host, ops)
     }

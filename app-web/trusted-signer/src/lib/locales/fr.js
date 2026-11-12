@@ -165,6 +165,7 @@ window.VelaCS.i18n.register('fr', {
   'refuse.safeTx': 'Cette demande veut que votre clé signe une transaction Safe (SafeTx), une instruction qu’un Safe peut exécuter plus tard. Aucun site n’a besoin de cela de la part de Vela. Signature refusée.',
   'refuse.parentSafe': 'Ce site demande à votre compte d’exécuter {fn} pour un autre Safe — peut-être un multisig dont vous êtes membre. Vela ne laisse jamais un site modifier ou approuver quoi que ce soit pour un multisig ; utilisez l’écran du multisig lui-même. Signature refusée.',
   'refuse.parentSafeMessage': 'Cette demande veut que votre clé signe un message Safe (SafeMessage) pour un autre Safe — peut-être un multisig dont vous êtes membre — que ce Safe compterait comme votre approbation. Vela ne laisse jamais un site faire cela ; utilisez l’écran du multisig lui-même. Signature refusée.',
+  'refuse.parentSafeOp': 'Cette demande veut que votre clé signe une opération utilisateur Safe (SafeOp) pour un autre Safe — peut-être un multisig dont vous êtes membre — que ce Safe compterait comme votre approbation. Vela ne laisse jamais un site faire cela ; utilisez l’écran du multisig lui-même. Pas de signature.',
   'warn.nonCanonicalModule': 'Cette opération désigne un EntryPoint ou un module 4337 qui n’est pas celui de Vela — la signer revient à cautionner un autre ensemble de contrats.',
   'ui.digest': 'Condensé signé · {kind}',
   'ui.digestUnwrapped': 'non encapsulé dans SafeMessage — une signature de type EOA qu’un Safe n’acceptera pas',

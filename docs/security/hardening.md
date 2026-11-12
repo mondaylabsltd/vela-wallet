@@ -1062,7 +1062,38 @@ headroom). The fork relay stand-in moves its gas price on every quote (`relay.py
   rustix 1.1.6 and the Windows passkey crate's crypto-bigint / ctutils / wnaf were updated
   here (§39).
 
+## 19. Final review fixes (§41)
+
+The decisions and their evidence are in
+[`docs/multisig-machines.md` §41](../multisig-machines.md). What changed in the guarantees:
+
+- **Addresses in one form** (P1-1, G24 closed). Arrival refuses -32602 a transaction `to`, a
+  `wallet_sendCalls` leg's `to` or a typed-data `verifyingContract` that is not `0x` and exactly
+  40 hex digits (`tx_request::is_canonical_address`); the guards read addresses as the encoders
+  do (`self_call_guard::normalise_address`).
+- **Safe v1.5.0** (P1-2). A v1.5.0 Safe checks an owner contract with `isValidSignature(bytes32)`,
+  the wrap a site's typed data gets; the parent-Safe guard refuses `SafeTx`, `SafeMessage` and
+  `SafeOp` for every Safe the account owns, whatever its version (`SelfCallFunction::SafeOpTypedData`).
+- **The simulation sees NFTs, grants and what it cannot read** (P2-3): ERC-721 / ERC-1155 moves and
+  the account's approvals are changes inside the two-node agreement; an unread asset log is
+  "This changes something Vela can't read" and "… anyway" (`sim_outcome::derive_deltas`).
+- **Approvals** (P2-4): a single `setApprovalForAll(true)` is a held danger; a carrier past the
+  guard's limits is "… anyway" (`GuardView::carrier_unread`); an unbounded grant the simulation
+  finds is a held danger whatever carried it (`sim_outcome::grants_unlimited`).
+- **The machines hold the gate** (P2-5): `sign_request` re-works the posture at approve time from
+  the views shown (`SignApproveOpts::review`) and takes "… anyway" only with `anyway_confirmed` and
+  never with Refuse blind signing; the multisig machine does the same in `authorize_signing`. The
+  hold's duration stays the shell's.
+- **4byte and fetched readings** (P2-6) lift nothing out of "… anyway" without a corroborated
+  simulation; **a reading that never started** (P2-7) cannot be confirmed
+  (`sign_confirm::is_transaction`).
+- **"Your chosen node"** (P2-8): a URL built from a retired provider key is not the person's own
+  node (`network_admin::is_provider_key_url`).
+- **The §40 creation lookup** is bounded, total and timed, and asks only a Blockscout-style API
+  (`multisig_shell::blockscout_api`).
+
 ## Left open (Round 22, signing truth)
+
 - Provider independence is a URL heuristic (above).
 - Ordinary display reads are not chain-id probed before use. A proven wrong-chain node is
   excluded from them once any corroborated read or race has met it.

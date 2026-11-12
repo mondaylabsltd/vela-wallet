@@ -1043,9 +1043,13 @@ enum SigningLive {
         // about the same thing each time, and repeating it is how people stop
         // reading it. It stands with an unverified ROW — a move of nothing
         // draws none.
+        // §41 (P2-3): an NFT's row is as unvouched-for as an unverified
+        // token's, and carries the same caution.
         let unverified = sim.judgments.contains {
-            if case .erc20Unverified(_, let direction) = $0 { return direction != .still }
-            return false
+            switch $0 {
+            case .erc20Unverified(_, let direction), .nft(_, _, _, let direction, _): return direction != .still
+            default: return false
+            }
         }
         return [.balances(
             title: s(loc, "balanceChangesTitle"),
@@ -1105,6 +1109,27 @@ enum SigningLive {
             case .still: return nil
             }
             return BalanceDeltaRow(symbol: s(loc, "balanceUnverifiedToken"), delta: sign, tone: .caution)
+        case .nft(_, let tokenId, _, let direction, let amount):
+            // §41 (P2-3): its id and which way, and how many when more than
+            // one ("−3") — never a price; the caution of an unverified token.
+            let sign: String
+            switch direction {
+            case .in: sign = "+"
+            case .out: sign = "\u{2212}"
+            case .unreadable: sign = ""
+            case .still: return nil
+            }
+            let figure = sign.isEmpty || amount == "1" ? sign : sign + amount
+            return BalanceDeltaRow(symbol: s(loc, "balanceNft", ["id": tokenId]), delta: figure, tone: .caution)
+        case .approval(_, let spender, let unlimited, _):
+            // §41 (P2-3): who may spend, and no figure — always a danger.
+            return BalanceDeltaRow(
+                symbol: s(loc, unlimited ? "balanceApprovalAll" : "balanceApproval", ["spender": AddressText.short(spender)]),
+                delta: "", tone: .danger
+            )
+        case .unread:
+            // §41 (P2-3): a log naming the account that Vela could not read.
+            return BalanceDeltaRow(symbol: s(loc, "balanceUnread"), delta: "", tone: .caution)
         }
     }
 

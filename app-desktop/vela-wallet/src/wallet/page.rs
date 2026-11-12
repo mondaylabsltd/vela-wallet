@@ -19720,6 +19720,10 @@ impl WalletPage {
         // ("Only use my node"), and the network it names.
         #[cfg_attr(target_os = "linux", allow(unused_mut))]
         let mut own_node_hint: Option<u32> = None;
+        // §41 (P2-5): the confirm as drawn was the "… anyway" one — what its
+        // press tells the core it was (`SigningHost::approve`).
+        #[cfg(not(target_os = "linux"))]
+        let mut drawn_anyway = false;
         #[cfg(not(target_os = "linux"))]
         if let Some(host) = self.signing_host.as_ref() {
             let host = host.read(cx);
@@ -19919,6 +19923,7 @@ impl WalletPage {
                 // simulation verdict and the person's "Refuse blind
                 // signing" read by the core (`sign_confirm::posture`).
                 let state = host.confirm_gate();
+                drawn_anyway = state.anyway;
                 signing_live::ColumnConfirm {
                     fee: fee_model,
                     label: signing_live::gate_label(&state, &host.clear_view, &self.signing),
@@ -20096,7 +20101,7 @@ impl WalletPage {
                                 // pre-check with the opts it saved, so the
                                 // request resumes rather than starting over.
                                 Some(event) => host.dispatch_sign(event, cx),
-                                None => host.approve(cx),
+                                None => host.approve(drawn_anyway, cx),
                             }
                         });
                     }

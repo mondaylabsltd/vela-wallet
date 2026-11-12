@@ -62,4 +62,12 @@ unlimited_warning_key: string, increase_total: GuardIncreaseTotalView | null,
  * Unverified decimals must be explicitly flagged
  * (`EditableApproveCard.tsx:200-202`; `PermitSignView.tsx:103-105`).
  */
-decimals_unverified: boolean, expired: boolean, batch: GuardBatchView | null, };
+decimals_unverified: boolean, expired: boolean, batch: GuardBatchView | null, 
+/**
+ * §41 (P2-4): a call of the request carries calls this guard did not
+ * read — nested past its depth, more than it reads, or an encoding that
+ * does not hold together ([`carriers_unread`]). Not "no approval": the
+ * confirm is "… anyway" (`sign_confirm::guarded_posture`), and Refuse
+ * blind signing refuses it.
+ */
+carrier_unread: boolean, };

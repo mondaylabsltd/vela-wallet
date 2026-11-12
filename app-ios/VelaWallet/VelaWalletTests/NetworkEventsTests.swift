@@ -179,7 +179,7 @@ struct NetworkEventsTests {
             .compactMap { $0["rpcURL"] as? String }
         #expect(overrides.contains { $0.contains("dkey=saved-key") }, "the key was dropped, not retired: \(overrides)")
         #expect(row(world, chainId: 1)?.rpcUrl.contains("saved-key") == true)
-        #expect(row(world, chainId: 1)?.ownRpc == true, "the retired key's RPC is the person's own")
+        #expect(row(world, chainId: 1)?.ownRpc == false, "§41 P2-8: a URL made from a retired provider key is no node the person chose")
     }
 
     // MARK: - Shown networks and "Only use my node" (Phase 2, P2.1)

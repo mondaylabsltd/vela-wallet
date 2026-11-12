@@ -223,6 +223,8 @@ fn as_vela_member(scene: Scene) -> (Value, &'static str, usize) {
             chain_id: CHAIN,
             safe_tx_hash: hash.clone(),
             owner: fixture(0).address,
+            anyway_confirmed: true,
+            refuse_blind: false,
         },
     );
     let gate = match &sut.view().actions[&format!("approve:{hash}")] {

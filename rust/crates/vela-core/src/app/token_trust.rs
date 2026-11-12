@@ -177,6 +177,22 @@ pub struct TrustReceiptLog {
 pub enum TrustDeltaKind {
     Native,
     Erc20,
+    /// §41 (P2-3): an ERC-721 token (`token_id`) entering (`+1`) or leaving
+    /// (`-1`) the account — `Transfer` with four topics.
+    Erc721,
+    /// §41 (P2-3): an ERC-1155 balance of `token_id` — `TransferSingle` /
+    /// `TransferBatch` — moving by `delta`.
+    Erc1155,
+    /// §41 (P2-3): the account lets `spender` spend `token`'s coins
+    /// (`Approval`, Permit2's `Approval` / `Permit`: `delta` the amount),
+    /// one NFT (`token_id`), or all of them (`ApprovalForAll`: `delta` is
+    /// `2^256 − 1`). Never a revocation: a zero grant is no change.
+    Approval,
+    /// §41 (P2-3): a log of an asset or approval event that names the
+    /// account, which Vela could not read (`token` its emitter; `delta` how
+    /// many). Said "This changes something Vela can't read" — never "No
+    /// asset changes".
+    Unread,
 }
 
 /// One signed per-asset balance change from a *simulation*, as the shell's
@@ -189,6 +205,15 @@ pub struct TrustAssetDelta {
     pub token: Option<String>,
     /// Signed decimal string in the asset's smallest unit.
     pub delta: String,
+    /// §41: the NFT's id, decimal — an ERC-721 / ERC-1155 move, or an
+    /// ERC-721 `Approval` of one token. Absent otherwise (and on the wire).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub token_id: Option<String>,
+    /// §41: who an [`TrustDeltaKind::Approval`] lets spend, lowercased.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub spender: Option<String>,
 }
 
 /// `{symbol, decimals}` for one ERC-20 (`token-metadata.ts TokenMetadata`).
@@ -813,6 +838,34 @@ pub enum TrustSimJudgment {
         token: Option<String>,
         direction: TrustSimDirection,
     },
+    /// §41 (P2-3): an NFT entering or leaving the account (ERC-721 or
+    /// ERC-1155, `standard`): its collection, its id, which way, and how
+    /// many (`amount`, the magnitude — `1` for an ERC-721). Nobody vouches
+    /// for an NFT here: drawn with its id and the caution, never a price.
+    Nft {
+        token: String,
+        token_id: String,
+        standard: TrustDeltaKind,
+        direction: TrustSimDirection,
+        amount: String,
+    },
+    /// §41 (P2-3): the account lets `spender` spend `token` — an amount
+    /// (`unlimited` at or above the wallet's one unlimited line, 2^128, and
+    /// for `ApprovalForAll`), or one NFT (`token_id`). Always shown; a held
+    /// danger when unlimited, or when nothing else on the sheet named an
+    /// approval (`sign_confirm::sim_posture`).
+    Approval {
+        token: String,
+        spender: String,
+        unlimited: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        token_id: Option<String>,
+    },
+    /// §41 (P2-3): an asset or approval log naming the account that Vela
+    /// could not read (`token` its emitter): "This changes something Vela
+    /// can't read".
+    Unread { token: Option<String> },
 }
 
 /// Which way an unverified token moves — all a sheet may say of it.
@@ -871,11 +924,52 @@ pub fn judge_delta(
     meta: Option<&TrustTokenMeta>,
     in_trusted_set: bool,
 ) -> TrustSimJudgment {
-    if delta.kind == TrustDeltaKind::Native {
-        return TrustSimJudgment::Native {
-            delta: delta.delta.clone(),
-        };
+    match delta.kind {
+        TrustDeltaKind::Native => {
+            return TrustSimJudgment::Native {
+                delta: delta.delta.clone(),
+            };
+        }
+        TrustDeltaKind::Erc20 => {}
+        TrustDeltaKind::Erc721 | TrustDeltaKind::Erc1155 => {
+            let direction = TrustSimDirection::of_delta(&delta.delta);
+            return match (delta.token.as_deref(), delta.token_id.as_deref()) {
+                (Some(token), Some(token_id)) => TrustSimJudgment::Nft {
+                    token: token.to_owned(),
+                    token_id: token_id.to_owned(),
+                    standard: delta.kind,
+                    direction,
+                    amount: delta.delta.trim().trim_start_matches(['-', '+']).to_owned(),
+                },
+                (token, _) => TrustSimJudgment::Unread {
+                    token: token.map(str::to_owned),
+                },
+            };
+        }
+        TrustDeltaKind::Approval => {
+            return match (delta.token.as_deref(), delta.spender.as_deref()) {
+                (Some(token), Some(spender)) => TrustSimJudgment::Approval {
+                    token: token.to_owned(),
+                    spender: spender.to_owned(),
+                    unlimited: delta.token_id.is_none()
+                        && alloy_primitives::U256::from_str_radix(delta.delta.trim(), 10)
+                            .map_or(true, |amount| {
+                                amount >= alloy_primitives::U256::from(1u8) << 128
+                            }),
+                    token_id: delta.token_id.clone(),
+                },
+                (token, _) => TrustSimJudgment::Unread {
+                    token: token.map(str::to_owned),
+                },
+            };
+        }
+        TrustDeltaKind::Unread => {
+            return TrustSimJudgment::Unread {
+                token: delta.token.clone(),
+            };
+        }
     }
+
     let unverified = TrustSimJudgment::Erc20Unverified {
         token: delta.token.clone(),
         direction: TrustSimDirection::of_delta(&delta.delta),
@@ -1121,7 +1215,12 @@ impl TrustSimJudgment {
             TrustSimJudgment::Native { delta } | TrustSimJudgment::Erc20Trusted { delta, .. } => {
                 TrustSimDirection::of_delta(delta)
             }
-            TrustSimJudgment::Erc20Unverified { direction, .. } => *direction,
+            TrustSimJudgment::Erc20Unverified { direction, .. }
+            | TrustSimJudgment::Nft { direction, .. } => *direction,
+            // A grant moves no balance and is no zero; what cannot be read
+            // has no direction to state.
+            TrustSimJudgment::Approval { .. } => TrustSimDirection::In,
+            TrustSimJudgment::Unread { .. } => TrustSimDirection::Unreadable,
         }
     }
 

@@ -47,7 +47,10 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::approval_guard::{GuardSurface, GuardView};
-use super::clear_signing::{ClearRisk, ClearSignType, ClearSigningView, ClearSurface};
+use super::clear_signing::{
+    ClearProvenance, ClearRisk, ClearSignType, ClearSigningView, ClearSurface,
+};
+
 use super::fee_policy::{FeeTier, FeeView};
 use super::sign_request::SignView;
 use super::sim_outcome::SimVerdict;
@@ -236,7 +239,11 @@ pub struct Posture {
 /// confirm is"). Pure; the same on every client.
 #[must_use]
 pub fn posture(sign: &SignView, clear: &ClearSigningView, sim: Option<&SimVerdict>) -> Posture {
-    let transaction = !off_chain(clear) && clear.surface != ClearSurface::None;
+    // §41 (P2-7): the request's own kind says it is a transaction, whatever
+    // the reading has (not) drawn — a reading that never started is no
+    // message.
+    let transaction =
+        is_transaction(sign) || (!off_chain(clear) && clear.surface != ClearSurface::None);
     // A transaction's own simulation: anything but a checked answer (the
     // verdict's `deltas`) — not yet back past its wait, not offered, nobody
     // independent confirmed it, it fails — is a check Vela could not read.
@@ -248,7 +255,32 @@ pub fn posture(sign: &SignView, clear: &ClearSigningView, sim: Option<&SimVerdic
         && (sign.sim_waited_out_key.is_some()
             || sim.is_none_or(|verdict| verdict.kind != "deltas"));
     let reverts = transaction && sim.is_some_and(|verdict| verdict.kind == "reverts");
-    let anyway = clear.sign_anyway || sim_unread;
+    // §41 (P2-3 / P2-4): what the checked answer itself says. A log of an
+    // asset or approval event naming the account that Vela could not read is
+    // a check Vela could not read — "… anyway". An unbounded grant the
+    // simulation found (ApprovalForAll, or an amount at the wallet's one
+    // unlimited line) is a danger however the call carried it — a Universal
+    // Router `execute`, an `execTransaction`, a router nobody decodes.
+    let checked = sim.filter(|verdict| transaction && verdict.kind == "deltas");
+    let changes_unread = checked.is_some_and(super::sim_outcome::changes_unread);
+    let grants_unlimited = checked.is_some_and(super::sim_outcome::grants_unlimited);
+    // §41 (P2-6): a reading whose only source is a name anyone can register
+    // (the public selector database, 4byte) or a descriptor the chain-data
+    // service fetched (unsigned, unpinned: G25) describes the request; it
+    // vouches for nothing. It lifts no call out of "… anyway" by itself: only
+    // a corroborated simulation of the transaction — two independent nodes,
+    // or the person's own node, saying what it does — makes the press plain.
+    // A signature has no simulation to corroborate it: such a reading of one
+    // is "… anyway".
+    let unvouched = clear.surface == ClearSurface::ClearSign
+        && clear.result.as_ref().is_some_and(|result| {
+            matches!(
+                result.provenance,
+                ClearProvenance::SelectorDb | ClearProvenance::Fetched
+            )
+        });
+    let corroborated = checked.is_some() && !sim_unread && !changes_unread;
+    let anyway = clear.sign_anyway || sim_unread || changes_unread || (unvouched && !corroborated);
     let reading_danger = clear
         .result
         .as_ref()
@@ -257,8 +289,12 @@ pub fn posture(sign: &SignView, clear: &ClearSigningView, sim: Option<&SimVerdic
             .batch
             .as_ref()
             .is_some_and(|batch| batch.risk == ClearRisk::Danger);
-    let danger =
-        reverts || reading_danger || clear.danger_haptic || clear.surface == ClearSurface::EthSign;
+    let danger = reverts
+        || reading_danger
+        || grants_unlimited
+        || clear.danger_haptic
+        || clear.surface == ClearSurface::EthSign;
+
     Posture {
         anyway,
         danger,
@@ -293,6 +329,19 @@ impl ConfirmBlock {
             Self::BlindRefused => BLIND_REFUSED_KEY,
         })
     }
+}
+
+/// The request on the sheet is a transaction or a batch (its method's kind,
+/// `sign_request` — never the reading's word).
+#[must_use]
+pub fn is_transaction(sign: &SignView) -> bool {
+    sign.request.as_ref().is_some_and(|request| {
+        matches!(
+            request.kind,
+            super::sign_request::SignMethodKind::Transaction
+                | super::sign_request::SignMethodKind::Batch
+        )
+    })
 }
 
 /// The request is a signature, not a transaction: no fee to wait for.
@@ -359,8 +408,22 @@ pub fn confirm_state(input: &ConfirmInput) -> ConfirmState {
 /// a witness permit was a plain Confirm while a two-leg batch was held. The
 /// approval guard's one verdict (`GuardView::unlimited_warning`, the same
 /// red sentence every shell draws) now makes the confirm a held danger.
+///
+/// §41 (P2-4): a request whose carried calls the guard could not read
+/// (`GuardView::carrier_unread`: nested past its depth, more than it reads,
+/// an encoding that does not hold together) is not "no approval" — it is
+/// "… anyway", held, and refused by Refuse blind signing.
 #[must_use]
 pub fn guarded_posture(posture: Posture, guard: &GuardView) -> Posture {
+    let posture = if guard.carrier_unread {
+        Posture {
+            anyway: true,
+            hold_ms: HOLD_TO_CONFIRM_MS,
+            ..posture
+        }
+    } else {
+        posture
+    };
     if !guard.unlimited_warning {
         return posture;
     }
@@ -439,6 +502,12 @@ pub fn confirm_state_of(
     if clear.resolving || clear.surface == ClearSurface::Loading {
         return shut(ConfirmBlock::Reading);
     }
+    // §41 (P2-7): a transaction whose reading never started has been shown
+    // nothing — not "not a transaction": unconfirmable until it reads.
+    if clear.surface == ClearSurface::None && is_transaction(sign) {
+        return shut(ConfirmBlock::Reading);
+    }
+
     if !guard.confirm_allowed {
         return shut(if guard.surface == GuardSurface::Batch {
             ConfirmBlock::BatchUnsettled

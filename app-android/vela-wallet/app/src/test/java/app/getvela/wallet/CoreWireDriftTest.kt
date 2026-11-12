@@ -1589,6 +1589,8 @@ class CoreWireDriftTest {
         assertFieldsExist<SignFundingNeeded>("SignFundingNeeded")
         assertFieldsExist<SignAccountRef>("SignAccountRef")
         assertFieldsExist<SignApproveOpts>("SignApproveOpts")
+        // §41 (P2-5): the review an approve hands back — every field the core reads.
+        assertFieldsExhaustive<app.getvela.wallet.feature.signing.core.SignApproveReview>("ApproveReview")
         assertFieldsExist<SignDappIdentity>("SignDappIdentity")
         assertFieldsExist<SignRecord>("SignRecord")
         assertFieldsExist<SignQuotedFee>("SignQuotedFee")

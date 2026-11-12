@@ -896,7 +896,7 @@ final class SigningController {
     }
 
     /// R22 (2a): the quiet line under the balance changes when the person's
-    /// own node answered alone ("Checked by your own node only") — the
+    /// own node answered alone ("Checked by your chosen node only") — the
     /// core's `source_key`; `nil` otherwise.
     var simSourceKey: String? {
         guard simulation == .answered, simVerdict != nil else { return nil }
@@ -1004,12 +1004,41 @@ final class SigningController {
         trustedSignerNotice = nil
         approvedAtMs = Date().timeIntervalSince1970 * 1000
         let shown = confirmInProgress ? pressedFee : fee
+        // §41 (P2-5): whether the confirm completed was the "… anyway" one —
+        // the gate's own word at the press (the held press, the assistive
+        // path's second) — read before anything moves.
+        let anyway = confirmState.anyway
         confirmEngaged(false)
         dispatchSign(["type": "approve_tapped", "opts": Self.approveOpts(
             fee: shown, clear: clear, guard: guardView,
             balanceChanges: Self.drawnChanges(simVerdict, simulation: simulation),
-            currentFee: fee
+            currentFee: fee,
+            review: Self.approveReview(
+                clear: clearJson, guard: guardJson, sim: simVerdictJson, refuseBlind: ports.refuseBlind()
+            ),
+            anywayConfirmed: anyway
         )])
+    }
+
+    /// §41 (P2-5): the sheet as the person saw it at the confirm — the very
+    /// views `confirmState` reads (`sign_confirm_state`), as the core wrote
+    /// them, and the person's Refuse blind signing — handed back so the
+    /// signing machine works out the posture itself (`ApproveReview`).
+    /// `nil` while a view is missing: the core then signs nothing, as the
+    /// gate kept the confirm shut.
+    static func approveReview(
+        clear: String?, guard guardJson: String?, sim: String?, refuseBlind: Bool
+    ) -> [String: Any]? {
+        guard let clear, let guardJson,
+              let clearView = try? CoreJSON.object(clear),
+              let guardObject = try? CoreJSON.object(guardJson)
+        else { return nil }
+        return [
+            "clear": clearView,
+            "guard": guardObject,
+            "sim": sim.flatMap { try? CoreJSON.object($0) } as Any? ?? NSNull(),
+            "refuse_blind": refuseBlind,
+        ]
     }
 
     /// What the sheet drew under "Balance changes" as the confirm was tapped (083
@@ -1365,7 +1394,9 @@ final class SigningController {
     static func approveOpts(
         fee: FeeViewWire?, clear: ClearSigningViewWire, guard guardView: GuardViewWire,
         balanceChanges: [TrustSimJudgmentWire]? = nil,
-        currentFee: FeeViewWire? = nil
+        currentFee: FeeViewWire? = nil,
+        review: [String: Any]? = nil,
+        anywayConfirmed: Bool = false
     ) -> [String: Any] {
         [
             "max_fee_per_gas": fee?.fee?.maxFeePerGas as Any? ?? NSNull(),
@@ -1394,6 +1425,10 @@ final class SigningController {
             "balance_changes": balanceChanges.map { $0.map(\.wire) as Any } ?? NSNull(),
             // Spec 097: what the reading named, copied verbatim.
             "reading": clear.recordReading?.wire as Any? ?? NSNull(),
+            // §41 (P2-5): what the sheet showed (`approveReview`) — none, and
+            // nothing is signed — and whether the press was "… anyway".
+            "review": review as Any? ?? NSNull(),
+            "anyway_confirmed": anywayConfirmed,
         ]
     }
 

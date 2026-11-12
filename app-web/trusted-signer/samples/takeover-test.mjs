@@ -161,9 +161,9 @@ check('other typed data is not treated as SafeTx', !view.warnings.some((w) => w.
 
 import { readFileSync } from 'node:fs';
 const VECTOR = JSON.parse(readFileSync(new URL('../../../rust/crates/vela-core/tests/vectors/rules/parent-safe-guard.json', import.meta.url), 'utf8'));
-const PAGE_KEYS = ['refuse.parentSafe', 'refuse.parentSafeMessage', 'refuse.safeTx', 'refuse.typedShape', 'refuse.selfCall', 'refuse.delegateCall'];
+const PAGE_KEYS = ['refuse.parentSafe', 'refuse.parentSafeMessage', 'refuse.parentSafeOp', 'refuse.safeTx', 'refuse.typedShape', 'refuse.selfCall', 'refuse.delegateCall'];
 const parentRefused = (view) => view.refuse && view.warnings.some((w) => PAGE_KEYS.includes(w.key));
-const saysParent = (view) => view.warnings.some((w) => w.key === 'refuse.parentSafe' || w.key === 'refuse.parentSafeMessage');
+const saysParent = (view) => view.warnings.some((w) => w.key === 'refuse.parentSafe' || w.key === 'refuse.parentSafeMessage' || w.key === 'refuse.parentSafeOp');
 for (const c of VECTOR.cases) {
   const intent = { method: c.input.method, origin: 'https://evil.example', params: c.input.params };
   const pageCtx = { account: c.input.signer, chainId: c.input.chain_id, channel: 'url', callback: 'velawallet://sign-result' };
@@ -210,7 +210,8 @@ check('a token sent TO a multisig is untouched', !saysParent(view));
 
 // --- words -------------------------------------------------------------------
 
-for (const key of ['refuse.selfCall', 'refuse.delegateCall', 'refuse.safeTx', 'refuse.parentSafe', 'refuse.parentSafeMessage']) {
+for (const key of ['refuse.selfCall', 'refuse.delegateCall', 'refuse.safeTx', 'refuse.parentSafe', 'refuse.parentSafeMessage', 'refuse.parentSafeOp']) {
+
   const phrase = ns.i18n ? ns.i18n.t(key, { fn: 'enableModule' }) : null;
   check(`"${key}" has English words`, typeof phrase === 'string' && phrase !== key && !phrase.includes('{'), phrase);
 }

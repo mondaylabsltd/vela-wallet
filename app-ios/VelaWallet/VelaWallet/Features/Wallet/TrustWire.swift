@@ -85,9 +85,22 @@ enum TrustSimJudgmentWire: Decodable, Equatable {
     /// "to read the sign from", and one client printed it: 「未验证代币
     /// +5,000,000,000,000,000,000,000.00」.)
     case erc20Unverified(token: String?, direction: TrustSimDirectionWire)
+    /// §41 (P2-3): an NFT entering or leaving the account — its collection,
+    /// its id, `standard` (`erc721` / `erc1155`, the core's word, kept as
+    /// written), which way, and how many (`amount`, a magnitude). Nobody
+    /// vouches for it: drawn with its id and the caution, never a price.
+    case nft(token: String, tokenId: String, standard: String, direction: TrustSimDirectionWire, amount: String)
+    /// §41 (P2-3): the account lets `spender` spend `token` — `unlimited`,
+    /// or one NFT (`tokenId`). Drawn in danger, with no figure.
+    case approval(token: String, spender: String, unlimited: Bool, tokenId: String?)
+    /// §41 (P2-3): an asset or approval log naming the account that Vela
+    /// could not read (`token` its emitter): "This changes something Vela
+    /// can't read".
+    case unread(token: String?)
 
     private enum CodingKeys: String, CodingKey {
         case type, token, delta, symbol, decimals, inTrustedSet, direction
+        case tokenId, standard, amount, spender, unlimited
     }
 
     init(from decoder: Decoder) throws {
@@ -103,6 +116,24 @@ enum TrustSimJudgmentWire: Decodable, Equatable {
                 decimals: try container.decode(Int.self, forKey: .decimals),
                 inTrustedSet: try container.decodeIfPresent(Bool.self, forKey: .inTrustedSet) ?? false
             )
+        case "nft":
+            self = .nft(
+                token: try container.decode(String.self, forKey: .token),
+                tokenId: try container.decode(String.self, forKey: .tokenId),
+                standard: try container.decode(String.self, forKey: .standard),
+                direction: (try? container.decodeIfPresent(TrustSimDirectionWire.self, forKey: .direction))
+                    ?? .unreadable,
+                amount: try container.decodeIfPresent(String.self, forKey: .amount) ?? "1"
+            )
+        case "approval":
+            self = .approval(
+                token: try container.decode(String.self, forKey: .token),
+                spender: try container.decode(String.self, forKey: .spender),
+                unlimited: try container.decodeIfPresent(Bool.self, forKey: .unlimited) ?? false,
+                tokenId: try container.decodeIfPresent(String.self, forKey: .tokenId)
+            )
+        case "unread":
+            self = .unread(token: try? container.decodeIfPresent(String.self, forKey: .token))
         default:
             // The direction is the core's word. A judgment written before
             // it had one (`{"type":"erc20_unverified","delta":"…"}`) still
@@ -139,6 +170,20 @@ enum TrustSimJudgmentWire: Decodable, Equatable {
                 "type": "erc20_unverified", "token": token.map { $0 as Any } ?? NSNull(),
                 "direction": direction.rawValue,
             ]
+        case .nft(let token, let tokenId, let standard, let direction, let amount):
+            return [
+                "type": "nft", "token": token, "token_id": tokenId, "standard": standard,
+                "direction": direction.rawValue, "amount": amount,
+            ]
+        case .approval(let token, let spender, let unlimited, let tokenId):
+            var wire: [String: Any] = [
+                "type": "approval", "token": token, "spender": spender, "unlimited": unlimited,
+            ]
+            // Absent when there is none, as the core writes it.
+            if let tokenId { wire["token_id"] = tokenId }
+            return wire
+        case .unread(let token):
+            return ["type": "unread", "token": token.map { $0 as Any } ?? NSNull()]
         }
     }
 }

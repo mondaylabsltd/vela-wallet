@@ -575,6 +575,38 @@ fn judgment(j: &TrustSimJudgment) -> Value {
             "direction": wire(direction),
             "note": "an amount the token's own contract reports is not shown",
         }),
+        TrustSimJudgment::Nft {
+            token,
+            token_id,
+            standard,
+            direction,
+            amount,
+        } => json!({
+            "asset": "nft",
+            "standard": standard,
+            "token": token,
+            "token_id": token_id,
+            "direction": wire(direction),
+            "amount_raw": amount,
+            "note": "nobody vouches for this collection",
+        }),
+        TrustSimJudgment::Approval {
+            token,
+            spender,
+            unlimited,
+            token_id,
+        } => json!({
+            "asset": "approval",
+            "token": token,
+            "spender": spender,
+            "unlimited": unlimited,
+            "token_id": token_id,
+        }),
+        TrustSimJudgment::Unread { token } => json!({
+            "asset": "unread",
+            "emitter": token,
+            "note": "a log naming the account that Vela could not read",
+        }),
     }
 }
 

@@ -4310,7 +4310,7 @@ fn retire_provider_keys(model: &mut Model) -> Command<NetEffect, Event> {
     }
     let retiring: Vec<Retiring> = chains
         .into_iter()
-        .filter(|&chain_id| !has_own_rpc(model, chain_id))
+        .filter(|&chain_id| !has_saved_rpc(model, chain_id))
         .filter_map(|chain_id| {
             let url = PROVIDER_ORDER.iter().find_map(|&id| {
                 let key = model.provider_keys.get(id)?;
@@ -4469,7 +4469,9 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
             model.endpoint_drafts = model.endpoints.clone();
             model.provider_keys = provider_keys;
             model.loaded = true;
-            let retire = retire_provider_keys(model);
+            let unchosen = drop_only_mine_unchosen(model);
+            let retire = Command::all([unchosen, retire_provider_keys(model)]);
+
             // A page asked before the ledger was read: its check begins now.
             let owed_add = model
                 .dapp_add
@@ -4760,11 +4762,79 @@ fn network_row(
 /// the shells' pool collection, which ranks exactly such an override as the
 /// person's tier (`RpcSource::User`). A network the person added has no
 /// shipped endpoint, so any override RPC of theirs is theirs.
+///
+/// §41 (P2-8): "your own node" is a node the person chose — never the URL
+/// Vela built from a retired provider key ([`retire_provider_keys`]): an
+/// Alchemy, dRPC or Ankr keyed endpoint ([`is_provider_key_url`]) is a
+/// third party's, however it got there, and "Only use my node" may not
+/// trust it alone. Such a network keeps the URL as its RPC
+/// ([`has_saved_rpc`]) and is corroborated like any other.
 pub fn has_own_rpc(model: &Model, chain_id: u32) -> bool {
+    has_saved_rpc(model, chain_id)
+        && override_for(model, chain_id).is_some_and(|c| !is_provider_key_url(&c.rpc_url))
+}
+
+/// The network has a saved RPC of its own — an override that is set and is
+/// not the built-in network's shipped endpoint — whoever made it. The
+/// provider-key retirement's reading: such a network never asked the
+/// provider first.
+fn has_saved_rpc(model: &Model, chain_id: u32) -> bool {
     override_for(model, chain_id).is_some_and(|config| {
         !config.rpc_url.trim().is_empty()
             && builtin(chain_id).is_none_or(|b| b.rpc_url != config.rpc_url)
     })
+}
+
+/// §41 (P2-8): `url` is the shape [`build_provider_rpc_url`] builds — a
+/// retired provider's keyed endpoint (`*.g.alchemy.com/v2/…`,
+/// `lb.drpc.org/ogrpc?…dkey=…`, `rpc.ankr.com/<slug>/<key>`). Read by host
+/// and shape, so a migration made before the URL carried any mark of it is
+/// read the same.
+#[must_use]
+pub fn is_provider_key_url(url: &str) -> bool {
+    let url = url.trim().to_ascii_lowercase();
+    let Some(rest) = url.strip_prefix("https://") else {
+        return false;
+    };
+    let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
+    (host.ends_with(".g.alchemy.com") && path.starts_with("v2/"))
+        || (host == "lb.drpc.org" && path.starts_with("ogrpc") && path.contains("dkey="))
+        || (host == "rpc.ankr.com" && path.split('/').filter(|s| !s.is_empty()).count() >= 2)
+}
+
+/// §41 (P2-8): on load, "Only use my node" is switched off wherever the
+/// network's saved RPC is not one the person chose ([`has_own_rpc`]) — a
+/// URL Vela made from a retired provider key that the switch was turned on
+/// for before this rule. Every shell's pool reads the stored switch, so it
+/// is written off, and those pools read again: no third party is trusted
+/// alone.
+fn drop_only_mine_unchosen(model: &mut Model) -> Command<NetEffect, Event> {
+    let unchosen: Vec<u32> = model
+        .overrides
+        .iter()
+        .filter(|c| c.only_mine)
+        .map(|c| c.chain_id)
+        .filter(|&chain_id| !has_own_rpc(model, chain_id))
+        .collect();
+    if unchosen.is_empty() {
+        return Command::done();
+    }
+    for config in &mut model.overrides {
+        if unchosen.contains(&config.chain_id) {
+            config.only_mine = false;
+        }
+    }
+    let mut ops = vec![NetOperation::WriteNetworkConfigs {
+        configs: model.overrides.clone(),
+    }];
+    ops.extend(
+        unchosen
+            .into_iter()
+            .map(|chain_id| NetOperation::InvalidatePools {
+                chain_id: Some(chain_id),
+            }),
+    );
+    requests_with(model.load_gen, ops)
 }
 
 /// "Only use my node" switched (owner decision 2026-10-28). Offered only for

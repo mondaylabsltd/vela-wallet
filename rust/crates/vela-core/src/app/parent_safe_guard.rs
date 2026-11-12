@@ -44,8 +44,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::self_call_guard::{
-    blocked_function, decode_exec_transaction, decode_multi_send, hex_bytes, same_address,
-    selector_of, SelfCallFunction, EXEC_TRANSACTION, MULTI_SEND,
+    blocked_function, decode_exec_transaction, decode_multi_send, hex_bytes, normalise_address,
+    same_address, selector_of, SelfCallFunction, EXEC_TRANSACTION, MULTI_SEND,
 };
 
 #[cfg(feature = "bindings")]
@@ -225,16 +225,32 @@ pub enum ParentVerdict {
     Read { reads: Vec<OwnerRead> },
 }
 
-fn lower(address: &str) -> String {
-    format!(
-        "0x{}",
-        address.trim().trim_start_matches("0x").to_ascii_lowercase()
-    )
+/// What the vectors' door ([`check`]) answers: the guard's verdict, or —
+/// with `at_arrival` — arrival's refusal before any guard ran.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum CheckVerdict {
+    Guard(ParentVerdict),
+    Arrival(ArrivalRefusal),
 }
 
-fn is_address(text: &str) -> bool {
-    let body = text.trim().strip_prefix("0x").unwrap_or("");
-    body.len() == 40 && body.bytes().all(|b| b.is_ascii_hexdigit())
+/// §41 (P1-1): refused at arrival (`-32602`, `message` the dApp's answer) —
+/// an address not written as `0x` and 40 hex characters (a tx `to`, a batch
+/// leg's `to`, a typed-data `verifyingContract`), or anything else arrival
+/// refuses. The signing machine answers it there, before any sheet.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "verdict", rename_all = "snake_case")]
+pub enum ArrivalRefusal {
+    Invalid { message: String },
+}
+
+fn lower(address: &str) -> String {
+    normalise_address(address).unwrap_or_else(|| {
+        format!(
+            "0x{}",
+            address.trim().trim_start_matches("0x").to_ascii_lowercase()
+        )
+    })
 }
 
 struct Walk<'a> {
@@ -270,8 +286,11 @@ impl Walk<'_> {
         let Some(selector) = selector_of(data) else {
             return;
         };
-        // The account's own configuration is the self-call guard's.
-        if is_address(to) && !same_address(to, self.signer) {
+        // The account's own configuration is the self-call guard's. §41: `to`
+        // is read the way the encoder signs it (bare hex too) — a form only
+        // this guard did not read was a call it never saw.
+        let to = normalise_address(to);
+        if let Some(to) = to.as_deref().filter(|to| !same_address(to, self.signer)) {
             let function = if selector.eq_ignore_ascii_case(APPROVE_HASH) {
                 Some(SelfCallFunction::ApproveHash)
             } else {
@@ -295,25 +314,27 @@ impl Walk<'_> {
         }
     }
 
-    /// A typed-data document: a `SafeTx` / `SafeMessage` under another
-    /// contract's domain.
+    /// A typed-data document: a `SafeTx` / `SafeMessage` / `SafeOp` under
+    /// another contract's domain, or a `SafeOp` for another Safe under the
+    /// 4337 module's.
+    ///
+    /// §41 (P1-2): a Safe v1.5.0 checks an owner contract's signature with
+    /// `isValidSignature(bytes32 dataHash, …)` (v1.4.1 passes the hash's
+    /// preimage, the legacy `bytes` form). An owner that is a Vela account
+    /// answers that form with its `SafeMessage(keccak256(dataHash))` — exactly
+    /// the wrap a site's typed data gets. So under a v1.5.0 parent ANY
+    /// document whose digest is the parent's own hash is this owner's
+    /// approval: its `SafeTx` (an execution), its `SafeMessage` (a message
+    /// the parent signs), and its `SafeOp` (a user operation the 4337 module
+    /// has the parent check). All three are refused for every Safe this
+    /// account owns, whatever its version.
     fn typed(&mut self, doc: &Value) {
         let function = match doc.get("primaryType").and_then(Value::as_str) {
             Some("SafeTx") => SelfCallFunction::SafeTxTypedData,
             Some("SafeMessage") => SelfCallFunction::SafeMessageTypedData,
+            Some("SafeOp") => SelfCallFunction::SafeOpTypedData,
             _ => return,
         };
-        let Some(contract) = doc
-            .get("domain")
-            .and_then(|d| d.get("verifyingContract"))
-            .and_then(Value::as_str)
-            .filter(|c| is_address(c))
-        else {
-            return;
-        };
-        if same_address(contract, self.signer) {
-            return;
-        }
         let chain = doc
             .get("domain")
             .and_then(|d| d.get("chainId"))
@@ -321,7 +342,30 @@ impl Walk<'_> {
             .unwrap_or(self.chain_id);
         let saved = self.chain_id;
         self.chain_id = chain;
-        self.push(contract, function.as_str(), String::new(), None, false);
+        // §41 (P1-1): the contract as the hasher reads it — bare and
+        // under-width too.
+        let contract = doc
+            .get("domain")
+            .and_then(|d| d.get("verifyingContract"))
+            .and_then(Value::as_str)
+            .and_then(normalise_address);
+        let mut contract = contract.filter(|c| !same_address(c, self.signer));
+        if function == SelfCallFunction::SafeOpTypedData {
+            // The Safe a `SafeOp` acts for is its `safe`. Its domain is the
+            // 4337 module's, which is no Safe and is not read as one.
+            let safe = doc
+                .get("message")
+                .and_then(|m| m.get("safe"))
+                .and_then(Value::as_str)
+                .and_then(normalise_address);
+            if let Some(safe) = safe.filter(|s| !same_address(s, self.signer)) {
+                self.push(&safe, function.as_str(), String::new(), None, false);
+            }
+            contract = contract.filter(|c| !same_address(c, crate::safe::SAFE_4337_MODULE));
+        }
+        if let Some(contract) = contract {
+            self.push(&contract, function.as_str(), String::new(), None, false);
+        }
         self.chain_id = saved;
     }
 }
@@ -505,12 +549,47 @@ pub struct CheckInput {
     /// The submit chokepoint's form ([`enforce`]): a read still missing refuses.
     #[serde(default)]
     pub at_submit: bool,
+    /// §41 (P1-1): arrival's own reading first — what the signing machine
+    /// does with a site's request before any guard: a transaction's `to`s
+    /// and values (`tx_request::canonical_params_json`), a typed-data
+    /// request's one document and its `verifyingContract`
+    /// (`typed_data_request::signable`). Refused there:
+    /// [`ArrivalRefusal::Invalid`]; otherwise the guard reads what arrival
+    /// carried on.
+    #[serde(default)]
+    pub at_arrival: bool,
+}
+
+/// Arrival's reading of a site's request (`sign_request`): the params every
+/// later reader holds, or the `-32602` message it is refused with.
+///
+/// # Errors
+/// The message the dApp is answered with.
+pub fn arrival_params(method: &str, params: &Value) -> Result<Value, String> {
+    if crate::typed_data_request::looks_like_typed_data(method) {
+        return crate::typed_data_request::signable(method, params)
+            .map(|read| read.params())
+            .map_err(|error| error.message());
+    }
+    match crate::tx_request::canonical_params_json(method, &params.to_string()) {
+        Err(error) => Err(error.message()),
+        Ok(Some(canonical)) => serde_json::from_str(&canonical).map_err(|e| e.to_string()),
+        Ok(None) => Ok(params.clone()),
+    }
 }
 
 /// [`parent_targets`] then [`verdict`] (or [`enforce`]), from one JSON input
 /// to one JSON verdict — what wasm, uniffi and the desktop replay.
-pub fn check(input: &CheckInput) -> ParentVerdict {
-    let targets = parent_targets(&input.method, &input.params, &input.signer, input.chain_id);
+pub fn check(input: &CheckInput) -> CheckVerdict {
+    let params = if input.at_arrival {
+        match arrival_params(&input.method, &input.params) {
+            Ok(params) => params,
+            Err(message) => return CheckVerdict::Arrival(ArrivalRefusal::Invalid { message }),
+        }
+    } else {
+        input.params.clone()
+    };
+    let targets = parent_targets(&input.method, &params, &input.signer, input.chain_id);
     let facts: Vec<OwnerFact> = input
         .answers
         .iter()
@@ -520,11 +599,11 @@ pub fn check(input: &CheckInput) -> ParentVerdict {
             reading: classify_owner_answer(&a.answer),
         })
         .collect();
-    if input.at_submit {
+    CheckVerdict::Guard(if input.at_submit {
         enforce(&targets, &input.known, &facts)
     } else {
         verdict(&targets, &input.known, &facts)
-    }
+    })
 }
 
 /// [`check`] over JSON: `Err` names a malformed input.

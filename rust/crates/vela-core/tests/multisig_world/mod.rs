@@ -386,6 +386,9 @@ pub struct World {
     pub submit_hooks: Vec<SubmitHook>,
     pub submits: Vec<Value>,
     pub tx_service: BTreeMap<String, (u16, Value)>,
+    /// §41: a Blockscout-style explorer's answers, by full URL
+    /// (`…/api/v2/addresses/{a}`); any other explorer URL answers 404.
+    pub explorer: BTreeMap<String, (u16, Value)>,
     pub http_log: Vec<String>,
     // The chains.
     pub silent: BTreeSet<u64>,
@@ -465,6 +468,7 @@ impl Default for World {
             submit_hooks: Vec::new(),
             submits: Vec::new(),
             tx_service: BTreeMap::new(),
+            explorer: BTreeMap::new(),
             http_log: Vec::new(),
             silent: BTreeSet::new(),
             codes: BTreeMap::new(),
@@ -624,6 +628,12 @@ impl World {
             retry_after: None,
             body: body.to_string(),
         };
+        if url.contains("/api/v2/addresses/") {
+            return match self.explorer.get(url) {
+                Some((s, b)) => answer(*s, b.clone()),
+                None => answer(404, json!({})),
+            };
+        }
         if let Some(rest) = url.strip_prefix("https://api.safe.global/tx-service/") {
             return match self.tx_service.get(rest) {
                 Some((s, b)) => answer(*s, b.clone()),

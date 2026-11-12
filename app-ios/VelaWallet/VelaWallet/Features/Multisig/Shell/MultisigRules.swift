@@ -137,6 +137,15 @@ enum MsRules {
         return MsSignDoor(answer: answer)
     }
 
+    /// §41 (P2-5): the fields every multisig signing event carries
+    /// (`confirm_draft`, `propose_execute`, `approve`, `approve_outside`,
+    /// `execute`, `approve_execute`): `anyway_confirmed` — the door's
+    /// `anyway` at the press, the "… anyway" step having stood before it —
+    /// and `refuse_blind`, the person's pref read now.
+    static func pressFields(_ door: MsSignDoor, refuseBlind: Bool? = nil) -> [String: Any] {
+        ["anyway_confirmed": door.anyway, "refuse_blind": refuseBlind ?? Self.refuseBlind()]
+    }
+
     /// R22: the person's "Refuse blind signing", as stored — the app's
     /// graph points it at its store (`AppGraph`); off until then.
     nonisolated(unsafe) static var refuseBlind: () -> Bool = { false }

@@ -97,7 +97,9 @@ describe('saved RPC provider keys, retired', () => {
 		);
 		const base = networkAdmin.view.networks.find((r) => r.chain_id === 8453);
 		expect(base?.rpc_url).toBe(`https://base-mainnet.g.alchemy.com/v2/${FAKE_KEY}`);
-		expect(base?.own_rpc).toBe(true);
+		// §41 (P2-8): its RPC still, but a third party's keyed endpoint is not
+		// the person's own node — "Only use my node" may not trust it alone.
+		expect(base?.own_rpc).toBe(false);
 	});
 
 	it('stay when the write fails, and the next load tries again', async () => {

@@ -725,6 +725,13 @@ pub struct GuardView {
     pub decimals_unverified: bool,
     pub expired: bool,
     pub batch: Option<GuardBatchView>,
+    /// §41 (P2-4): a call of the request carries calls this guard did not
+    /// read — nested past its depth, more than it reads, or an encoding that
+    /// does not hold together ([`carriers_unread`]). Not "no approval": the
+    /// confirm is "… anyway" (`sign_confirm::guarded_posture`), and Refuse
+    /// blind signing refuses it.
+    #[serde(default)]
+    pub carrier_unread: bool,
 }
 
 fn unlimited_warning_key() -> String {
@@ -866,6 +873,7 @@ impl App for ApprovalGuard {
                 decimals_unverified: false,
                 expired: false,
                 batch: Some(batch_view),
+                carrier_unread: carriers_unread(&model.method, model.params.as_ref()),
             };
         }
 
@@ -886,6 +894,7 @@ impl App for ApprovalGuard {
                 decimals_unverified: false,
                 expired: false,
                 batch: None,
+                carrier_unread: carriers_unread(&model.method, model.params.as_ref()),
             };
         };
 
@@ -901,11 +910,18 @@ impl App for ApprovalGuard {
         let confirm_allowed = !(detected.editable && choice.is_none());
 
         let unlimited_consented = matches!(choice, Some(GuardChoice::Unlimited));
-        // Kept unbounded on the editor, or a permit nobody can cap.
+        // Kept unbounded on the editor, or a permit nobody can cap — or
+        // (§41, P2-4) a grant of a whole collection (`setApprovalForAll(true)`,
+        // a DAI permit's `allowed`) not revoked: the same held danger it is
+        // as a batch leg.
         let unbounded_kept = unlimited_consented
             || (surface == GuardSurface::PermitSign
                 && detected.is_unbounded
-                && !detected.is_reducing);
+                && !detected.is_reducing)
+            || (detected.is_boolean_grant
+                && detected.is_unbounded
+                && !detected.is_reducing
+                && !matches!(choice, Some(GuardChoice::Revoke)));
         // §37: a finite amount kept at a hundredfold the balance or more is
         // unlimited-like — said in the same tone, in its own words.
         let kept_amount = match &choice {
@@ -960,6 +976,7 @@ impl App for ApprovalGuard {
             decimals_unverified,
             meta,
             batch: None,
+            carrier_unread: carriers_unread(&model.method, model.params.as_ref()),
         }
     }
 }
@@ -1940,23 +1957,64 @@ pub fn detect_calldata_approval(
 /// approval is marked [`GuardDetectedApproval::nested_at`], so its cap
 /// re-encodes its own word where it sits. Empty when nothing grants.
 pub fn calldata_approvals(to: Option<&str>, data: Option<&str>) -> Vec<GuardDetectedApproval> {
+    calldata_approvals_read(to, data).0
+}
+
+/// [`calldata_approvals`], and — §41 (P2-4) — whether a carrier went
+/// unread: one nested past [`MAX_NESTING`], one carrying more than
+/// [`MAX_CARRIED`] calls, or one whose encoding does not hold together. Such
+/// a call is not "no approval": the guard could not read it, and the confirm
+/// is "… anyway" ([`GuardView::carrier_unread`]).
+pub fn calldata_approvals_read(
+    to: Option<&str>,
+    data: Option<&str>,
+) -> (Vec<GuardDetectedApproval>, bool) {
     let Some(data) = data else {
-        return Vec::new();
+        return (Vec::new(), false);
     };
     let body = data.strip_prefix("0x").unwrap_or(data);
     if !body.is_ascii() || body.len() % 2 != 0 || !body.bytes().all(|b| b.is_ascii_hexdigit()) {
         // A top-level shape still reads as it always did (it tolerates what
         // it can); carried calls are read only from bytes that parse.
-        return detect_calldata_approval(to, Some(data))
-            .into_iter()
-            .collect();
+        return (
+            detect_calldata_approval(to, Some(data))
+                .into_iter()
+                .collect(),
+            false,
+        );
     }
     let Ok(bytes) = crate::primitives::from_hex(body) else {
-        return Vec::new();
+        return (Vec::new(), false);
     };
     let mut out = Vec::new();
-    walk_calls(to, &bytes, 0, bytes.len(), 0, &mut out);
-    out
+    let mut unread = false;
+    walk_calls(to, &bytes, 0, bytes.len(), 0, &mut out, &mut unread);
+    (out, unread)
+}
+
+/// §41 (P2-4): a call of the request (`eth_sendTransaction`'s, or any
+/// `wallet_sendCalls` leg's) carries calls this guard could not read
+/// ([`calldata_approvals_read`]).
+#[must_use]
+pub fn carriers_unread(method: &str, params: Option<&Value>) -> bool {
+    let Some(first) = params.and_then(Value::as_array).and_then(|a| a.first()) else {
+        return false;
+    };
+    let unread = |call: &Value| {
+        calldata_approvals_read(
+            call.get("to").and_then(Value::as_str),
+            call.get("data").and_then(Value::as_str),
+        )
+        .1
+    };
+    match method {
+        "eth_sendTransaction" => unread(first),
+        "wallet_sendCalls" => first
+            .get("calls")
+            .and_then(Value::as_array)
+            .is_some_and(|calls| calls.iter().any(unread)),
+        _ => false,
+    }
 }
 
 /// The approval the sheet surfaces from `approvals` (one per call): the
@@ -1978,6 +2036,7 @@ fn walk_calls(
     len: usize,
     depth: u8,
     out: &mut Vec<GuardDetectedApproval>,
+    unread: &mut bool,
 ) {
     let Some(call) = all.get(start..start.saturating_add(len)) else {
         return;
@@ -1994,12 +2053,29 @@ fn walk_calls(
         // An approval carries nothing.
         return;
     }
+    let Ok(carried) = carried_calls(call) else {
+        // A carrier whose calls do not read (too many, or an encoding that
+        // does not hold together): not "no approval" — unread.
+        *unread = true;
+        return;
+    };
     if depth >= MAX_NESTING {
+        // Past the depth this guard follows, a carrier still carrying calls
+        // is a call it did not read.
+        *unread |= !carried.is_empty();
         return;
     }
-    for inner in carried_calls(call) {
+    for inner in carried {
         let target = inner.to.as_deref().or(to);
-        walk_calls(target, all, start + inner.start, inner.len, depth + 1, out);
+        walk_calls(
+            target,
+            all,
+            start + inner.start,
+            inner.len,
+            depth + 1,
+            out,
+            unread,
+        );
     }
 }
 
@@ -2050,12 +2126,13 @@ fn array_elements(bytes: &[u8], at: usize) -> Option<Vec<usize>> {
 }
 
 /// The calls `call` (a selector and its arguments) carries, if it is a
-/// carrier this guard reads; empty otherwise, or when its encoding does not
-/// hold together.
-fn carried_calls(call: &[u8]) -> Vec<Carried> {
+/// carrier this guard reads; empty when it is none. `Err` (§41): a carrier
+/// whose encoding does not hold together, or that carries more than
+/// [`MAX_CARRIED`] calls — what it carries was not read.
+fn carried_calls(call: &[u8]) -> Result<Vec<Carried>, ()> {
     const ARGS: usize = 4;
     let Some(selector) = call.get(..ARGS) else {
-        return Vec::new();
+        return Ok(Vec::new());
     };
     let selector = crate::primitives::to_hex(selector, false).to_lowercase();
     // `bytes[]` at argument `arg`: each to the carrier itself.
@@ -2122,9 +2199,9 @@ fn carried_calls(call: &[u8]) -> Vec<Carried> {
         SEL_AGGREGATE3 => tuples(0, 2),
         SEL_AGGREGATE3_VALUE => tuples(0, 3),
         SEL_MULTI_SEND => multi_send(),
-        _ => None,
+        _ => return Ok(Vec::new()),
     }
-    .unwrap_or_default()
+    .ok_or(())
 }
 
 fn detect_typed_data_approval(td: &Value) -> Option<GuardDetectedApproval> {

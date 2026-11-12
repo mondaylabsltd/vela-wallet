@@ -172,6 +172,7 @@ window.VelaCS.i18n.register('zh', {
   'refuse.safeTx': '这个请求要你的钥匙签一笔 Safe 交易（SafeTx），也就是一条 Safe 以后可以执行的指令。没有哪个网站需要 Vela 签这个。不签。',
   'refuse.parentSafe': '这个网站要你的账户替另一个 Safe 执行 {fn}——可能是你所在的多签。Vela 从不允许网站替多签做变更或批准；请在该多签自己的页面操作。不签。',
   'refuse.parentSafeMessage': '这个请求要你的钥匙替另一个 Safe 签一条 Safe 消息（SafeMessage）——可能是你所在的多签——那个 Safe 会把它当作你的批准。Vela 从不允许网站这样做；请在该多签自己的页面操作。不签。',
+  'refuse.parentSafeOp': '这个请求要你的钥匙替另一个 Safe 签一条 Safe 用户操作（SafeOp）——可能是你所在的多签——那个 Safe 会把它当作你的批准。Vela 从不允许网站这样做；请在该多签自己的页面操作。不签。',
   'warn.nonCanonicalModule': '这笔操作指向的不是 Vela 的 EntryPoint 或 4337 模块 —— 签了它，等于为另一套合约背书。',
   'ui.digest': '签名摘要 · {kind}',
   'ui.digestUnwrapped': '未包 SafeMessage：这是 EOA 式签名，Safe 的 EIP-1271 不会认',

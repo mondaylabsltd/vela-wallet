@@ -30,9 +30,9 @@ use vela_core::app::browser_load::{self, address_bar, LoadFailureClass};
 use vela_core::app::clear_signing::{plain_send_of, ClearLocale};
 use vela_core::app::sign_request::{
     ending_of, ending_state, not_confirmed_detail, reverted_detail, Event as SignEvent,
-    SignAccountRef, SignApproveOpts, SignEndingState, SignErrorKind, SignOperation as SignOp,
-    SignRecord, SignRecordKind, SignRecordStatus, SignRequest, SignResponsePayload,
-    SignShellResult as SignRes, SignSubmitOutcome,
+    SignAccountRef, SignEndingState, SignErrorKind, SignOperation as SignOp, SignRecord,
+    SignRecordKind, SignRecordStatus, SignRequest, SignResponsePayload, SignShellResult as SignRes,
+    SignSubmitOutcome,
 };
 use vela_core::app::sim_outcome;
 use vela_core::app::tx_tracker::{
@@ -171,7 +171,7 @@ fn approved() -> DomainDriver<SignRequest> {
         first_party: false,
     });
     sign.dispatch(SignEvent::ApproveTapped {
-        opts: SignApproveOpts::default(),
+        opts: support::reviewed_opts(),
     });
     let ops = sign.resolve(SignRes::PreCheck { funding: None });
     assert!(

@@ -95,7 +95,7 @@ class NativeShownFeeTest {
                         val transfer = mapOf("kind" to "transfers", "transfers" to listOf(mapOf("token" to null, "to" to bob, "amount" to "1000")))
                         hub.proposals.request(ev("draft", "chain_id" to 100, "proposal" to transfer)) { v -> v["draft"] as? JsonObject }
                         poll("the draft's review read") { hub.proposalsView.value.draft?.takeIf { it.reviewState.kind == "ready" } }
-                        val proposed = hub.proposals.request(ev("confirm_draft", "as_member" to owners[0])) { v ->
+                        val proposed = hub.proposals.request(ev("confirm_draft", "as_member" to owners[0], "anyway_confirmed" to hub.proposalsView.value.draft?.let { app.getvela.wallet.feature.multisig.draftDoor(it, refuseBlind = false).anyway })) { v ->
                             (v["actions"] as? JsonObject)?.get("propose")?.takeIf { it.kind != "working" }
                         }
                         assertEquals("proposed: $proposed", "done", proposed.kind)
@@ -157,7 +157,7 @@ class NativeShownFeeTest {
 
     @Test
     fun `Execute carries the figure drawn, so a quote landed after the paint signs nothing and the next press signs it`() = withProposed { s ->
-        s.hub.sendProposal(ev("approve", "chain_id" to 100, "safe_tx_hash" to s.hash, "owner" to s.owners[1]))
+        s.hub.sendProposal(painted(s).approveEvent(s.owners[1]))
         poll("ready") { item(s.hub, s.hash)?.takeIf { it.status == "ready" } }
         val executor = s.owners[0]
         val drawn = aQuoteLandsAfterThePaint(s, executor)
@@ -213,7 +213,7 @@ class NativeShownFeeTest {
 
     @Test
     fun `no figure drawn, none carried`() = withProposed { s ->
-        s.hub.sendProposal(ev("approve", "chain_id" to 100, "safe_tx_hash" to s.hash, "owner" to s.owners[1]))
+        s.hub.sendProposal(painted(s).approveEvent(s.owners[1]))
         poll("ready") { item(s.hub, s.hash)?.takeIf { it.status == "ready" } }
         // Not looked at yet: "Checking the fee…" — no figure on screen.
         val model = painted(s)
@@ -221,6 +221,6 @@ class NativeShownFeeTest {
         assertNull(model.shownFee(nobody))
         val press = model.executeEvent(nobody, oneTap = false)
         assertNull(press["shown_fee"])
-        assertEquals(setOf("type", "chain_id", "safe_tx_hash", "executor"), press.keys)
+        assertEquals(setOf("type", "chain_id", "safe_tx_hash", "executor", "anyway_confirmed", "refuse_blind"), press.keys)
     }
 }

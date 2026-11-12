@@ -499,9 +499,20 @@ struct MultisigFlowTests {
                          orIdle: { machine.isIdle })
         guard machine.proposalsView.draft != nil else { return state() }
         await reviewRead { machine.proposalsView }
-        machine.dispatch(["type": "confirm_draft", "as_member": member])
+        // §41 (P2-5): pressed as the sheet presses it — the door's "… anyway"
+        // (the step past the reasons stood before it) and Refuse blind signing.
+        machine.dispatch(
+            ["type": "confirm_draft", "as_member": member]
+                .merging(MsRules.pressFields(draftDoor(machine.proposalsView), refuseBlind: false)) { a, _ in a }
+        )
         await Wait.until({ state().map { $0.kind != "working" } ?? false }, orIdle: { machine.isIdle })
         return state()
+    }
+
+    /// §41 (P2-5): the draft's sign door as the sheet asks it — what a
+    /// press carries (`MsRules.pressFields`).
+    static func draftDoor(_ view: MsProposalsView) -> MsSignDoor {
+        view.draft.map(MultisigDraftReviewSheet.door) ?? .unanswered
     }
 
     /// §12: the person presses "Propose and approve" only once the draft's
@@ -746,7 +757,7 @@ struct MultisigFlowTests {
 
         // Proposed on its review, as that member: one passkey, the cancellation sent.
         await Self.reviewRead { hub.proposalsView }
-        hub.confirmDraft(as: first)
+        hub.confirmDraft(as: first, door: Self.draftDoor(hub.proposalsView))
         let settled = await pressed.value
         #expect(settled?.kind == "done", "rejecting ended \(String(describing: settled?.raw))")
         #expect(world.passkeys.map { $0.owner.lowercased() } == [owners[0].lowercased(), owners[1].lowercased()])
@@ -814,7 +825,7 @@ struct MultisigFlowTests {
         world.passkeyAnswers = [["type": "passkey_cancelled"]]
         var pressed = await Self.pressReject(hub, transfer, as: owners[1])
         await Self.reviewRead { hub.proposalsView }
-        hub.confirmDraft(as: owners[1])
+        hub.confirmDraft(as: owners[1], door: Self.draftDoor(hub.proposalsView))
         var settled = await pressed.value
         #expect(settled?.kind != "done")
         #expect(world.passkeys.count == 2, "the passkey was asked, after its review")
@@ -830,7 +841,7 @@ struct MultisigFlowTests {
         pressed = await Self.pressReject(hub, transfer, as: owners[1])
         #expect(hub.rejectFailure(chainId: 100, safeTxHash: transfer.safeTxHash) == nil, "a new press starts clean")
         await Self.reviewRead { hub.proposalsView }
-        hub.confirmDraft(as: owners[1])
+        hub.confirmDraft(as: owners[1], door: Self.draftDoor(hub.proposalsView))
         settled = await pressed.value
         #expect(settled?.kind == "failed", "\(String(describing: settled?.raw))")
         #expect(world.submits.count == 1, "nothing sent")
@@ -868,7 +879,7 @@ struct MultisigFlowTests {
         #expect(words.t("review.state.loading") == "Reading the transaction…")
 
         // A shell that let it be pressed: the core signs nothing.
-        hub.confirmDraft(as: owners[0])
+        hub.confirmDraft(as: owners[0], door: Self.draftDoor(hub.proposalsView))
         await Wait.until({ hub.proposalsView.action("propose").map { $0.kind != "working" } ?? false },
                          orIdle: { hub.proposals.isIdle })
         #expect(hub.proposalsView.action("propose")?.kind == "signingUnchecked",
@@ -896,7 +907,7 @@ struct MultisigFlowTests {
         #expect(reread.reviewState?.kind == "ready")
         #expect(MultisigDraftReviewSheet.door(reread).enabled)
 
-        hub.confirmDraft(as: owners[0])
+        hub.confirmDraft(as: owners[0], door: Self.draftDoor(hub.proposalsView))
         await Wait.until({ hub.proposalsView.action("propose").map { $0.kind != "working" } ?? false },
                          orIdle: { hub.proposals.isIdle })
         #expect(hub.proposalsView.action("propose")?.kind == "done",
@@ -979,7 +990,8 @@ struct MultisigFlowTests {
         // The look on screen grows stale and the relay's price moves.
         world.quoteAmount = "0x2"
         world.skewMs = 20_000
-        hub.sendProposal(["type": "approve_execute", "chain_id": 100, "safe_tx_hash": hash, "executor": owners[1]])
+        hub.sendProposal(["type": "approve_execute", "chain_id": 100, "safe_tx_hash": hash, "executor": owners[1]]
+            .merging(MsProposalModel(item: try #require(item()), view: hub.proposalsView, words: words, account: nil).pressFields) { a, _ in a })
         await Wait.until({ execute().map { $0.kind != "working" } ?? false }, orIdle: { hub.proposals.isIdle })
         #expect(execute()?.kind == "failed", "\(String(describing: execute()?.raw))")
         #expect(world.sentFees.isEmpty, "nothing signed at a fee nobody was shown")
@@ -1008,7 +1020,8 @@ struct MultisigFlowTests {
         try await screen.save("i-r15-5-feemoved-after")
 
         // Pressed again on the figure now shown: signed at exactly it.
-        hub.sendProposal(["type": "approve_execute", "chain_id": 100, "safe_tx_hash": hash, "executor": owners[1]])
+        hub.sendProposal(["type": "approve_execute", "chain_id": 100, "safe_tx_hash": hash, "executor": owners[1]]
+            .merging(MsProposalModel(item: try #require(item()), view: hub.proposalsView, words: words, account: nil).pressFields) { a, _ in a })
         await Wait.until({ !world.sentFees.isEmpty }, orIdle: { hub.proposals.isIdle })
         #expect(world.sentFees == ["0x2"])
     }
@@ -1048,7 +1061,8 @@ struct MultisigFlowTests {
         #expect(model.door.holdMs > 0, "an unread check is held")
 
         let asked = world.passkeys.count
-        hub.sendProposal(["type": "approve", "chain_id": 100, "safe_tx_hash": hash, "owner": owners[1]])
+        hub.sendProposal(MsProposalModel(item: try #require(item()), view: hub.proposalsView, words: words, account: nil)
+            .approveEvent(owner: owners[1]))
         await Wait.until({ item()?.status == "ready" }, orIdle: { hub.proposals.isIdle })
         #expect(item()?.status == "ready", "\(String(describing: hub.proposalsView.action("approve:\(hash)")?.raw))")
         #expect(world.passkeys.count == asked + 1, "one passkey: never locked")
@@ -1148,7 +1162,8 @@ struct MultisigFlowTests {
         await Wait.until({
             ["ready", "unchecked"].contains(hub.proposalsView.lookup(hub.proposalsView.reviewStates, chainId: 100, hash: hash)?.kind ?? "")
         }, orIdle: { hub.proposals.isIdle })
-        hub.sendProposal(["type": "approve", "chain_id": 100, "safe_tx_hash": hash, "owner": owners[1]])
+        hub.sendProposal(MsProposalModel(item: try #require(item()), view: hub.proposalsView, words: words, account: nil)
+            .approveEvent(owner: owners[1]))
         await Wait.until({ item()?.status == "ready" }, orIdle: { hub.proposals.isIdle })
         #expect(item()?.status == "ready")
 
@@ -1156,7 +1171,7 @@ struct MultisigFlowTests {
         let unpriced = MsProposalModel(item: try #require(item()), view: hub.proposalsView, words: words, account: nil)
         let bare = unpriced.executeEvent(executor: "0x0000000000000000000000000000000000000001", oneTouch: false)
         #expect(bare["shown_fee"] == nil)
-        #expect(Set(bare.keys) == ["type", "chain_id", "safe_tx_hash", "executor"])
+        #expect(Set(bare.keys) == ["type", "chain_id", "safe_tx_hash", "executor", "anyway_confirmed", "refuse_blind"])
 
         let painted = try await Self.aQuoteLandsAfterThePaint(world, hub, hash: hash, executor: owners[0], words: words)
         let press = painted.executeEvent(executor: owners[0], oneTouch: false)
@@ -1223,7 +1238,7 @@ struct MultisigFlowTests {
         sending = await send()
         #expect(hub.sheet == .review(chainId: 100), "its review is up again")
         await Self.reviewRead { hub.proposalsView }
-        hub.confirmDraft(as: owners[0])
+        hub.confirmDraft(as: owners[0], door: Self.draftDoor(hub.proposalsView))
         let proposed = await sending.value
         #expect(proposed["type"] as? String == "proposed", "\(proposed)")
         #expect(world.passkeys.count == 1 && world.mailbox.count == 1)

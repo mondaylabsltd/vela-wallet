@@ -1679,7 +1679,13 @@ describe('a link’s transaction on a device with no member (ms-21)', () => {
 		await settle();
 		expect(fake.calls).toContain('external');
 		expect(machineSent('approve_outside')).toEqual([
-			{ type: 'approve_outside', chain_id: 100, safe_tx_hash: HASH }
+			{
+				type: 'approve_outside',
+				chain_id: 100,
+				safe_tx_hash: HASH,
+				anyway_confirmed: false,
+				refuse_blind: false
+			}
 		]);
 		await screen.unmount();
 	});

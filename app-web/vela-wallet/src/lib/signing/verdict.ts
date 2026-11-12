@@ -44,6 +44,7 @@ import type { SimVerdict } from '$lib/core/generated/SimVerdict';
 import type { TrustSimJudgment } from '$lib/core/generated/TrustSimJudgment';
 import type { TrustSimView } from '$lib/core/generated/TrustSimView';
 import { fill } from '$lib/wallet/messages';
+import { shortenAddress } from '$lib/wallet/identity';
 import {
 	SIM_DISAGREED_KEY,
 	SIM_OWN_NODE_KEY,
@@ -80,6 +81,10 @@ export type VerdictWords = Pick<
 	| 'simChecking'
 	| 'simSaid'
 	| 'balanceUnverifiedToken'
+	| 'balanceNft'
+	| 'balanceApproval'
+	| 'balanceApprovalAll'
+	| 'balanceUnread'
 	| 'warnUnverifiedAmount'
 	| 'warnSimUnavailable'
 	| 'warnWillFail'
@@ -154,7 +159,38 @@ function balanceRow(judgment: TrustSimJudgment, ctx: VerdictContext): BalanceRow
 				case 'still':
 					return null;
 			}
+			return null;
 		}
+		// §41 (P2-3): an NFT nobody vouches for — its id, which way, and how
+		// many when more than one; the caution's ink.
+		case 'nft': {
+			const symbol = fill(ctx.m.balanceNft, { id: judgment.token_id });
+			const count = judgment.amount === '1' ? '' : judgment.amount;
+			switch (judgment.direction) {
+				case 'in':
+					return { symbol, delta: `+${count}`, tone: 'caution' };
+				case 'out':
+					return { symbol, delta: `${MINUS}${count}`, tone: 'caution' };
+				case 'unreadable':
+					return { symbol, delta: '', tone: 'caution' };
+				case 'still':
+					return null;
+			}
+			return null;
+		}
+		// §41: a grant the simulation found — who may spend, in the danger's ink.
+		case 'approval':
+			return {
+				symbol: fill(judgment.unlimited ? ctx.m.balanceApprovalAll : ctx.m.balanceApproval, {
+					spender: shortenAddress(judgment.spender)
+				}),
+				delta: '',
+				tone: 'danger'
+			};
+		// §41: a log naming the account that Vela could not read — said, never
+		// "No asset changes".
+		case 'unread':
+			return { symbol: ctx.m.balanceUnread, delta: '', tone: 'caution' };
 	}
 }
 
@@ -266,8 +302,11 @@ export function landedVerdict(sim: SimEnded, ctx: VerdictContext): VerdictSaid {
 	const rows = balanceRows(judged.judgments, ctx);
 	if (rows.length === 0) return unchecked;
 	const unverified = judged.judgments.some(
-		(judgment) => judgment.type === 'erc20_unverified' && judgment.direction !== 'still'
+		(judgment) =>
+			(judgment.type === 'erc20_unverified' || judgment.type === 'nft') &&
+			judgment.direction !== 'still'
 	);
+
 	return {
 		kind: 'moves',
 		block: {
