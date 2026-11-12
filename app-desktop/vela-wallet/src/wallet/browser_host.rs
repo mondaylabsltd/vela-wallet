@@ -3147,8 +3147,7 @@ mod tests {
         use crate::executor::landing::Landing;
         use crate::wallet::signing_host::BROWSER_TRANSPORT;
         use vela_core::app::sign_request::{
-            Event as SignEvent, SignAccountRef, SignApproveOpts, SignOperation, SignRequest,
-            SignShellResult,
+            Event as SignEvent, SignAccountRef, SignOperation, SignRequest, SignShellResult,
         };
         const PCS: &str = "https://pancakeswap.finance";
         const SAFE: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
@@ -3236,7 +3235,7 @@ mod tests {
                 first_party: false,
             });
             let ops = sign.dispatch(SignEvent::ApproveTapped {
-                opts: SignApproveOpts::default(),
+                opts: crate::signing::fixtures::admitted_opts(),
             });
             let ops = sign.resolve(ops[0].id, SignShellResult::PreCheck { funding: None });
             let submit = ops[0].id;

@@ -87,6 +87,12 @@ pub(crate) fn fee_balance_changes(
                 // A token move with no contract names no coin: never read as
                 // the native one.
                 TrustDeltaKind::Erc20 => Some(delta.token.clone()?),
+                // §41: an NFT, a grant or an unread log is no coin a fee is
+                // paid in — nothing the fee machine weighs.
+                TrustDeltaKind::Erc721
+                | TrustDeltaKind::Erc1155
+                | TrustDeltaKind::Approval
+                | TrustDeltaKind::Unread => return None,
             };
             Some(vela_core::app::fee_policy::FeeBalanceChange {
                 token,
@@ -354,6 +360,10 @@ pub struct SigningHost {
     /// The person approved this request (the confirm, or the button that opens
     /// the Trusted Signer's page). A close after this refuses nothing.
     pub approved: bool,
+    /// §41 (P2-5): the person's last confirm was the "… anyway" one (the
+    /// held press, or the accessible path's second) — what a Retry of the
+    /// same approval says again, never more than the person did.
+    pressed_anyway: bool,
     /// Submits running on a worker (the `Streaming` arm): counted from the
     /// dispatch until the core has their result. A request whose page left
     /// keeps its machines only while one runs (spec 082 RB2).
@@ -496,6 +506,7 @@ impl SigningHost {
             ending: None,
             seen_submitted_ms: None,
             approved: false,
+            pressed_anyway: false,
             streaming: 0,
             multisigs_fed: Vec::new(),
         };
@@ -837,8 +848,13 @@ impl SigningHost {
         speed_control::choose_fee_token(self, token, cx);
     }
 
-    pub fn approve(&mut self, cx: &mut Context<Self>) {
+    /// The confirm fired. `anyway_confirmed`: the confirm the person
+    /// completed was the "… anyway" one (`ConfirmState::anyway` on the
+    /// confirm as it was drawn — the held press, or the accessible path's
+    /// second) — §41 (P2-5), the core takes an "… anyway" posture only on it.
+    pub fn approve(&mut self, anyway_confirmed: bool, cx: &mut Context<Self>) {
         self.approved = true;
+        self.pressed_anyway = anyway_confirmed;
         // The dApp's answer window starts at the tap (spec 082 RA12).
         self.ctx.approved_at_ms = Some(now_ms());
         self.phone_stop = None;
@@ -854,6 +870,17 @@ impl SigningHost {
         // 083 F1: the lines the sheet drew under "Balance changes" — none when
         // the simulation reverted or could not run (its notice stood there).
         opts.balance_changes = approved_changes(&self.sim.judgments, self.sim.notice.is_some());
+        // §41 (P2-5): the sheet as it stood at the press — the same views the
+        // confirm's gate was drawn from ([`Self::confirm_gate`]) — for the
+        // core's own reading of the posture, and how the person pressed.
+        press_into(
+            &mut opts,
+            &self.clear_view,
+            &self.guard_view,
+            self.sim.verdict.as_ref(),
+            crate::executor::preferences::refuse_blind_signing(),
+            anyway_confirmed,
+        );
         // The confirm fired — the hold completed or the arm was pressed
         // again, and either is over (`ui::hold_confirm`): the row is live
         // again. On a fee that rose (`SignErrorKind::FeeRose`) the sheet
@@ -926,7 +953,9 @@ impl SigningHost {
     pub fn retry(&mut self, cx: &mut Context<Self>) {
         self.phone_stop = None;
         if self.confirm_gate().enabled {
-            self.approve(cx);
+            // The same approval again, pressed as it was: a Retry is no
+            // "… anyway" the person did not give.
+            self.approve(self.pressed_anyway, cx);
         } else {
             cx.notify();
         }
@@ -1658,7 +1687,7 @@ pub(crate) struct SimVerdict {
     /// R22: the core's own verdict record (`sim_outcome::verdict_of_envelope`)
     /// — its kind, who stood behind it (`source`, `source_key`) — what the
     /// confirm's posture reads (`ConfirmInput::sim`) and the sheet's quiet
-    /// "Checked by your own node only" line.
+    /// "Checked by your chosen node only" line.
     pub core: Option<vela_core::app::sim_outcome::SimVerdict>,
 }
 
@@ -1977,6 +2006,32 @@ pub fn known_chain_ids() -> Vec<u32> {
     crate::executor::network_admin::wallet_chain_ids()
 }
 
+/// §41 (P2-5): the press, on the approve: what the sheet showed when the
+/// confirm fired, handed back to the signing machine verbatim
+/// (`SignApproveOpts::review`) — the reading, the approval guard's view and
+/// the simulation's verdict the confirm's gate read
+/// ([`SigningHost::confirm_gate`]), and the person's "Refuse blind signing"
+/// — and whether the confirm completed was the "… anyway" one
+/// (`anyway_confirmed`). The core works the posture out again from these; an
+/// approve without a review signs nothing, and an "… anyway" posture is
+/// taken only on the "… anyway" press.
+pub(crate) fn press_into(
+    opts: &mut SignApproveOpts,
+    clear: &ClearSigningView,
+    guard: &GuardView,
+    sim: Option<&vela_core::app::sim_outcome::SimVerdict>,
+    refuse_blind: bool,
+    anyway_confirmed: bool,
+) {
+    opts.review = Some(vela_core::app::sign_request::ApproveReview {
+        clear: clear.clone(),
+        guard: guard.clone(),
+        sim: sim.cloned(),
+        refuse_blind,
+    });
+    opts.anyway_confirmed = anyway_confirmed;
+}
+
 /// The first call's `to` / `data` / `value`, for the decoder.
 ///
 /// What the confirm signs, assembled from the three views on screen.
@@ -2037,6 +2092,10 @@ fn approve_opts(
         // What the reading named — the contract and the coins (spec 097) —
         // so Activity names them as this sheet did. Copied, never decided.
         reading: clear.record_reading.clone(),
+        // §41 (P2-5): what the sheet showed and how the person pressed are
+        // the press's (`approve`, [`press_into`]), not these views'.
+        review: None,
+        anyway_confirmed: false,
     }
 }
 
@@ -2425,16 +2484,22 @@ mod tests {
                 kind: TrustDeltaKind::Erc20,
                 token: Some(usdc.to_owned()),
                 delta: "-271741".to_owned(),
+                token_id: None,
+                spender: None,
             },
             TrustAssetDelta {
                 kind: TrustDeltaKind::Native,
                 token: None,
                 delta: "101000000000000".to_owned(),
+                token_id: None,
+                spender: None,
             },
             TrustAssetDelta {
                 kind: TrustDeltaKind::Erc20,
                 token: None,
                 delta: "-1".to_owned(),
+                token_id: None,
+                spender: None,
             },
         ]);
         assert_eq!(
@@ -2626,7 +2691,7 @@ mod tests {
     #[test]
     fn the_tracker_s_verdict_answers_the_page_once() {
         use vela_core::app::sign_request::{
-            SignAccountRef, SignApproveOpts, SignResponsePayload, SignSubmitOutcome,
+            SignAccountRef, SignResponsePayload, SignSubmitOutcome,
         };
         use vela_core::app::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
         const OP: &str = "0xa974c5dd0a00000000000000000000000000000000000000000000000000beef";
@@ -2687,7 +2752,7 @@ mod tests {
             first_party: false,
         });
         let ops = host.dispatch(SignEvent::ApproveTapped {
-            opts: SignApproveOpts::default(),
+            opts: crate::signing::fixtures::admitted_opts(),
         });
         let precheck = ops[0].id;
         let ops = host.resolve(precheck, SignShellResult::PreCheck { funding: None });
@@ -3325,6 +3390,8 @@ mod approve_tests {
             balance_changes: None,
             token_meta: None,
             reading: None,
+            review: None,
+            anyway_confirmed: false,
         };
 
         let signed = opts
@@ -3475,7 +3542,7 @@ mod approve_tests {
             first_party: false,
         });
         let signing = sign.dispatch(SignEvent::ApproveTapped {
-            opts: SignApproveOpts::default(),
+            opts: crate::signing::fixtures::admitted_opts(),
         });
         // The core took it: the host's `approved` stands (`approve_taken`).
         assert!(approve_taken(&sign.view(), false));
@@ -3781,7 +3848,7 @@ mod approve_tests {
             ctx.prompt_reset();
             assert_eq!(ctx.take_phone_stop(), None, "an approval starts clean");
             let again = sign.dispatch(SignEvent::ApproveTapped {
-                opts: SignApproveOpts::default(),
+                opts: crate::signing::fixtures::admitted_opts(),
             });
             assert!(answers_in(&again).is_empty(), "a retry answers nothing");
             let submit = match again.as_slice() {
@@ -4178,6 +4245,8 @@ mod sim_wait_tests {
                             kind: vela_core::app::token_trust::TrustDeltaKind::Native,
                             token: None,
                             delta: "-1000000000000000".to_owned(),
+                            token_id: None,
+                            spender: None,
                         }],
                     },
                 )
@@ -4229,7 +4298,7 @@ mod sim_wait_tests {
         // the shell, and nothing is signing.
         let before = sheet.asked.len();
         sheet.dispatch(SignEvent::ApproveTapped {
-            opts: SignApproveOpts::default(),
+            opts: crate::signing::fixtures::admitted_opts(),
         });
         assert_eq!(sheet.asked.len(), before, "no pipeline started");
         assert!(!sheet.sign.view().is_signing && !sheet.sign.view().is_submitting);
@@ -4315,6 +4384,79 @@ mod sim_wait_tests {
         assert_eq!(refused.key.as_deref(), Some(BLIND_REFUSED_KEY));
     }
 
+    /// §41 (P2-5): the approve carries the sheet as the gate read it (the
+    /// reading, the guard, the verdict, the person's pref) and whether the
+    /// press was the "… anyway" one — exactly what `SigningHost::approve`
+    /// sends (`press_into`). The core works the posture out again from it: no
+    /// review signs nothing; an "… anyway" sheet is taken on the held press
+    /// alone, and never with Refuse blind signing on; a sheet read in full is
+    /// taken on a plain press.
+    #[test]
+    fn an_approve_carries_its_review_and_whether_it_was_pressed_anyway() {
+        use vela_core::app::sim_outcome::{notice, verdict_of};
+        let pressed = |sheet: &Sheet, refuse_blind: bool, anyway: bool| {
+            let mut opts = approve_opts(&sheet.fee, &sheet.fee, &sheet.clear, &sheet.guard);
+            press_into(
+                &mut opts,
+                &sheet.clear,
+                &sheet.guard,
+                sheet.sim.verdict.as_ref(),
+                refuse_blind,
+                anyway,
+            );
+            opts
+        };
+        let takes = |sheet: &mut Sheet, opts: SignApproveOpts| {
+            !sheet
+                .sign
+                .dispatch(SignEvent::ApproveTapped { opts })
+                .is_empty()
+        };
+
+        // Nobody independent confirmed the simulation: "… anyway", held.
+        let unconfirmed = SimOutcome::Unconfirmed { disagreed: false };
+        let alone = || {
+            let mut sheet = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+            sheet.lands(SimVerdict::of_core(
+                verdict_of(unconfirmed.clone()),
+                notice(&unconfirmed),
+            ));
+            assert!(sheet.gate(false).anyway);
+            sheet
+        };
+        let mut sheet = alone();
+        let opts = pressed(&sheet, false, true);
+        let review = opts
+            .review
+            .as_ref()
+            .expect("the approve carries its review");
+        assert_eq!(review.clear, sheet.clear);
+        assert_eq!(review.guard, sheet.guard);
+        assert_eq!(review.sim, sheet.sim.verdict);
+        assert!(!review.refuse_blind);
+        assert!(opts.anyway_confirmed);
+        assert!(takes(&mut sheet, opts), "the held press is taken");
+
+        let mut sheet = alone();
+        let mut opts = pressed(&sheet, false, true);
+        opts.review = None;
+        assert!(!takes(&mut sheet, opts), "no review, nothing signed");
+        let mut sheet = alone();
+        let opts = pressed(&sheet, false, false);
+        assert!(!takes(&mut sheet, opts), "a plain press of an … anyway");
+        let mut sheet = alone();
+        let opts = pressed(&sheet, true, true);
+        assert!(!takes(&mut sheet, opts), "Refuse blind signing refuses it");
+
+        // Read in full and confirmed: the plain press is taken.
+        let mut checked = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+        checked.lands(a_send());
+        assert!(!checked.gate(false).anyway);
+        let opts = pressed(&checked, false, false);
+        assert!(!opts.anyway_confirmed);
+        assert!(takes(&mut checked, opts), "a plain press of a plain sheet");
+    }
+
     /// §39 (R22 follow-up, r22-6): "Check again" under a verdict already on
     /// the sheet keeps the confirm's door — it never flips to the shut
     /// "Checking…" and back — and a hold or an arm made on it survives a
@@ -4394,7 +4536,7 @@ mod sim_wait_tests {
         let opts = SignApproveOpts {
             quoted_fee: Some(quote("120000000000000000")),
             current_fee: Some(quote("138000000000000000")),
-            ..SignApproveOpts::default()
+            ..crate::signing::fixtures::admitted_opts()
         };
         let asked = sheet.sign.dispatch(SignEvent::ApproveTapped { opts });
         assert!(asked.is_empty(), "nothing signed or sent");
@@ -4833,7 +4975,7 @@ pub(crate) mod parent_safe_tests {
     use crate::signing::fixtures::Block;
     use serde_json::Value;
     use vela_core::app::parent_safe_guard::ParentReason;
-    use vela_core::app::sign_request::{SignApproveOpts, SignErrorKind, SignResponsePayload};
+    use vela_core::app::sign_request::{SignErrorKind, SignResponsePayload};
 
     /// The core's vector for the rule.
     pub(crate) fn vector() -> Value {
@@ -5065,7 +5207,7 @@ pub(crate) mod parent_safe_tests {
 
             // The confirm is not there, and pressing it anyway does nothing.
             self.dispatch(SignEvent::ApproveTapped {
-                opts: SignApproveOpts::default(),
+                opts: crate::signing::fixtures::admitted_opts(),
             });
             assert!(self.nothing_signed(), "{:?}", self.asked);
             assert!(self.answers.is_empty(), "answered before it was read");
@@ -5160,7 +5302,7 @@ pub(crate) mod parent_safe_tests {
         assert!(!sentence.contains("{{"), "{sentence}");
 
         column.dispatch(SignEvent::ApproveTapped {
-            opts: SignApproveOpts::default(),
+            opts: crate::signing::fixtures::admitted_opts(),
         });
         assert!(column.nothing_signed(), "{:?}", column.asked);
         column.close();

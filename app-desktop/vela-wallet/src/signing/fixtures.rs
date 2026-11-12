@@ -2168,13 +2168,48 @@ pub fn refusal_pin() -> Option<vela_core::app::sign_request::SignView> {
     refusal_view(want.trim())
 }
 
+/// §41 (P2-5): the review a plain press is admitted on — what a sheet that
+/// read its request in full shows: the reading drawn (`ClearSign`, nothing
+/// resolving, nothing "… anyway"), no approval guard concern, and a
+/// simulation two independent nodes agreed on. The signing machine signs
+/// nothing for an approve without a review; a fixture (or a test) that is
+/// not about the posture approves with this one.
+#[must_use]
+pub fn admitted_review() -> vela_core::app::sign_request::ApproveReview {
+    use crate::core_host::CoreHost;
+    use vela_core::app::approval_guard::ApprovalGuard;
+    use vela_core::app::clear_signing::{ClearSigning, ClearSurface};
+    use vela_core::app::sim_outcome::{SimOutcome, verdict_of};
+    let mut clear = CoreHost::<ClearSigning>::new().view();
+    clear.resolving = false;
+    clear.surface = ClearSurface::ClearSign;
+    clear.sign_anyway = false;
+    let mut sim = verdict_of(SimOutcome::Deltas { deltas: Vec::new() });
+    sim.source = Some("corroborated".to_owned());
+    vela_core::app::sign_request::ApproveReview {
+        clear,
+        guard: CoreHost::<ApprovalGuard>::new().view(),
+        sim: Some(sim),
+        refuse_blind: false,
+    }
+}
+
+/// Approve options carrying [`admitted_review`] — a plain press of a sheet
+/// read in full.
+#[must_use]
+pub fn admitted_opts() -> vela_core::app::sign_request::SignApproveOpts {
+    vela_core::app::sign_request::SignApproveOpts {
+        review: Some(admitted_review()),
+        ..vela_core::app::sign_request::SignApproveOpts::default()
+    }
+}
+
 /// [`refusal_pin`]'s sheet for `want`, or `None` for a name it does not know.
 #[must_use]
 pub fn refusal_view(want: &str) -> Option<vela_core::app::sign_request::SignView> {
     use crate::core_host::CoreHost;
     use vela_core::app::sign_request::{
-        Event, SignAccountRef, SignApproveOpts, SignOperation, SignRequest, SignShellResult,
-        SignSubmitOutcome,
+        Event, SignAccountRef, SignOperation, SignRequest, SignShellResult, SignSubmitOutcome,
     };
     use vela_core::app::tx_tracker::{RefusalReason, TrackStatus};
     const ME: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
@@ -2233,7 +2268,7 @@ pub fn refusal_view(want: &str) -> Option<vela_core::app::sign_request::SignView
         first_party: false,
     });
     let ops = host.dispatch(Event::ApproveTapped {
-        opts: SignApproveOpts::default(),
+        opts: crate::signing::fixtures::admitted_opts(),
     });
     let precheck = ops.first()?.id;
     let ops = host.resolve(precheck, SignShellResult::PreCheck { funding: None });

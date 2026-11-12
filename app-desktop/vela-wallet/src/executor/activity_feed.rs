@@ -251,6 +251,9 @@ fn stored_changes(stored: &Value) -> Option<Vec<TrustSimJudgment>> {
                             },
                         })
                     }
+                    // §41 (P2-3): the line is the judgment, kept verbatim by
+                    // the sign executor; one that will not read is dropped.
+                    "nft" | "approval" | "unread" => serde_json::from_value(line.clone()).ok(),
                     _ => None,
                 }
             })

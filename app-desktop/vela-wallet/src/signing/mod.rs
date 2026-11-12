@@ -286,6 +286,13 @@ pub struct SigningStrings {
     /// an unverified inflow is called (never its amount — a site can emit any
     /// `Transfer` it likes), and what "it ran and nothing moved" reads as.
     pub balance_unverified_token: SharedString,
+    /// §41 (P2-3): the simulation's NFT, approval and unread lines —
+    /// "NFT #{{id}}", "Spending approval for {{spender}}" (its unlimited
+    /// twin), and "This changes something Vela can't read".
+    pub balance_nft: String,
+    pub balance_approval: String,
+    pub balance_approval_all: String,
+    pub balance_unread: SharedString,
     pub sim_no_change: SharedString,
     /// "Checking…" — what the verdict's place says under its title while the
     /// simulation is out (PR 3 final note F2). The hero's own word for a
@@ -636,6 +643,10 @@ impl SigningStrings {
             confirm_again: loc.t(vela_core::app::sign_confirm::CONFIRM_AGAIN_KEY),
             sign_anyway: s("certain.signAnyway"),
             balance_unverified_token: s("balanceUnverifiedToken"),
+            balance_nft: raw("balanceNft"),
+            balance_approval: raw("balanceApproval"),
+            balance_approval_all: raw("balanceApprovalAll"),
+            balance_unread: s("balanceUnread"),
             // The key is the core's (`sim_outcome::KEY_NO_CHANGE`), and so is
             // when it is said (`TrustSimView.no_change_key`).
             sim_no_change: loc.t(vela_core::app::sim_outcome::KEY_NO_CHANGE),

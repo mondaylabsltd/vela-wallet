@@ -230,10 +230,27 @@ mod tests {
                 .as_object()
                 .unwrap_or_else(|| unreachable!("{name}: expect"))
             {
-                let got = if field == "deltas" {
-                    Value::Array(deltas.clone())
-                } else {
-                    verdict.get(field).cloned().unwrap_or(Value::Null)
+                // §41 (P2-3): what each move is (an NFT and its id, a grant,
+                // a log nobody could read), and what the sheet may say of it.
+                let got = match field.as_str() {
+                    "deltas" => Value::Array(deltas.clone()),
+                    "kinds" => json!(
+                        read.verdict
+                            .deltas
+                            .iter()
+                            .map(|d| json!(d.kind))
+                            .collect::<Vec<_>>()
+                    ),
+                    "token_ids" => json!(
+                        read.verdict
+                            .deltas
+                            .iter()
+                            .map(|d| d.token_id.as_deref())
+                            .collect::<Vec<_>>()
+                    ),
+                    "grants_unlimited" => json!(sim_outcome::grants_unlimited(&read.verdict)),
+                    "changes_unread" => json!(sim_outcome::changes_unread(&read.verdict)),
+                    _ => verdict.get(field).cloned().unwrap_or(Value::Null),
                 };
                 assert_eq!(&got, want, "{name}: {field}");
             }

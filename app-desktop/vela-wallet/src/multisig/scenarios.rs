@@ -515,7 +515,11 @@ fn propose(sim: &mut Sim, kind: ProposalKind) -> String {
         "the review comes first: {:?}",
         sim.machines.proposals_view.actions.get("propose")
     );
-    sim.proposals(ProposalsEvent::ConfirmDraft { as_member: None });
+    sim.proposals(ProposalsEvent::ConfirmDraft {
+        as_member: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
     match sim.machines.proposals_view.actions.get("propose") {
         Some(ActionState::Done { safe_tx_hash, .. }) => safe_tx_hash.clone(),
         other => panic!("{other:?}"),
@@ -632,6 +636,8 @@ fn proposed_approved_executed_and_recorded() {
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         owner: fixture(1).address,
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     let item = sim
         .machines
@@ -663,6 +669,8 @@ fn proposed_approved_executed_and_recorded() {
         safe_tx_hash: hash.clone(),
         executor,
         shown_fee,
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     assert_eq!(sim.world().sent.len(), 1, "one user operation");
     assert!(
@@ -713,6 +721,8 @@ fn an_execute_over_no_drawn_figure_signs_nothing_and_says_the_fee() {
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         owner: fixture(1).address,
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     let executor = fixture(0).address;
     let passkeys = sim.world().passkeys.len();
@@ -721,6 +731,8 @@ fn an_execute_over_no_drawn_figure_signs_nothing_and_says_the_fee() {
         safe_tx_hash: hash.clone(),
         executor: executor.clone(),
         shown_fee: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     assert!(sim.world().sent.is_empty(), "nothing sent");
     assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
@@ -760,6 +772,8 @@ fn an_execute_over_no_drawn_figure_signs_nothing_and_says_the_fee() {
         safe_tx_hash: hash.clone(),
         executor,
         shown_fee,
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     assert_eq!(sim.world().sent.len(), 1, "signed at the fee drawn");
 }
@@ -773,6 +787,8 @@ fn a_fee_that_moved_after_it_was_drawn_stops_the_press_and_names_its_executor() 
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         owner: fixture(1).address,
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     let executor = fixture(0).address;
     let look = |sim: &Sim| {
@@ -813,6 +829,8 @@ fn a_fee_that_moved_after_it_was_drawn_stops_the_press_and_names_its_executor() 
         safe_tx_hash: hash.clone(),
         executor: executor.clone(),
         shown_fee: Some(drawn),
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     assert!(sim.world().sent.is_empty(), "nothing signed or sent");
     let state = sim.machines.proposals_view.actions
@@ -864,6 +882,8 @@ fn a_fee_that_moved_after_it_was_drawn_stops_the_press_and_names_its_executor() 
         safe_tx_hash: hash.clone(),
         executor,
         shown_fee: Some(now),
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     assert_eq!(sim.world().sent.len(), 1, "signed at the fee drawn");
 }
@@ -881,6 +901,8 @@ fn the_fee_line_keeps_the_pressed_figure_and_says_so_while_the_press_is_out() {
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         owner: fixture(1).address,
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     let executor = fixture(0).address;
     let drawn = drawn_fee(&mut sim, &hash, &executor).expect("a priced look drawn");
@@ -905,6 +927,8 @@ fn the_fee_line_keeps_the_pressed_figure_and_says_so_while_the_press_is_out() {
         safe_tx_hash: hash.clone(),
         executor: executor.clone(),
         shown_fee: Some(drawn.clone()),
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     // The sheet looks again while the passkey is up, at a fee that moved.
     sim.world().now += 20_000.0;
@@ -1061,6 +1085,8 @@ fn a_press_stopped_for_its_fee_says_why_beside_the_press() {
         safe_tx_hash: hash.clone(),
         executor: one_press.clone(),
         shown_fee: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     assert!(sim.world().sent.is_empty(), "nothing sent");
     let approved_by = vec![fixture(0).address];
@@ -1070,6 +1096,8 @@ fn a_press_stopped_for_its_fee_says_why_beside_the_press() {
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         owner: one_press.clone(),
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     sim.proposals(ProposalsEvent::Preview {
         chain_id: 100,
@@ -1081,6 +1109,8 @@ fn a_press_stopped_for_its_fee_says_why_beside_the_press() {
         safe_tx_hash: hash.clone(),
         executor: plain.clone(),
         shown_fee: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     assert!(sim.world().sent.is_empty(), "nothing sent");
     let approved_by = vec![fixture(0).address, one_press.clone()];
@@ -1178,6 +1208,8 @@ fn one_short_is_looked_at_and_approved_and_executed_in_one_press() {
         safe_tx_hash: hash.clone(),
         executor: second,
         shown_fee,
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     assert_eq!(sim.world().sent.len(), 1, "one user operation");
     // Its approval is the execution's own sender (`msg.sender`): no
@@ -1234,7 +1266,11 @@ fn a_declined_risk_signs_nothing() {
         proposal: transfer("1"),
     });
     let passkeys = sim.world().passkeys.len();
-    sim.proposals(ProposalsEvent::ConfirmDraft { as_member: None });
+    sim.proposals(ProposalsEvent::ConfirmDraft {
+        as_member: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
     assert_eq!(sim.risks, 1, "the person was asked");
     assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
     assert!(matches!(
@@ -1280,6 +1316,8 @@ fn an_outside_member_is_asked_over_a_session() {
     sim.proposals(ProposalsEvent::ApproveOutside {
         chain_id: 100,
         safe_tx_hash: hash.clone(),
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     assert!(
         sim.screen
@@ -1419,6 +1457,8 @@ fn notifications_follow_the_views_and_skip_the_persons_own_moves() {
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         owner: fixture(1).address,
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     assert!(look(&sim, &mut n).is_empty(), "approved here, ready by it");
     let owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
@@ -1438,6 +1478,8 @@ fn notifications_follow_the_views_and_skip_the_persons_own_moves() {
         safe_tx_hash: hash.clone(),
         executor: fixture(0).address,
         shown_fee,
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     sim.proposals(ProposalsEvent::Refresh { fresh: true });
     let got = look(&sim, &mut n);
@@ -1531,7 +1573,11 @@ fn a_member_change_composed_in_settings_is_proposed_through_its_review() {
         let lines = member_words::change_lines(&loc, &changes, "Gnosis", &|a: &str| a.to_owned());
         assert_eq!(lines.rule, "Approvals: 2 of 3 → 2 of 4");
         assert!(changes.fits);
-        sim.proposals(ProposalsEvent::ConfirmDraft { as_member: None });
+        sim.proposals(ProposalsEvent::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        });
         let end = propose::follow(&mut step, &sim.machines.proposals_view);
         assert!(matches!(end, Some(Proposed::Done { .. })), "{end:?}");
     }
@@ -1695,6 +1741,8 @@ fn anothers_proposal_rejected_is_a_cancellation_reviewed_then_approved_at_its_nu
     // Confirmed as the rejecting member: one passkey, one more proposal.
     sim.proposals(ProposalsEvent::ConfirmDraft {
         as_member: Some(rejecter.clone()),
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     let cancel_hash = match sim.machines.proposals_view.actions.get("propose") {
         Some(ActionState::Done { safe_tx_hash, .. }) => safe_tx_hash.clone(),
@@ -1845,6 +1893,8 @@ fn a_sites_transaction_from_a_multisig_is_proposed_held_and_answered() {
             chain_id: 100,
             safe_tx_hash: hash.to_owned(),
             owner: fixture(1).address,
+            anyway_confirmed: true,
+            refuse_blind: false,
         });
         let mut after =
             DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2);
@@ -1864,6 +1914,8 @@ fn a_sites_transaction_from_a_multisig_is_proposed_held_and_answered() {
             safe_tx_hash: hash.to_owned(),
             executor: fixture(0).address,
             shown_fee,
+            anyway_confirmed: true,
+            refuse_blind: false,
         });
         tx
     };
@@ -1893,7 +1945,11 @@ fn a_sites_transaction_from_a_multisig_is_proposed_held_and_answered() {
     assert!(holds.step(&sim.machines.proposals_view).is_empty());
 
     // Proposed: its sheet opens on it, the site still waits.
-    sim.proposals(ProposalsEvent::ConfirmDraft { as_member: None });
+    sim.proposals(ProposalsEvent::ConfirmDraft {
+        as_member: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
     assert_eq!(sim.world().passkeys.len(), passkeys + 1, "one passkey");
     let hash = sim.machines.proposals_view.dapp[&rid]
         .safe_tx_hash
@@ -1954,7 +2010,11 @@ fn a_sites_transaction_from_a_multisig_is_proposed_held_and_answered() {
         Some(EXTENSION_REQUEST_TTL_MS),
     );
     sim.proposals(ask);
-    sim.proposals(ProposalsEvent::ConfirmDraft { as_member: None });
+    sim.proposals(ProposalsEvent::ConfirmDraft {
+        as_member: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
     let steps = holds.step(&sim.machines.proposals_view);
     let Some(Step::Answer { rid, answer, .. }) = steps.last() else {
         panic!("{steps:?}");
@@ -2163,7 +2223,11 @@ fn a_drafts_propose_is_shut_while_read_and_when_it_fails_and_opens_after_try_aga
     assert!(!failed.enabled && failed.retry);
     assert_eq!(failed.reason_key.as_deref(), Some(REASON_TIMED_OUT));
     // Pressed anyway (a shell that let it through): the core refuses.
-    sim.proposals(ProposalsEvent::ConfirmDraft { as_member: None });
+    sim.proposals(ProposalsEvent::ConfirmDraft {
+        as_member: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
     assert_eq!(
         sim.machines.proposals_view.actions.get("propose"),
         Some(&ActionState::SigningUnchecked)
@@ -2183,7 +2247,11 @@ fn a_drafts_propose_is_shut_while_read_and_when_it_fails_and_opens_after_try_aga
     let open = draft_door(&sim);
     assert_eq!(open.shows, ReviewShows::Review);
     assert!(open.enabled, "read, and its rule allows it");
-    sim.proposals(ProposalsEvent::ConfirmDraft { as_member: None });
+    sim.proposals(ProposalsEvent::ConfirmDraft {
+        as_member: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
     assert!(matches!(
         sim.machines.proposals_view.actions.get("propose"),
         Some(ActionState::Done { .. })
@@ -2232,6 +2300,8 @@ fn a_proposals_approve_is_shut_until_its_review_is_read_and_opens_after_try_agai
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         owner: fixture(1).address,
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
     assert_eq!(listed(&sim, &hash).approved, 1);
@@ -2245,6 +2315,8 @@ fn a_proposals_approve_is_shut_until_its_review_is_read_and_opens_after_try_agai
         chain_id: 100,
         safe_tx_hash: hash.clone(),
         owner: fixture(1).address,
+        anyway_confirmed: true,
+        refuse_blind: false,
     });
     assert_eq!(sim.world().passkeys.len(), passkeys + 1, "approved once");
     assert_eq!(listed(&sim, &hash).approved, 2);

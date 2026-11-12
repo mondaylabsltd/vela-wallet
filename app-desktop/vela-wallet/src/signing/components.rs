@@ -985,6 +985,13 @@ fn balances_card(
         )
         .children(mark("card".to_owned()));
     for (index, (symbol, delta, tone)) in rows.iter().enumerate() {
+        // §41: a line with no figure (an approval, a change Vela can't read)
+        // carries its tone on its words — there is nothing else to colour.
+        let label_color = if delta.is_empty() && *tone != Tone::Neutral {
+            tone_color(theme, *tone)
+        } else {
+            theme.fg_base
+        };
         col = col.child(
             div()
                 .relative()
@@ -995,7 +1002,7 @@ fn balances_card(
                 .child(
                     div()
                         .text_size(theme::text_row_title())
-                        .text_color(theme.fg_base)
+                        .text_color(label_color)
                         .child(symbol.clone()),
                 )
                 .child(

@@ -797,9 +797,24 @@ impl MultisigHost {
             && self.machines.proposals_view.draft.is_some()
     }
 
-    /// The person's word on the review: propose it, as `as_member`.
-    pub fn confirm_draft(&mut self, as_member: Option<String>, cx: &mut Context<Self>) {
-        self.proposals(proposals::Event::ConfirmDraft { as_member }, cx);
+    /// The person's word on the review: propose it, as `as_member`. §41
+    /// (P2-5): `anyway_confirmed` — the press was the door's "… anyway"
+    /// (held); `refuse_blind` — "Refuse blind signing" is on.
+    pub fn confirm_draft(
+        &mut self,
+        as_member: Option<String>,
+        anyway_confirmed: bool,
+        refuse_blind: bool,
+        cx: &mut Context<Self>,
+    ) {
+        self.proposals(
+            proposals::Event::ConfirmDraft {
+                as_member,
+                anyway_confirmed,
+                refuse_blind,
+            },
+            cx,
+        );
     }
 
     /// The person withdrew it on its review: nothing is signed or sent.

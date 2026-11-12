@@ -1082,6 +1082,14 @@ fn stored_asset_sim(outcome: &vela_core::app::sim_outcome::SimOutcome) -> Option
                             "unverified": true,
                         })
                     }
+                    // §41 (P2-3): an NFT, a grant, a log Vela can't read —
+                    // carried verbatim, as the simulation said it.
+                    TrustDeltaKind::Erc721
+                    | TrustDeltaKind::Erc1155
+                    | TrustDeltaKind::Approval
+                    | TrustDeltaKind::Unread => {
+                        serde_json::to_value(delta).unwrap_or(serde_json::Value::Null)
+                    }
                 })
                 .collect();
             json!({ "ok": true, "engine": "rpc", "changes": changes })
@@ -1702,11 +1710,15 @@ mod tests {
                     kind: TrustDeltaKind::Native,
                     token: None,
                     delta: "-1000".to_owned(),
+                    token_id: None,
+                    spender: None,
                 },
                 TrustAssetDelta {
                     kind: TrustDeltaKind::Erc20,
                     token: Some("0xtoken".to_owned()),
                     delta: "25".to_owned(),
+                    token_id: None,
+                    spender: None,
                 },
             ],
         };

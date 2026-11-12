@@ -929,6 +929,54 @@ pub fn sim_blocks(
                     Tone::Caution,
                 ))
             }
+            // §41 (P2-3): an NFT is drawn like a token nobody vouches for —
+            // its id, a sign, and how many when more than one; never a price.
+            J::Nft {
+                token_id,
+                direction,
+                amount,
+                ..
+            } => {
+                let sign = match direction {
+                    Direction::In => "+",
+                    Direction::Out => "−",
+                    Direction::Unreadable => "",
+                    Direction::Still => return None,
+                };
+                let count = if amount == "1" || sign.is_empty() {
+                    ""
+                } else {
+                    amount.as_str()
+                };
+                Some((
+                    SharedString::from(crate::signing::fill(&s.balance_nft, &[("id", token_id)])),
+                    SharedString::from(format!("{sign}{count}")),
+                    Tone::Caution,
+                ))
+            }
+            // A grant moves nothing yet; it is always said, in the danger
+            // tone, with no figure.
+            J::Approval {
+                spender, unlimited, ..
+            } => Some((
+                SharedString::from(crate::signing::fill(
+                    if *unlimited {
+                        &s.balance_approval_all
+                    } else {
+                        &s.balance_approval
+                    },
+                    &[("spender", &short_address(spender))],
+                )),
+                SharedString::default(),
+                Tone::Danger,
+            )),
+            // A change Vela could not read is said as one — never "No asset
+            // changes".
+            J::Unread { .. } => Some((
+                s.balance_unread.clone(),
+                SharedString::default(),
+                Tone::Caution,
+            )),
         })
         .collect();
 
@@ -947,7 +995,8 @@ pub fn sim_blocks(
     let unverified = judgments.iter().any(|judgment| {
         matches!(
             judgment,
-            J::Erc20Unverified { direction, .. } if *direction != Direction::Still
+            J::Erc20Unverified { direction, .. } | J::Nft { direction, .. }
+                if *direction != Direction::Still
         )
     });
     vec![Block::Balances {
@@ -1054,7 +1103,7 @@ pub fn verdict_block(
 }
 
 /// R22 (review 1-2): the verdict's place says who stood behind a checked
-/// answer — the person's own node alone ("Checked by your own node only",
+/// answer — the person's own node alone ("Checked by your chosen node only",
 /// `SimVerdict::source_key`), a quiet line under the balance changes. Only
 /// a landed verdict says it.
 #[must_use]
@@ -1530,6 +1579,8 @@ mod sim_block_tests {
                     kind: TrustDeltaKind::Erc20,
                     token: Some("0xbad0000000000000000000000000000000000bad".to_owned()),
                     delta: delta.to_owned(),
+                    token_id: None,
+                    spender: None,
                 },
                 None,
                 false,
@@ -1607,6 +1658,81 @@ mod sim_block_tests {
             )]
         );
         assert!(said.contains(s.warn_unverified_amount.as_ref()));
+    }
+
+    /// §41 (P2-3): what the simulation now reads beyond coins is drawn on
+    /// the balance card — an NFT by its id with a sign (and how many past
+    /// one), never a price, under the unverified-amount caution; a spending
+    /// approval by its spender, shortened, in the danger tone and with no
+    /// figure ("Unlimited …" when it is); and a change Vela can't read said
+    /// as one, never "No asset changes". An NFT that does not move is no row.
+    #[test]
+    fn nfts_approvals_and_unread_changes_are_balance_rows() {
+        use vela_core::app::token_trust::{TrustDeltaKind, TrustSimDirection as Direction};
+        let s = SigningStrings::resolve(&crate::loc::Loc::for_language("en"));
+        const NFT: &str = "0x00000000000000000000000000000000000000aa";
+        const SPENDER: &str = "0x1234567890abcdef1234567890abcdef1234abcd";
+        let nft = |direction, amount: &str| J::Nft {
+            token: NFT.to_owned(),
+            token_id: "7".to_owned(),
+            standard: TrustDeltaKind::Erc721,
+            direction,
+            amount: amount.to_owned(),
+        };
+        let approval = |unlimited| J::Approval {
+            token: NFT.to_owned(),
+            spender: SPENDER.to_owned(),
+            unlimited,
+            token_id: None,
+        };
+        let blocks = sim_blocks(
+            &[
+                nft(Direction::Out, "1"),
+                nft(Direction::In, "3"),
+                nft(Direction::Unreadable, "1"),
+                nft(Direction::Still, "1"),
+                approval(false),
+                approval(true),
+                J::Unread { token: None },
+            ],
+            None,
+            100,
+            &s,
+        );
+        let Some(Block::Balances { rows, note, .. }) = blocks.first() else {
+            unreachable!("a balance card");
+        };
+        let row = |label: &str, figure: &str, tone| {
+            (
+                SharedString::from(label.to_owned()),
+                SharedString::from(figure.to_owned()),
+                tone,
+            )
+        };
+        assert_eq!(
+            rows,
+            &vec![
+                row("NFT #7", "\u{2212}", Tone::Caution),
+                row("NFT #7", "+3", Tone::Caution),
+                row("NFT #7", "", Tone::Caution),
+                row("Spending approval for 0x1234…abcd", "", Tone::Danger),
+                row(
+                    "Unlimited spending approval for 0x1234…abcd",
+                    "",
+                    Tone::Danger
+                ),
+                row("This changes something Vela can’t read", "", Tone::Caution),
+            ],
+            "the still NFT is no row"
+        );
+        assert_eq!(note.as_ref(), Some(&s.warn_unverified_amount));
+
+        // An approval alone moves nothing: no caution about amounts.
+        let blocks = sim_blocks(&[approval(true)], None, 100, &s);
+        assert!(matches!(
+            blocks.first(),
+            Some(Block::Balances { rows, note: None, .. }) if rows.len() == 1
+        ));
     }
 
     /// "Could not check" and "checked, nothing moves" are different sentences,
@@ -4318,6 +4444,7 @@ mod tests {
             decimals_unverified: false,
             expired: false,
             batch: None,
+            carrier_unread: false,
         }
     }
 
@@ -4848,8 +4975,8 @@ mod tests {
     #[test]
     fn the_top_up_button_says_check_again_and_sends_it() {
         use vela_core::app::sign_request::{
-            Event as SignEvent, SignAccountRef, SignApproveOpts, SignFundingNeeded, SignOperation,
-            SignShellResult, SignSponsorship,
+            Event as SignEvent, SignAccountRef, SignFundingNeeded, SignOperation, SignShellResult,
+            SignSponsorship,
         };
         const ME: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
         let s = strings();
@@ -4886,7 +5013,7 @@ mod tests {
             first_party: false,
         });
         let ops = host.dispatch(SignEvent::ApproveTapped {
-            opts: SignApproveOpts::default(),
+            opts: crate::signing::fixtures::admitted_opts(),
         });
         let precheck = ops
             .iter()
