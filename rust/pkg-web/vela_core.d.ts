@@ -1051,7 +1051,8 @@ export function minGasPriceWei(chain_id: number): string;
 
 /**
  * `parent_safe_guard::check` over JSON: a `CheckInput` in, a
- * `ParentVerdict` out (`{ verdict: "clear" | "refuse" | "read", … }`), or
+ * `CheckVerdict` out (`{ verdict: "clear" | "refuse" | "read", … }`, or with
+ * `at_arrival` arrival's own refusal `{ verdict: "invalid", message }`), or
  * `{ "error": … }` for an input that does not read.
  */
 export function parentSafeCheck(input_json: string): string;
