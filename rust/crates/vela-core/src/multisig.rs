@@ -3025,7 +3025,7 @@ impl ChainFacts {
 
 /// Code an `eth_getCode` answer says is a contract's: not empty, not zeros,
 /// not an EIP-7702 delegation designator (`0xef0100 ‖ address`).
-fn holds_contract(code: &str) -> bool {
+pub fn holds_contract(code: &str) -> bool {
     let body = code.trim().strip_prefix("0x").unwrap_or(code.trim());
     if body.trim_start_matches('0').is_empty() {
         return false;
@@ -3197,6 +3197,82 @@ fn vet_genesis(g: &Genesis, safe: Address) -> Result<Vetted, Vec<Refusal>> {
     })
 }
 
+/// §40: the genesis of the Safe at `safe`, read from the input of the
+/// transaction that created it — a direct `createProxyWithNonce` call, or one
+/// nested anywhere inside it (an ERC-4337 `handleOps` initCode, a multicall).
+/// The factory is the call's target (`to`) or, in an initCode, the 20 bytes
+/// before the selector. A candidate is kept only if it makes exactly `safe`
+/// ([`genesis_address`]), so a wrong or forged transaction binds nothing:
+/// whoever pointed at the transaction is never trusted, the address is.
+pub fn genesis_in_creation_input(input: &str, to: Option<&str>, safe: &str) -> Option<Genesis> {
+    const SELECTOR: &str = "1688f0b9"; // createProxyWithNonce(address,bytes,uint256)
+    let hex = input
+        .trim()
+        .strip_prefix("0x")
+        .unwrap_or(input.trim())
+        .to_ascii_lowercase();
+    let want = addr(safe).ok()?;
+    fn word(s: &str, i: usize) -> Option<&str> {
+        s.get(i * 64..(i + 1) * 64)
+    }
+    let mut from = 0;
+    while let Some(found) = hex[from..].find(SELECTOR) {
+        let at = from + found;
+        from = at + 2;
+        if at % 2 != 0 {
+            continue;
+        }
+        let args = &hex[at + SELECTOR.len()..];
+        let (Some(single), Some(off), Some(salt)) = (word(args, 0), word(args, 1), word(args, 2))
+        else {
+            continue;
+        };
+        let Ok(off) = usize::from_str_radix(off.trim_start_matches('0').max("0"), 16) else {
+            continue;
+        };
+        if off % 32 != 0 || off > args.len() / 2 {
+            continue;
+        }
+        let Some(len) = word(&args[off * 2..], 0)
+            .and_then(|w| usize::from_str_radix(w.trim_start_matches('0').max("0"), 16).ok())
+        else {
+            continue;
+        };
+        let start = off * 2 + 64;
+        let Some(init) = args.get(start..start + len * 2) else {
+            continue;
+        };
+        let Ok(salt) = U256::from_str_radix(salt, 16) else {
+            continue;
+        };
+        let mut factories: Vec<String> = Vec::new();
+        if let Some(t) = to {
+            factories.push(t.to_owned());
+        }
+        if at >= 40 {
+            factories.push(format!("0x{}", &hex[at - 40..at]));
+        }
+        for factory in factories {
+            let Ok(f) = addr(&factory) else { continue };
+            let g = Genesis {
+                factory: f.to_checksum(None),
+                singleton: format!("0x{}", &single[24..]),
+                salt_nonce: format!("{salt:#x}"),
+                initializer: format!("0x{init}"),
+                name: None,
+            };
+            if genesis_address(&g)
+                .ok()
+                .and_then(|a| addr(&a).ok())
+                .is_some_and(|a| a == want)
+            {
+                return Some(g);
+            }
+        }
+    }
+    None
+}
+
 /// What a Safe not deployed on a chain holds the moment its genesis' setup
 /// has run there — for a simulation that puts it in place with a state
 /// override (`multisig_review`): the singleton it runs (the L2 one when the
@@ -3318,12 +3394,14 @@ fn owner_bound(o: Address, facts: &ChainFacts) -> Result<Option<String>, Refusal
         // A contract elsewhere, nothing here, nothing binding it: whoever
         // can deploy at that address here would hold its vote.
         (true, false) => Err(Refusal::OwnerNotBound { address: here }),
-        // Code here and none elsewhere: the member already holds its address
-        // here, so nobody can deploy there any more (and since EIP-6780 its
-        // code cannot be removed). The vote this multisig would count here is
-        // that contract's — the risk the rule names ("whoever can deploy at
-        // that address") does not exist. Refusing it locked out every Vela
-        // account deployed only where the multisig is (the R22 Arc report).
+        // Code here where the multisig's other networks have none (the replay
+        // rule's "code on the target only"): a contract re-made here by
+        // somebody else (a CREATE replay) looks exactly like this, its real
+        // code being on a network nobody read. Bound only by its own genesis
+        // (§40 reads it from its creation here, `counterfactual_facts`).
+        (false, true) if !fact.elsewhere.is_empty() => {
+            Err(Refusal::OwnerNotBound { address: here })
+        }
         _ => Ok(None),
     }
 }
@@ -5394,13 +5472,31 @@ mod tests {
         assert_eq!(refusals(&ms.genesis, B), vec![Refusal::WrongAddress]);
     }
 
+    /// §40: a member's genesis read from its real creation (a 4337 handleOps
+    /// on Arc Testnet) makes exactly that member; the same input binds no
+    /// other address, and a target that is not the factory binds nothing.
+    #[test]
+    fn a_members_genesis_is_read_from_its_creation_and_must_make_it() {
+        let fx: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/vectors/multisig/creation-4337.json"))
+                .unwrap();
+        let s = |k: &str| fx[k].as_str().unwrap();
+        let g = genesis_in_creation_input(s("input"), Some(s("to")), s("safe")).unwrap();
+        assert_eq!(g.factory, s("factory"));
+        assert!(genesis_address(&g).unwrap().eq_ignore_ascii_case(s("safe")));
+        // The same transaction never binds another address.
+        assert!(genesis_in_creation_input(s("input"), Some(s("to")), A).is_none());
+        // Garbage binds nothing.
+        assert!(genesis_in_creation_input("0x1688f0b9", None, s("safe")).is_none());
+    }
+
     /// §37 (review 1-13 c; the registry README's step 3): a member that is a
     /// contract on another network the multisig is used on, with nothing here
     /// and nothing binding it to its own genesis, would let whoever deploys
     /// at that address here hold its vote — refused. Bound by its own genesis
     /// (CREATE2 through Safe's factory), it is Verified; code here that is not
-    /// its code there is refused; code here and none elsewhere already holds
-    /// the address (Verified); a network that did not answer is Unknown.
+    /// its code there is refused; code here and none elsewhere is bound only by
+    /// its own genesis (§40); a network that did not answer is Unknown.
     #[test]
     fn a_contract_member_must_be_bound_to_its_own_genesis() {
         let member = multisig_genesis(&[A.into(), B.into()], 1, "Member", "0x9").unwrap();
@@ -5443,10 +5539,11 @@ mod tests {
         ));
         // Other code here than there: someone else's contract at its address.
         assert_eq!(with(None, "0x6080", Some(&proxy)), not_bound);
-        // Code here, none on its other network: it already holds its address
-        // here — nobody can deploy there any more, so its vote is its own.
+        // Code here, none on its other network: possibly a CREATE replay —
+        // refused unless its own genesis binds it.
+        assert_eq!(with(None, &proxy, Some("0x")), not_bound);
         assert!(matches!(
-            with(None, &proxy, Some("0x")),
+            with(Some(member.genesis.clone()), &proxy, Some("0x")),
             Authority::Verified { .. }
         ));
         // An EIP-7702 delegation is a key holder's.

@@ -2418,16 +2418,77 @@ pub async fn counterfactual_facts<Ev: Send + 'static>(
         .elsewhere
         .iter()
         .map(|id| async move { (*id, codes_of(io, *id, asked).await) });
-    let (codes, elsewhere) = futures::join!(
+    let (mut codes, elsewhere) = futures::join!(
         codes_of(io, chain_id, &reads),
         futures::future::join_all(elsewhere)
     );
+    // §40: a member that is a contract on another network, and that no
+    // genesis this device holds makes, gets its genesis read from its own
+    // creation there — kept only if it makes exactly that member.
+    let mut found: Vec<Genesis> = Vec::new();
+    for m in &members {
+        let held = binding
+            .geneses
+            .iter()
+            .any(|g| multisig::genesis_address(g).is_ok_and(|a| same_address(&a, m)));
+        if held {
+            continue;
+        }
+        // Where it is a contract: here first, then the multisig's other networks.
+        let here = codes
+            .get(&m.to_lowercase())
+            .or_else(|| {
+                codes
+                    .iter()
+                    .find(|(k, _)| same_address(k, m))
+                    .map(|(_, v)| v)
+            })
+            .and_then(|c| c.as_deref())
+            .is_some_and(multisig::holds_contract);
+        let mut chains: Vec<u64> = Vec::new();
+        if here {
+            chains.push(chain_id);
+        }
+        for (id, cs) in &elsewhere {
+            if cs
+                .get(m)
+                .and_then(|c| c.as_deref())
+                .is_some_and(multisig::holds_contract)
+            {
+                chains.push(*id);
+            }
+        }
+        for id in chains {
+            if let Some(g) = creation_genesis_on(io, id, m).await {
+                found.push(g);
+                break;
+            }
+        }
+    }
+    // A member bound by its genesis is bound only if that genesis' factory is
+    // Safe's own here too (`owner_bound`): read the factories the multisig's
+    // own reads did not.
+    let factories: Vec<String> = found
+        .iter()
+        .chain(binding.geneses.iter())
+        .map(|g| g.factory.clone())
+        .filter(|f| !codes.keys().any(|k| same_address(k, f)))
+        .fold(Vec::new(), |mut acc, f| {
+            if !acc.iter().any(|a: &String| same_address(a, &f)) {
+                acc.push(f);
+            }
+            acc
+        });
+    if !factories.is_empty() {
+        codes.extend(codes_of(io, chain_id, &factories).await);
+    }
     let owners = members
         .iter()
         .map(|m| {
             let genesis = binding
                 .geneses
                 .iter()
+                .chain(found.iter())
                 .find(|g| multisig::genesis_address(g).is_ok_and(|a| same_address(&a, m)))
                 .cloned();
             let elsewhere = elsewhere
@@ -2438,6 +2499,44 @@ pub async fn counterfactual_facts<Ev: Send + 'static>(
         })
         .collect();
     multisig::ChainFacts { codes, owners }
+}
+
+/// §40: the genesis `member` was created with on `chain_id`, read from its
+/// creation transaction. Where that transaction is comes from the network's
+/// explorer (Blockscout's `/api/v2/addresses/{a}`) — a hint: the transaction is
+/// read from the chain and its genesis kept only if it makes `member`
+/// ([`multisig::genesis_in_creation_input`]). `None`: not found, or nothing
+/// in it makes `member`.
+async fn creation_genesis_on<Ev: Send + 'static>(
+    io: &Io<Ev>,
+    chain_id: u64,
+    member: &str,
+) -> Option<Genesis> {
+    let explorer = crate::app::network_admin::builtin_explorer_url(u32::try_from(chain_id).ok()?)?;
+    let url = format!(
+        "{}/api/v2/addresses/{}",
+        explorer.trim_end_matches('/'),
+        checksummed(member)
+    );
+    let HttpAnswer::Answered { status, body, .. } = io.http("GET", url, None, 10_000).await else {
+        return None;
+    };
+    if !(200..300).contains(&status) {
+        return None;
+    }
+    let info: Value = serde_json::from_str(&body).ok()?;
+    let tx = info.get("creation_transaction_hash")?.as_str()?.to_owned();
+    let found = io
+        .rpc(
+            chain_id,
+            "eth_getTransactionByHash",
+            serde_json::json!([tx]),
+        )
+        .await
+        .ok()?;
+    let input = found.get("input")?.as_str()?;
+    let to = found.get("to").and_then(Value::as_str);
+    multisig::genesis_in_creation_input(input, to, member)
 }
 
 /// The core's verdict on `safe`, not deployed on `chain_id`, deployed there from `genesis`.

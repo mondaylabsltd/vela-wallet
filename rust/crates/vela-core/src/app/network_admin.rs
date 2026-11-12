@@ -848,7 +848,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         chain_id: 5042002,
         native_symbol: "USDC",
         rpc_url: "https://rpc.testnet.arc.network",
-        explorer_url: "https://testnet.arcscan.app",
+        explorer_url: "https://explorer.testnet.arc.io",
         typical_inclusion_s: 4,
         testnet: true,
         shown_by_default: true,
@@ -865,6 +865,12 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         shown_by_default: true,
     },
 ];
+
+/// §40: the block explorer of a built-in network, for reading where a
+/// contract was created (a hint only: what it names is checked on the chain).
+pub fn builtin_explorer_url(chain_id: u32) -> Option<&'static str> {
+    builtin(chain_id).map(|c| c.explorer_url)
+}
 
 fn builtin(chain_id: u32) -> Option<&'static NetBuiltinChain> {
     BUILTIN_CHAINS.iter().find(|c| c.chain_id == chain_id)
