@@ -602,8 +602,13 @@ final class MultisigHub {
         return inBackground ? true : nil
     }
 
-    func confirmDraft(as member: String?) {
-        proposals.dispatch(["type": "confirm_draft", "as_member": member ?? NSNull()])
+    /// §41 (P2-5): `door` is the draft's sign door as the press saw it —
+    /// its `anyway` and the person's Refuse blind signing ride the event.
+    func confirmDraft(as member: String?, door: MsSignDoor) {
+        proposals.dispatch(
+            ["type": "confirm_draft", "as_member": member ?? NSNull()]
+                .merging(MsRules.pressFields(door)) { a, _ in a }
+        )
     }
 
     func withdrawDraft() {

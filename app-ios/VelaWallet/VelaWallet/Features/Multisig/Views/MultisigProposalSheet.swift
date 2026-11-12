@@ -181,6 +181,27 @@ struct MsProposalModel {
         ConfirmPress.door(holdMs: door.holdMs, danger: signAnyway || review?["tone"]?.string == "danger", loc: words.loc)
     }
 
+    /// §41 (P2-5): what every signing press carries — whether it was the
+    /// person's explicit "… anyway" (the door's `anyway` at the press: the
+    /// step that names the reasons stood before it) and whether "Refuse
+    /// blind signing" is on. The core checks both against the posture it
+    /// works out itself (`anyway_not_confirmed`, `blind_refused`).
+    var pressFields: [String: Any] {
+        MsRules.pressFields(door)
+    }
+
+    /// §41 (P2-5): Approve for `owner`, carrying the press (`pressFields`).
+    func approveEvent(owner: String) -> [String: Any] {
+        ["type": "approve", "chain_id": chainId, "safe_tx_hash": hash, "owner": owner]
+            .merging(pressFields) { a, _ in a }
+    }
+
+    /// §41 (P2-5): "Sign with another wallet", carrying the press (`pressFields`).
+    var approveOutsideEvent: [String: Any] {
+        ["type": "approve_outside", "chain_id": chainId, "safe_tx_hash": hash]
+            .merging(pressFields) { a, _ in a }
+    }
+
     /// The label a signing control wears: "… anyway" when the core asks
     /// for that friction (the web's `anywayLabel`).
     func signLabel(_ plain: String, anyway: String) -> String {
@@ -548,7 +569,8 @@ struct MsProposalModel {
             "chain_id": chainId, "safe_tx_hash": hash, "executor": executor,
         ]
         if let fee = shownFee(for: executor) { event["shown_fee"] = fee }
-        return event
+        // §41 (P2-5): the press — "… anyway" or not, and Refuse blind signing.
+        return event.merging(pressFields) { a, _ in a }
     }
 
     /// core-ms-2: whose ONE press approves and executes it — the member
@@ -1345,7 +1367,14 @@ struct MultisigProposalSheet: View {
         }
         if model.offersOutsideWallet {
             VelaButton(title: words.t("external.signWithWallet"), kind: .secondary) {
-                hub.sendProposal(["type": "approve_outside", "chain_id": chainId, "safe_tx_hash": model.hash])
+                // §41 (P2-5): under an "… anyway" review the person confirms
+                // past its reasons first — the press then says so.
+                let run = { hub.sendProposal(model.approveOutsideEvent) }
+                if model.signAnyway {
+                    anyway = MsAnywayStep(title: anywayTitle(.approve), reasons: model.anywayReasons, run: run)
+                } else {
+                    run()
+                }
             }
             .accessibilityIdentifier("multisig.proposal.outside")
         }
@@ -1419,7 +1448,7 @@ struct MultisigProposalSheet: View {
 
     private func approve(_ model: MsProposalModel) {
         guard let owner = member ?? model.defaultMember else { return }
-        hub.sendProposal(["type": "approve", "chain_id": chainId, "safe_tx_hash": model.hash, "owner": owner])
+        hub.sendProposal(model.approveEvent(owner: owner))
         let key = "approve:\(model.hash)"
         Task { @MainActor in
             let settled = await hub.proposals.until(timeout: 600) { view -> MsTagged? in

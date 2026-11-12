@@ -424,6 +424,8 @@ struct DappBrowserTests {
                 "max_fee_per_gas": NSNull(), "bundler_cost_wei": NSNull(), "gas_fee_token": NSNull(),
                 "quoted_fee": NSNull(), "fee_collector": NSNull(), "params_override_json": NSNull(),
                 "intent": NSNull(), "unlimited_approved": false,
+                // §41 (P2-5): the sheet the person saw — no review, nothing signed.
+                "review": try ApproveReviewFixture.plain(),
             ],
         ])))
         let answerEach: ([String: Any]) -> String? = { operation in

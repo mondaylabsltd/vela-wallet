@@ -369,6 +369,8 @@ struct CoreWire082Tests {
                 "quoted_fee": ["amount": "1000", "recipient": me, "tier": "fast"],
                 "fee_collector": NSNull(), "params_override_json": NSNull(), "intent": NSNull(),
                 "unlimited_approved": false,
+                // §41 (P2-5): the sheet the person saw — no review, nothing signed.
+                "review": try ApproveReviewFixture.plain(),
             ],
         ])))
         #expect(try CoreJSON.decode(SignViewWire.self, from: run.view).phase == .preparing)
@@ -570,6 +572,8 @@ struct CoreWireRoundTwoTests {
                 "quoted_fee": ["amount": "1000", "recipient": me, "tier": "fast"],
                 "fee_collector": NSNull(), "params_override_json": NSNull(), "intent": NSNull(),
                 "unlimited_approved": false,
+                // §41 (P2-5): the sheet the person saw — no review, nothing signed.
+                "review": try ApproveReviewFixture.plain(),
             ],
         ])))
         try run.drain(core) { operation in

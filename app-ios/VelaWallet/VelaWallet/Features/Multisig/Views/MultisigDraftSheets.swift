@@ -121,7 +121,10 @@ struct MultisigDraftReviewSheet: View {
                     haptic: .confirm
                 ) {
                     signing(rule, title: title, draft: draft) {
-                        hub.sendProposal(["type": "propose_execute", "as_member": (member ?? first(draft)).map { $0 as Any } ?? NSNull()])
+                        hub.sendProposal(
+                            ["type": "propose_execute", "as_member": (member ?? first(draft)).map { $0 as Any } ?? NSNull()]
+                                .merging(MsRules.pressFields(rule)) { a, _ in a }
+                        )
                     }
                 }
                 .accessibilityIdentifier("multisig.draft.proposeExecute")
@@ -137,7 +140,7 @@ struct MultisigDraftReviewSheet: View {
                 haptic: .confirm
             ) {
                 signing(rule, title: words.t(draft.membersHere.isEmpty ? "send.proposeOnly" : "review.proposeAnyway"), draft: draft) {
-                    hub.confirmDraft(as: member ?? first(draft))
+                    hub.confirmDraft(as: member ?? first(draft), door: rule)
                 }
             }
             .accessibilityIdentifier("multisig.draft.propose")

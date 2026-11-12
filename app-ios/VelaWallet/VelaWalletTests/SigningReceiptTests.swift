@@ -625,6 +625,8 @@ struct SigningWriteAheadTests {
                 "quoted_fee": ["amount": "1000", "recipient": fixture.account, "tier": "fast"],
                 "fee_collector": NSNull(), "params_override_json": NSNull(), "intent": NSNull(),
                 "unlimited_approved": false,
+                // §41 (P2-5): the sheet the person saw — no review, nothing signed.
+                "review": try ApproveReviewFixture.plain(),
             ] as [String: Any],
         ])
 

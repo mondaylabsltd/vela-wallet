@@ -574,9 +574,13 @@ struct SigningBalances: View {
                 .padding(.vertical, Tokens.Space.s8)
             ForEach(rows) { row in
                 HStack {
+                    // §41 (P2-3): a row with no figure (an approval, a change
+                    // Vela can't read) says its tone in its words instead.
                     Text(verbatim: row.symbol)
                         .typeRole(Typography.body.scaled(textScale))
-                        .foregroundStyle(theme.fgBase)
+                        .foregroundStyle(row.delta.isEmpty && row.tone != .neutral ? row.tone.color(theme)
+                                                                                   : theme.fgBase)
+                        .fixedSize(horizontal: false, vertical: true)
                     Spacer()
                     Text(verbatim: row.delta)
                         .typeRole(Typography.rowValue.scaled(textScale))
