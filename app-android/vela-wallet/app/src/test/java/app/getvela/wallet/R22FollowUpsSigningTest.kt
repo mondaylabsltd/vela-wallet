@@ -253,7 +253,7 @@ class R22FollowUpsSigningTest {
         val opts = SigningController.approveOpts(shown, c.clear.value, c.guard.value, c.sim.value, current = risen)
         assertEquals(total(shown).toString(), opts.quoted_fee!!.amount)
         assertEquals(total(risen).toString(), opts.current_fee!!.amount)
-        c.approve()
+        c.approve(anywayConfirmed = gate(c).anyway)
         withTimeout(20_000) { while (c.sign.value.error?.kind != SignErrorKind.FeeRose) delay(20) }
         delay(300)
         assertEquals("nothing was signed at a fee nobody was shown", 0, signed.get())
@@ -270,7 +270,7 @@ class R22FollowUpsSigningTest {
         // The next confirm pays the new figure: it goes on to the passkey.
         c.confirmBegan()
         assertEquals(total(risen), total(c.heldFee.value!!))
-        c.approve()
+        c.approve(anywayConfirmed = gate(c).anyway)
         taken(c)
         assertTrue(c.sign.value.error?.kind != SignErrorKind.FeeRose)
     }
@@ -289,7 +289,7 @@ class R22FollowUpsSigningTest {
         val fell = c.fee.value
         val opts = SigningController.approveOpts(shown, c.clear.value, c.guard.value, c.sim.value, current = fell)
         assertEquals("the figure shown is what is signed", total(shown).toString(), opts.quoted_fee!!.amount)
-        c.approve()
+        c.approve(anywayConfirmed = gate(c).anyway)
         taken(c)
         assertTrue(c.sign.value.error?.kind != SignErrorKind.FeeRose)
     }
@@ -311,7 +311,7 @@ class R22FollowUpsSigningTest {
         gasPrice = gasPrice * 115 / 100
         c.refreshFee()
         withTimeout(30_000) { while (c.fee.value.fee == null || total(c.fee.value) <= total(shown)) delay(20) }
-        c.approve()
+        c.approve(anywayConfirmed = gate(c).anyway)
         withTimeout(20_000) { while (c.sign.value.error?.kind != SignErrorKind.FeeRose) delay(20) }
         delay(300)
         assertEquals(0, signed.get())

@@ -47,7 +47,6 @@ import app.getvela.wallet.feature.signing.core.GuardShellResult
 import app.getvela.wallet.feature.signing.core.GuardView
 import app.getvela.wallet.feature.signing.core.IncomingRequest
 import app.getvela.wallet.feature.signing.core.SignAccountRef
-import app.getvela.wallet.feature.signing.core.SignApproveOpts
 import app.getvela.wallet.feature.signing.core.SignErrorKind
 import app.getvela.wallet.feature.signing.core.SignEvent
 import app.getvela.wallet.feature.signing.core.SignExecutor
@@ -428,7 +427,7 @@ class BrowserTabsAndLayersTest {
     fun `a held signer failure shuts the confirm as answered, in the signer's words`() = runBlocking<Unit> {
         val rig = signRig(SignExecutor.outcomeOf(UserOpSpine.Failure.Signer(FailureKind.Other, "the prompt broke")))
         arrive(rig)
-        rig.host.dispatch(SignEvent.ApproveTapped(SignApproveOpts()), SignEvent.serializer())
+        rig.host.dispatch(SignEvent.ApproveTapped(reviewedOpts()), SignEvent.serializer())
         val failed = withTimeout(10_000) { rig.host.view.first { it.error != null } }
         assertEquals(SignErrorKind.SignerFailed, failed.error?.kind)
         assertTrue("a failed prompt may work next time", failed.failure_retryable)
@@ -488,7 +487,7 @@ class BrowserTabsAndLayersTest {
             assertEquals(SignSubmitOutcome.Failed("x", signer = kind), outcome)
             val rig = signRig(outcome)
             arrive(rig)
-            rig.host.dispatch(SignEvent.ApproveTapped(SignApproveOpts()), SignEvent.serializer())
+            rig.host.dispatch(SignEvent.ApproveTapped(reviewedOpts()), SignEvent.serializer())
             val view = withTimeout(10_000) { rig.host.view.first { it.error != null } }
             assertEquals(kind.name, expected, view.error?.kind)
         }

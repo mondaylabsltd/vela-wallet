@@ -628,6 +628,14 @@ object I18nKeys {
         const val UNLIMITED = "componentsUi.signingApprove.unlimitedValue"
         const val BALANCE_CHANGES = "componentsUi.signing.balanceChangesTitle"
         const val UNVERIFIED_TOKEN = "componentsUi.signing.balanceUnverifiedToken"
+        /** §41 (P2-3): an NFT's balance row, `{{id}}` its token id ("NFT #7"). */
+        const val BALANCE_NFT = "componentsUi.signing.balanceNft"
+        /** §41 (P2-3): a bounded grant's row, `{{spender}}` shortened. */
+        const val BALANCE_APPROVAL = "componentsUi.signing.balanceApproval"
+        /** §41 (P2-3): an unlimited grant's row (or `ApprovalForAll`), `{{spender}}` shortened. */
+        const val BALANCE_APPROVAL_ALL = "componentsUi.signing.balanceApprovalAll"
+        /** §41 (P2-3): a log naming the account Vela could not read. */
+        const val BALANCE_UNREAD = "componentsUi.signing.balanceUnread"
         const val TECHNICAL = "componentsUi.signing.advancedToggle"
         const val OPERATION = "componentsTx.detail.labelOperation"
         const val OP_CONTRACT = "componentsTx.detail.opContractInteraction"

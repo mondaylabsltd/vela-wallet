@@ -1102,7 +1102,7 @@ class SigningLiveTest {
 
         // On the sheet.
         fun sheet(sign: SignView, sim: SigningController.SimOutcome?) =
-            SigningLive.model(drawn, request(params), sign, ClearSigningView(), GuardView(), FeeView(confirm_fee_ready = true), ctx, sim)
+            SigningLive.model(drawn, request(params), sign, ClearSigningView(surface = ClearSurface.ClearSign), GuardView(), FeeView(confirm_fee_ready = true), ctx, sim)
         fun place(model: app.getvela.wallet.feature.signing.SigningScreenModel) = model.blocks.single { it is SigningBlock.Held } as SigningBlock.Held
         val couldNotCheck = SigningBlock.Warning(SigningTone.Caution, strings.t(key))
 

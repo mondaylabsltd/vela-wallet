@@ -158,6 +158,24 @@ class MsProposalModel(
     val signAnyway: Boolean get() = door.anyway
 
     /**
+     * §41 (P2-5): what a signing press on this sheet tells the core — whether
+     * it was the "… anyway" confirm (the door's `anyway` at the press: the
+     * sign button signs it only through its hold / second confirmation) and
+     * whether "Refuse blind signing" is on. The core checks both against the
+     * posture it works out itself (`anyway_not_confirmed`, `blind_refused`).
+     */
+    val pressFields: Array<Pair<String, Any?>>
+        get() = arrayOf("anyway_confirmed" to door.anyway, "refuse_blind" to refuseBlind)
+
+    /** §41 (P2-5): Approve for [owner] — carrying the press ([pressFields]). */
+    fun approveEvent(owner: String): JsonObject =
+        ev("approve", "chain_id" to chainId, "safe_tx_hash" to hash, "owner" to owner, *pressFields)
+
+    /** §41 (P2-5): "Approve with another wallet" — carrying the press ([pressFields]). */
+    val approveOutsideEvent: JsonObject
+        get() = ev("approve_outside", "chain_id" to chainId, "safe_tx_hash" to hash, *pressFields)
+
+    /**
      * r8-1: the one review every signer signs from is on screen (the door
      * shows it). Before it is, no action may sign — a tap on a sheet still
      * filling in (its review landing pushes the buttons down under the
@@ -508,6 +526,7 @@ class MsProposalModel(
     fun executeEvent(executor: String, oneTap: Boolean): JsonObject {
         val fields = mutableListOf<Pair<String, Any?>>("chain_id" to chainId, "safe_tx_hash" to hash, "executor" to executor)
         shownFee(executor)?.let { fields += "shown_fee" to it }
+        fields += pressFields
         return ev(if (oneTap) "approve_execute" else "execute", *fields.toTypedArray())
     }
 

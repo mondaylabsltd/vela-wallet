@@ -440,7 +440,13 @@ private fun Moves(review: JsonElement, chainId: Int, words: MultisigWords, token
         MovesSaid.Deltas -> MsSection(words.raw(movesTitleKey(review))) {
             for (delta in deltas) {
                 val text = deltaText(delta, chainId, words, tokens)
-                MsText(text, MsType.RowTitle, Modifier.testTag("multisig.review.delta"), color = if (delta["delta"].str?.startsWith("-") == true) colors.fgBase else colors.successBase)
+                // §41 (P2-3): a grant is a danger, an NFT or a change Vela can't read a caution.
+                val color = when (delta["kind"].str) {
+                    "approval" -> colors.errorBase
+                    "erc721", "erc1155", "unread" -> colors.warningBase
+                    else -> if (delta["delta"].str?.startsWith("-") == true) colors.fgBase else colors.successBase
+                }
+                MsText(text, MsType.RowTitle, Modifier.testTag("multisig.review.delta"), color = color)
             }
             if (review["simulationSource"].str == "probe") MsNote(words.t("review.movesProbe"))
             simSourceLine(review, words)?.let { MsNote(it, tag = "multisig.review.simSource") }
@@ -453,7 +459,7 @@ private fun Moves(review: JsonElement, chainId: Int, words: MultisigWords, token
     }
 }
 
-/** R22: the quiet line about who stood behind the check (`simulation.source_key`: "Checked by your own node only"). */
+/** R22: the quiet line about who stood behind the check (`simulation.source_key`: "Checked by your chosen node only"). */
 internal fun simSourceLine(review: JsonElement, words: MultisigWords): String? =
     review["simulation"]["source_key"].str?.takeIf { it.isNotBlank() }?.let { words.raw(it) }
 
@@ -461,6 +467,22 @@ internal fun deltaText(delta: JsonElement, chainId: Int, words: MultisigWords, t
     val raw = delta["delta"].str ?: "0"
     val negative = raw.startsWith("-")
     val magnitude = raw.removePrefix("-")
+    // §41 (P2-3): what the simulation reads beyond coins — said as the signing
+    // sheet says it, never as a coin figure (an `ApprovalForAll` is 2^256 − 1).
+    when (delta["kind"].str) {
+        "erc721", "erc1155" -> {
+            val sign = if (negative) "\u2212" else "+"
+            val count = magnitude.takeIf { it != "1" }.orEmpty()
+            return "${words.raw("componentsUi.signing.balanceNft", "id" to (delta["token_id"].str ?: ""))} $sign$count"
+        }
+        "approval" -> {
+            // The wallet's one unlimited line (2^128), as the core judges it.
+            val unlimited = magnitude.toBigIntegerOrNull()?.let { it >= java.math.BigInteger.ONE.shiftLeft(128) } ?: true
+            val key = if (unlimited) "componentsUi.signing.balanceApprovalAll" else "componentsUi.signing.balanceApproval"
+            return words.raw(key, "spender" to MultisigWords.short(delta["spender"].str ?: ""))
+        }
+        "unread" -> return words.raw("componentsUi.signing.balanceUnread")
+    }
     val token = delta["token"].str?.takeIf { it.isNotEmpty() }
     // r12-1: a token's own decimals, never 18 assumed — unknown (not read
     // yet, or its contract did not say) is the base units, "decimals unknown".
@@ -750,7 +772,14 @@ fun MultisigDraftReviewSheet(
             words = words,
             onConfirm = {
                 val by = member ?: draft.defaultMember
-                if (executeNow) hub.sendProposal(ev("propose_execute", "as_member" to by)) else hub.confirmDraft(by)
+                // §41 (P2-5): the press says whether it was the "… anyway" confirm
+                // (the door's, through MsSignButton's friction) and the pref.
+                val pressedAnyway = anyway && signs
+                if (executeNow) {
+                    hub.sendProposal(ev("propose_execute", "as_member" to by, "anyway_confirmed" to pressedAnyway, "refuse_blind" to refuseBlind))
+                } else {
+                    hub.confirmDraft(by, anywayConfirmed = pressedAnyway, refuseBlind = refuseBlind)
+                }
             },
             modifier = Modifier.fillMaxWidth().testTag("multisig.draft.propose"),
             enabled = door.enabled && !working,

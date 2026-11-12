@@ -109,7 +109,7 @@ class R16NativeFixesTest {
     fun `the one press settles on its execution alone and never waits for an approval behind it`() {
         // The core does both or nothing (§26): the press reads the execution's
         // outcome; nothing approves after it.
-        val onePress = sheetSource.substringAfter("if (oneTap) {").substringBefore("val settled = hub.proposals.request(ev(\"approve\"")
+        val onePress = sheetSource.substringAfter("if (oneTap) {").substringBefore("val settled = hub.proposals.request(model.approveEvent(")
         assertFalse("no wait for an approval the one press never gives", onePress.contains("settledOf(v, \"approve\")"))
         assertTrue(onePress.contains("model.executeEvent(owner, oneTap = true)"))
     }

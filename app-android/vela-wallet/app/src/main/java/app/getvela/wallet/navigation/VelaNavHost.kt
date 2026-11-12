@@ -1286,19 +1286,20 @@ fun VelaNavHost(
                     signRequest?.let { request ->
                         if (signView.surface != app.getvela.wallet.feature.signing.core.SignSurface.Hidden) {
                             val drawn = remember(strings) { SigningFixtures.build(SigningScreenState.CS1, strings) }
+                            // R22: the sheet's own simulation verdict and "Refuse blind
+                            // signing" go to the core's gate too (its posture: anyway,
+                            // danger, hold).
+                            val signConfirm = remember(signJson, guardJson, clearJson, feeJson, signSpeed.tier, signSim, refuseBlind) {
+                                app.getvela.wallet.feature.signing.SigningLive.confirmState(
+                                    signJson, guardJson, clearJson, feeJson, signSpeed.tier,
+                                    simJson = signSim?.verdictJson,
+                                    refuseBlind = refuseBlind,
+                                )
+                            }
                             val signingModel = app.getvela.wallet.feature.signing.SigningLive.model(
                                 drawn, request, signView, clearView, guardView, signFee, signCtx, signSim,
                                 speed = SendLive.SpeedInputs(signSpeed, controller::feeViewOf),
-                                // R22: the sheet's own simulation verdict and "Refuse blind
-                                // signing" go to the core's gate too (its posture: anyway,
-                                // danger, hold).
-                                confirm = remember(signJson, guardJson, clearJson, feeJson, signSpeed.tier, signSim, refuseBlind) {
-                                    app.getvela.wallet.feature.signing.SigningLive.confirmState(
-                                        signJson, guardJson, clearJson, feeJson, signSpeed.tier,
-                                        simJson = signSim?.verdictJson,
-                                        refuseBlind = refuseBlind,
-                                    )
-                                },
+                                confirm = signConfirm,
                             )
                             SideEffect { lastSigning.value = signingModel to signCtx }
                             app.getvela.wallet.feature.signing.SigningSheet(
@@ -1306,7 +1307,10 @@ fun VelaNavHost(
                                 // The ✕ (spec 079: the ONLY close): a reject before the
                                 // commitment point, a dismiss after — the core routes it.
                                 onDismiss = { controller.swipeDismissed() },
-                                onConfirm = { controller.approve() },
+                                // §41 (P2-5): the press says whether it was the "… anyway" confirm
+                                // (the gate's posture at the press, held / pressed twice) and the
+                                // pref the gate read; the core works the posture out again.
+                                onConfirm = { controller.approve(anywayConfirmed = signConfirm.anyway, refuseBlind = refuseBlind) },
                                 onConfirmEngage = { began -> if (began) controller.confirmBegan() else controller.confirmLetGo() },
                                 onChip = { id -> controller.guardChip(id) },
                                 onCustomAmount = { controller.guardCustomAmount(it) },

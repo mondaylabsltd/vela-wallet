@@ -12,7 +12,6 @@ import app.getvela.wallet.feature.browser.core.DbrView
 import app.getvela.wallet.feature.browser.core.ProviderBridge
 import app.getvela.wallet.feature.browser.core.ProviderScript
 import app.getvela.wallet.feature.signing.core.SignAccountRef
-import app.getvela.wallet.feature.signing.core.SignApproveOpts
 import app.getvela.wallet.feature.signing.core.SignErrorKind
 import app.getvela.wallet.feature.signing.core.SignEvent
 import app.getvela.wallet.feature.signing.core.SignOperation
@@ -506,7 +505,7 @@ class BrowserMachineTest {
             SignEvent.serializer(),
         )
         withTimeout(10_000) { sign.view.first { it.surface == SignSurface.Sheet && !it.reconcile_pending } }
-        sign.dispatch(SignEvent.ApproveTapped(SignApproveOpts()), SignEvent.serializer())
+        sign.dispatch(SignEvent.ApproveTapped(reviewedOpts()), SignEvent.serializer())
         val payload = withTimeout(20_000) { answered.await() }
         assertEquals(SignResponsePayload.Ok(JsonObject(mapOf("id" to JsonPrimitive(op)))), payload)
 

@@ -386,7 +386,7 @@ class SigningController(
             val noChangeKey: String? = null,
             /**
              * R22: the core's line about who stood behind the check
-             * (`source_key`: `simOwnNode`, "Checked by your own node only")
+             * (`source_key`: `simOwnNode`, "Checked by your chosen node only")
              * — a quiet line under the balance changes; `null` when two
              * independent nodes agreed.
              */
@@ -930,11 +930,23 @@ class SigningController(
      * then draws the new figure, says why, and the next confirm pays it).
      * Never a charge above what was shown. The row is let go either way.
      */
-    fun approve() {
+    fun approve(
+        /** §41 (P2-5): the confirm completed was the "… anyway" one (`ConfirmState.anyway` at the press). */
+        anywayConfirmed: Boolean = false,
+        /** §41 (P2-5): the person's "Refuse blind signing", as the confirm gate read it. */
+        refuseBlind: Boolean = app.getvela.wallet.core.data.SigningPrefs.refuseBlind.value,
+    ) {
         val live = fee.value
         val shown = _heldFee.value ?: live
         _heldFee.value = null
-        dispatchSign(SignEvent.ApproveTapped(approveOpts(shown, clear.value, guard.value, _sim.value, current = live)))
+        val sim = _sim.value
+        val opts = approveOpts(shown, clear.value, guard.value, sim, current = live).copy(
+            // §41 (P2-5): the views the confirm gate read, handed back as the
+            // machines wrote them — the core works the posture out again.
+            review = reviewOf(clearJson.value, guardJson.value, sim?.verdictJson, refuseBlind, clear.value, guard.value),
+            anyway_confirmed = anywayConfirmed,
+        )
+        dispatchSign(SignEvent.ApproveTapped(opts))
     }
 
     private val _heldFee = MutableStateFlow<FeeView?>(null)
@@ -1128,6 +1140,33 @@ class SigningController(
             // Spec 097: what the reading named, copied — never decided here.
             reading = clear.record_reading,
         )
+
+        /**
+         * §41 (P2-5): the review an approve hands back — the clear-signing and
+         * guard views exactly as the machines wrote them ([clearJson],
+         * [guardJson]; re-encoded from the decoded views only when no raw JSON
+         * is held), the simulation verdict the confirm gate read ([simJson]),
+         * and "Refuse blind signing". A view that does not parse is the
+         * decoded one re-encoded: the core reads it as it reads the gate's.
+         */
+        fun reviewOf(
+            clearJson: String?,
+            guardJson: String?,
+            simJson: String?,
+            refuseBlind: Boolean,
+            clear: ClearSigningView,
+            guard: GuardView,
+        ): SignApproveReview {
+            val wire = app.getvela.wallet.core.crux.Wire.json
+            fun parsed(raw: String?): kotlinx.serialization.json.JsonElement? =
+                raw?.let { runCatching { wire.parseToJsonElement(it) }.getOrNull() }
+            return SignApproveReview(
+                clear = parsed(clearJson) ?: wire.encodeToJsonElement(ClearSigningView.serializer(), clear),
+                guard = parsed(guardJson) ?: wire.encodeToJsonElement(GuardView.serializer(), guard),
+                sim = parsed(simJson)?.takeUnless { it is kotlinx.serialization.json.JsonNull },
+                refuse_blind = refuseBlind,
+            )
+        }
 
         /**
          * A fee view's figure as the approve carries it: the amount in the

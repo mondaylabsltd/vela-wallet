@@ -609,7 +609,16 @@ class MultisigHub(
         data class Failed(val cancelled: Boolean, val reason: String?) : ProposeOutcome
     }
 
-    fun confirmDraft(asMember: String?) = proposals.dispatch(ev("confirm_draft", "as_member" to asMember))
+    /**
+     * §41 (P2-5): the press on the draft's sign button — [anywayConfirmed]
+     * when it was the "… anyway" confirm (its hold / second confirmation),
+     * and [refuseBlind] the person's "Refuse blind signing".
+     */
+    fun confirmDraft(
+        asMember: String?,
+        anywayConfirmed: Boolean = false,
+        refuseBlind: Boolean = app.getvela.wallet.core.data.SigningPrefs.refuseBlind.value,
+    ) = proposals.dispatch(ev("confirm_draft", "as_member" to asMember, "anyway_confirmed" to anywayConfirmed, "refuse_blind" to refuseBlind))
 
     fun withdrawDraft() = proposals.dispatch(ev("withdraw"))
 

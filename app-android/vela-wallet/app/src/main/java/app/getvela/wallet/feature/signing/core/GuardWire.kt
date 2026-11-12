@@ -206,6 +206,13 @@ data class GuardView(
     val decimals_unverified: Boolean = false,
     val expired: Boolean = false,
     val batch: GuardBatchView? = null,
+    /**
+     * §41 (P2-4): a call of the request carries calls the guard did not read
+     * (nested too deep, too many, an encoding that does not hold together).
+     * Only the core reads it (the posture: "… anyway"); kept so a re-encoded
+     * view says it too.
+     */
+    val carrier_unread: Boolean = false,
 )
 
 @Serializable

@@ -108,7 +108,8 @@ class R22FollowUpsMultisigTest {
     }
 
     private suspend fun proposed(hub: MultisigHub, owner: String): JsonElement =
-        hub.proposals.request<JsonElement>(ev("confirm_draft", "as_member" to owner)) { v ->
+        // §41 (P2-5): pressed as the sheet presses it — "… anyway" when its door says so.
+        hub.proposals.request<JsonElement>(ev("confirm_draft", "as_member" to owner, "anyway_confirmed" to hub.proposalsView.value.draft?.let { draftDoor(it, refuseBlind = false).anyway })) { v ->
             (v["actions"] as? JsonObject)?.get("propose")?.takeIf { it.kind != "working" }
         } ?: error("the press never settled")
 
