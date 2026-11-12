@@ -2424,8 +2424,13 @@ pub async fn counterfactual_facts<Ev: Send + 'static>(
     );
     // §40: a member that is a contract on another network, and that no
     // genesis this device holds makes, gets its genesis read from its own
-    // creation there — kept only if it makes exactly that member.
+    // creation there — kept only if it makes exactly that member. §41: the
+    // lookups share one time budget ([`CREATION_LOOKUP_BUDGET_MS`]) and at
+    // most [`CREATION_LOOKUPS`] of them are made; past either, a member not
+    // found yet stays unbound (refused, never guessed).
     let mut found: Vec<Genesis> = Vec::new();
+    let started = io.now().await;
+    let mut lookups = 0usize;
     for m in &members {
         let held = binding
             .geneses
@@ -2459,6 +2464,15 @@ pub async fn counterfactual_facts<Ev: Send + 'static>(
             }
         }
         for id in chains {
+            if lookups >= CREATION_LOOKUPS
+                || io.now().await - started > f64::from(CREATION_LOOKUP_BUDGET_MS)
+            {
+                break;
+            }
+            if blockscout_api(id).is_none() {
+                continue;
+            }
+            lookups += 1;
             if let Some(g) = creation_genesis_on(io, id, m).await {
                 found.push(g);
                 break;
@@ -2501,36 +2515,91 @@ pub async fn counterfactual_facts<Ev: Send + 'static>(
     multisig::ChainFacts { codes, owners }
 }
 
+/// §41: at most this many creation lookups (one explorer read, one
+/// transaction read) for one multisig's facts.
+pub const CREATION_LOOKUPS: usize = 4;
+/// §41: and within this long, all of them together (ms). Each explorer read
+/// is bounded by [`CREATION_HTTP_MS`] and each transaction read by
+/// [`CREATION_RPC_MS`]; a lookup started past the budget is not made.
+pub const CREATION_LOOKUP_BUDGET_MS: u32 = 20_000;
+/// §41: one explorer read's bound (ms).
+pub const CREATION_HTTP_MS: u32 = 8_000;
+/// §41: one creation-transaction read's bound (ms).
+pub const CREATION_RPC_MS: u32 = 8_000;
+/// §41: the most bytes of explorer answer read (a Blockscout address record
+/// is a few KiB).
+pub const CREATION_EXPLORER_MAX_BYTES: usize = 64 * 1024;
+
+/// §41 (§40 review): the Blockscout-style API (`/api/v2/addresses/{a}`,
+/// `creation_transaction_hash`) the creation lookup asks on `chain_id`, or
+/// `None` where Vela knows none — the lookup is then not made (an Etherscan
+/// page has no such API, and asking it only spends the budget). Blockscout's
+/// own instances for the networks whose built-in explorer is another
+/// (Ethereum, Base, Optimism, Arbitrum, Polygon, Gnosis and their testnets),
+/// and the built-in explorers that are Blockscout. The answer is a hint
+/// only: the transaction is read from the chain, and its genesis kept only
+/// if it makes the member.
+#[must_use]
+pub fn blockscout_api(chain_id: u64) -> Option<&'static str> {
+    Some(match chain_id {
+        1 => "https://eth.blockscout.com",
+        10 => "https://optimism.blockscout.com",
+        100 => "https://gnosis.blockscout.com",
+        137 => "https://polygon.blockscout.com",
+        8453 => "https://base.blockscout.com",
+        42161 => "https://arbitrum.blockscout.com",
+        11_155_111 => "https://eth-sepolia.blockscout.com",
+        84532 => "https://base-sepolia.blockscout.com",
+        421_614 => "https://arbitrum-sepolia.blockscout.com",
+        11_155_420 => "https://optimism-sepolia.blockscout.com",
+        // Built-in explorers that are Blockscout themselves.
+        4663 | 1868 | 4326 | 5042 | 5_042_002 | 57073 => {
+            crate::app::network_admin::builtin_explorer_url(u32::try_from(chain_id).ok()?)?
+        }
+        _ => return None,
+    })
+}
+
 /// §40: the genesis `member` was created with on `chain_id`, read from its
 /// creation transaction. Where that transaction is comes from the network's
-/// explorer (Blockscout's `/api/v2/addresses/{a}`) — a hint: the transaction is
+/// Blockscout-style explorer ([`blockscout_api`]) — a hint: the transaction is
 /// read from the chain and its genesis kept only if it makes `member`
-/// ([`multisig::genesis_in_creation_input`]). `None`: not found, or nothing
-/// in it makes `member`.
+/// ([`multisig::genesis_in_creation_input`]). `None`: not found, no such
+/// explorer, an answer too large or not of the shape, a read past its bound,
+/// or nothing in it makes `member`.
 async fn creation_genesis_on<Ev: Send + 'static>(
     io: &Io<Ev>,
     chain_id: u64,
     member: &str,
 ) -> Option<Genesis> {
-    let explorer = crate::app::network_admin::builtin_explorer_url(u32::try_from(chain_id).ok()?)?;
+    let explorer = blockscout_api(chain_id)?;
     let url = format!(
         "{}/api/v2/addresses/{}",
         explorer.trim_end_matches('/'),
         checksummed(member)
     );
-    let HttpAnswer::Answered { status, body, .. } = io.http("GET", url, None, 10_000).await else {
+    let HttpAnswer::Answered { status, body, .. } =
+        io.http("GET", url, None, CREATION_HTTP_MS).await
+    else {
         return None;
     };
-    if !(200..300).contains(&status) {
+    if !(200..300).contains(&status) || body.len() > CREATION_EXPLORER_MAX_BYTES {
         return None;
     }
     let info: Value = serde_json::from_str(&body).ok()?;
-    let tx = info.get("creation_transaction_hash")?.as_str()?.to_owned();
+    let tx = info
+        .get("creation_transaction_hash")?
+        .as_str()
+        .filter(|h| {
+            h.len() == 66 && h.starts_with("0x") && h[2..].bytes().all(|b| b.is_ascii_hexdigit())
+        })?
+        .to_owned();
     let found = io
-        .rpc(
+        .rpc_within(
             chain_id,
             "eth_getTransactionByHash",
             serde_json::json!([tx]),
+            Some(CREATION_RPC_MS),
         )
         .await
         .ok()?;
