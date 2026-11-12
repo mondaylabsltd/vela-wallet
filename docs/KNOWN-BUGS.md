@@ -1,5 +1,9 @@
 # Known bugs
 
+## R22v-10 (open, S4, 2026-11-11, desktop) — found in the Round 22 verification on Arc Testnet
+
+**Platform:** desktop. **Symptom:** A site's `eth_requestAccounts` sometimes does not raise the Connection sheet; it waits behind the toolbar account chip (the tab's badge reads "1") until the chip is clicked. Seen 3 of 4 times after a restart with restored tabs; on a fresh tab it opened by itself. **Likely cause:** the Connection column opens only on a NEW consent (`browser_host_changed`); a consent already standing when Explore shows its tab (a restored tab's request) is never raised again. **Fix direction:** re-raise a standing consent when Explore shows its tab. **Severity:** S4 — nothing is granted or signed; the request is answered once the chip is clicked. **Workaround:** click the account chip.
+
 ## R22-PLAN-1 (planned, feature, every surface; from review 1-12, 2026-11-07) — no allowance list, no revoke screen
 
 **Platform:** every surface. **Gap:** Vela shows and caps an approval when a site asks

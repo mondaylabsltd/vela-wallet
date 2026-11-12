@@ -1009,6 +1009,14 @@ headroom). The fork relay stand-in moves its gas price on every quote (`relay.py
   with "Only use my node", a checked answer that moves no native coin is drawn with the
   request's own native outflow. Reconciled, not refused: an honest node without
   `traceTransfers` reports no native move at all.
+- **A stop that sent the site nothing is still answered.** A `FeeRose` (or a stale Tempo
+  quote) holds no answer for the site; a swipe of that sheet returned `Dismiss` and the
+  site waited for ever. An error with nothing sent, no answer held and nothing in flight
+  now swipes as `Reject` (4001), the spec-081 rule (vector `signing-truth.json`
+  `fee_rose`).
+- **The desktop's connect request behind the chip (R22v-10)** is not fixed: the Connection
+  column opens only on a new consent, and a restored tab's standing one is not raised
+  again. Recorded in KNOWN-BUGS with the fix direction; nothing is granted meanwhile.
 - **Every unbounded grant is a held danger** (`sign_confirm::guarded_posture`): a
   Multicall3- or multicall-carried approval and a Permit2 witness permit were a plain
   Confirm while a two-leg unlimited batch was held. The approval guard's one verdict
@@ -1024,6 +1032,10 @@ headroom). The fork relay stand-in moves its gas price on every quote (`relay.py
 - The headroom is paid, not refunded (the in-band fee leg is fixed in the signature).
 - A quote that rises more than the headroom between the look and the press still stops
   once — said, and the next press pays it.
+- R22v-10 (desktop): a restored tab's connect request waits behind the account chip.
+- Dependency advisories published after a round's gates fail CI until the lock moves:
+  rustix 1.1.6 and the Windows passkey crate's crypto-bigint / ctutils / wnaf were updated
+  here (§39).
 
 ## Left open (Round 22, signing truth)
 - Provider independence is a URL heuristic (above).
