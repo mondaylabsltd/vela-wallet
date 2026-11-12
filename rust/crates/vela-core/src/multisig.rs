@@ -3318,11 +3318,12 @@ fn owner_bound(o: Address, facts: &ChainFacts) -> Result<Option<String>, Refusal
         // A contract elsewhere, nothing here, nothing binding it: whoever
         // can deploy at that address here would hold its vote.
         (true, false) => Err(Refusal::OwnerNotBound { address: here }),
-        // Code here where the multisig's other networks have none (the
-        // replay rule's "code on the target only"), when there are others.
-        (false, true) if !fact.elsewhere.is_empty() => {
-            Err(Refusal::OwnerNotBound { address: here })
-        }
+        // Code here and none elsewhere: the member already holds its address
+        // here, so nobody can deploy there any more (and since EIP-6780 its
+        // code cannot be removed). The vote this multisig would count here is
+        // that contract's — the risk the rule names ("whoever can deploy at
+        // that address") does not exist. Refusing it locked out every Vela
+        // account deployed only where the multisig is (the R22 Arc report).
         _ => Ok(None),
     }
 }
@@ -5398,7 +5399,8 @@ mod tests {
     /// and nothing binding it to its own genesis, would let whoever deploys
     /// at that address here hold its vote — refused. Bound by its own genesis
     /// (CREATE2 through Safe's factory), it is Verified; code here that is not
-    /// its code there is refused; a network that did not answer is Unknown.
+    /// its code there is refused; code here and none elsewhere already holds
+    /// the address (Verified); a network that did not answer is Unknown.
     #[test]
     fn a_contract_member_must_be_bound_to_its_own_genesis() {
         let member = multisig_genesis(&[A.into(), B.into()], 1, "Member", "0x9").unwrap();
@@ -5441,8 +5443,12 @@ mod tests {
         ));
         // Other code here than there: someone else's contract at its address.
         assert_eq!(with(None, "0x6080", Some(&proxy)), not_bound);
-        // Code here, none on its other network: not the same member.
-        assert_eq!(with(None, &proxy, Some("0x")), not_bound);
+        // Code here, none on its other network: it already holds its address
+        // here — nobody can deploy there any more, so its vote is its own.
+        assert!(matches!(
+            with(None, &proxy, Some("0x")),
+            Authority::Verified { .. }
+        ));
         // An EIP-7702 delegation is a key holder's.
         let delegated = format!("0xef0100{}", "11".repeat(20));
         assert!(matches!(
