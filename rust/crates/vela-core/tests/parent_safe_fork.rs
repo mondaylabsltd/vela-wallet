@@ -18,12 +18,24 @@
 //!    `execTransaction` shape aimed at a Safe this account does NOT own)
 //!    goes on to the submit pipeline as before.
 //!
+//! 0.9.10 (the second test): the same takeover with the parent's address
+//! written without its `0x`. The "Vela account" is now a Safe shaped like
+//! one (the 4337 module enabled and its fallback handler) and the parent's
+//! only owner. Vela's own encoder (`tx_request::calls_of` →
+//! `user_op::build_execute_call_data`) reads the bare form as the parent, and
+//! the EntryPoint running that `callData` hands the parent to the attacker —
+//! what 0.9.9's guard, which read only `0x` + 40 hex, let through (proved on
+//! a snapshot, then reverted). Through 0.9.10 the bare form, `0X` and a bare
+//! batch leg are answered -32602 at arrival, before any read or sheet; the
+//! `0x` form is still read and refused; a plain transfer still reaches the
+//! submit and lands.
+//!
 //! Ignored by default; run with a fork up:
 //!
 //! ```sh
 //! anvil --fork-url https://rpc.gnosischain.com --chain-id 100 --port 9461 &
 //! VELA_PARENT_FORK=http://127.0.0.1:9461 \
-//!   cargo test -p vela-core --features crux,dev-fixtures --test parent_safe_fork -- --ignored --nocapture
+//!   cargo test -p vela-core --features crux,dev-fixtures --test parent_safe_fork -- --ignored --nocapture --test-threads=1
 //! ```
 #![cfg(feature = "crux")]
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -41,7 +53,7 @@ use support::DomainDriver;
 use vela_core::app::parent_safe_guard::{ParentReason, SafeOwnerAnswer};
 use vela_core::app::sign_request::{
     Event, SignAccountRef, SignApproveOpts, SignErrorKind, SignOperation as Op, SignRequest,
-    SignResponsePayload, SignShellResult, CODE_INTERNAL,
+    SignResponsePayload, SignShellResult, SignSurface, CODE_INTERNAL, CODE_INVALID_PARAMS,
 };
 
 type Sut = DomainDriver<SignRequest>;
@@ -421,5 +433,231 @@ fn the_appendix_takeover_is_real_on_the_fork_and_vela_refuses_it() {
     );
     assert_eq!(receipt["status"], "0x1");
     println!("normal: the plain transfer lands on the fork");
+    assert_eq!(rpc("evm_revert", &json!([outer])), json!(true));
+}
+
+// ---------------------------------------------------------------------------
+// 0.9.10: the same takeover with the Safe's address written without its `0x`
+// ---------------------------------------------------------------------------
+
+/// The 4337 module, the EntryPoint it trusts, and the module-setup contract a
+/// Vela account is made with (`vela_core::safe`).
+const MODULE: &str = vela_core::safe::SAFE_4337_MODULE;
+const ENTRY_POINT: &str = vela_core::safe::ENTRY_POINT;
+const MODULE_SETUP: &str = vela_core::safe::SAFE_MODULE_SETUP;
+/// The key that controls the account (irrelevant to the attack: the account
+/// itself is the parent's owner).
+const ACCOUNT_KEY: &str = "0x00000000000000000000000000000000000a11c0";
+
+/// A Safe v1.4.1 shaped like a Vela account: the 4337 module enabled
+/// (`SAFE_MODULE_SETUP.enableModules`) and set as the fallback handler — so
+/// the EntryPoint runs its calls through `executeUserOp`, as on any Vela
+/// account; its address.
+fn make_vela_shaped_account(salt: u64) -> String {
+    let enable = calldata(
+        "enableModules(address[])",
+        vec![DynSolValue::Array(vec![addr(MODULE)])],
+    );
+    let setup = calldata(
+        "setup(address[],uint256,address,bytes,address,address,uint256,address)",
+        vec![
+            DynSolValue::Array(vec![addr(ACCOUNT_KEY)]),
+            uint(1),
+            addr(MODULE_SETUP),
+            bytes(&enable),
+            addr(MODULE),
+            addr("0x0000000000000000000000000000000000000000"),
+            uint(0),
+            addr("0x0000000000000000000000000000000000000000"),
+        ],
+    );
+    let create = calldata(
+        "createProxyWithNonce(address,bytes,uint256)",
+        vec![addr(SINGLETON), bytes(&setup), uint(salt)],
+    );
+    let predicted = call(FACTORY, &create);
+    let account = format!(
+        "0x{}",
+        predicted.trim_start_matches("0x")[24..64].to_ascii_lowercase()
+    );
+    let receipt = send_from(OWNER, FACTORY, &create, "0x0");
+    assert_eq!(receipt["status"], "0x1", "the account is made: {receipt}");
+    let enabled = call(
+        &account,
+        &calldata("isModuleEnabled(address)", vec![addr(MODULE)]),
+    );
+    assert!(enabled.ends_with('1'), "the 4337 module is enabled");
+    account
+}
+
+/// What Vela signs for a site's single call (`tx_request::calls_of` then
+/// `user_op::build_execute_call_data`) — the user operation's `callData`,
+/// which the EntryPoint hands to the account.
+fn vela_call_data(params: &Value) -> String {
+    let calls = vela_core::tx_request::calls_of("eth_sendTransaction", &params.to_string())
+        .expect("the submit reads the call");
+    assert_eq!(calls.len(), 1);
+    let one = vela_core::user_op::to_multi_send_call(&calls[0].to, &calls[0].value, &calls[0].data)
+        .unwrap();
+    let data = vela_core::user_op::build_execute_call_data(&one.to, &one.value_hex, &one.data)
+        .expect("the encoder takes the address");
+    format!("0x{}", hex::encode(data))
+}
+
+/// The EntryPoint running `call_data` on `account`, as it does once a user
+/// operation validates (the signature step is the passkey's; not the point).
+fn run_as_entry_point(account: &str, call_data: &str) -> Value {
+    rpc(
+        "anvil_setBalance",
+        &json!([ENTRY_POINT, "0x56bc75e2d63100000"]),
+    );
+    send_from(ENTRY_POINT, account, call_data, "0x0")
+}
+
+fn invalid_params_message(ops: &[Op]) -> Option<String> {
+    ops.iter().find_map(|op| match op {
+        Op::SendResponse {
+            payload: SignResponsePayload::Err { code, message, .. },
+            ..
+        } if *code == CODE_INVALID_PARAMS => Some(message.clone().unwrap_or_default()),
+        _ => None,
+    })
+}
+
+fn arrive_method(sut: &mut Sut, signer: &str, method: &str, params: &Value) -> Vec<Op> {
+    sut.dispatch(Event::RequestArrived {
+        id: "rid-fork".to_owned(),
+        method: method.to_owned(),
+        params_json: params.to_string(),
+        origin: "https://attack.example".to_owned(),
+        transport_id: "tab-1".to_owned(),
+        dedicated_transport: false,
+        per_request_chain: Some(CHAIN),
+        dapp: None,
+        granted_address: Some(signer.to_owned()),
+        requested_address: None,
+        request_ts_ms: None,
+        now_ms: 1_700_000_000_000.0,
+        first_party: false,
+    })
+}
+
+fn wei(value: &Value) -> U256 {
+    U256::from_str_radix(value.as_str().unwrap().trim_start_matches("0x"), 16).unwrap()
+}
+
+#[test]
+#[ignore = "needs a Gnosis fork: VELA_PARENT_FORK=http://127.0.0.1:<port>"]
+fn the_bare_hex_takeover_is_real_on_the_fork_and_vela_0_9_10_refuses_it() {
+    assert_eq!(rpc("eth_chainId", &json!([])), "0x64", "a Gnosis fork");
+    let outer = rpc("evm_snapshot", &json!([]));
+    let salt = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0x0910, |t| t.as_secs())
+        + 0x0910;
+    rpc("anvil_setBalance", &json!([OWNER, "0x56bc75e2d63100000"]));
+    let account = make_vela_shaped_account(salt);
+    let parent = make_safe(&account, salt + 1);
+    let data = takeover_data(&parent, &account);
+    let bare = parent.trim_start_matches("0x").to_owned();
+    println!("account {account} (4337 module), parent Safe {parent} owned by it alone");
+
+    // 1. What 0.9.9 let through: the site writes the parent's address without
+    //    `0x`. Vela's own encoder reads it as the parent — the same bytes as
+    //    the 0x form — and the EntryPoint running it hands the parent to the
+    //    attacker. Snapshot, prove, revert.
+    let bare_params = json!([{ "from": account, "to": bare, "data": data, "value": "0x0" }]);
+    let canonical_params = json!([{ "from": account, "to": parent, "data": data, "value": "0x0" }]);
+    let signed = vela_call_data(&bare_params);
+    assert_eq!(
+        signed,
+        vela_call_data(&canonical_params),
+        "the encoder reads the bare form as the Safe"
+    );
+    let snapshot = rpc("evm_snapshot", &json!([]));
+    let receipt = run_as_entry_point(&account, &signed);
+    assert_eq!(receipt["status"], "0x1", "{receipt}");
+    assert_eq!(
+        owners(&parent),
+        vec![ATTACKER.to_ascii_lowercase()],
+        "taken over through the account's executeUserOp"
+    );
+    println!(
+        "as signed: executeUserOp(<bare parent>, execTransaction(swapOwner) v=1) -> owners = [{ATTACKER}]"
+    );
+    assert_eq!(rpc("evm_revert", &json!([snapshot])), json!(true));
+    assert_eq!(owners(&parent), vec![account.clone()], "reverted");
+
+    // 2. Through Vela 0.9.10: refused at arrival, -32602, before any read,
+    //    sheet or submit — the bare form, an upper-case `0X`, a batch leg.
+    for (method, params) in [
+        ("eth_sendTransaction", bare_params.clone()),
+        (
+            "eth_sendTransaction",
+            json!([{ "from": account, "to": format!("0X{bare}"), "data": data, "value": "0x0" }]),
+        ),
+        (
+            "wallet_sendCalls",
+            json!([{ "version": "2.0.0", "from": account, "chainId": "0x64", "atomic": true,
+                     "calls": [{ "to": bare, "data": data, "value": "0x0" }] }]),
+        ),
+    ] {
+        let mut sut = boot(&account);
+        let ops = arrive_method(&mut sut, &account, method, &params);
+        let message = invalid_params_message(&ops).unwrap_or_else(|| panic!("{method}: {ops:?}"));
+        assert!(
+            message.contains("expected 0x followed by 40 hex characters"),
+            "{message}"
+        );
+        assert!(!signs(&ops), "{method}: nothing signed");
+        assert!(
+            !ops.iter().any(|op| matches!(op, Op::ReadSafeOwner { .. })),
+            "{method}: refused before any read"
+        );
+        assert_eq!(
+            sut.view().surface,
+            SignSurface::Hidden,
+            "{method}: no sheet"
+        );
+        println!("through Vela 0.9.10: {method} with a non-0x `to` -> -32602 \"{message}\"");
+    }
+    assert_eq!(owners(&parent), vec![account.clone()], "untouched");
+
+    // 2b. The 0x form is still the 0.9.9 guard's: read on the fork, owned,
+    //     refused.
+    let mut sut = boot(&account);
+    arrive(&mut sut, &account, &canonical_params);
+    assert_eq!(answer_reads(&mut sut, &fork()), 1, "one isOwner read");
+    let blocked = sut.view().blocked.expect("refused");
+    assert_eq!(blocked.parent.as_deref(), Some(parent.as_str()));
+    assert_eq!(blocked.reason, Some(ParentReason::Owner));
+    assert!(!approve_reaches_submit(&mut sut), "never signed");
+    println!("through Vela 0.9.10: the 0x form -> refused (owner)");
+
+    // 3. A normal dApp transaction still works: a plain transfer from the
+    //    account reaches the passkey + submit, and what Vela signs for it
+    //    lands when the EntryPoint runs it.
+    rpc("anvil_setBalance", &json!([account, "0xde0b6b3a7640000"]));
+    let payee = "0x00000000000000000000000000000000000beef1";
+    let transfer = json!([{ "from": account, "to": payee, "value": "0x2386f26fc10000" }]);
+    let mut sut = boot(&account);
+    let ops = arrive(&mut sut, &account, &transfer);
+    assert!(invalid_params_message(&ops).is_none(), "{ops:?}");
+    answer_reads(&mut sut, &fork());
+    assert!(sut.view().blocked.is_none(), "not refused");
+    assert!(
+        approve_reaches_submit(&mut sut),
+        "reaches the passkey + submit"
+    );
+    let before = wei(&rpc("eth_getBalance", &json!([payee, "latest"])));
+    let receipt = run_as_entry_point(&account, &vela_call_data(&transfer));
+    assert_eq!(receipt["status"], "0x1", "{receipt}");
+    let after = wei(&rpc("eth_getBalance", &json!([payee, "latest"])));
+    assert_eq!(
+        after - before,
+        U256::from(10_000_000_000_000_000_u64),
+        "0.01 xDAI arrived"
+    );
+    println!("normal: a plain transfer -> SignAndSubmit, and it lands on the fork (0.01 xDAI)");
     assert_eq!(rpc("evm_revert", &json!([outer])), json!(true));
 }

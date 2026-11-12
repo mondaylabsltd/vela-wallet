@@ -1,5 +1,5 @@
 {
-  "about": "VELA-2026-002 (0.9.9 hotfix, backported from feat/multisig-account §31): the parent-Safe guard. A request from a site may never make this account act for a Safe it owns — any contract whose isOwner(signer) reads true. v0.9.8 has no multisig list, so every Safe a request would act for is read on chain first. `input` is vela_core::app::parent_safe_guard::CheckInput; `expect` is check(input) (ParentVerdict). `answers` are the shell's answers to ReadSafeOwner (SafeOwnerAnswer); `at_submit` is the submit chokepoint's form, where a Safe nobody read is refused 'unchecked'. A SafeTx the parent rule clears is still refused by the self-call guard (spec 081), whatever its domain. Replayed by rust/crates/vela-core/tests/app_parent_safe_guard.rs, wasm (parentSafeCheck, verify-web), uniffi (parent_safe_check) and the signing page's own suite (the page cannot read the chain, so it refuses every refused or read shape here on any target).",
+  "about": "VELA-2026-002 (0.9.9 hotfix, backported from feat/multisig-account §31): the parent-Safe guard. A request from a site may never make this account act for a Safe it owns — any contract whose isOwner(signer) reads true. v0.9.8 has no multisig list, so every Safe a request would act for is read on chain first. `input` is vela_core::app::parent_safe_guard::CheckInput; `expect` is check(input) (CheckVerdict: a ParentVerdict, or with `at_arrival` arrival's own -32602 refusal `{verdict: invalid, message}` when it refuses first). `answers` are the shell's answers to ReadSafeOwner (SafeOwnerAnswer); `at_submit` is the submit chokepoint's form, where a Safe nobody read is refused 'unchecked'. A SafeTx the parent rule clears is still refused by the self-call guard (spec 081), whatever its domain. Replayed by rust/crates/vela-core/tests/app_parent_safe_guard.rs, wasm (parentSafeCheck, verify-web), uniffi (parent_safe_check) and the signing page's own suite (the page cannot read the chain, so it refuses every refused or read shape here on any target). 0.9.10 (backported from feat/multisig-account §41, f09326124): a `to`, batch-leg `to` or typed-data `verifyingContract` not written as 0x + 40 hex is refused at arrival (`at_arrival`), and every guard reads an address as the encoders do (bare, 0X, under-width); a SafeOp for a Safe this account owns (its `safe`, or a domain other than the 4337 module's) is refused like SafeTx / SafeMessage, whatever the Safe's version (v1.5.0 counts the wrap a site's typed data gets as the owner's approval).",
   "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "parent": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
   "unknown": "0x7777777777777777777777777777777777777777",
@@ -2525,6 +2525,1244 @@
       "expect": {
         "verdict": "clear"
       }
+    },
+    {
+      "name": "0.9.10 non-canonical: approveHash with a bare-hex `to` on a Safe this account owns",
+      "input": {
+        "method": "eth_sendTransaction",
+        "params": [
+          {
+            "to": "5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "data": "0xd4d9bdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": "0x0"
+          }
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "answer": {
+              "type": "returned",
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+            }
+          }
+        ],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+          "chain_id": 8453,
+          "function": "approveHash",
+          "selector": "0xd4d9bdcd",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "owner"
+      },
+      "about": "The encoder signs a bare 40-hex `to`; the guard read only the 0x form and let this through to clear-signing's grade."
+    },
+    {
+      "name": "0.9.10 non-canonical: the takeover execTransaction (v=1) with a bare-hex `to`",
+      "input": {
+        "method": "eth_sendTransaction",
+        "params": [
+          {
+            "to": "5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "data": "0x6a7612020000000000000000000000005afe5afe5afe5afe5afe5afe5afe5afe5afe5afe0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001e00000000000000000000000000000000000000000000000000000000000000064e318b52b0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000000000000000000000000badbadbadbadbadbadbadbadbadbadbadbadbad0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa00000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000",
+            "value": "0x0"
+          }
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "answer": {
+              "type": "returned",
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+            }
+          }
+        ],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+          "chain_id": 8453,
+          "function": "execTransaction",
+          "selector": "0x6a761202",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "owner"
+      },
+      "about": "The 1-of-N takeover, sent to the parent written without 0x."
+    },
+    {
+      "name": "0.9.10 non-canonical: a wallet_sendCalls leg with a bare-hex `to`",
+      "input": {
+        "method": "wallet_sendCalls",
+        "params": [
+          {
+            "version": "2.0.0",
+            "from": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "chainId": "0x2105",
+            "atomic": true,
+            "calls": [
+              {
+                "to": "0x1111111111111111111111111111111111111111",
+                "data": "0x"
+              },
+              {
+                "to": "5AFE5AFE5AFE5AFE5AFE5AFE5AFE5AFE5AFE5AFE",
+                "data": "0xd4d9bdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+              }
+            ]
+          }
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "answer": {
+              "type": "returned",
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+            }
+          }
+        ],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+          "chain_id": 8453,
+          "function": "approveHash",
+          "selector": "0xd4d9bdcd",
+          "leg_index": 2,
+          "nested": false
+        },
+        "reason": "owner"
+      },
+      "about": "A batch leg addressed in bare, upper-case hex."
+    },
+    {
+      "name": "0.9.10 non-canonical: an unknown Safe behind a bare-hex `to` is read first",
+      "input": {
+        "method": "eth_sendTransaction",
+        "params": [
+          {
+            "to": "7777777777777777777777777777777777777777",
+            "data": "0xd4d9bdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": "0x0"
+          }
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "read",
+        "reads": [
+          {
+            "chain_id": 8453,
+            "safe": "0x7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "about": "Read under its canonical name, as the encoder would sign to it."
+    },
+    {
+      "name": "0.9.10 non-canonical: SafeMessage under a bare verifyingContract",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeMessage\": [{\"name\": \"message\", \"type\": \"bytes\"}]}, \"primaryType\": \"SafeMessage\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe\"}, \"message\": {\"message\": \"0xabababababababababababababababababababababababababababababababab\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "answer": {
+              "type": "returned",
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+            }
+          }
+        ],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+          "chain_id": 8453,
+          "function": "SafeMessage",
+          "selector": "",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "owner"
+      },
+      "about": "alloy's serde hashes a bare 40-hex verifyingContract; the guard read only the 0x form."
+    },
+    {
+      "name": "0.9.10 non-canonical: SafeTx under an under-width verifyingContract",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeTx\": [{\"name\": \"to\", \"type\": \"address\"}, {\"name\": \"value\", \"type\": \"uint256\"}, {\"name\": \"data\", \"type\": \"bytes\"}, {\"name\": \"operation\", \"type\": \"uint8\"}, {\"name\": \"safeTxGas\", \"type\": \"uint256\"}, {\"name\": \"baseGas\", \"type\": \"uint256\"}, {\"name\": \"gasPrice\", \"type\": \"uint256\"}, {\"name\": \"gasToken\", \"type\": \"address\"}, {\"name\": \"refundReceiver\", \"type\": \"address\"}, {\"name\": \"nonce\", \"type\": \"uint256\"}]}, \"primaryType\": \"SafeTx\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"0x5afe5afe5afe5afe5afe5afe5afe5afe5afe\"}, \"message\": {\"to\": \"0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe\", \"value\": \"0\", \"data\": \"0xe318b52b0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000000000000000000000000badbadbadbadbadbadbadbadbadbadbadbadbad0\", \"operation\": 0, \"safeTxGas\": \"0\", \"baseGas\": \"0\", \"gasPrice\": \"0\", \"gasToken\": \"0x0000000000000000000000000000000000000000\", \"refundReceiver\": \"0x0000000000000000000000000000000000000000\", \"nonce\": \"0\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x00005afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "answer": {
+              "type": "returned",
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+            }
+          }
+        ],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x00005afe5afe5afe5afe5afe5afe5afe5afe5afe",
+          "chain_id": 8453,
+          "function": "SafeTx",
+          "selector": "",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "owner"
+      },
+      "about": "eip712::pad_scalar left-pads an under-width address: 36 hex characters are the multisig 0x0000…."
+    },
+    {
+      "name": "0.9.10 at arrival: a bare-hex `to` is refused -32602",
+      "input": {
+        "method": "eth_sendTransaction",
+        "params": [
+          {
+            "to": "5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "data": "0xd4d9bdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": "0x0"
+          }
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [],
+        "at_submit": false,
+        "at_arrival": true
+      },
+      "expect": {
+        "verdict": "invalid",
+        "message": "Invalid transaction `to`: expected 0x followed by 40 hex characters"
+      },
+      "about": "sign_request refuses it at arrival; no guard has to agree with the encoder on it."
+    },
+    {
+      "name": "0.9.10 at arrival: a bare-hex batch leg `to` is refused -32602",
+      "input": {
+        "method": "wallet_sendCalls",
+        "params": [
+          {
+            "version": "2.0.0",
+            "from": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "chainId": "0x2105",
+            "atomic": true,
+            "calls": [
+              {
+                "to": "0x1111111111111111111111111111111111111111",
+                "data": "0x"
+              },
+              {
+                "to": "5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+                "data": "0xd4d9bdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+              }
+            ]
+          }
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [],
+        "at_submit": false,
+        "at_arrival": true
+      },
+      "expect": {
+        "verdict": "invalid",
+        "message": "Invalid `to` in call 1: expected 0x followed by 40 hex characters"
+      },
+      "about": "The leg is named by its 0-based index, as a value refusal names it."
+    },
+    {
+      "name": "0.9.10 at arrival: an under-width `to` is refused -32602",
+      "input": {
+        "method": "eth_sendTransaction",
+        "params": [
+          {
+            "to": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5a",
+            "data": "0xd4d9bdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": "0x0"
+          }
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [],
+        "at_submit": false,
+        "at_arrival": true
+      },
+      "expect": {
+        "verdict": "invalid",
+        "message": "Invalid transaction `to`: expected 0x followed by 40 hex characters"
+      },
+      "about": "Nothing is padded for a site."
+    },
+    {
+      "name": "0.9.10 at arrival: a bare verifyingContract is refused -32602",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeMessage\": [{\"name\": \"message\", \"type\": \"bytes\"}]}, \"primaryType\": \"SafeMessage\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe\"}, \"message\": {\"message\": \"0xabababababababababababababababababababababababababababababababab\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [],
+        "at_submit": false,
+        "at_arrival": true
+      },
+      "expect": {
+        "verdict": "invalid",
+        "message": "Invalid typed data: domain.verifyingContract must be 0x followed by 40 hex characters"
+      },
+      "about": "typed_data_request::canonical refuses the document."
+    },
+    {
+      "name": "0.9.10 at arrival: an under-width verifyingContract is refused -32602",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeTx\": [{\"name\": \"to\", \"type\": \"address\"}, {\"name\": \"value\", \"type\": \"uint256\"}, {\"name\": \"data\", \"type\": \"bytes\"}, {\"name\": \"operation\", \"type\": \"uint8\"}, {\"name\": \"safeTxGas\", \"type\": \"uint256\"}, {\"name\": \"baseGas\", \"type\": \"uint256\"}, {\"name\": \"gasPrice\", \"type\": \"uint256\"}, {\"name\": \"gasToken\", \"type\": \"address\"}, {\"name\": \"refundReceiver\", \"type\": \"address\"}, {\"name\": \"nonce\", \"type\": \"uint256\"}]}, \"primaryType\": \"SafeTx\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"0x5afe5afe5afe5afe5afe5afe5afe5afe5afe\"}, \"message\": {\"to\": \"0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe\", \"value\": \"0\", \"data\": \"0xe318b52b0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000000000000000000000000badbadbadbadbadbadbadbadbadbadbadbadbad0\", \"operation\": 0, \"safeTxGas\": \"0\", \"baseGas\": \"0\", \"gasPrice\": \"0\", \"gasToken\": \"0x0000000000000000000000000000000000000000\", \"refundReceiver\": \"0x0000000000000000000000000000000000000000\", \"nonce\": \"0\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [],
+        "at_submit": false,
+        "at_arrival": true
+      },
+      "expect": {
+        "verdict": "invalid",
+        "message": "Invalid typed data: domain.verifyingContract must be 0x followed by 40 hex characters"
+      },
+      "about": "Refused before the hasher pads it."
+    },
+    {
+      "name": "0.9.10 at arrival: a canonical mixed-case `to` goes on to the guard",
+      "input": {
+        "method": "eth_sendTransaction",
+        "params": [
+          {
+            "to": "0x5AFE5afe5afe5afe5afe5afe5afe5afe5afe5AFE",
+            "data": "0xd4d9bdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": "0x0"
+          }
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "answer": {
+              "type": "returned",
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+            }
+          }
+        ],
+        "at_submit": false,
+        "at_arrival": true
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+          "chain_id": 8453,
+          "function": "approveHash",
+          "selector": "0xd4d9bdcd",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "owner"
+      },
+      "about": "Case is not a form: 0x and 40 hex characters of either case is canonical."
+    },
+    {
+      "name": "0.9.10 c: SafeOp for a Safe this account owns, under the 4337 module's domain",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeOp\": [{\"name\": \"safe\", \"type\": \"address\"}, {\"name\": \"nonce\", \"type\": \"uint256\"}, {\"name\": \"initCode\", \"type\": \"bytes\"}, {\"name\": \"callData\", \"type\": \"bytes\"}, {\"name\": \"verificationGasLimit\", \"type\": \"uint128\"}, {\"name\": \"callGasLimit\", \"type\": \"uint128\"}, {\"name\": \"preVerificationGas\", \"type\": \"uint256\"}, {\"name\": \"maxPriorityFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"maxFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"paymasterAndData\", \"type\": \"bytes\"}, {\"name\": \"validAfter\", \"type\": \"uint48\"}, {\"name\": \"validUntil\", \"type\": \"uint48\"}, {\"name\": \"entryPoint\", \"type\": \"address\"}]}, \"primaryType\": \"SafeOp\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226\"}, \"message\": {\"safe\": \"0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe\", \"nonce\": \"0\", \"initCode\": \"0x\", \"callData\": \"0x7bb37428000000000000000000000000bad0bad0bad0bad0bad0bad0bad0bad0bad0bad00000000000000000000000000000000000000000000000000de0b6b3a7640000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\", \"verificationGasLimit\": \"500000\", \"callGasLimit\": \"500000\", \"preVerificationGas\": \"60000\", \"maxPriorityFeePerGas\": \"1000000\", \"maxFeePerGas\": \"2000000\", \"paymasterAndData\": \"0x\", \"validAfter\": \"0\", \"validUntil\": \"0\", \"entryPoint\": \"0x0000000071727De22E5E9d8BAf0edAc6f37da032\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "answer": {
+              "type": "returned",
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+            }
+          }
+        ],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+          "chain_id": 8453,
+          "function": "SafeOp",
+          "selector": "",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "owner"
+      },
+      "about": "A Safe v1.5.0 checks an owner contract with isValidSignature(bytes32): this account's wrapped signature of the parent's SafeOp is its approval of the parent's user operation."
+    },
+    {
+      "name": "0.9.10 c: SafeOp under an owned Safe's own domain",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeOp\": [{\"name\": \"safe\", \"type\": \"address\"}, {\"name\": \"nonce\", \"type\": \"uint256\"}, {\"name\": \"initCode\", \"type\": \"bytes\"}, {\"name\": \"callData\", \"type\": \"bytes\"}, {\"name\": \"verificationGasLimit\", \"type\": \"uint128\"}, {\"name\": \"callGasLimit\", \"type\": \"uint128\"}, {\"name\": \"preVerificationGas\", \"type\": \"uint256\"}, {\"name\": \"maxPriorityFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"maxFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"paymasterAndData\", \"type\": \"bytes\"}, {\"name\": \"validAfter\", \"type\": \"uint48\"}, {\"name\": \"validUntil\", \"type\": \"uint48\"}, {\"name\": \"entryPoint\", \"type\": \"address\"}]}, \"primaryType\": \"SafeOp\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe\"}, \"message\": {\"safe\": \"0x7777777777777777777777777777777777777777\", \"nonce\": \"0\", \"initCode\": \"0x\", \"callData\": \"0x7bb37428000000000000000000000000bad0bad0bad0bad0bad0bad0bad0bad0bad0bad00000000000000000000000000000000000000000000000000de0b6b3a7640000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\", \"verificationGasLimit\": \"500000\", \"callGasLimit\": \"500000\", \"preVerificationGas\": \"60000\", \"maxPriorityFeePerGas\": \"1000000\", \"maxFeePerGas\": \"2000000\", \"paymasterAndData\": \"0x\", \"validAfter\": \"0\", \"validUntil\": \"0\", \"entryPoint\": \"0x0000000071727De22E5E9d8BAf0edAc6f37da032\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "answer": {
+              "type": "returned",
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+            }
+          }
+        ],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+          "chain_id": 8453,
+          "function": "SafeOp",
+          "selector": "",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "owner"
+      },
+      "about": "Under the parent's domain whoever its `safe` names."
+    },
+    {
+      "name": "0.9.10 c: SafeOp for an unknown Safe: read first (the module is no Safe)",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeOp\": [{\"name\": \"safe\", \"type\": \"address\"}, {\"name\": \"nonce\", \"type\": \"uint256\"}, {\"name\": \"initCode\", \"type\": \"bytes\"}, {\"name\": \"callData\", \"type\": \"bytes\"}, {\"name\": \"verificationGasLimit\", \"type\": \"uint128\"}, {\"name\": \"callGasLimit\", \"type\": \"uint128\"}, {\"name\": \"preVerificationGas\", \"type\": \"uint256\"}, {\"name\": \"maxPriorityFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"maxFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"paymasterAndData\", \"type\": \"bytes\"}, {\"name\": \"validAfter\", \"type\": \"uint48\"}, {\"name\": \"validUntil\", \"type\": \"uint48\"}, {\"name\": \"entryPoint\", \"type\": \"address\"}]}, \"primaryType\": \"SafeOp\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226\"}, \"message\": {\"safe\": \"0x7777777777777777777777777777777777777777\", \"nonce\": \"0\", \"initCode\": \"0x\", \"callData\": \"0x7bb37428000000000000000000000000bad0bad0bad0bad0bad0bad0bad0bad0bad0bad00000000000000000000000000000000000000000000000000de0b6b3a7640000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\", \"verificationGasLimit\": \"500000\", \"callGasLimit\": \"500000\", \"preVerificationGas\": \"60000\", \"maxPriorityFeePerGas\": \"1000000\", \"maxFeePerGas\": \"2000000\", \"paymasterAndData\": \"0x\", \"validAfter\": \"0\", \"validUntil\": \"0\", \"entryPoint\": \"0x0000000071727De22E5E9d8BAf0edAc6f37da032\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "read",
+        "reads": [
+          {
+            "chain_id": 8453,
+            "safe": "0x7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "about": "The Safe it acts for is read; the module's domain is not."
+    },
+    {
+      "name": "0.9.10 c: SafeOp for an unknown Safe, isOwner true: refused",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeOp\": [{\"name\": \"safe\", \"type\": \"address\"}, {\"name\": \"nonce\", \"type\": \"uint256\"}, {\"name\": \"initCode\", \"type\": \"bytes\"}, {\"name\": \"callData\", \"type\": \"bytes\"}, {\"name\": \"verificationGasLimit\", \"type\": \"uint128\"}, {\"name\": \"callGasLimit\", \"type\": \"uint128\"}, {\"name\": \"preVerificationGas\", \"type\": \"uint256\"}, {\"name\": \"maxPriorityFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"maxFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"paymasterAndData\", \"type\": \"bytes\"}, {\"name\": \"validAfter\", \"type\": \"uint48\"}, {\"name\": \"validUntil\", \"type\": \"uint48\"}, {\"name\": \"entryPoint\", \"type\": \"address\"}]}, \"primaryType\": \"SafeOp\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226\"}, \"message\": {\"safe\": \"0x7777777777777777777777777777777777777777\", \"nonce\": \"0\", \"initCode\": \"0x\", \"callData\": \"0x7bb37428000000000000000000000000bad0bad0bad0bad0bad0bad0bad0bad0bad0bad00000000000000000000000000000000000000000000000000de0b6b3a7640000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\", \"verificationGasLimit\": \"500000\", \"callGasLimit\": \"500000\", \"preVerificationGas\": \"60000\", \"maxPriorityFeePerGas\": \"1000000\", \"maxFeePerGas\": \"2000000\", \"paymasterAndData\": \"0x\", \"validAfter\": \"0\", \"validUntil\": \"0\", \"entryPoint\": \"0x0000000071727De22E5E9d8BAf0edAc6f37da032\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x7777777777777777777777777777777777777777",
+            "answer": {
+              "type": "returned",
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+            }
+          }
+        ],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x7777777777777777777777777777777777777777",
+          "chain_id": 8453,
+          "function": "SafeOp",
+          "selector": "",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "owner"
+      },
+      "about": "Any Safe this account owns, whatever its version."
+    },
+    {
+      "name": "0.9.10 non-canonical: SafeOp whose `safe` is written bare",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeOp\": [{\"name\": \"safe\", \"type\": \"address\"}, {\"name\": \"nonce\", \"type\": \"uint256\"}, {\"name\": \"initCode\", \"type\": \"bytes\"}, {\"name\": \"callData\", \"type\": \"bytes\"}, {\"name\": \"verificationGasLimit\", \"type\": \"uint128\"}, {\"name\": \"callGasLimit\", \"type\": \"uint128\"}, {\"name\": \"preVerificationGas\", \"type\": \"uint256\"}, {\"name\": \"maxPriorityFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"maxFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"paymasterAndData\", \"type\": \"bytes\"}, {\"name\": \"validAfter\", \"type\": \"uint48\"}, {\"name\": \"validUntil\", \"type\": \"uint48\"}, {\"name\": \"entryPoint\", \"type\": \"address\"}]}, \"primaryType\": \"SafeOp\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226\"}, \"message\": {\"safe\": \"5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe\", \"nonce\": \"0\", \"initCode\": \"0x\", \"callData\": \"0x7bb37428000000000000000000000000bad0bad0bad0bad0bad0bad0bad0bad0bad0bad00000000000000000000000000000000000000000000000000de0b6b3a7640000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\", \"verificationGasLimit\": \"500000\", \"callGasLimit\": \"500000\", \"preVerificationGas\": \"60000\", \"maxPriorityFeePerGas\": \"1000000\", \"maxFeePerGas\": \"2000000\", \"paymasterAndData\": \"0x\", \"validAfter\": \"0\", \"validUntil\": \"0\", \"entryPoint\": \"0x0000000071727De22E5E9d8BAf0edAc6f37da032\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "answer": {
+              "type": "returned",
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+            }
+          }
+        ],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+          "chain_id": 8453,
+          "function": "SafeOp",
+          "selector": "",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "owner"
+      },
+      "about": "The message field as the hasher reads it."
+    },
+    {
+      "name": "0.9.10 a SafeOp for the account itself is not another Safe's",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeOp\": [{\"name\": \"safe\", \"type\": \"address\"}, {\"name\": \"nonce\", \"type\": \"uint256\"}, {\"name\": \"initCode\", \"type\": \"bytes\"}, {\"name\": \"callData\", \"type\": \"bytes\"}, {\"name\": \"verificationGasLimit\", \"type\": \"uint128\"}, {\"name\": \"callGasLimit\", \"type\": \"uint128\"}, {\"name\": \"preVerificationGas\", \"type\": \"uint256\"}, {\"name\": \"maxPriorityFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"maxFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"paymasterAndData\", \"type\": \"bytes\"}, {\"name\": \"validAfter\", \"type\": \"uint48\"}, {\"name\": \"validUntil\", \"type\": \"uint48\"}, {\"name\": \"entryPoint\", \"type\": \"address\"}]}, \"primaryType\": \"SafeOp\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226\"}, \"message\": {\"safe\": \"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"nonce\": \"0\", \"initCode\": \"0x\", \"callData\": \"0x7bb37428000000000000000000000000bad0bad0bad0bad0bad0bad0bad0bad0bad0bad00000000000000000000000000000000000000000000000000de0b6b3a7640000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\", \"verificationGasLimit\": \"500000\", \"callGasLimit\": \"500000\", \"preVerificationGas\": \"60000\", \"maxPriorityFeePerGas\": \"1000000\", \"maxFeePerGas\": \"2000000\", \"paymasterAndData\": \"0x\", \"validAfter\": \"0\", \"validUntil\": \"0\", \"entryPoint\": \"0x0000000071727De22E5E9d8BAf0edAc6f37da032\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "clear"
+      },
+      "about": "The account's own operation; the module is not read."
+    },
+    {
+      "name": "0.9.10 v1.5.0: SafeMessage under an owned Safe v1.5.0's domain, isOwner true: refused",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeMessage\": [{\"name\": \"message\", \"type\": \"bytes\"}]}, \"primaryType\": \"SafeMessage\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe\"}, \"message\": {\"message\": \"0xabababababababababababababababababababababababababababababababab\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "answer": {
+              "type": "returned",
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+            }
+          }
+        ],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+          "chain_id": 8453,
+          "function": "SafeMessage",
+          "selector": "",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "owner"
+      },
+      "about": "alloy's serde hashes a bare 40-hex verifyingContract; the guard read only the 0x form."
+    },
+    {
+      "name": "0.9.10 v1.5.0: SafeMessage under a Safe v1.5.0, isOwner unreadable: refused couldn't check",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeMessage\": [{\"name\": \"message\", \"type\": \"bytes\"}]}, \"primaryType\": \"SafeMessage\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe\"}, \"message\": {\"message\": \"0xabababababababababababababababababababababababababababababababab\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "answer": {
+              "type": "unreachable",
+              "detail": "offline"
+            }
+          }
+        ],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+          "chain_id": 8453,
+          "function": "SafeMessage",
+          "selector": "",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "unchecked"
+      },
+      "about": "alloy's serde hashes a bare 40-hex verifyingContract; the guard read only the 0x form."
+    },
+    {
+      "name": "0.9.10 v1.5.0: SafeOp for an owned Safe v1.5.0 (its `safe`), under the 4337 module's domain: refused",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeOp\": [{\"name\": \"safe\", \"type\": \"address\"}, {\"name\": \"nonce\", \"type\": \"uint256\"}, {\"name\": \"initCode\", \"type\": \"bytes\"}, {\"name\": \"callData\", \"type\": \"bytes\"}, {\"name\": \"verificationGasLimit\", \"type\": \"uint128\"}, {\"name\": \"callGasLimit\", \"type\": \"uint128\"}, {\"name\": \"preVerificationGas\", \"type\": \"uint256\"}, {\"name\": \"maxPriorityFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"maxFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"paymasterAndData\", \"type\": \"bytes\"}, {\"name\": \"validAfter\", \"type\": \"uint48\"}, {\"name\": \"validUntil\", \"type\": \"uint48\"}, {\"name\": \"entryPoint\", \"type\": \"address\"}]}, \"primaryType\": \"SafeOp\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226\"}, \"message\": {\"safe\": \"0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe\", \"nonce\": \"0\", \"initCode\": \"0x\", \"callData\": \"0x7bb37428000000000000000000000000bad0bad0bad0bad0bad0bad0bad0bad0bad0bad00000000000000000000000000000000000000000000000000de0b6b3a7640000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\", \"verificationGasLimit\": \"500000\", \"callGasLimit\": \"500000\", \"preVerificationGas\": \"60000\", \"maxPriorityFeePerGas\": \"1000000\", \"maxFeePerGas\": \"2000000\", \"paymasterAndData\": \"0x\", \"validAfter\": \"0\", \"validUntil\": \"0\", \"entryPoint\": \"0x0000000071727De22E5E9d8BAf0edAc6f37da032\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "answer": {
+              "type": "returned",
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+            }
+          }
+        ],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+          "chain_id": 8453,
+          "function": "SafeOp",
+          "selector": "",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "owner"
+      },
+      "about": "A Safe v1.5.0 checks an owner contract with isValidSignature(bytes32): this account's wrapped signature of the parent's SafeOp is its approval of the parent's user operation."
+    },
+    {
+      "name": "0.9.10 v1.5.0: SafeOp for a Safe v1.5.0, isOwner unreadable: refused couldn't check",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeOp\": [{\"name\": \"safe\", \"type\": \"address\"}, {\"name\": \"nonce\", \"type\": \"uint256\"}, {\"name\": \"initCode\", \"type\": \"bytes\"}, {\"name\": \"callData\", \"type\": \"bytes\"}, {\"name\": \"verificationGasLimit\", \"type\": \"uint128\"}, {\"name\": \"callGasLimit\", \"type\": \"uint128\"}, {\"name\": \"preVerificationGas\", \"type\": \"uint256\"}, {\"name\": \"maxPriorityFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"maxFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"paymasterAndData\", \"type\": \"bytes\"}, {\"name\": \"validAfter\", \"type\": \"uint48\"}, {\"name\": \"validUntil\", \"type\": \"uint48\"}, {\"name\": \"entryPoint\", \"type\": \"address\"}]}, \"primaryType\": \"SafeOp\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226\"}, \"message\": {\"safe\": \"0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe\", \"nonce\": \"0\", \"initCode\": \"0x\", \"callData\": \"0x7bb37428000000000000000000000000bad0bad0bad0bad0bad0bad0bad0bad0bad0bad00000000000000000000000000000000000000000000000000de0b6b3a7640000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\", \"verificationGasLimit\": \"500000\", \"callGasLimit\": \"500000\", \"preVerificationGas\": \"60000\", \"maxPriorityFeePerGas\": \"1000000\", \"maxFeePerGas\": \"2000000\", \"paymasterAndData\": \"0x\", \"validAfter\": \"0\", \"validUntil\": \"0\", \"entryPoint\": \"0x0000000071727De22E5E9d8BAf0edAc6f37da032\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "answer": {
+              "type": "unreachable",
+              "detail": "offline"
+            }
+          }
+        ],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+          "chain_id": 8453,
+          "function": "SafeOp",
+          "selector": "",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "unchecked"
+      },
+      "about": "A Safe v1.5.0 checks an owner contract with isValidSignature(bytes32): this account's wrapped signature of the parent's SafeOp is its approval of the parent's user operation."
+    },
+    {
+      "name": "0.9.10 v1.5.0: SafeOp for a Safe this account does not own: allowed",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeOp\": [{\"name\": \"safe\", \"type\": \"address\"}, {\"name\": \"nonce\", \"type\": \"uint256\"}, {\"name\": \"initCode\", \"type\": \"bytes\"}, {\"name\": \"callData\", \"type\": \"bytes\"}, {\"name\": \"verificationGasLimit\", \"type\": \"uint128\"}, {\"name\": \"callGasLimit\", \"type\": \"uint128\"}, {\"name\": \"preVerificationGas\", \"type\": \"uint256\"}, {\"name\": \"maxPriorityFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"maxFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"paymasterAndData\", \"type\": \"bytes\"}, {\"name\": \"validAfter\", \"type\": \"uint48\"}, {\"name\": \"validUntil\", \"type\": \"uint48\"}, {\"name\": \"entryPoint\", \"type\": \"address\"}]}, \"primaryType\": \"SafeOp\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226\"}, \"message\": {\"safe\": \"0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe\", \"nonce\": \"0\", \"initCode\": \"0x\", \"callData\": \"0x7bb37428000000000000000000000000bad0bad0bad0bad0bad0bad0bad0bad0bad0bad00000000000000000000000000000000000000000000000000de0b6b3a7640000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\", \"verificationGasLimit\": \"500000\", \"callGasLimit\": \"500000\", \"preVerificationGas\": \"60000\", \"maxPriorityFeePerGas\": \"1000000\", \"maxFeePerGas\": \"2000000\", \"paymasterAndData\": \"0x\", \"validAfter\": \"0\", \"validUntil\": \"0\", \"entryPoint\": \"0x0000000071727De22E5E9d8BAf0edAc6f37da032\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "answer": {
+              "type": "returned",
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        ],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "clear"
+      },
+      "about": "A Safe v1.5.0 checks an owner contract with isValidSignature(bytes32): this account's wrapped signature of the parent's SafeOp is its approval of the parent's user operation."
+    },
+    {
+      "name": "0.9.10 v1.5.0: SafeOp for another Safe: arrival reads isOwner first (the module is never read)",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeOp\": [{\"name\": \"safe\", \"type\": \"address\"}, {\"name\": \"nonce\", \"type\": \"uint256\"}, {\"name\": \"initCode\", \"type\": \"bytes\"}, {\"name\": \"callData\", \"type\": \"bytes\"}, {\"name\": \"verificationGasLimit\", \"type\": \"uint128\"}, {\"name\": \"callGasLimit\", \"type\": \"uint128\"}, {\"name\": \"preVerificationGas\", \"type\": \"uint256\"}, {\"name\": \"maxPriorityFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"maxFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"paymasterAndData\", \"type\": \"bytes\"}, {\"name\": \"validAfter\", \"type\": \"uint48\"}, {\"name\": \"validUntil\", \"type\": \"uint48\"}, {\"name\": \"entryPoint\", \"type\": \"address\"}]}, \"primaryType\": \"SafeOp\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226\"}, \"message\": {\"safe\": \"0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe\", \"nonce\": \"0\", \"initCode\": \"0x\", \"callData\": \"0x7bb37428000000000000000000000000bad0bad0bad0bad0bad0bad0bad0bad0bad0bad00000000000000000000000000000000000000000000000000de0b6b3a7640000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\", \"verificationGasLimit\": \"500000\", \"callGasLimit\": \"500000\", \"preVerificationGas\": \"60000\", \"maxPriorityFeePerGas\": \"1000000\", \"maxFeePerGas\": \"2000000\", \"paymasterAndData\": \"0x\", \"validAfter\": \"0\", \"validUntil\": \"0\", \"entryPoint\": \"0x0000000071727De22E5E9d8BAf0edAc6f37da032\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "read",
+        "reads": [
+          {
+            "chain_id": 8453,
+            "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe"
+          }
+        ]
+      },
+      "about": "A Safe v1.5.0 checks an owner contract with isValidSignature(bytes32): this account's wrapped signature of the parent's SafeOp is its approval of the parent's user operation."
+    },
+    {
+      "name": "0.9.10 v1.5.0: SafeOp at submit, nobody read the Safe: refused couldn't check",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeOp\": [{\"name\": \"safe\", \"type\": \"address\"}, {\"name\": \"nonce\", \"type\": \"uint256\"}, {\"name\": \"initCode\", \"type\": \"bytes\"}, {\"name\": \"callData\", \"type\": \"bytes\"}, {\"name\": \"verificationGasLimit\", \"type\": \"uint128\"}, {\"name\": \"callGasLimit\", \"type\": \"uint128\"}, {\"name\": \"preVerificationGas\", \"type\": \"uint256\"}, {\"name\": \"maxPriorityFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"maxFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"paymasterAndData\", \"type\": \"bytes\"}, {\"name\": \"validAfter\", \"type\": \"uint48\"}, {\"name\": \"validUntil\", \"type\": \"uint48\"}, {\"name\": \"entryPoint\", \"type\": \"address\"}]}, \"primaryType\": \"SafeOp\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226\"}, \"message\": {\"safe\": \"0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe\", \"nonce\": \"0\", \"initCode\": \"0x\", \"callData\": \"0x7bb37428000000000000000000000000bad0bad0bad0bad0bad0bad0bad0bad0bad0bad00000000000000000000000000000000000000000000000000de0b6b3a7640000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\", \"verificationGasLimit\": \"500000\", \"callGasLimit\": \"500000\", \"preVerificationGas\": \"60000\", \"maxPriorityFeePerGas\": \"1000000\", \"maxFeePerGas\": \"2000000\", \"paymasterAndData\": \"0x\", \"validAfter\": \"0\", \"validUntil\": \"0\", \"entryPoint\": \"0x0000000071727De22E5E9d8BAf0edAc6f37da032\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [],
+        "at_submit": true
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+          "chain_id": 8453,
+          "function": "SafeOp",
+          "selector": "",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "unchecked"
+      },
+      "about": "A Safe v1.5.0 checks an owner contract with isValidSignature(bytes32): this account's wrapped signature of the parent's SafeOp is its approval of the parent's user operation."
+    },
+    {
+      "name": "0.9.10 at arrival: a canonical SafeOp goes on to the guard and is refused there",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeOp\": [{\"name\": \"safe\", \"type\": \"address\"}, {\"name\": \"nonce\", \"type\": \"uint256\"}, {\"name\": \"initCode\", \"type\": \"bytes\"}, {\"name\": \"callData\", \"type\": \"bytes\"}, {\"name\": \"verificationGasLimit\", \"type\": \"uint128\"}, {\"name\": \"callGasLimit\", \"type\": \"uint128\"}, {\"name\": \"preVerificationGas\", \"type\": \"uint256\"}, {\"name\": \"maxPriorityFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"maxFeePerGas\", \"type\": \"uint128\"}, {\"name\": \"paymasterAndData\", \"type\": \"bytes\"}, {\"name\": \"validAfter\", \"type\": \"uint48\"}, {\"name\": \"validUntil\", \"type\": \"uint48\"}, {\"name\": \"entryPoint\", \"type\": \"address\"}]}, \"primaryType\": \"SafeOp\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226\"}, \"message\": {\"safe\": \"0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe\", \"nonce\": \"0\", \"initCode\": \"0x\", \"callData\": \"0x7bb37428000000000000000000000000bad0bad0bad0bad0bad0bad0bad0bad0bad0bad00000000000000000000000000000000000000000000000000de0b6b3a7640000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\", \"verificationGasLimit\": \"500000\", \"callGasLimit\": \"500000\", \"preVerificationGas\": \"60000\", \"maxPriorityFeePerGas\": \"1000000\", \"maxFeePerGas\": \"2000000\", \"paymasterAndData\": \"0x\", \"validAfter\": \"0\", \"validUntil\": \"0\", \"entryPoint\": \"0x0000000071727De22E5E9d8BAf0edAc6f37da032\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "answer": {
+              "type": "returned",
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+            }
+          }
+        ],
+        "at_submit": false,
+        "at_arrival": true
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+          "chain_id": 8453,
+          "function": "SafeOp",
+          "selector": "",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "owner"
+      },
+      "about": "A Safe v1.5.0 checks an owner contract with isValidSignature(bytes32): this account's wrapped signature of the parent's SafeOp is its approval of the parent's user operation."
+    },
+    {
+      "name": "0.9.10 bare execTransaction: a bare-hex `to` is read like any other",
+      "input": {
+        "method": "eth_sendTransaction",
+        "params": [
+          {
+            "to": "7777777777777777777777777777777777777777",
+            "data": "0x6a7612020000000000000000000000005afe5afe5afe5afe5afe5afe5afe5afe5afe5afe0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001e00000000000000000000000000000000000000000000000000000000000000064e318b52b0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000000000000000000000000badbadbadbadbadbadbadbadbadbadbadbadbad0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa00000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000",
+            "value": "0x0"
+          }
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "read",
+        "reads": [
+          {
+            "chain_id": 8453,
+            "safe": "0x7777777777777777777777777777777777777777"
+          },
+          {
+            "chain_id": 8453,
+            "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe"
+          }
+        ]
+      },
+      "about": "The 1-of-N takeover, sent to the parent written without 0x."
+    },
+    {
+      "name": "0.9.10 bare execTransaction: bare-hex `to`, isOwner true: refused",
+      "input": {
+        "method": "eth_sendTransaction",
+        "params": [
+          {
+            "to": "7777777777777777777777777777777777777777",
+            "data": "0x6a7612020000000000000000000000005afe5afe5afe5afe5afe5afe5afe5afe5afe5afe0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001e00000000000000000000000000000000000000000000000000000000000000064e318b52b0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000000000000000000000000badbadbadbadbadbadbadbadbadbadbadbadbad0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa00000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000",
+            "value": "0x0"
+          }
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x7777777777777777777777777777777777777777",
+            "answer": {
+              "type": "returned",
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+            }
+          }
+        ],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x7777777777777777777777777777777777777777",
+          "chain_id": 8453,
+          "function": "execTransaction",
+          "selector": "0x6a761202",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "owner"
+      },
+      "about": "The 1-of-N takeover, sent to the parent written without 0x."
+    },
+    {
+      "name": "0.9.10 bare execTransaction: bare-hex `to`, isOwner unreadable: refused couldn't check",
+      "input": {
+        "method": "eth_sendTransaction",
+        "params": [
+          {
+            "to": "7777777777777777777777777777777777777777",
+            "data": "0x6a7612020000000000000000000000005afe5afe5afe5afe5afe5afe5afe5afe5afe5afe0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001e00000000000000000000000000000000000000000000000000000000000000064e318b52b0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000000000000000000000000badbadbadbadbadbadbadbadbadbadbadbadbad0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa00000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000",
+            "value": "0x0"
+          }
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x7777777777777777777777777777777777777777",
+            "answer": {
+              "type": "unreachable",
+              "detail": "offline"
+            }
+          }
+        ],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x7777777777777777777777777777777777777777",
+          "chain_id": 8453,
+          "function": "execTransaction",
+          "selector": "0x6a761202",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "unchecked"
+      },
+      "about": "The 1-of-N takeover, sent to the parent written without 0x."
+    },
+    {
+      "name": "0.9.10 bare execTransaction: at submit, a bare-hex `to` nobody read: refused couldn't check",
+      "input": {
+        "method": "eth_sendTransaction",
+        "params": [
+          {
+            "to": "7777777777777777777777777777777777777777",
+            "data": "0x6a7612020000000000000000000000005afe5afe5afe5afe5afe5afe5afe5afe5afe5afe0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001e00000000000000000000000000000000000000000000000000000000000000064e318b52b0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000000000000000000000000badbadbadbadbadbadbadbadbadbadbadbadbad0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa00000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000",
+            "value": "0x0"
+          }
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [],
+        "at_submit": true
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x7777777777777777777777777777777777777777",
+          "chain_id": 8453,
+          "function": "execTransaction",
+          "selector": "0x6a761202",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "unchecked"
+      },
+      "about": "The 1-of-N takeover, sent to the parent written without 0x."
+    },
+    {
+      "name": "0.9.10 at arrival: execTransaction with a bare-hex `to` is refused -32602",
+      "input": {
+        "method": "eth_sendTransaction",
+        "params": [
+          {
+            "to": "7777777777777777777777777777777777777777",
+            "data": "0x6a7612020000000000000000000000005afe5afe5afe5afe5afe5afe5afe5afe5afe5afe0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001e00000000000000000000000000000000000000000000000000000000000000064e318b52b0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000000000000000000000000badbadbadbadbadbadbadbadbadbadbadbadbad0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa00000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000",
+            "value": "0x0"
+          }
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [],
+        "at_submit": false,
+        "at_arrival": true
+      },
+      "expect": {
+        "verdict": "invalid",
+        "message": "Invalid transaction `to`: expected 0x followed by 40 hex characters"
+      },
+      "about": "The 1-of-N takeover, sent to the parent written without 0x."
+    },
+    {
+      "name": "0.9.10 bare approveHash: a bare-hex `to` is read like any other",
+      "input": {
+        "method": "eth_sendTransaction",
+        "params": [
+          {
+            "to": "7777777777777777777777777777777777777777",
+            "data": "0xd4d9bdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": "0x0"
+          }
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "read",
+        "reads": [
+          {
+            "chain_id": 8453,
+            "safe": "0x7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "about": "The encoder signs a bare 40-hex `to`; the guard read only the 0x form and let this through to clear-signing's grade."
+    },
+    {
+      "name": "0.9.10 bare approveHash: bare-hex `to`, isOwner true: refused",
+      "input": {
+        "method": "eth_sendTransaction",
+        "params": [
+          {
+            "to": "7777777777777777777777777777777777777777",
+            "data": "0xd4d9bdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": "0x0"
+          }
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x7777777777777777777777777777777777777777",
+            "answer": {
+              "type": "returned",
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+            }
+          }
+        ],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x7777777777777777777777777777777777777777",
+          "chain_id": 8453,
+          "function": "approveHash",
+          "selector": "0xd4d9bdcd",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "owner"
+      },
+      "about": "The encoder signs a bare 40-hex `to`; the guard read only the 0x form and let this through to clear-signing's grade."
+    },
+    {
+      "name": "0.9.10 bare approveHash: bare-hex `to`, isOwner unreadable: refused couldn't check",
+      "input": {
+        "method": "eth_sendTransaction",
+        "params": [
+          {
+            "to": "7777777777777777777777777777777777777777",
+            "data": "0xd4d9bdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": "0x0"
+          }
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x7777777777777777777777777777777777777777",
+            "answer": {
+              "type": "unreachable",
+              "detail": "offline"
+            }
+          }
+        ],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x7777777777777777777777777777777777777777",
+          "chain_id": 8453,
+          "function": "approveHash",
+          "selector": "0xd4d9bdcd",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "unchecked"
+      },
+      "about": "The encoder signs a bare 40-hex `to`; the guard read only the 0x form and let this through to clear-signing's grade."
+    },
+    {
+      "name": "0.9.10 bare approveHash: at submit, a bare-hex `to` nobody read: refused couldn't check",
+      "input": {
+        "method": "eth_sendTransaction",
+        "params": [
+          {
+            "to": "7777777777777777777777777777777777777777",
+            "data": "0xd4d9bdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": "0x0"
+          }
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [],
+        "at_submit": true
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x7777777777777777777777777777777777777777",
+          "chain_id": 8453,
+          "function": "approveHash",
+          "selector": "0xd4d9bdcd",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "unchecked"
+      },
+      "about": "The encoder signs a bare 40-hex `to`; the guard read only the 0x form and let this through to clear-signing's grade."
+    },
+    {
+      "name": "0.9.10 at arrival: approveHash with a bare-hex `to` is refused -32602",
+      "input": {
+        "method": "eth_sendTransaction",
+        "params": [
+          {
+            "to": "7777777777777777777777777777777777777777",
+            "data": "0xd4d9bdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": "0x0"
+          }
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [],
+        "at_submit": false,
+        "at_arrival": true
+      },
+      "expect": {
+        "verdict": "invalid",
+        "message": "Invalid transaction `to`: expected 0x followed by 40 hex characters"
+      },
+      "about": "The encoder signs a bare 40-hex `to`; the guard read only the 0x form and let this through to clear-signing's grade."
+    },
+    {
+      "name": "0.9.10 non-canonical: approveHash with an upper-case `0X` `to` on a Safe this account owns",
+      "input": {
+        "method": "eth_sendTransaction",
+        "params": [
+          {
+            "to": "0X5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "data": "0xd4d9bdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": "0x0"
+          }
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [
+          {
+            "chain_id": 8453,
+            "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "answer": {
+              "type": "returned",
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+            }
+          }
+        ],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "refuse",
+        "target": {
+          "safe": "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+          "chain_id": 8453,
+          "function": "approveHash",
+          "selector": "0xd4d9bdcd",
+          "leg_index": null,
+          "nested": false
+        },
+        "reason": "owner"
+      },
+      "about": "The encoder signs a bare 40-hex `to`; the guard read only the 0x form and let this through to clear-signing's grade."
+    },
+    {
+      "name": "0.9.10 at arrival: an upper-case `0X` `to` is refused -32602",
+      "input": {
+        "method": "eth_sendTransaction",
+        "params": [
+          {
+            "to": "0X5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+            "data": "0xd4d9bdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": "0x0"
+          }
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [],
+        "at_submit": false,
+        "at_arrival": true
+      },
+      "expect": {
+        "verdict": "invalid",
+        "message": "Invalid transaction `to`: expected 0x followed by 40 hex characters"
+      },
+      "about": "The encoder signs a bare 40-hex `to`; the guard read only the 0x form and let this through to clear-signing's grade."
+    },
+    {
+      "name": "0.9.10 non-canonical: a bare verifyingContract is read like any other",
+      "input": {
+        "method": "eth_signTypedData_v4",
+        "params": [
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "{\"types\": {\"EIP712Domain\": [{\"name\": \"chainId\", \"type\": \"uint256\"}, {\"name\": \"verifyingContract\", \"type\": \"address\"}], \"SafeMessage\": [{\"name\": \"message\", \"type\": \"bytes\"}]}, \"primaryType\": \"SafeMessage\", \"domain\": {\"chainId\": 8453, \"verifyingContract\": \"7777777777777777777777777777777777777777\"}, \"message\": {\"message\": \"0xabababababababababababababababababababababababababababababababab\"}}"
+        ],
+        "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chain_id": 8453,
+        "answers": [],
+        "at_submit": false
+      },
+      "expect": {
+        "verdict": "read",
+        "reads": [
+          {
+            "chain_id": 8453,
+            "safe": "0x7777777777777777777777777777777777777777"
+          }
+        ]
+      },
+      "about": "alloy's serde hashes a bare 40-hex verifyingContract; the guard read only the 0x form."
     }
   ]
 }

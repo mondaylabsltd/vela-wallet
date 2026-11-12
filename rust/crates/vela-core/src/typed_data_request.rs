@@ -191,6 +191,24 @@ pub fn canonical(
             "missing types, primaryType, domain or message".to_owned(),
         ));
     }
+    // VELA-2026-002 (0.9.10): the domain's contract is taken in one form only — `0x` and
+    // 40 hex characters. The hasher reads bare hex (alloy's serde) and pads
+    // an under-width one (`eip712::pad_scalar`); the guards that refuse a
+    // `SafeTx` / `SafeMessage` / `SafeOp` for a Safe this account owns compare
+    // the address they read, so a form they and the hasher read differently
+    // is refused before either has to.
+    match fields
+        .get("domain")
+        .and_then(|domain| domain.get("verifyingContract"))
+    {
+        None | Some(Value::Null) => {}
+        Some(Value::String(contract)) if crate::tx_request::is_canonical_address(contract) => {}
+        Some(_) => {
+            return Err(TypedDataRequestError::BadDocument(
+                "domain.verifyingContract must be 0x followed by 40 hex characters".to_owned(),
+            ))
+        }
+    }
     let document_json = document.to_string();
     Ok(CanonicalTypedData {
         method,
@@ -318,6 +336,33 @@ mod tests {
             canonical("eth_signTypedData_v2", &json!([ACCOUNT, mail()])),
             Err(TypedDataRequestError::UnsupportedMethod)
         );
+    }
+
+    #[test]
+    fn the_domain_contract_is_taken_in_one_form() {
+        let under = |contract: Value| {
+            let mut doc = mail();
+            doc["domain"]["verifyingContract"] = contract;
+            canonical("eth_signTypedData_v4", &json!([ACCOUNT, doc]))
+        };
+        assert!(under(json!("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe")).is_ok());
+        assert!(under(json!("0x5AFE5afe5afe5afe5afe5afe5afe5afe5afe5afe")).is_ok());
+        assert!(under(Value::Null).is_ok());
+        for bad in [
+            json!("5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe"),
+            json!("0x5afe5afe5afe5afe5afe5afe5afe5afe5afe"),
+            json!("0X5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe"),
+            json!("0x"),
+            json!(42),
+        ] {
+            assert!(
+                matches!(
+                    under(bad.clone()),
+                    Err(TypedDataRequestError::BadDocument(_))
+                ),
+                "{bad}"
+            );
+        }
     }
 
     #[test]

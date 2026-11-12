@@ -8,6 +8,11 @@
 //! request is refused before it can be signed — after an `isOwner` read of
 //! every Safe it would act for, and again at the submit chokepoint — that a
 //! read nobody could make refuses, and that the refusal is answered.
+//!
+//! 0.9.10 (backported from feat/multisig-account §41): a site's address not
+//! written as `0x` + 40 hex is refused at arrival (-32602), every guard reads
+//! an address as the encoders do, and a `SafeOp` for an owned Safe is refused
+//! like `SafeTx` / `SafeMessage` (Safe v1.5.0 counts the wrap as approval).
 #![cfg(feature = "crux")]
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
@@ -16,7 +21,7 @@ mod support;
 use serde_json::{json, Value};
 use support::DomainDriver;
 use vela_core::app::parent_safe_guard::{
-    check, check_json, CheckInput, ParentReason, ParentVerdict, SafeOwnerAnswer, IS_OWNER,
+    check, check_json, CheckInput, CheckVerdict, ParentReason, SafeOwnerAnswer, IS_OWNER,
 };
 use vela_core::app::sign_confirm::ConfirmBlock;
 use vela_core::app::sign_request::{
@@ -79,6 +84,18 @@ fn the_vector_names_every_shape_the_disclosure_did() {
         "hotfix SafeMessage",
         "hotfix exec-swap: unknown Safe, not owner, allowed",
         "hotfix approveHash: isOwner unreadable",
+        // 0.9.10
+        "0.9.10 non-canonical: approveHash with a bare-hex `to`",
+        "0.9.10 non-canonical: the takeover execTransaction (v=1) with a bare-hex `to`",
+        "0.9.10 non-canonical: a wallet_sendCalls leg with a bare-hex `to`",
+        "0.9.10 non-canonical: SafeMessage under a bare verifyingContract",
+        "0.9.10 non-canonical: SafeTx under an under-width verifyingContract",
+        "0.9.10 at arrival: a bare-hex `to` is refused -32602",
+        "0.9.10 at arrival: a bare verifyingContract is refused -32602",
+        "0.9.10 at arrival: an under-width verifyingContract is refused -32602",
+        "0.9.10 v1.5.0: SafeMessage under an owned Safe v1.5.0",
+        "0.9.10 v1.5.0: SafeOp for an owned Safe v1.5.0",
+        "0.9.10 bare execTransaction: bare-hex `to`, isOwner true: refused",
     ] {
         assert!(
             names.iter().any(|n| n.starts_with(wanted)),
@@ -439,6 +456,164 @@ fn the_appendix_poc_is_refused_both_ways() {
     assert_eq!(view.blocked.unwrap().function, "SafeTx");
 }
 
+/// 0.9.10: every arrival vector's refusal, through the machine — a
+/// non-canonical `to`, batch leg or `verifyingContract` is answered -32602
+/// before any sheet and before any read, in the vector's words; a canonical
+/// one reaches the guard (read first, then refused).
+#[test]
+fn a_non_canonical_address_is_refused_at_arrival_by_the_machine() {
+    let v = vector();
+    let arrivals: Vec<&Value> = v["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c["input"]["at_arrival"] == json!(true))
+        .collect();
+    assert!(arrivals.len() >= 8, "the arrival cases");
+    for case in arrivals {
+        let name = case["name"].as_str().unwrap();
+        let mut sut = boot();
+        let method = case["input"]["method"].as_str().unwrap();
+        let ops = arrive(&mut sut, method, &case["input"]["params"]);
+        let answered = ops.iter().find_map(|op| match op {
+            Op::SendResponse {
+                payload: SignResponsePayload::Err { code, message, .. },
+                ..
+            } => Some((*code, message.clone())),
+            _ => None,
+        });
+        if case["expect"]["verdict"] == "invalid" {
+            let (code, message) = answered.unwrap_or_else(|| panic!("{name}: {ops:?}"));
+            assert_eq!(code, CODE_INVALID_PARAMS, "{name}");
+            assert_eq!(
+                message.as_deref(),
+                case["expect"]["message"].as_str(),
+                "{name}"
+            );
+            assert!(reads(&ops).is_empty(), "{name}: nothing is read");
+            assert_eq!(sut.view().surface, SignSurface::Hidden, "{name}");
+        } else {
+            assert!(answered.is_none(), "{name}: {ops:?}");
+            assert_eq!(
+                reads(&ops)
+                    .into_iter()
+                    .map(|(_, safe, _, _)| safe)
+                    .collect::<Vec<_>>(),
+                vec![parent()],
+                "{name}: the guard reads the Safe"
+            );
+            let target = case["expect"]["target"].clone();
+            answer_read(
+                &mut sut,
+                &parent(),
+                SafeOwnerAnswer::Returned { data: word(1) },
+            );
+            assert_refused_as(
+                &mut sut,
+                target["function"].as_str().unwrap(),
+                ParentReason::Owner,
+                &parent(),
+            );
+        }
+    }
+}
+
+const SAFE_OP_V150: &str = "0.9.10 v1.5.0: SafeOp for an owned Safe v1.5.0 (its `safe`), \
+                            under the 4337 module's domain: refused";
+
+/// 0.9.10: a `SafeMessage` or `SafeOp` for a Safe this account owns — under
+/// a Safe v1.5.0, either is the account's approval — opens refused once the
+/// read says owned; unreadable, refused "couldn't check"; not owned, as before.
+#[test]
+fn a_safe_message_or_safe_op_for_an_owned_v150_safe_is_refused_by_the_machine() {
+    for (name, function) in [
+        (
+            "0.9.10 v1.5.0: SafeMessage under an owned Safe v1.5.0's domain, isOwner true: refused",
+            "SafeMessage",
+        ),
+        (SAFE_OP_V150, "SafeOp"),
+        (
+            "0.9.10 c: SafeOp under an owned Safe's own domain",
+            "SafeOp",
+        ),
+        (
+            "0.9.10 non-canonical: SafeOp whose `safe` is written bare",
+            "SafeOp",
+        ),
+    ] {
+        let mut sut = boot();
+        let (method, params) = params_of(name);
+        let ops = arrive(&mut sut, &method, &params);
+        assert!(
+            reads(&ops).iter().any(|r| r.1 == parent()),
+            "{name}: {ops:?}"
+        );
+        answer_read(
+            &mut sut,
+            &parent(),
+            SafeOwnerAnswer::Returned { data: word(1) },
+        );
+        assert_refused_as(&mut sut, function, ParentReason::Owner, &parent());
+    }
+
+    let (method, params) = params_of(SAFE_OP_V150);
+    let mut sut = boot();
+    arrive(&mut sut, &method, &params);
+    answer_read(
+        &mut sut,
+        &parent(),
+        SafeOwnerAnswer::Unreachable {
+            detail: "offline".to_owned(),
+        },
+    );
+    assert_refused_as(&mut sut, "SafeOp", ParentReason::Unchecked, &parent());
+
+    let mut sut = boot();
+    arrive(&mut sut, &method, &params);
+    answer_read(
+        &mut sut,
+        &parent(),
+        SafeOwnerAnswer::Returned { data: word(0) },
+    );
+    let view = sut.view();
+    assert!(view.blocked.is_none(), "not owned: as before");
+    assert_ne!(view.confirm_block, Some(ConfirmBlock::Refused));
+    assert_ne!(view.confirm_block, Some(ConfirmBlock::Reading));
+}
+
+/// 0.9.10: the submit chokepoint reads a bare-hex `to` the way the encoder
+/// signs it — a rewrite toward the bare-hex takeover is refused, never signed.
+#[test]
+fn a_rewrite_toward_a_bare_hex_takeover_is_refused_at_submit() {
+    let mut sut = boot();
+    arrive(
+        &mut sut,
+        "eth_sendTransaction",
+        &json!([{ "to": "0x1111111111111111111111111111111111111111", "value": "0x1" }]),
+    );
+    let (_, rewritten) =
+        params_of("0.9.10 non-canonical: the takeover execTransaction (v=1) with a bare-hex `to`");
+    assert_eq!(
+        rewritten[0]["to"].as_str(),
+        Some(parent().trim_start_matches("0x"))
+    );
+    sut.dispatch(Event::ApproveTapped {
+        opts: SignApproveOpts {
+            params_override_json: Some(rewritten.to_string()),
+            ..SignApproveOpts::default()
+        },
+    });
+    let ops = sut.resolve(SignShellResult::PreCheck { funding: None });
+    assert!(!sut
+        .outstanding()
+        .iter()
+        .chain(ops.iter())
+        .any(|op| matches!(op, Op::SignAndSubmit { .. })));
+    let blocked = sut.view().blocked.expect("the sheet says why");
+    assert_eq!(blocked.reason, Some(ParentReason::Unchecked));
+    assert_eq!(blocked.parent.as_deref(), Some(parent().as_str()));
+}
+
 #[test]
 fn an_unknown_target_is_read_before_it_can_be_signed() {
     let mut sut = boot();
@@ -655,7 +830,7 @@ fn the_answer_names_the_call_and_the_safe() {
 #[test]
 fn every_vector_verdict_round_trips() {
     for case in vector()["cases"].as_array().unwrap() {
-        let verdict: ParentVerdict = serde_json::from_value(case["expect"].clone()).unwrap();
+        let verdict: CheckVerdict = serde_json::from_value(case["expect"].clone()).unwrap();
         assert_eq!(serde_json::to_value(&verdict).unwrap(), case["expect"]);
     }
 }
