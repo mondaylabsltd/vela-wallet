@@ -87,6 +87,11 @@ install -Dm0644 usr/lib/udev/rules.d/70-vela-fido.rules \
 %{_datadir}/metainfo/%{appid}.metainfo.xml
 
 %changelog
+* Fri Nov 13 2026 Monday Labs <hello@getvela.app> - 0.9.10-1
+- Pre-release: Security: a site could get around the 0.9.9 Safe guard by
+  writing an address without its 0x prefix, or by asking for a Safe message
+  signature on a v1.5.0 Safe; both are now refused.
+
 * Sun Nov 08 2026 Monday Labs <hello@getvela.app> - 0.9.9-1
 - Pre-release: Security: a connected site could make your account approve or
   execute for a Safe you own; now refused.

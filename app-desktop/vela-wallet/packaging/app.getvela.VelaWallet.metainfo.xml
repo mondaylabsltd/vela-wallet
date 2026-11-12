@@ -93,6 +93,11 @@
   </supports>
 
   <releases>
+    <release version="0.9.10" date="2026-11-13" type="development">
+      <description>
+        <p>Pre-release: Security: a site could get around the 0.9.9 Safe guard by writing an address without its 0x prefix, or by asking for a Safe message signature on a v1.5.0 Safe; both are now refused.</p>
+      </description>
+    </release>
     <release version="0.9.9" date="2026-11-08" type="development">
       <description>
         <p>Pre-release: Security: a connected site could make your account approve or execute for a Safe you own; now refused.</p>
