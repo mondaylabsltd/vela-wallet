@@ -119,16 +119,22 @@ as a vector on every shell (`ParentSafeGuardTests`, `ParentSafeGuardVectorTest`,
 
 The fix ships with the first release made from `feat/multisig-account`.
 
-**Known gap in the fix (final review, 2026-11-12; open).** The guard looks at a call's `to` and
+**Gap in the fix, now fixed (final review, 2026-11-12; closed by `f09326124`,
+`docs/multisig-machines.md` §41).** The guard looked at a call's `to` and
 a typed-data `verifyingContract` only when it is written as `0x` followed by exactly 40 hex
 digits (`parent_safe_guard.rs`, `is_address`); a target written any other way is skipped, not
 refused. Other parts of the core read addresses more loosely: `primitives::parse_address`
 accepts one without `0x`, and the EIP-712 encoder left-pads a short one to 20 bytes (`eip712.rs`,
 `pad_scalar`). So a request that names a parent Safe in such a spelling is not refused by this
-guard, and the fix does not yet cover every spelling of every form above. Canonicalising each
-address before the check is in progress (to be recorded as `docs/multisig-machines.md` §41);
-[SECURITY-MODEL G24](../../SECURITY-MODEL.md#13-known-gaps-and-accepted-risks) tracks it. This
-advisory is not to be published until that fix is in the release that carries `64da454d3`.
+guard. Commit `f09326124` closes it: arrival now refuses -32602 any `to`, `wallet_sendCalls` leg
+or `verifyingContract` that is not exactly `0x` and 40 hex digits, and the guards read an
+address the way the encoders do (bare, `0X`, under-width). It also refuses a site's `SafeOp`
+for a Safe the account owns: a Safe v1.5.0 checks an owner contract with
+`isValidSignature(bytes32)`, so the account's wrapped signature of that Safe's `SafeOp` is its
+approval of the Safe's user operation. [SECURITY-MODEL G24](../../SECURITY-MODEL.md#13-known-gaps-and-accepted-risks)
+is closed. This advisory is not to be published until a release carries both `64da454d3` and
+`f09326124`.
+
 
 ## Workarounds
 

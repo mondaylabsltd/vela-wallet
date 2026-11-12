@@ -213,30 +213,32 @@ replayed by the core and by every shell through the real core.
   leg, and a `SafeTx` typed-data signature, recursing through `multiSend` and `execTransaction`
   to depth 4 (`SelfCallFunction`). Empty-calldata self-calls are allowed (the fee leg and the
   estimator use them). `parent_safe_guard::verdict` extends this to **every Safe the account
-  owns**: `execTransaction`, `approveHash` (`parent_safe_guard::APPROVE_HASH`), the admin list, and
-  `SafeTx` / `SafeMessage` typed data under that Safe's domain. "Owns" is the device's multisig
+  owns**: `execTransaction`, `approveHash` (`parent_safe_guard::APPROVE_HASH`), the admin list,
+  `SafeTx` / `SafeMessage` typed data under that Safe's domain, and — §41, because a Safe v1.5.0
+  checks an owner contract with `isValidSignature(bytes32)`, the very form a site's wrapped
+  signature answers — `SafeOp` typed data for that Safe (its `safe`, under the 4337 module's domain
+  or any other), whatever the Safe's version (`SelfCallFunction::SafeOpTypedData`). Every address
+  is taken in one form: at arrival a transaction's `to`, every `wallet_sendCalls` leg's `to` and a
+  typed-data `verifyingContract` that is not `0x` and exactly 40 hex digits is refused -32602
+  (`tx_request::is_canonical_address`, `TxRequestError::BadAddress`); and the guards themselves
+  read an address the way the encoders do — bare, `0X`, or under-width and left-padded
+  (`self_call_guard::normalise_address`). "Owns" is the device's multisig
   list, or an `isOwner(account)` read (`SignOperation::ReadSafeOwner`) that must be corroborated
   by two providers; `true`, an unreadable answer or a disagreement refuses. The submit step
   checks the final params again (`parent_safe_guard::enforce`). The same self-call rule holds at
   a connected multisig's own address (`multisig_dapp::self_call_refusal`, SEC-PARENT-2).
 - **Guarantees.** A connected site cannot obtain a signature that changes who controls the
-  account or a Safe it owns, through any of these shapes **when the target is written as `0x` and
-  40 hex digits**, on any shell or the signing page.
-- **Does not guarantee.** **A target written another way (G24, open).** The walk
-  (`parent_safe_guard::parent_targets`) considers a call's `to` and a typed-data
-  `verifyingContract` only when they are `0x` followed by exactly 40 hex digits
-  (`parent_safe_guard::is_address`); anything else is skipped, not refused. The core reads
-  addresses more loosely elsewhere: `primitives::parse_address` takes one with or without `0x`,
-  and the EIP-712 encoder left-pads a short one to 20 bytes
-  (`rust/crates/vela-core/src/eip712.rs#pad_scalar`). A request that names a parent Safe in such a
-  spelling is not checked by this guard. The fix (canonicalising every address before the walk) is
-  in progress on a separate branch and is to be recorded as `docs/multisig-machines.md` §41; until
-  it lands, VELA-2026-002's fix is incomplete for these spellings.
+  account or a Safe it owns, through any of these shapes, however the target address is written
+  (a non-canonical spelling is refused at arrival; G24, closed by §41), on any shell or the
+  signing page.
+- **Does not guarantee.**
   Protection against a shape outside the list (a future Safe version's
   new admin function, a module's own admin calls on a Safe that has one). An `isOwner` read for a
   Safe on another chain is made on the request's chain only. The signing page cannot read the
   chain, so it refuses these shapes on **any** Safe but the account, which is stricter.
-- **Tests.** Vectors `tests/vectors/rules/parent-safe-guard.json` (39 cases),
+- **Tests.** Vectors `tests/vectors/rules/parent-safe-guard.json` (59 cases, `at_arrival` among
+  them),
+
   `tests/vectors/rules/multisig-self-call.json` (13); `tests/app_self_call_guard.rs`,
   `tests/app_parent_safe_guard.rs`; fork `tests/multisig_fork.rs`
   (`parent_safe_takeover_is_refused_while_the_multisigs_own_flow_runs`); the page's
@@ -728,7 +730,7 @@ Each item is open at the commit above. "Accepted" means decided and recorded; th
 | G21 | The phones' page path has no end-to-end harness; hold-to-confirm and the assistive path have not been walked on real hardware. | open | [hardening R22-3](security/hardening.md#r22-3-the-signing-page-check-then-open-review-0-5) |
 | G22 | **On a network whose pool holds one provider, who can act for a multisig is one node's word** in the member's own flows (held "… anyway", said, refused with Refuse blind signing). A lying sole node can hide a module or guard from the review; it cannot move funds (the Safe enforces its owners on chain; the state-diff guard's refusal stands alone). A provider-diverse default pool is the fix. | accepted, documented | [hardening §18](security/hardening.md#18-round-22-follow-ups-one-provider-a-fee-that-moves-39) |
 | G23 | **The fee headroom is paid, not refunded**: a fee at the relay's published price is shown and signed 12.5 % above the quote (`fee_policy::FEE_HEADROOM_BPS`), and the relay keeps it. | accepted, documented | [hardening §18](security/hardening.md#18-round-22-follow-ups-one-provider-a-fee-that-moves-39) |
-| G24 | **The parent-Safe guard skips a target address it does not recognise as canonical.** A call's `to` or a typed-data `verifyingContract` that is not `0x` and exactly 40 hex digits is not walked (`parent_safe_guard::is_address`), while `primitives::parse_address` (no `0x` needed) and the EIP-712 encoder (`rust/crates/vela-core/src/eip712.rs#pad_scalar`, short addresses left-padded) still read it as an address. A site that writes a parent Safe that way is not refused by this guard, so VELA-2026-002's fix does not cover those spellings yet. | open; fix in progress (to be `docs/multisig-machines.md` §41) | [§6.2](#62-the-self-call-and-parent-safe-guards) |
+| G24 | **Closed by §41 (`f09326124`).** The parent-Safe guard walked a call's `to` or a typed-data `verifyingContract` only when it was `0x` and exactly 40 hex digits, while `primitives::parse_address` and the EIP-712 encoder (`rust/crates/vela-core/src/eip712.rs#pad_scalar`) read other spellings as addresses. Now arrival refuses every non-canonical spelling -32602 (`tx_request::is_canonical_address`) and the guards read addresses as the encoders do (`self_call_guard::normalise_address`); the vector's `at_arrival` cases replay it on every shell. | closed | [§6.2](#62-the-self-call-and-parent-safe-guards) |
 | G25 | **Fetched ERC-7730 descriptors are neither signed nor hash-pinned.** One equal to a built-in descriptor is `ClearProvenance::PinnedMatch`; every other is `ClearProvenance::Fetched`, floored at Normal risk and said as unauthenticated, but what it says a call does is the chain-data service's word. No publisher signature or build-time hash list exists. | open | [§6.1](#61-clear-signing-and-provenance) |
 | G26 | **On a network Vela's own RPC lists do not cover with two providers, the chain index supplies the other source.** The pool's tiers are the person's own, Vela's built-in and curated public lists, then the chain index (`RpcSource::Builtin`, `RpcSource::Fallback`), which the chain-data service serves. Where Vela's lists name one provider, the corroborating source comes from that index; where they name none (a network added from the index), both do. Two endpoints one compromised service names under two registrable domains pass `corroborate::independent`, so a "two-provider" verdict there rests on the chain-data service. | open | [§6.4](#64-two-provider-simulation-and-the-state-diff-guard); G1 |
 | G27 | **getvela.app loads a third-party analytics script, and has no `script-src` CSP.** Rybbit's `https://tj.appsdata.org/api/script.js` is loaded, unpinned and without Subresource Integrity, on every page but `/chain-setup` (`app-web/getvela.app/src/routes/+layout.svelte`), and the site's CSP is `frame-ancestors 'none'` alone (`app-web/getvela.app/src/lib/security-headers.ts`). The Permissions-Policy keeps that script from using `getvela.app` passkeys, but whoever controls it can rewrite any page it runs on, including the download links and the docs that say how to verify a build. Leaving the tag off `/chain-setup` does not keep the script from that page's deployer key: the key is in the origin's `localStorage` (`app-web/getvela.app/src/lib/chain-setup/deployer-wallet.ts#STORAGE_KEY`), which the script can read from any other page of the site, and a client-side navigation to `/chain-setup` from a page that loaded the script keeps it running there. Recommended: remove it, or self-host a pinned copy with SRI, and add a `script-src` CSP. Not changed here: the site's inline SvelteKit scripts would first need kit's hash-mode CSP. | open | [§11](#11-privacy); [hardening §4](security/hardening.md#4-origin-hardening-review-1-1) |
@@ -748,7 +750,7 @@ key yet; **no bug bounty**). `security.txt` is served by both sites
 | ID | Issue | Fixed in | Published |
 | --- | --- | --- | --- |
 | [VELA-2026-001](security/advisories/VELA-2026-001-typed-data-preview-mismatch.md) | A typed-data request could preview one EIP-712 message and sign another | v0.9.6 | not yet |
-| [VELA-2026-002](security/advisories/VELA-2026-002-parent-safe-authority.md) | A site connected to a Vela account could act for a Safe that account owns | `64da454d3`, not released; incomplete for a target address in a non-canonical spelling (G24, fix in progress) | not yet; after the release |
+| [VELA-2026-002](security/advisories/VELA-2026-002-parent-safe-authority.md) | A site connected to a Vela account could act for a Safe that account owns | `64da454d3`, not released; completed for non-canonical spellings by `f09326124` (G24, closed) | not yet; after the release |
 | [VELA-2026-003](security/advisories/VELA-2026-003-passkey-app-association.md) | getvela.app's app-association files let development and demo apps request users' passkeys | site `0562c17bb`, deployed 2026-11-07 | not yet |
 
 Internal incidents that put no user at risk: [`docs/security/incidents.md`](security/incidents.md).
