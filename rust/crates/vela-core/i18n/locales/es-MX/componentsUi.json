@@ -342,7 +342,7 @@
       },
       "simUnconfirmed": "Solo respondió un nodo, así que Vela no pudo confirmar qué hace esta transacción. Revísala antes de firmar.",
       "simDisagreed": "Dos nodos independientes dieron respuestas distintas sobre qué hace esta transacción. Revísala antes de firmar.",
-      "simOwnNode": "Verificado solo por tu propio nodo",
+      "simOwnNode": "Verificado solo por el nodo que elegiste",
       "ownNodeHint": "Para verificar con un nodo de confianza, agrega el tuyo y activa “Usar solo mi nodo” en esta red.",
       "feeRose": "La comisión de red subió desde que presionaste, así que no se firmó nada. La comisión que se muestra es la nueva: presiona de nuevo para pagarla.",
       "confirmAgain": "Presiona de nuevo para confirmar"

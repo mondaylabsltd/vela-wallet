@@ -1706,7 +1706,7 @@
    },
    "simUnconfirmed": "Nur ein Knoten hat geantwortet, daher konnte Vela nicht bestätigen, was diese Transaktion bewirkt – bitte vor dem Signieren kontrollieren.",
    "simDisagreed": "Zwei unabhängige Knoten haben unterschiedlich beantwortet, was diese Transaktion bewirkt – bitte vor dem Signieren kontrollieren.",
-   "simOwnNode": "Nur von deinem eigenen Knoten geprüft",
+   "simOwnNode": "Nur von dem von dir gewählten Knoten geprüft",
    "ownNodeHint": "Um mit einem Knoten zu prüfen, dem du vertraust, füge deinen eigenen hinzu und schalte „Nur meinen Knoten verwenden“ für dieses Netzwerk ein.",
    "feeRose": "Die Netzwerkgebühr ist seit deinem Tippen gestiegen, daher wurde nichts signiert. Die angezeigte Gebühr ist die neue — tippe erneut, um sie zu zahlen.",
    "confirmAgain": "Zum Bestätigen erneut drücken"

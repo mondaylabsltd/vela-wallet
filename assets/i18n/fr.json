@@ -1711,7 +1711,7 @@
    },
    "simUnconfirmed": "Un seul nœud a répondu : Vela n’a pas pu confirmer ce que fait cette transaction. Vérifiez-la avant de signer.",
    "simDisagreed": "Deux nœuds indépendants donnent des réponses différentes sur ce que fait cette transaction. Vérifiez-la avant de signer.",
-   "simOwnNode": "Vérifié uniquement par votre propre nœud",
+   "simOwnNode": "Vérifié uniquement par le nœud que vous avez choisi",
    "ownNodeHint": "Pour vérifier avec un nœud de confiance, ajoutez le vôtre et activez « Utiliser uniquement mon nœud » pour ce réseau.",
    "feeRose": "Les frais de réseau ont augmenté depuis votre appui, donc rien n’a été signé. Les frais affichés sont les nouveaux — appuyez à nouveau pour les payer.",
    "confirmAgain": "Appuyez à nouveau pour confirmer"

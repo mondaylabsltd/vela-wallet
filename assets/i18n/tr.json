@@ -1706,7 +1706,7 @@
    },
    "simUnconfirmed": "Yalnızca bir düğüm yanıt verdi, bu yüzden Vela bu işlemin ne yaptığını doğrulayamadı. İmzalamadan önce kontrol edin.",
    "simDisagreed": "İki bağımsız düğüm bu işlemin ne yaptığı konusunda farklı yanıtlar verdi. İmzalamadan önce kontrol edin.",
-   "simOwnNode": "Yalnızca kendi düğümünüzle kontrol edildi",
+   "simOwnNode": "Yalnızca seçtiğiniz düğümle kontrol edildi",
    "ownNodeHint": "Güvendiğiniz bir düğümle kontrol etmek için bu ağa kendi düğümünüzü ekleyin ve “Yalnızca kendi düğümümü kullan”ı açın.",
    "feeRose": "Bastığınızdan beri ağ ücreti arttı, bu yüzden hiçbir şey imzalanmadı. Gösterilen ücret yenisidir — ödemek için tekrar basın.",
    "confirmAgain": "Onaylamak için tekrar basın"

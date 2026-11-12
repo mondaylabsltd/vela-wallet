@@ -342,7 +342,7 @@
       },
       "simUnconfirmed": "Chỉ một nút trả lời nên Vela không thể xác nhận giao dịch này làm gì. Hãy kiểm tra trước khi ký.",
       "simDisagreed": "Hai nút độc lập trả lời khác nhau về việc giao dịch này làm gì. Hãy kiểm tra trước khi ký.",
-      "simOwnNode": "Chỉ được kiểm tra bởi nút của riêng bạn",
+      "simOwnNode": "Chỉ được kiểm tra bởi nút bạn đã chọn",
       "ownNodeHint": "Để kiểm tra bằng một nút bạn tin, hãy thêm nút của bạn và bật “Chỉ dùng nút của tôi” cho mạng này.",
       "feeRose": "Phí mạng đã tăng kể từ khi bạn nhấn, nên chưa có gì được ký. Phí đang hiển thị là phí mới — nhấn lần nữa để trả phí này.",
       "confirmAgain": "Nhấn lần nữa để xác nhận"

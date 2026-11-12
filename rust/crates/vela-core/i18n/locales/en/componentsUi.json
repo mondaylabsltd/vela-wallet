@@ -394,7 +394,7 @@
       },
       "simUnconfirmed": "Only one node answered, so Vela couldn’t confirm what this transaction does. Review it before you sign.",
       "simDisagreed": "Two independent nodes gave different answers about what this transaction does. Review it before you sign.",
-      "simOwnNode": "Checked by your own node only",
+      "simOwnNode": "Checked by your chosen node only",
       "ownNodeHint": "To check with a node you trust, add your own and turn on “Only use my node” for this network.",
       "feeRose": "The network fee went up since you pressed, so nothing was signed. The fee shown is the new one — press again to pay it.",
       "confirmAgain": "Press again to confirm"
