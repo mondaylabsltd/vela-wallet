@@ -14,6 +14,14 @@ forked chain's real contracts.
     RELAY_PORT   where to listen (default 8790)
     BUNDLER_KEY  the key that pays for handleOps (default: a fixed fresh key)
     FEE_RECIPIENT where in-band fees go (default: a fixed fresh address)
+    MOVING_GAS   §39 (R22 follow-up): a gas price that moves on EVERY quote —
+                 a comma list of gwei figures, cycled one per
+                 `pimlico_getUserOperationGasPrice` (e.g. "2,1.8,2.1,1.9,2.6"):
+                 the fee the wallet prices moves up and down between its look
+                 and its press, as a real network's does. A test sets or
+                 reads it at run time: `POST /v1/test/gas {"gwei": [...]}`
+                 (the cycle from its start), `GET /v1/test/gas` (the cycle
+                 and every price quoted, in order).
 
 Requires `cast` (Foundry) on PATH. Standard library only otherwise.
 """
@@ -141,6 +149,25 @@ def op_receipt(h: str):
 
 GAS = {"slow": "0x3b9aca00", "standard": "0x3b9aca00", "fast": "0x3b9aca00"}
 
+# §39: the moving gas price (MOVING_GAS), and every price quoted.
+moving: list[float] = [float(g) for g in os.environ.get("MOVING_GAS", "").split(",") if g.strip()]
+moving_at = 0
+quoted: list[str] = []
+
+
+def gas_now() -> dict:
+    """This quote's price: the next of the moving cycle, or the fixed one."""
+    global moving_at
+    with lock:
+        if not moving:
+            price = GAS
+        else:
+            wei = hex(int(moving[moving_at % len(moving)] * 1_000_000_000))
+            moving_at += 1
+            price = {k: wei for k in GAS}
+        quoted.append(price["standard"])
+    return price
+
 
 def answer(method: str, params: list):
     if method == "eth_estimateUserOperationGas":
@@ -152,7 +179,7 @@ def answer(method: str, params: list):
             "callGasLimit": "0x4c4b40",
         }
     if method == "pimlico_getUserOperationGasPrice":
-        return {k: {"maxFeePerGas": v, "maxPriorityFeePerGas": v} for k, v in GAS.items()}
+        return {k: {"maxFeePerGas": v, "maxPriorityFeePerGas": v} for k, v in gas_now().items()}
     if method == "vela_getInBandGasQuote":
         return [
             {
@@ -215,6 +242,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"sponsored": False})
         if path in ("/", "/health"):
             return self._send(200, {"relay": "multisig-fork", "rpcs": RPCS})
+        if path == "/v1/test/gas":
+            with lock:
+                return self._send(200, {"gwei": moving, "at": moving_at, "quoted": quoted})
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -226,6 +256,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(400, {"error": "not json"})
         if self.path.startswith("/v1/sponsor"):
             return self._send(200, {"sponsored": False})
+        if self.path.split("?")[0] == "/v1/test/gas":
+            global moving, moving_at
+            with lock:
+                moving = [float(g) for g in request.get("gwei", [])]
+                moving_at = 0
+            return self._send(200, {"gwei": moving})
         chain = self.path.split("?")[0].strip("/").split("/")[0]
         if chain not in RPCS:
             return self._send(404, {"error": f"no fork for chain {chain}"})
